@@ -18,7 +18,7 @@ I will use Docker Compose to manage the different services.
   - [Docker-Compose Instructions](https://immich.app/docs/install/docker-compose)
 - [ ] [<img src="https://jellyfin.org/images/favicon.ico" alt="favicon" height="12"/> Jellyfin](https://jellyfin.org/)
   - [Docker Instructions](https://jellyfin.org/downloads/docker)
-- [ ] [<img src="https://www.minecraft.net/content/dam/minecraftnet/franchise/logos/minecraft-creeper-face.jpg" alt="favicon" height="12"/> Minecraft Server](https://github.com/itzg/docker-minecraft-server)
+- [ ] [<img src="https://cdn.icon-icons.com/icons2/2699/PNG/512/minecraft_logo_icon_168974.png" alt="favicon" height="12"/> Minecraft Server](https://github.com/itzg/docker-minecraft-server)
   - [Docker-Compose Instructions](https://docker-minecraft-server.readthedocs.io/en/latest/#using-docker-compose)
 - [ ] [<img src="https://nextcloud.com/c/uploads/2022/03/favicon.png" alt="favicon" height="12"/> NextCloud](https://nextcloud.com/)
   - [Docker Instructions](https://github.com/nextcloud/all-in-one)
