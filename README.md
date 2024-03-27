@@ -26,7 +26,7 @@ I will use Docker Compose to manage the different services.
   - [Docker Instructions](https://github.com/nginx-proxy/nginx-proxy)
 - [ ] [<img src="https://www.plex.tv/wp-content/themes/plex/assets/img/favicons/favicon.ico" alt="favicon" height="12"/> Plex](https://www.plex.tv/)
   - [Docker Instructions](https://github.com/plexinc/pms-docker)
-- [ ] [Torrenting Software Instructions](https://dev.to/rafaelmagalhaes/home-media-server-with-plex-sonarr-radarr-qbitorrent-and-overseerr-2a84)
+- [ ] [<img src="https://res.cloudinary.com/practicaldev/image/fetch/s--E8ak4Hr1--/c_limit,f_auto,fl_progressive,q_auto,w_32/https://dev-to.s3.us-east-2.amazonaws.com/favicon.ico" height="12"/> Torrenting Software Instructions](https://dev.to/rafaelmagalhaes/home-media-server-with-plex-sonarr-radarr-qbitorrent-and-overseerr-2a84)
   - [ ] [<img src="https://www.qbittorrent.org/favicon.ico" alt="favicon" height="12"/> qBittorrent](https://www.qbittorrent.org/)
   - [ ] [<img src="https://cdn-icons-png.flaticon.com/512/3531/3531671.png" alt="favicon" height="12"/> Jackett](https://github.com/Jackett/Jackett)
   - [ ] [<img src="https://radarr.video/img/favicon.ico" alt="favicon" height="12"/> Radarr](https://radarr.video/) (Movies)
