@@ -12,6 +12,8 @@ I will use Docker Compose to manage the different services.
   - [Docker Instructions](https://github.com/AdguardTeam/AdGuardHome/wiki/Docker)
 - [ ] [<img src="https://static.wikia.nocookie.net/logopedia/images/4/49/Counter-Strike_2_%28Icon%29.png/revision/latest?cb=20230330015359" alt="favicon" height="12"/> CS2 Server](https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
   - [Docker Instructions](https://github.com/joedwards32/CS2)
+- [ ] [<img src="https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/ddclient-logo.png" alt="favicon" height="12"/> DDCLIENT](https://github.com/ddclient/ddclient)
+  - [Docker Instructions](https://github.com/linuxserver/docker-ddclient) 
 - [ ] [<img src="https://raw.githubusercontent.com/bastienwirtz/homer/main/public/logo.png" alt="favicon" height="12"/> Homer](https://github.com/bastienwirtz/homer)
   - [<img src="https://yt3.googleusercontent.com/ytc/AIdro_kPmbjvdbonj03XjDq5DI5Ottdvtv-S36ylF_d4UA=s176-c-k-c0x00ffffff-no-rj" alt="favicon" height="12"/> Docker-Compose Instructions](https://www.youtube.com/watch?v=f5jNJDaztqk)
 - [ ] [<img src="https://immich.app/img/favicon.png" alt="favicon" height="12"/> Immich](https://immich.app/)
