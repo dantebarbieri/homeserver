@@ -258,8 +258,113 @@ services:
       - <path/to/transcode/temp>:/transcode
       - <path/to/media>:/data
 
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - /path/to/appdata/config:/config
+      - /path/to/downloads:/downloads
+    ports:
+      - 8080:8080
+      - 6881:6881
+      - 6881:6881/udp
+    restart: unless-stopped
+
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - AUTO_UPDATE=true #optional
+      - RUN_OPTS= #optional
+    volumes:
+      - /path/to/data:/config
+      - /path/to/blackhole:/downloads
+    ports:
+      - 9117:9117
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /path/to/radarr/data:/config
+      - /path/to/movies:/movies #optional
+      - /path/to/download-client-downloads:/downloads #optional
+    ports:
+      - 7878:7878
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /path/to/data:/config
+      - /path/to/tvseries:/tv #optional
+      - /path/to/downloadclient-downloads:/downloads #optional
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /path/to/lidarr/config:/config
+      - /path/to/music:/music #optional
+      - /path/to/downloads:/downloads #optional
+    ports:
+      - 8686:8686
+    restart: unless-stopped
+
+  overseerr:
+    image: lscr.io/linuxserver/overseerr:latest
+    container_name: overseerr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+    volumes:
+      - /path/to/overseerr/config:/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
+
+  openbooks:
+    ports:
+      - '8080:80'
+    volumes:
+      - 'openbooks:/books'
+    restart: unless-stopped
+    container_name: openbooks
+    command: --name my_irc_name --persist
+    environment:
+      - BASE_PATH=/openbooks/
+    image: evanbuss/openbooks:latest
+
 volumes:
   cs2:
   pgdata:
   model-cache:
   mc:
+  openbooks:
