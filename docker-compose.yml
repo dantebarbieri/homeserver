@@ -221,6 +221,21 @@ services:
       - ${DATA}/nginxproxymanager/data:/data
       - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
 
+  ouroboros:
+    container_name: ouroboros
+    hostname: ouroboros
+    image: pyouroboros/ouroboros
+    environment:
+      CLEANUP: true
+      INTERVAL: 300
+      LOG_LEVEL: info
+      SELF_UPDATE: true
+      # IGNORE: mongo influxdb postgres mariadb
+      TZ: ${TZ}
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   plex:
     container_name: plex
     image: plexinc/pms-docker

@@ -27,6 +27,8 @@ I will use Docker Compose to manage the different services. Potentially Ansible 
   - [Docker Instructions](https://github.com/nextcloud/all-in-one)
 - [ ] [<img src="https://nginxproxymanager.com/icon.png" alt="favicon" height="12"/> Nginx Proxy Manager](https://nginxproxymanager.com/) - Reverse proxy (routes to different services and supports different subdomains)
   - [Docker Instructions](https://nginxproxymanager.com/guide/#quick-setup)
+- [ ] [<img src="https://avatars.githubusercontent.com/u/46544832" alt="favicon" height="12"/> Ouroboros](https://github.com/pyouroboros/ouroboros) - Automatically keeps all docker containers up to date
+  - [Docker Instructions](https://github.com/pyouroboros/ouroboros?tab=readme-ov-file#docker)
 - [ ] [<img src="https://www.plex.tv/wp-content/themes/plex/assets/img/favicons/favicon.ico" alt="favicon" height="12"/> Plex](https://www.plex.tv/) - Self-hosted media server
   - [Docker Instructions](https://github.com/plexinc/pms-docker)
 - [ ] [<img src="https://res.cloudinary.com/practicaldev/image/fetch/s--E8ak4Hr1--/c_limit,f_auto,fl_progressive,q_auto,w_32/https://dev-to.s3.us-east-2.amazonaws.com/favicon.ico" height="12"/> Torrenting Software Instructions](https://dev.to/rafaelmagalhaes/home-media-server-with-plex-sonarr-radarr-qbitorrent-and-overseerr-2a84)
