@@ -74,7 +74,7 @@ services:
       - homer:/www/assets
     user: "1000:1000" # default
     environment:
-      - INIT_ASSETS=1 # default
+      INIT_ASSETS: 1 # default
 
   immich-server:
     container_name: immich_server
@@ -157,19 +157,19 @@ services:
     ports:
       - "36676:25565"
     environment:
-      EULA: "TRUE"
-      MOTD: "Dante's Minecraft §l§c%VERSION%§r server running %TYPE%."
+      EULA: true
+      MOTD: "§l§aWeekly Games§r §9Discord§r Minecraft §o§c%VERSION%§r server running §o§c%TYPE%§r."
       DIFFICULTY: "hard"
       OPS: |
         DanteVB
         Otakeb
         Heruth99
       ICON: "https://cdn.discordapp.com/icons/1132409092917440644/b5d41a2889dcd44fc0d83f4522ab15ed.webp"
-      OVERRIDE_ICON: "TRUE"
-      ENABLE_QUERY: "TRUE"
-      ENABLE_COMMAND_BLOCK: "TRUE"
+      OVERRIDE_ICON: true
+      ENABLE_QUERY: true
+      ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 32
-      TYPE: "PAPER"
+      TYPE: "Paper"
     volumes:
       - minecraft-server:/data
 
@@ -250,9 +250,9 @@ services:
       - "32413:32413/udp"
       - "32414:32414/udp"
     environment:
-      - TZ=${TZ}
-      - PLEX_CLAIM=${PLEX_CLAIM}
-      - ADVERTISE_IP=${ADVERTISE_IP}
+      TZ: ${TZ}
+      PLEX_CLAIM: ${PLEX_CLAIM}
+      ADVERTISE_IP: ${ADVERTISE_IP}
     volumes:
       - ${DATA}/plex/database:/config
       - ${DATA}/plex/transcode/temp:/transcode
@@ -262,11 +262,11 @@ services:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
     environment:
-      - PUID=${UID}
-      - PGID=${GID}
-      - TZ=${TZ}
-      - WEBUI_PORT=8080
-      - TORRENTING_PORT=6881
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+      WEBUI_PORT: 8080
+      TORRENTING_PORT: 6881
     volumes:
       - ${DATA}/qbittorrent/config:/config
       - ${DATA}/qbittorrent/downloads:/downloads
@@ -279,11 +279,11 @@ services:
     image: lscr.io/linuxserver/jackett:latest
     container_name: jackett
     environment:
-      - PUID=${UID}
-      - PGID=${GID}
-      - TZ=${TZ}
-      - AUTO_UPDATE=true #optional
-      - RUN_OPTS= #optional
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+      AUTO_UPDATE: true #optional
+      RUN_OPTS: null #optional
     volumes:
       - ${DATA}/jackett/data:/config
       - ${DATA}/jackett/blackhole:/downloads
@@ -295,9 +295,9 @@ services:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
     environment:
-      - PUID=${UID}
-      - PGID=${GID}
-      - TZ=${TZ}
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
     volumes:
       - ${DATA}/radarr/data:/config
       - ${DATA}/radarr/movies:/movies #optional
@@ -310,9 +310,9 @@ services:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
     environment:
-      - PUID=${UID}
-      - PGID=${GID}
-      - TZ=${TZ}
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
     volumes:
       - ${DATA}/sonarr/data:/config
       - ${DATA}/sonarr/tvseries:/tv #optional
@@ -325,9 +325,9 @@ services:
     image: lscr.io/linuxserver/lidarr:latest
     container_name: lidarr
     environment:
-      - PUID=${UID}
-      - PGID=${GID}
-      - TZ=${TZ}
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
     volumes:
       - ${DATA}/lidarr/data:/config
       - ${DATA}/lidarr/music:/music #optional
@@ -350,9 +350,9 @@ services:
     image: lscr.io/linuxserver/overseerr:latest
     container_name: overseerr
     environment:
-      - PUID=${UID}
-      - PGID=${GID}
-      - TZ=${TZ}
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
     volumes:
       - overseerr:/config
     ports:
