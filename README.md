@@ -52,7 +52,7 @@ sudo usermod -aG docker $USER
 ```
 
 > [!TIP]
-> If you're not running as your current user (or in `su` mode) then you need to manually replace `$USER` with the proper value.
+> If you're not running as your current user (example: `su` mode) then you need to manually replace `$USER` with the proper value.
 
 ### The Repo
 
