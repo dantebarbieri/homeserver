@@ -160,6 +160,18 @@ services:
       - "36676:25565"
     environment:
       EULA: "TRUE"
+      MOTD: "Dante's Minecraft §l§c%VERSION%§r server running %TYPE%."
+      DIFFICULTY: "hard"
+      OPS: |
+        DanteVB
+        Otakeb
+        Heruth99
+      ICON: "https://cdn.discordapp.com/icons/1132409092917440644/b5d41a2889dcd44fc0d83f4522ab15ed.webp"
+      OVERRIDE_ICON: "TRUE"
+      ENABLE_QUERY: "TRUE"
+      ENABLE_COMMAND_BLOCK: "TRUE"
+      VIEW_DISTANCE: 32
+      TYPE: "PAPER"
     volumes:
       - minecraft-server:/data
 
