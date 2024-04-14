@@ -27,8 +27,8 @@ I will use Docker Compose to manage the different services.
   - Probably not possible to proxy with Nginx. Likely a better idea to open the port for this.
 - [ ] [<img src="https://nextcloud.com/c/uploads/2022/03/favicon.png" alt="favicon" height="12"/> NextCloud](https://nextcloud.com/)
   - [Docker Instructions](https://github.com/nextcloud/all-in-one)
-- [ ] [<img src="https://docs.nginx.com/images/favicon-48x48.ico" alt="favicon" height="12"/> Nginx Reverse Proxy](https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/)
-  - [Docker Instructions](https://github.com/nginx-proxy/nginx-proxy)
+- [ ] [<img src="https://nginxproxymanager.com/icon.png" alt="favicon" height="12"/> Nginx Proxy Manager](https://nginxproxymanager.com/)
+  - [Docker Instructions](https://nginxproxymanager.com/guide/#quick-setup)
 - [ ] [<img src="https://www.plex.tv/wp-content/themes/plex/assets/img/favicons/favicon.ico" alt="favicon" height="12"/> Plex](https://www.plex.tv/)
   - [Docker Instructions](https://github.com/plexinc/pms-docker)
 - [ ] [<img src="https://res.cloudinary.com/practicaldev/image/fetch/s--E8ak4Hr1--/c_limit,f_auto,fl_progressive,q_auto,w_32/https://dev-to.s3.us-east-2.amazonaws.com/favicon.ico" height="12"/> Torrenting Software Instructions](https://dev.to/rafaelmagalhaes/home-media-server-with-plex-sonarr-radarr-qbitorrent-and-overseerr-2a84)

@@ -1,20 +1,16 @@
-version: '3.8'
-
 services:
   adguardhome:
     image: adguard/adguardhome
     container_name: adguardhome
     restart: unless-stopped
     volumes:
-      - /my/own/workdir:/opt/adguardhome/work
-      - /my/own/confdir:/opt/adguardhome/conf
+      - ${DATA}/adguardhome/workdir:/opt/adguardhome/work
+      - ${DATA}/adguardhome/confdir:/opt/adguardhome/conf
     ports:
       - "53:53/tcp"
       - "53:53/udp"
       - "67:67/udp"
       - "68:68/udp"
-      - "80:80/tcp"
-      - "443:443/tcp"
       - "443:443/udp"
       - "3000:3000/tcp"
       - "853:853/tcp"
@@ -28,42 +24,42 @@ services:
     container_name: cs2-dedicated
     environment:
       # Server configuration
-      - SRCDS_TOKEN # Game Server Token from https://steamcommunity.com/dev/managegameservers
-      - STEAMAPPVALIDATE=0 # (0 - no validation, 1 - enable validation)
-      - CS2_SERVERNAME=changeme # (Set the visible name for your private server)
-      - CS2_CHEATS=0 # (0 - disable cheats, 1 - enable cheats)
-      - CS2_PORT=27015 # (CS2 server listen port tcp_udp)
-      - CS2_SERVER_HIBERNATE=0 # (Put server in a low CPU state when there are no players. 0 - hibernation disabled, 1 - hibernation enabled)
-      - CS2_RCON_PORT # (Optional, use a simple TCP proxy to have RCON listen on an alternative port. Useful for services like AWS Fargate which do not support mixed protocol ports.)
-      - CS2_LAN=0 # (0 - LAN mode disabled, 1 - LAN Mode enabled)
-      - CS2_RCONPW=changeme # (RCON password)
-      - CS2_PW=changeme # (CS2 server password)
-      - CS2_MAXPLAYERS=10 # (Max players)
-      - CS2_ADDITIONAL_ARGS # (Optional additional arguments to pass into cs2)
-      - CS2_CFG_URL # HTTP/HTTPS URL to fetch a Tar Gzip bundle of configuration files/mods
+      SRCDS_TOKEN: ${SRCDS_TOKEN} # Game Server Token from https://steamcommunity.com/dev/managegameservers
+      STEAMAPPVALIDATE: 0 # (0 - no validation, 1 - enable validation)
+      CS2_SERVERNAME: "changeme" # (Set the visible name for your private server)
+      CS2_CHEATS: 0 # (0 - disable cheats, 1 - enable cheats)
+      CS2_PORT: 27015 # (CS2 server listen port tcp_udp)
+      CS2_SERVER_HIBERNATE: 0 # (Put server in a low CPU state when there are no players. 0 - hibernation disabled, 1 - hibernation enabled)
+      CS2_RCON_PORT: null # (Optional, use a simple TCP proxy to have RCON listen on an alternative port. Useful for services like AWS Fargate which do not support mixed protocol ports.)
+      CS2_LAN: 0 # (0 - LAN mode disabled, 1 - LAN Mode enabled)
+      CS2_RCONPW: ${CS2_RCONPW} # (RCON password)
+      CS2_PW: ${CS2_PW} # (CS2 server password)
+      CS2_MAXPLAYERS: 10 # (Max players)
+      CS2_ADDITIONAL_ARGS: null # (Optional additional arguments to pass into cs2)
+      CS2_CFG_URL: null # HTTP/HTTPS URL to fetch a Tar Gzip bundle of configuration files/mods
       # Game modes
-      - CS2_GAMEALIAS # (Game type, e.g. casual, competitive, deathmatch. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
-      - CS2_GAMETYPE=0 # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
-      - CS2_GAMEMODE=1 # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
-      - CS2_MAPGROUP=mg_active # (Map pool)
-      - CS2_STARTMAP=de_inferno # (Start map)
+      CS2_GAMEALIAS: null # (Game type, e.g. casual, competitive, deathmatch. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
+      CS2_GAMETYPE: 0 # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
+      CS2_GAMEMODE: 1 # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
+      CS2_MAPGROUP: "mg_active" # (Map pool)
+      CS2_STARTMAP: "de_inferno" # (Start map)
       # Bots
-      - CS2_BOT_DIFFICULTY # (0 - easy, 1 - normal, 2 - hard, 3 - expert)
-      - CS2_BOT_QUOTA # (Number of bots)
-      - CS2_BOT_QUOTA_MODE # (fill, competitive)
+      CS2_BOT_DIFFICULTY: null # (0 - easy, 1 - normal, 2 - hard, 3 - expert)
+      CS2_BOT_QUOTA: null # (Number of bots)
+      CS2_BOT_QUOTA_MODE: null # (fill, competitive)
       # TV
-      - TV_AUTORECORD=0 # Automatically records all games as CSTV demos: 0=off, 1=on.
-      - TV_ENABLE=0 # Activates CSTV on server: 0=off, 1=on.
-      - TV_PORT=27020 # Host SourceTV port
-      - TV_PW=changeme # CSTV password for clients
-      - TV_RELAY_PW=changeme # CSTV password for relay proxies
-      - TV_MAXRATE=0 # World snapshots to broadcast per second. Affects camera tickrate.
-      - TV_DELAY=0 # Max CSTV spectator bandwidth rate allowed, 0 == unlimited
+      TV_AUTORECORD: 0 # Automatically records all games as CSTV demos: 0=off, 1=on.
+      TV_ENABLE: 0 # Activates CSTV on server: 0=off, 1=on.
+      TV_PORT: 27020 # Host SourceTV port
+      TV_PW: ${TV_PW} # CSTV password for clients
+      TV_RELAY_PW: ${TV_RELAY_PW} # CSTV password for relay proxies
+      TV_MAXRATE: 0 # World snapshots to broadcast per second. Affects camera tickrate.
+      TV_DELAY: 0 # Max CSTV spectator bandwidth rate allowed, 0 == unlimited
       # Logs
-      - CS2_LOG=on # 'on'/'off'
-      - CS2_LOG_MONEY=0 # Turns money logging on/off: (0=off, 1=on)
-      - CS2_LOG_DETAIL=0 # Combat damage logging: (0=disabled, 1=enemy, 2=friendly, 3=all)
-      - CS2_LOG_ITEMS=0 # Turns item logging on/off: (0=off, 1=on)
+      CS2_LOG: "on" # 'on'/'off'
+      CS2_LOG_MONEY: 0 # Turns money logging on/off: (0=off, 1=on)
+      CS2_LOG_DETAIL: 0 # Combat damage logging: (0=disabled, 1=enemy, 2=friendly, 3=all)
+      CS2_LOG_ITEMS: 0 # Turns item logging on/off: (0=off, 1=on)
     volumes:
       - cs2:/home/steam/cs2-dedicated/ # Persistent data volume mount point inside container
     ports:
@@ -73,13 +69,9 @@ services:
 
   homer:
     image: b4bz/homer
-    # To build from source, comment the previous line and uncomment below
-    # build: .
     container_name: homer
     volumes:
-      - /your/local/assets/:/www/assets
-    ports:
-      - "8080:8080"
+      - homer:/www/assets
     user: "1000:1000" # default
     environment:
       - INIT_ASSETS=1 # default
@@ -87,7 +79,7 @@ services:
   immich-server:
     container_name: immich_server
     image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
-    command: [ 'start.sh', 'immich' ]
+    command: ["start.sh", "immich"]
     volumes:
       - ${UPLOAD_LOCATION}:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro
@@ -106,7 +98,7 @@ services:
     # extends: # uncomment this section for hardware acceleration - see https://immich.app/docs/features/hardware-transcoding
     #   file: hwaccel.transcoding.yml
     #   service: cpu # set to one of [nvenc, quicksync, rkmpp, vaapi, vaapi-wsl] for accelerated transcoding
-    command: [ 'start.sh', 'microservices' ]
+    command: ["start.sh", "microservices"]
     volumes:
       - ${UPLOAD_LOCATION}:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro
@@ -151,23 +143,35 @@ services:
     image: jellyfin/jellyfin:latest
     container_name: jellyfin
     volumes:
-      - /srv/jellyfin/config:/config
-      - /srv/jellyfin/cache:/cache
+      - ${DATA}/jellyfin/config:/config
+      - ${DATA}/jellyfin/cache:/cache
       - /media:/media
     network_mode: host
     restart: unless-stopped
 
-  mc:
+  minecraft-server:
     image: itzg/minecraft-server
+    container_name: minecraft-server
     tty: true
     stdin_open: true
     ports:
-      - "25565:25565"
+      - "36676:25565"
     environment:
       EULA: "TRUE"
+      MOTD: "Dante's Minecraft §l§c%VERSION%§r server running %TYPE%."
+      DIFFICULTY: "hard"
+      OPS: |
+        DanteVB
+        Otakeb
+        Heruth99
+      ICON: "https://cdn.discordapp.com/icons/1132409092917440644/b5d41a2889dcd44fc0d83f4522ab15ed.webp"
+      OVERRIDE_ICON: "TRUE"
+      ENABLE_QUERY: "TRUE"
+      ENABLE_COMMAND_BLOCK: "TRUE"
+      VIEW_DISTANCE: 32
+      TYPE: "PAPER"
     volumes:
-      # attach the relative directory 'data' to the container's /data path
-      - mc:/data
+      - minecraft-server:/data
 
   nextcloud-aio-mastercontainer:
     image: nextcloud/all-in-one:latest
@@ -178,62 +182,44 @@ services:
       - nextcloud_aio_mastercontainer:/mnt/docker-aio-config # This line is not allowed to be changed as otherwise the built-in backup solution will not work
       - /var/run/docker.sock:/var/run/docker.sock:ro # May be changed on macOS, Windows or docker rootless. See the applicable documentation. If adjusting, don't forget to also set 'WATCHTOWER_DOCKER_SOCKET_PATH'!
     ports:
-      - 80:80 # Can be removed when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else). See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
+      # - 80:80 # Can be removed when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else). See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
       - 8080:8080
-      - 8443:8443 # Can be removed when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else). See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
-    # environment: # Is needed when using any of the options below
+      # - 8443:8443 # Can be removed when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else). See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
+    environment: # Is needed when using any of the options below
       # - AIO_DISABLE_BACKUP_SECTION=false # Setting this to true allows to hide the backup section in the AIO interface. See https://github.com/nextcloud/all-in-one#how-to-disable-the-backup-section
-      # - APACHE_PORT=11000 # Is needed when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else). See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
-      # - APACHE_IP_BINDING=127.0.0.1 # Should be set when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else) that is running on the same host. See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
-      # - BORG_RETENTION_POLICY=--keep-within=7d --keep-weekly=4 --keep-monthly=6 # Allows to adjust borgs retention policy. See https://github.com/nextcloud/all-in-one#how-to-adjust-borgs-retention-policy
-      # - COLLABORA_SECCOMP_DISABLED=false # Setting this to true allows to disable Collabora's Seccomp feature. See https://github.com/nextcloud/all-in-one#how-to-disable-collaboras-seccomp-feature
-      # - NEXTCLOUD_DATADIR=/mnt/ncdata # Allows to set the host directory for Nextcloud's datadir. ⚠️⚠️⚠️ Warning: do not set or adjust this value after the initial Nextcloud installation is done! See https://github.com/nextcloud/all-in-one#how-to-change-the-default-location-of-nextclouds-datadir
-      # - NEXTCLOUD_MOUNT=/mnt/ # Allows the Nextcloud container to access the chosen directory on the host. See https://github.com/nextcloud/all-in-one#how-to-allow-the-nextcloud-container-to-access-directories-on-the-host
-      # - NEXTCLOUD_UPLOAD_LIMIT=10G # Can be adjusted if you need more. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-upload-limit-for-nextcloud
-      # - NEXTCLOUD_MAX_TIME=3600 # Can be adjusted if you need more. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-max-execution-time-for-nextcloud
-      # - NEXTCLOUD_MEMORY_LIMIT=512M # Can be adjusted if you need more. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-php-memory-limit-for-nextcloud
-      # - NEXTCLOUD_TRUSTED_CACERTS_DIR=/path/to/my/cacerts # CA certificates in this directory will be trusted by the OS of the nexcloud container (Useful e.g. for LDAPS) See See https://github.com/nextcloud/all-in-one#how-to-trust-user-defined-certification-authorities-ca
-      # - NEXTCLOUD_STARTUP_APPS=deck twofactor_totp tasks calendar contacts notes # Allows to modify the Nextcloud apps that are installed on starting AIO the first time. See https://github.com/nextcloud/all-in-one#how-to-change-the-nextcloud-apps-that-are-installed-on-the-first-startup
-      # - NEXTCLOUD_ADDITIONAL_APKS=imagemagick # This allows to add additional packages to the Nextcloud container permanently. Default is imagemagick but can be overwritten by modifying this value. See https://github.com/nextcloud/all-in-one#how-to-add-os-packages-permanently-to-the-nextcloud-container
-      # - NEXTCLOUD_ADDITIONAL_PHP_EXTENSIONS=imagick # This allows to add additional php extensions to the Nextcloud container permanently. Default is imagick but can be overwritten by modifying this value. See https://github.com/nextcloud/all-in-one#how-to-add-php-extensions-permanently-to-the-nextcloud-container
-      # - NEXTCLOUD_ENABLE_DRI_DEVICE=true # This allows to enable the /dev/dri device in the Nextcloud container. ⚠️⚠️⚠️ Warning: this only works if the '/dev/dri' device is present on the host! If it should not exist on your host, don't set this to true as otherwise the Nextcloud container will fail to start! See https://github.com/nextcloud/all-in-one#how-to-enable-hardware-transcoding-for-nextcloud
-      # - NEXTCLOUD_KEEP_DISABLED_APPS=false # Setting this to true will keep Nextcloud apps that are disabled in the AIO interface and not uninstall them if they should be installed. See https://github.com/nextcloud/all-in-one#how-to-keep-disabled-apps
-      # - TALK_PORT=3478 # This allows to adjust the port that the talk container is using. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-talk-port
-      # - WATCHTOWER_DOCKER_SOCKET_PATH=/var/run/docker.sock # Needs to be specified if the docker socket on the host is not located in the default '/var/run/docker.sock'. Otherwise mastercontainer updates will fail. For macos it needs to be '/var/run/docker.sock'
+      - APACHE_PORT=11000 # Is needed when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else). See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
+      - APACHE_IP_BINDING=127.0.0.1 # Should be set when running behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else) that is running on the same host. See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
+    # - BORG_RETENTION_POLICY=--keep-within=7d --keep-weekly=4 --keep-monthly=6 # Allows to adjust borgs retention policy. See https://github.com/nextcloud/all-in-one#how-to-adjust-borgs-retention-policy
+    # - COLLABORA_SECCOMP_DISABLED=false # Setting this to true allows to disable Collabora's Seccomp feature. See https://github.com/nextcloud/all-in-one#how-to-disable-collaboras-seccomp-feature
+    # - NEXTCLOUD_DATADIR=/mnt/ncdata # Allows to set the host directory for Nextcloud's datadir. ⚠️⚠️⚠️ Warning: do not set or adjust this value after the initial Nextcloud installation is done! See https://github.com/nextcloud/all-in-one#how-to-change-the-default-location-of-nextclouds-datadir
+    # - NEXTCLOUD_MOUNT=/mnt/ # Allows the Nextcloud container to access the chosen directory on the host. See https://github.com/nextcloud/all-in-one#how-to-allow-the-nextcloud-container-to-access-directories-on-the-host
+    # - NEXTCLOUD_UPLOAD_LIMIT=10G # Can be adjusted if you need more. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-upload-limit-for-nextcloud
+    # - NEXTCLOUD_MAX_TIME=3600 # Can be adjusted if you need more. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-max-execution-time-for-nextcloud
+    # - NEXTCLOUD_MEMORY_LIMIT=512M # Can be adjusted if you need more. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-php-memory-limit-for-nextcloud
+    # - NEXTCLOUD_TRUSTED_CACERTS_DIR=/path/to/my/cacerts # CA certificates in this directory will be trusted by the OS of the nexcloud container (Useful e.g. for LDAPS) See See https://github.com/nextcloud/all-in-one#how-to-trust-user-defined-certification-authorities-ca
+    # - NEXTCLOUD_STARTUP_APPS=deck twofactor_totp tasks calendar contacts notes # Allows to modify the Nextcloud apps that are installed on starting AIO the first time. See https://github.com/nextcloud/all-in-one#how-to-change-the-nextcloud-apps-that-are-installed-on-the-first-startup
+    # - NEXTCLOUD_ADDITIONAL_APKS=imagemagick # This allows to add additional packages to the Nextcloud container permanently. Default is imagemagick but can be overwritten by modifying this value. See https://github.com/nextcloud/all-in-one#how-to-add-os-packages-permanently-to-the-nextcloud-container
+    # - NEXTCLOUD_ADDITIONAL_PHP_EXTENSIONS=imagick # This allows to add additional php extensions to the Nextcloud container permanently. Default is imagick but can be overwritten by modifying this value. See https://github.com/nextcloud/all-in-one#how-to-add-php-extensions-permanently-to-the-nextcloud-container
+    # - NEXTCLOUD_ENABLE_DRI_DEVICE=true # This allows to enable the /dev/dri device in the Nextcloud container. ⚠️⚠️⚠️ Warning: this only works if the '/dev/dri' device is present on the host! If it should not exist on your host, don't set this to true as otherwise the Nextcloud container will fail to start! See https://github.com/nextcloud/all-in-one#how-to-enable-hardware-transcoding-for-nextcloud
+    # - NEXTCLOUD_KEEP_DISABLED_APPS=false # Setting this to true will keep Nextcloud apps that are disabled in the AIO interface and not uninstall them if they should be installed. See https://github.com/nextcloud/all-in-one#how-to-keep-disabled-apps
+    # - TALK_PORT=3478 # This allows to adjust the port that the talk container is using. See https://github.com/nextcloud/all-in-one#how-to-adjust-the-talk-port
+    # - WATCHTOWER_DOCKER_SOCKET_PATH=/var/run/docker.sock # Needs to be specified if the docker socket on the host is not located in the default '/var/run/docker.sock'. Otherwise mastercontainer updates will fail. For macos it needs to be '/var/run/docker.sock'
     # networks: # Is needed when you want to create the nextcloud-aio network with ipv6-support using this file, see the network config at the bottom of the file
-      # - nextcloud-aio # Is needed when you want to create the nextcloud-aio network with ipv6-support using this file, see the network config at the bottom of the file
+    # - nextcloud-aio # Is needed when you want to create the nextcloud-aio network with ipv6-support using this file, see the network config at the bottom of the file
     # # Uncomment the following line when using SELinux
     # security_opt: ["label:disable"]
 
-  # # Optional: Caddy reverse proxy. See https://github.com/nextcloud/all-in-one/blob/main/reverse-proxy.md
-  # # You can find further examples here: https://github.com/nextcloud/all-in-one/discussions/588
-  # caddy:
-  #   image: caddy:alpine
-  #   restart: always
-  #   container_name: caddy
-  #   volumes:
-  #     - ./Caddyfile:/etc/caddy/Caddyfile
-  #     - ./certs:/certs
-  #     - ./config:/config
-  #     - ./data:/data
-  #     - ./sites:/srv
-  #   network_mode: "host"
-
-  nginx-proxy:
-    image: nginxproxy/nginx-proxy
-    container_name: nginx-proxy
+  nginxproxymanager:
+    image: "jc21/nginx-proxy-manager:latest"
+    container_name: nginxproxymanager
+    restart: unless-stopped
     ports:
       - "80:80"
+      - "81:81"
+      - "443:443"
     volumes:
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-
-    # if you want to proxy based on host ports, you'll want to use the host network
-    # network_mode: "host"
-
-  whoami:
-    image: jwilder/whoami
-    environment:
-      - VIRTUAL_HOST=whoami.example
+      - ${DATA}/nginxproxymanager/data:/data
+      - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
 
   plex:
     container_name: plex
@@ -249,29 +235,27 @@ services:
       - "32413:32413/udp"
       - "32414:32414/udp"
     environment:
-      - TZ=<timezone>
-      - PLEX_CLAIM=<claimToken>
-      - ADVERTISE_IP=http://<hostIPAddress>:32400/
-    hostname: <hostname>
+      - TZ=${TZ}
+      - PLEX_CLAIM=${PLEX_CLAIM}
+      - ADVERTISE_IP=${ADVERTISE_IP}
     volumes:
-      - <path/to/plex/database>:/config
-      - <path/to/transcode/temp>:/transcode
-      - <path/to/media>:/data
+      - ${DATA}/plex/database:/config
+      - ${DATA}/plex/transcode/temp:/transcode
+      - /media:/data
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
       - WEBUI_PORT=8080
       - TORRENTING_PORT=6881
     volumes:
-      - /path/to/appdata/config:/config
-      - /path/to/downloads:/downloads
+      - ${DATA}/qbittorrent/config:/config
+      - ${DATA}/qbittorrent/downloads:/downloads
     ports:
-      - 8080:8080
       - 6881:6881
       - 6881:6881/udp
     restart: unless-stopped
@@ -280,14 +264,14 @@ services:
     image: lscr.io/linuxserver/jackett:latest
     container_name: jackett
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
       - AUTO_UPDATE=true #optional
       - RUN_OPTS= #optional
     volumes:
-      - /path/to/data:/config
-      - /path/to/blackhole:/downloads
+      - ${DATA}/jackett/data:/config
+      - ${DATA}/jackett/blackhole:/downloads
     ports:
       - 9117:9117
     restart: unless-stopped
@@ -296,13 +280,13 @@ services:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
     volumes:
-      - /path/to/radarr/data:/config
-      - /path/to/movies:/movies #optional
-      - /path/to/download-client-downloads:/downloads #optional
+      - ${DATA}/radarr/data:/config
+      - ${DATA}/radarr/movies:/movies #optional
+      - ${DATA}/radarr/downloads:/downloads #optional
     ports:
       - 7878:7878
     restart: unless-stopped
@@ -311,13 +295,13 @@ services:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
     volumes:
-      - /path/to/data:/config
-      - /path/to/tvseries:/tv #optional
-      - /path/to/downloadclient-downloads:/downloads #optional
+      - ${DATA}/sonarr/data:/config
+      - ${DATA}/sonarr/tvseries:/tv #optional
+      - ${DATA}/sonarr/downloads:/downloads #optional
     ports:
       - 8989:8989
     restart: unless-stopped
@@ -326,35 +310,20 @@ services:
     image: lscr.io/linuxserver/lidarr:latest
     container_name: lidarr
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
     volumes:
-      - /path/to/lidarr/config:/config
-      - /path/to/music:/music #optional
-      - /path/to/downloads:/downloads #optional
+      - ${DATA}/lidarr/data:/config
+      - ${DATA}/lidarr/music:/music #optional
+      - ${DATA}/lidarr/downloads:/downloads #optional
     ports:
       - 8686:8686
     restart: unless-stopped
 
-  overseerr:
-    image: lscr.io/linuxserver/overseerr:latest
-    container_name: overseerr
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-    volumes:
-      - /path/to/overseerr/config:/config
-    ports:
-      - 5055:5055
-    restart: unless-stopped
-
   openbooks:
-    ports:
-      - '8080:80'
     volumes:
-      - 'openbooks:/books'
+      - openbooks:/books
     restart: unless-stopped
     container_name: openbooks
     command: --name my_irc_name --persist
@@ -362,9 +331,24 @@ services:
       - BASE_PATH=/openbooks/
     image: evanbuss/openbooks:latest
 
+  overseerr:
+    image: lscr.io/linuxserver/overseerr:latest
+    container_name: overseerr
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
+    volumes:
+      - overseerr:/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
+
 volumes:
   cs2:
+  homer:
   pgdata:
   model-cache:
-  mc:
+  minecraft-server:
   openbooks:
+  overseerr:
