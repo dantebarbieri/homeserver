@@ -59,7 +59,9 @@ sudo usermod -aG docker $USER
 ### The Repo
 
 ```bash
-mkdir -p /opt/docker/compose
+sudo mkdir -p /opt/docker/compose
+sudo chown -R :docker /opt/docker/compose
+sudo chmod -R 775 /opt/docker/compose
 pushd /opt/docker/compose
 git clone https://github.com/dantebarbieri/homeserver.git
 ```
@@ -67,5 +69,5 @@ git clone https://github.com/dantebarbieri/homeserver.git
 Edit [`.env`](.env) to add the secrets.
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
