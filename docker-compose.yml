@@ -230,7 +230,7 @@ services:
       INTERVAL: 300
       LOG_LEVEL: info
       SELF_UPDATE: true
-      # IGNORE: mongo influxdb postgres mariadb
+      IGNORE: immich-server immich-microservices immich-machine-learning redis database
       TZ: ${TZ}
     restart: unless-stopped
     volumes:
