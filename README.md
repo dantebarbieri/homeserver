@@ -59,9 +59,11 @@ sudo usermod -aG docker $USER
 ### The Repo
 
 ```bash
-sudo mkdir -p /opt/docker/compose
-sudo chown -R :docker /opt/docker/compose
-sudo chmod -R 775 /opt/docker/compose
+sudo su
+mkdir -p /opt/docker/compose
+chown -R :docker /opt/docker/compose
+chmod -R 775 /opt/docker/compose
+exit
 pushd /opt/docker/compose
 git clone https://github.com/dantebarbieri/homeserver.git
 ```
