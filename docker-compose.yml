@@ -365,5 +365,6 @@ volumes:
   pgdata:
   model-cache:
   minecraft-server:
+  nextcloud_aio_mastercontainer:
   openbooks:
   overseerr:
