@@ -169,6 +169,7 @@ services:
       ENABLE_QUERY: true
       ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 32
+      MEMORY: 8G
       TYPE: "Paper"
     volumes:
       - minecraft-server:/data
