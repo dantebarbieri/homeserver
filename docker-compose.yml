@@ -71,7 +71,7 @@ services:
     image: b4bz/homer
     container_name: homer
     volumes:
-      - homer:/www/assets
+      - ${DATA}/homer/data:/www/assets
     user: "1000:1000" # default
     environment:
       INIT_ASSETS: 1 # default
@@ -330,8 +330,6 @@ services:
       - ${DATA}/radarr/data:/config
       - ${DATA}/radarr/movies:/movies #optional
       - ${DATA}/radarr/downloads:/downloads #optional
-    ports:
-      - 7878:7878
     restart: unless-stopped
 
   sonarr:
@@ -345,8 +343,6 @@ services:
       - ${DATA}/sonarr/data:/config
       - ${DATA}/sonarr/tvseries:/tv #optional
       - ${DATA}/sonarr/downloads:/downloads #optional
-    ports:
-      - 8989:8989
     restart: unless-stopped
 
   lidarr:
@@ -360,8 +356,6 @@ services:
       - ${DATA}/lidarr/data:/config
       - ${DATA}/lidarr/music:/music #optional
       - ${DATA}/lidarr/downloads:/downloads #optional
-    ports:
-      - 8686:8686
     restart: unless-stopped
 
   openbooks:
@@ -382,14 +376,11 @@ services:
       PGID: ${GID}
       TZ: ${TZ}
     volumes:
-      - overseerr:/config
-    ports:
-      - 5055:5055
+      - ${DATA}/overseerr/data:/config
     restart: unless-stopped
 
 volumes:
   cs2:
-  homer:
   pgdata:
   model-cache:
   minecraft-server:
@@ -397,4 +388,3 @@ volumes:
   nextcloud_aio_mastercontainer:
     name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
   openbooks:
-  overseerr:
