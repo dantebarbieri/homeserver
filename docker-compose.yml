@@ -176,7 +176,7 @@ services:
   
   creative-minecraft-server:
     image: itzg/minecraft-server
-    container_name: minecraft-server
+    container_name: creative-minecraft-server
     tty: true
     stdin_open: true
     ports:
