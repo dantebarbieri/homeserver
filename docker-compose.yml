@@ -396,5 +396,6 @@ volumes:
   minecraft-server:
   creative-minecraft-server:
   nextcloud_aio_mastercontainer:
+    name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
   openbooks:
   overseerr:
