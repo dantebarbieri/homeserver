@@ -158,7 +158,8 @@ services:
       - "36676:25565"
     environment:
       EULA: true
-      MOTD: "§aWeekly Games§r §9Discord§r §c§l%MODE%§r Minecraft §c§l%VERSION%§r server running §c§l%TYPE%§r."
+      MODE: "survival"
+      MOTD: "§aWeekly Games§r §9Discord§r §c§l%MODE%§r Minecraft §c§o%VERSION%§r server running §c§o%TYPE%§r."
       DIFFICULTY: "hard"
       OPS: |
         DanteVB
@@ -185,7 +186,7 @@ services:
       EULA: true
       MODE: "creative"
       ALLOW_FLIGHT: true
-      MOTD: "§aWeekly Games§r §9Discord§r §c§l%MODE%§r Minecraft §c§l%VERSION%§r server running §c§l%TYPE%§r."
+      MOTD: "§aWeekly Games§r §9Discord§r §c§l%MODE%§r Minecraft §c§o%VERSION%§r server running §c§o%TYPE%§r."
       DIFFICULTY: "hard"
       OPS: |
         DanteVB
