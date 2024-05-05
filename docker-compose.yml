@@ -284,7 +284,7 @@ services:
     volumes:
       - ${DATA}/plex/database:/config
       - ${DATA}/plex/transcode/temp:/transcode
-      - /media:/data
+      - /media/plex:/data
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
