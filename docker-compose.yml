@@ -143,7 +143,7 @@ services:
     volumes:
       - ${DATA}/jellyfin/config:/config
       - ${DATA}/jellyfin/cache:/cache
-      - /media:/media
+      - ${DATA}/shared/media:/data/media
     network_mode: host
     restart: unless-stopped
 
@@ -282,9 +282,9 @@ services:
       PLEX_CLAIM: ${PLEX_CLAIM}
       ADVERTISE_IP: ${ADVERTISE_IP}
     volumes:
-      - ${DATA}/plex/database:/config
+      - ${DATA}/plex/config:/config
       - ${DATA}/plex/transcode/temp:/transcode
-      - /media/plex:/data
+      - ${DATA}/shared/media:/data/media
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
@@ -374,6 +374,19 @@ services:
       TZ: ${TZ}
     volumes:
       - ${DATA}/overseerr/config:/app/config
+    restart: unless-stopped
+  
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+      AUTO_UPDATE: true #optional
+    volumes:
+      - ${DATA}/jackett/config:/config
+      - ${DATA}/shared/torrents:/downloads
     restart: unless-stopped
 
   openbooks:
