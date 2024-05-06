@@ -295,7 +295,7 @@ services:
       TZ: ${TZ}
     volumes:
       - ${DATA}/qbittorrent/config:/config
-      - ${DATA}/shared/torrents:/downloads
+      - ${DATA}/shared/torrents:/data/torrents
     ports:
       - 6881:6881
       - 6881:6881/udp
