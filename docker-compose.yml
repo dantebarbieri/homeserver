@@ -303,6 +303,17 @@ services:
       - 6881:6881/udp
     restart: unless-stopped
 
+  sabnzbd:
+    image: lscr.io/linuxserver/sabnzbd:latest
+    container_name: sabnzbd
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    volumes:
+      - ${DATA}/sabnzbd/config:/config
+    restart: unless-stopped
+
   jackett:
     image: lscr.io/linuxserver/jackett:latest
     container_name: jackett
