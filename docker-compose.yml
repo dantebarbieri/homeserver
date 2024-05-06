@@ -278,9 +278,12 @@ services:
       - "32413:32413/udp"
       - "32414:32414/udp"
     environment:
+      PLEX_UID: ${UID}
+      PLEX_GID: ${GID}
       TZ: ${TZ}
       PLEX_CLAIM: ${PLEX_CLAIM}
       ADVERTISE_IP: ${ADVERTISE_IP}
+      LAN_NETWORKS: 192.168.1.0/24,172.16.0.0/16
     volumes:
       - ${DATA}/plex/config:/config
       - ${DATA}/plex/transcode/temp:/transcode
