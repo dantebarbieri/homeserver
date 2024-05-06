@@ -368,16 +368,28 @@ services:
       - ${DATA}/shared/usenet:/data/usenet:rw
   
   overseerr:
-    image: sctx/overseerr:latest
+    image: ghcr.io/hotio/overseerr:latest
     container_name: overseerr
     environment:
       LOG_LEVEL: debug
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
+      UMASK: '002'
     volumes:
       - ${DATA}/overseerr/config:/app/config
     restart: unless-stopped
+  
+  prowlarr:
+    container_name: prowlarr
+    image: ghcr.io/hotio/prowlarr:latest
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+      UMASK: '002'
+    volumes:
+      - ${DATA}/prowlarr/config:/config
   
   jackett:
     image: lscr.io/linuxserver/jackett:latest
