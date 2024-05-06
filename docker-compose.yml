@@ -293,82 +293,87 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
-      WEBUI_PORT: 8080
-      TORRENTING_PORT: 6881
     volumes:
       - ${DATA}/qbittorrent/config:/config
-      - ${DATA}/qbittorrent/downloads:/downloads
+      - ${DATA}/shared/torrents:/downloads
     ports:
       - 6881:6881
       - 6881:6881/udp
     restart: unless-stopped
 
-  sabnzbd:
-    image: lscr.io/linuxserver/sabnzbd:latest
-    container_name: sabnzbd
-    environment:
-      PUID: ${UID}
-      PGID: ${GID}
-      TZ: ${TZ}
-    volumes:
-      - ${DATA}/sabnzbd/config:/config
-    ports:
-      - 8989:8080
-    restart: unless-stopped
-
-  jackett:
-    image: lscr.io/linuxserver/jackett:latest
-    container_name: jackett
-    environment:
-      PUID: ${UID}
-      PGID: ${GID}
-      TZ: ${TZ}
-      AUTO_UPDATE: true #optional
-      RUN_OPTS: null #optional
-    volumes:
-      - ${DATA}/jackett/data:/config
-      - ${DATA}/jackett/blackhole:/downloads
-    ports:
-      - 9117:9117
-    restart: unless-stopped
-
   radarr:
-    image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
+    image: ghcr.io/hotio/radarr:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
     environment:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
     volumes:
-      - ${DATA}/radarr/data:/config
-      - ${DATA}/radarr/movies:/movies #optional
-      - ${DATA}/radarr/downloads:/downloads #optional
-    restart: unless-stopped
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/radarr/config:/config
+      - ${DATA}/shared:/data
 
   sonarr:
-    image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
-    environment:
-      PUID: ${UID}
-      PGID: ${GID}
-      TZ: ${TZ}
-    volumes:
-      - ${DATA}/sonarr/data:/config
-      - ${DATA}/sonarr/tvseries:/tv #optional
-      - ${DATA}/sonarr/downloads:/downloads #optional
+    image: ghcr.io/hotio/sonarr:latest
     restart: unless-stopped
-
-  lidarr:
-    image: lscr.io/linuxserver/lidarr:latest
-    container_name: lidarr
+    logging:
+      driver: json-file
     environment:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
     volumes:
-      - ${DATA}/lidarr/data:/config
-      - ${DATA}/lidarr/music:/music #optional
-      - ${DATA}/lidarr/downloads:/downloads #optional
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/sonarr/config:/config
+      - ${DATA}/shared:/data
+
+  bazarr:
+    container_name: bazarr
+    image: ghcr.io/hotio/bazarr:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/bazarr/config:/config
+      - ${DATA}/shared/media:/data/media
+
+  sabnzbd:
+    container_name: sabnzbd
+    image: ghcr.io/hotio/sabnzbd:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+    ports:
+      - 8989:8080
+      - 9090:9090
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/sabnzbd/config:/config
+      - ${DATA}/shared/usenet:/data/usenet:rw
+  
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: overseerr
+    environment:
+      LOG_LEVEL: debug
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    volumes:
+      - ${DATA}/overseerr/config:/app/config
     restart: unless-stopped
 
   openbooks:
@@ -380,17 +385,6 @@ services:
     environment:
       - BASE_PATH=/openbooks/
     image: evanbuss/openbooks:latest
-
-  overseerr:
-    image: lscr.io/linuxserver/overseerr:latest
-    container_name: overseerr
-    environment:
-      PUID: ${UID}
-      PGID: ${GID}
-      TZ: ${TZ}
-    volumes:
-      - ${DATA}/overseerr/data:/config
-    restart: unless-stopped
 
 volumes:
   cs2:
