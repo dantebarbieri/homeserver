@@ -312,6 +312,8 @@ services:
       TZ: ${TZ}
     volumes:
       - ${DATA}/sabnzbd/config:/config
+    ports:
+      - 8989:8080
     restart: unless-stopped
 
   jackett:
