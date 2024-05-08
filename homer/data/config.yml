@@ -139,14 +139,14 @@ services:
         url: "https://overseerr.danteb.com"
         target: "_blank" # optional html a tag target attribute
       - name: "Radarr"
-        logo: "assets/tools/radarr_logo.png"
+        logo: "assets/tools/radarr_logo.svg"
         subtitle: "Movies"
         tag: "app"
         keywords: "p2p"
         url: "https://radarr.danteb.com"
         target: "_blank" # optional html a tag target attribute
       - name: "Sonarr"
-        logo: "assets/tools/sonarr_logo.png"
+        logo: "assets/tools/sonarr_logo.svg"
         subtitle: "TV"
         tag: "app"
         keywords: "p2p"
