@@ -1,0 +1,182 @@
+---
+# Homepage configuration
+# See https://fontawesome.com/v5/search for icons options
+
+title: "Dante's Homeserver"
+subtitle: "danteb.com"
+logo: "logo.png"
+# icon: "fas fa-skull-crossbones" # Optional icon
+
+header: true
+footer: '<p>Created with <span class="has-text-danger">❤️</span> with <a href="https://bulma.io/">bulma</a>, <a href="https://vuejs.org/">vuejs</a> & <a href="https://fontawesome.com/">font awesome</a> // Fork me on <a href="https://github.com/bastienwirtz/homer"><i class="fab fa-github-alt"></i></a></p>' # set false if you want to hide it.
+
+columns: "auto" # "auto" or number (must be a factor of 12: 1, 2, 3, 4, 6, 12)
+connectivityCheck: true # whether you want to display a message when the apps are not accessible anymore (VPN disconnected for example).
+
+# Set the default layout and color scheme
+defaults:
+  layout: columns # Either 'columns', or 'list'
+  colorTheme: auto # One of 'auto', 'light', or 'dark'
+
+# Optional theme customization
+theme: default
+colors:
+  light:
+    highlight-primary: "#3367d6"
+    highlight-secondary: "#4285f4"
+    highlight-hover: "#5a95f5"
+    background: "#f5f5f5"
+    card-background: "#ffffff"
+    text: "#363636"
+    text-header: "#ffffff"
+    text-title: "#303030"
+    text-subtitle: "#424242"
+    card-shadow: rgba(0, 0, 0, 0.1)
+    link: "#3273dc"
+    link-hover: "#363636"
+  dark:
+    highlight-primary: "#3367d6"
+    highlight-secondary: "#4285f4"
+    highlight-hover: "#5a95f5"
+    background: "#131313"
+    card-background: "#2b2b2b"
+    text: "#eaeaea"
+    text-header: "#ffffff"
+    text-title: "#fafafa"
+    text-subtitle: "#f5f5f5"
+    card-shadow: rgba(0, 0, 0, 0.4)
+    link: "#3273dc"
+    link-hover: "#ffdd57"
+
+# Optional message
+message:
+  #url: https://b4bz.io
+  style: "is-dark" # See https://bulma.io/documentation/components/message/#colors for styling options.
+  title: "Legal Disclaimer"
+  icon: "fa fa-scale-balanced"
+  content: "All Peer to Peer connections are <strong>completely legal connections</strong>. <br /> I support legal Linux ISO exchange over Bittorrent among other legally permissible uses."
+
+# Optional navbar
+links: [] # Allows for navbar (dark mode, layout, and search) without any links
+# links:
+#   - name: "Contribute"
+#     icon: "fab fa-github"
+#     url: "https://github.com/bastienwirtz/homer"
+#     target: "_blank" # optional html a tag target attribute
+#   - name: "Wiki"
+#     icon: "fas fa-book"
+#     url: "https://www.wikipedia.org/"
+#   # this will link to a second homer page that will load config from additional-page.yml and keep default config values as in config.yml file
+#   # see url field and assets/additional-page.yml.dist used in this example:
+#   #- name: "another page!"
+#   #  icon: "fas fa-file-alt"
+#   #  url: "#additional-page" 
+
+# Services
+# First level array represent a group.
+# Leave only a "items" key if not using group (group name, icon & tagstyle are optional, section separation will not be displayed).
+services:
+  - name: "Game Servers"
+    icon: "fas fa-server"
+    items:
+      - name: "Counter-Strike 2"
+        logo: "assets/tools/cs2_logo.jpg"
+        subtitle: "connect danteb.com:27015"
+        tag: "server"
+        keywords: "game cs2 steam"
+        url: "steam://connect/danteb.com:27015"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Creative Minecraft"
+        logo: "assets/tools/mc_logo.png"
+        subtitle: "creative-mc.danteb.com"
+        tag: "server"
+      - name: "Survival Minecraft"
+        logo: "assets/tools/mc_logo.png"
+        subtitle: "survival-mc.danteb.com"
+        tag: "server"
+  - name: "Media"
+    icon: "fas fa-tv"
+    items:
+      - name: "Plex"
+        logo: "assets/tools/plex_logo.png"
+        subtitle: "Movies & TV"
+        tag: "remote app"
+        keywords: "media"
+        url: "https://app.plex.tv"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Immich"
+        logo: "assets/tools/immich-logo-stacked-dark.svg"
+        subtitle: "Photos"
+        tag: "app"
+        keywords: "media"
+        url: "https://images.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+  - name: "Networking"
+    icon: "fas fa-network-wired"
+    items:
+      - name: "Adguard Home"
+        logo: "assets/tools/AdGuard_Logo.png"
+        subtitle: "Ad-Blocking DNS & DHCP"
+        tag: "app"
+        keywords: "network"
+        url: "https://adguard.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Nginx Proxy Manager"
+        logo: "assets/tools/npm_icon.png"
+        subtitle: "Reverse Proxy"
+        tag: "app"
+        keywords: "media"
+        url: "https://nginx-proxy-manager.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+  - name: "Peer to Peer"
+    icon: "fas fa-circle-nodes"
+    items:
+      - name: "Overseerr"
+        logo: "assets/tools/os_logo_filled.svg"
+        subtitle: "Request Content"
+        tag: "app"
+        keywords: "p2p"
+        url: "https://overseerr.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Radarr"
+        logo: "assets/tools/radarr_logo.png"
+        subtitle: "Movies"
+        tag: "app"
+        keywords: "p2p"
+        url: "https://radarr.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Sonarr"
+        logo: "assets/tools/sonarr_logo.png"
+        subtitle: "TV"
+        tag: "app"
+        keywords: "p2p"
+        url: "https://sonarr.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Bazarr"
+        logo: "assets/tools/bazarr_logo.png"
+        subtitle: "Subtitles"
+        tag: "app"
+        keywords: "p2p"
+        url: "https://bazarr.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Prowlarr"
+        logo: "assets/tools/prowlarr_logo.png"
+        subtitle: "Indexer"
+        tag: "app"
+        keywords: "p2p"
+        url: "https://prowlarr.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "qBittorrent"
+        logo: "assets/tools/qbittorrent_logo.png"
+        subtitle: "Torrents"
+        tag: "app"
+        keywords: "p2p"
+        url: "https://qbittorrent.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "SABnzbd"
+        logo: "assets/tools/sabnzbd_logo.png"
+        subtitle: "NZB"
+        tag: "app"
+        keywords: "p2p"
+        url: "https://sabnzbd.danteb.com"
+        target: "_blank" # optional html a tag target attribute
