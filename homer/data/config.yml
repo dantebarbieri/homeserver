@@ -122,7 +122,7 @@ services:
         url: "https://adguard.danteb.com"
         target: "_blank" # optional html a tag target attribute
       - name: "Nginx Proxy Manager"
-        logo: "assets/tools/npm_icon.png"
+        logo: "assets/homer-icons/png/nginxproxymanager.png"
         subtitle: "Reverse Proxy"
         tag: "app"
         keywords: "media"
