@@ -70,12 +70,46 @@ links: [] # Allows for navbar (dark mode, layout, and search) without any links
 #   # see url field and assets/additional-page.yml.dist used in this example:
 #   #- name: "another page!"
 #   #  icon: "fas fa-file-alt"
-#   #  url: "#additional-page" 
+#   #  url: "#additional-page"
 
 # Services
 # First level array represent a group.
 # Leave only a "items" key if not using group (group name, icon & tagstyle are optional, section separation will not be displayed).
 services:
+  - name: "Management"
+    icon: "fas fa-tv"
+    items:
+      - name: "IPMI"
+        logo: "assets/tools/asrock_rack_logo.png"
+        subtitle: "BMC Management"
+        tag: "local"
+        keywords: "management"
+        url: "https://192.168.1.8"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Netgear Nighthawk"
+        logo: "assets/tools/router_logo.png"
+        subtitle: "Router Settings"
+        tag: "local"
+        keywords: "management"
+        url: "www.routerlogin.com"
+        target: "_blank" # optional html a tag target attribute
+  - name: "Networking"
+    icon: "fas fa-network-wired"
+    items:
+      - name: "Adguard Home"
+        logo: "assets/homer-icons/svg/adguardhome.svg"
+        subtitle: "Ad-Blocking DNS & DHCP"
+        tag: "app"
+        keywords: "network"
+        url: "https://adguard.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Nginx Proxy Manager"
+        logo: "assets/homer-icons/png/nginxproxymanager.png"
+        subtitle: "Reverse Proxy"
+        tag: "app"
+        keywords: "media"
+        url: "https://nginx-proxy-manager.danteb.com"
+        target: "_blank" # optional html a tag target attribute
   - name: "Game Servers"
     icon: "fas fa-server"
     items:
@@ -110,23 +144,6 @@ services:
         tag: "app"
         keywords: "media"
         url: "https://images.danteb.com"
-        target: "_blank" # optional html a tag target attribute
-  - name: "Networking"
-    icon: "fas fa-network-wired"
-    items:
-      - name: "Adguard Home"
-        logo: "assets/homer-icons/svg/adguardhome.svg"
-        subtitle: "Ad-Blocking DNS & DHCP"
-        tag: "app"
-        keywords: "network"
-        url: "https://adguard.danteb.com"
-        target: "_blank" # optional html a tag target attribute
-      - name: "Nginx Proxy Manager"
-        logo: "assets/homer-icons/png/nginxproxymanager.png"
-        subtitle: "Reverse Proxy"
-        tag: "app"
-        keywords: "media"
-        url: "https://nginx-proxy-manager.danteb.com"
         target: "_blank" # optional html a tag target attribute
   - name: "Peer to Peer"
     icon: "fas fa-circle-nodes"
