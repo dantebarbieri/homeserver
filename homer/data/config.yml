@@ -91,7 +91,7 @@ services:
         subtitle: "Router Settings"
         tag: "local"
         keywords: "management"
-        url: "www.routerlogin.com"
+        url: "https://www.routerlogin.com"
         target: "_blank" # optional html a tag target attribute
   - name: "Networking"
     icon: "fas fa-network-wired"
