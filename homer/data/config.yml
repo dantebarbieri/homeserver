@@ -118,7 +118,7 @@ services:
         subtitle: "connect danteb.com:27015"
         tag: "server"
         keywords: "game cs2 steam"
-        url: "steam://connect/danteb.com:27015"
+        url: "steam://connect/24.55.20.222:27015"
         target: "_blank" # optional html a tag target attribute
       - name: "Creative Minecraft"
         logo: "assets/tools/mc_logo.png"
