@@ -284,20 +284,15 @@ services:
       PLEX_CLAIM: ${PLEX_CLAIM}
       ADVERTISE_IP: ${ADVERTISE_IP}
       LAN_NETWORKS: 192.168.1.0/24,172.16.0.0/16
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
     volumes:
       - ${DATA}/plex/config:/config
       - ${DATA}/plex/transcode/temp:/transcode
       - ${RAID}/shared/media:/data/media
     devices:
       - "/dev/dri:/dev/dri"
-    deploy:
-      resources:
-        reservations:
-          devices:
-          - capabilities: ["compute", "utility"]
-            driver: nvidia
-            count: 1
-            device_ids: ["0"] # Adjust this if you have multiple GPUs
+    runtime: "nvidia"
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
