@@ -288,16 +288,6 @@ services:
       - ${DATA}/plex/config:/config
       - ${DATA}/plex/transcode/temp:/transcode
       - ${RAID}/shared/media:/data/media
-    devices:
-      - "/dev/dri:/dev/dri"
-    deploy:
-      resources:
-        reservations:
-          devices:
-          - capabilities: ["compute", "utility"]
-            driver: nvidia
-            count: 1
-            device_ids: ["0"] # Adjust this if you have multiple GPUs
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
