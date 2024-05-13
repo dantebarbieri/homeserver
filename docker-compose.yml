@@ -380,7 +380,7 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
-      UMASK: '002'
+      UMASK: "002"
     volumes:
       - ${DATA}/overseerr/config:/app/config
     restart: unless-stopped
@@ -392,7 +392,7 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
-      UMASK: '002'
+      UMASK: "002"
     volumes:
       - ${DATA}/prowlarr/config:/config
 
@@ -406,6 +406,13 @@ services:
       - BASE_PATH=/openbooks/
     image: evanbuss/openbooks:latest
 
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    volumes:
+      - vw-data:/data
+    restart: unless-stopped
+
 volumes:
   cs2:
   pgdata:
@@ -415,3 +422,4 @@ volumes:
   nextcloud_aio_mastercontainer:
     name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
   openbooks:
+  vw-data:
