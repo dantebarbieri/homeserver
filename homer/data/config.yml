@@ -79,6 +79,13 @@ services:
   - name: "Management"
     icon: "fas fa-tv"
     items:
+      - name: "Vaultwarden"
+        logo: "assets/homer-icons/png/vaultwarden.png"
+        subtitle: "Password Manager"
+        tag: "app"
+        keywords: "management password bitwarden"
+        url: "https://vaultwarden.danteb.com"
+        target: "_blank" # optional html a tag target attribute
       - name: "IPMI"
         logo: "assets/tools/asrock_rack_logo.png"
         subtitle: "BMC Management"
