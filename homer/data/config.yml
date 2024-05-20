@@ -110,6 +110,23 @@ services:
         keywords: "media"
         url: "https://nginx-proxy-manager.danteb.com"
         target: "_blank" # optional html a tag target attribute
+  - name: "Utilities"
+    icon: "fas fa-gears"
+    items:
+      - name: "SearXNG"
+        logo: "assets/homer-icons/png/searxmetasearchengine.png"
+        subtitle: "Metasearch Engine"
+        tag: "app"
+        keywords: "management search searx"
+        url: "https://searxng.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Vaultwarden"
+        logo: "assets/homer-icons/png/vaultwarden.png"
+        subtitle: "Password Manager"
+        tag: "app"
+        keywords: "management password bitwarden"
+        url: "https://vaultwarden.danteb.com"
+        target: "_blank" # optional html a tag target attribute
   - name: "Media"
     icon: "fas fa-tv"
     items:
@@ -195,21 +212,4 @@ services:
         tag: "local"
         keywords: "management"
         url: "https://www.routerlogin.com"
-        target: "_blank" # optional html a tag target attribute
-  - name: "Utilities"
-    icon: "fas fa-gears"
-    items:
-      - name: "SearXNG"
-        logo: "assets/homer-icons/png/searxmetasearchengine.png"
-        subtitle: "Metasearch Engine"
-        tag: "app"
-        keywords: "management search searx"
-        url: "https://searxng.danteb.com"
-        target: "_blank" # optional html a tag target attribute
-      - name: "Vaultwarden"
-        logo: "assets/homer-icons/png/vaultwarden.png"
-        subtitle: "Password Manager"
-        tag: "app"
-        keywords: "management password bitwarden"
-        url: "https://vaultwarden.danteb.com"
         target: "_blank" # optional html a tag target attribute
