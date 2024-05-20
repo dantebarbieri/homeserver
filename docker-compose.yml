@@ -3,6 +3,8 @@ services:
     image: adguard/adguardhome
     container_name: adguardhome
     restart: unless-stopped
+    networks:
+      - default
     volumes:
       - ${DATA}/adguardhome/workdir:/opt/adguardhome/work
       - ${DATA}/adguardhome/confdir:/opt/adguardhome/conf
@@ -60,6 +62,8 @@ services:
       CS2_LOG_MONEY: 0 # Turns money logging on/off: (0=off, 1=on)
       CS2_LOG_DETAIL: 0 # Combat damage logging: (0=disabled, 1=enemy, 2=friendly, 3=all)
       CS2_LOG_ITEMS: 0 # Turns item logging on/off: (0=off, 1=on)
+    networks:
+      - default
     volumes:
       - cs2:/home/steam/cs2-dedicated/ # Persistent data volume mount point inside container
     ports:
@@ -73,6 +77,8 @@ services:
     user: "${UID}:${GID}"
     environment:
       INIT_ASSETS: 1
+    networks:
+      - default
     volumes:
       - ${CONFIG}/homeserver/homer/data:/www/assets
 
@@ -80,6 +86,9 @@ services:
     container_name: immich_server
     image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
     command: ["start.sh", "immich"]
+    networks:
+      - default
+      - immich
     volumes:
       - ${UPLOAD_LOCATION}:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro
@@ -97,6 +106,8 @@ services:
       file: hwaccel.transcoding.yml
       service: nvenc # set to one of [nvenc, quicksync, rkmpp, vaapi, vaapi-wsl] for accelerated transcoding
     command: ["start.sh", "microservices"]
+    networks:
+      - immich
     volumes:
       - ${UPLOAD_LOCATION}:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro
@@ -115,15 +126,19 @@ services:
     # extends: # uncomment this section for hardware acceleration - see https://immich.app/docs/features/ml-hardware-acceleration
     #   file: hwaccel.ml.yml
     #   service: cuda # set to one of [armnn, cuda, openvino, openvino-wsl] for accelerated inference - use the `-wsl` version for WSL2 where applicable
+    networks:
+      - immich
     volumes:
       - model-cache:/cache
     env_file:
       - .env
     restart: always
 
-  redis:
+  immich_redis:
     container_name: immich_redis
     image: registry.hub.docker.com/library/redis:6.2-alpine@sha256:51d6c56749a4243096327e3fb964a48ed92254357108449cb6e23999c37773c5
+    networks:
+      - immich
     restart: always
 
   database:
@@ -133,6 +148,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_DB: ${DB_DATABASE_NAME}
+    networks:
+      - immich
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
@@ -160,6 +177,8 @@ services:
       VIEW_DISTANCE: 32
       MEMORY: 8G
       TYPE: "Paper"
+    networks:
+      - default
     volumes:
       - minecraft-server:/data
 
@@ -188,6 +207,8 @@ services:
       MEMORY: 8G
       TYPE: "Paper"
       TZ: ${TZ}
+    networks:
+      - default
     volumes:
       - creative-minecraft-server:/data
 
@@ -199,6 +220,8 @@ services:
       - "80:80"
       - "81:81"
       - "443:443"
+    networks:
+      - default
     volumes:
       - ${DATA}/nginxproxymanager/data:/data
       - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
@@ -215,6 +238,8 @@ services:
       IGNORE: immich-server immich-microservices immich-machine-learning redis database
       TZ: ${TZ}
     restart: unless-stopped
+    networks:
+      - default
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -240,6 +265,8 @@ services:
       LAN_NETWORKS: 192.168.1.0/24,172.16.0.0/16
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+    networks:
+      - default
     volumes:
       - ${DATA}/plex/config:/config
       - ${DATA}/plex/transcode/temp:/transcode
@@ -255,6 +282,8 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
+    networks:
+      - default
     volumes:
       - ${DATA}/qbittorrent/config:/config
       - ${RAID}/shared/torrents:/data/torrents
@@ -273,6 +302,8 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
+    networks:
+      - default
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/radarr/config:/config
@@ -288,6 +319,8 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
+    networks:
+      - default
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/sonarr/config:/config
@@ -303,6 +336,8 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
+    networks:
+      - default
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/bazarr/config:/config
@@ -321,6 +356,8 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
+    networks:
+      - default
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/sabnzbd/config:/config
@@ -335,6 +372,8 @@ services:
       PGID: ${GID}
       TZ: ${TZ}
       UMASK: "002"
+    networks:
+      - default
     volumes:
       - ${DATA}/overseerr/config:/app/config
     restart: unless-stopped
@@ -347,15 +386,68 @@ services:
       PGID: ${GID}
       TZ: ${TZ}
       UMASK: "002"
+    networks:
+      - default
     volumes:
       - ${DATA}/prowlarr/config:/config
 
   vaultwarden:
     image: vaultwarden/server:latest
     container_name: vaultwarden
+    networks:
+      - default
     volumes:
       - vw-data:/data
     restart: unless-stopped
+
+  redis:
+    container_name: redis
+    image: cgr.dev/chainguard/valkey:latest
+    command: --save 30 1 --loglevel warning
+    restart: unless-stopped
+    networks:
+      - searxng
+    volumes:
+      - valkey-data:/data
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+  searxng:
+    container_name: searxng
+    image: docker.io/searxng/searxng:latest
+    restart: unless-stopped
+    networks:
+      - default
+      - searxng
+    volumes:
+      - ${DATA}/searxng/config:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=https://${SEARXNG_HOSTNAME:-localhost}/
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+networks:
+  default:
+  immich:
+  searxng:
 
 volumes:
   cs2:
@@ -366,4 +458,5 @@ volumes:
   nextcloud_aio_mastercontainer:
     name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
   openbooks:
+  valkey-data:
   vw-data:
