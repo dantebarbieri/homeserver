@@ -76,9 +76,16 @@ links: [] # Allows for navbar (dark mode, layout, and search) without any links
 # First level array represent a group.
 # Leave only a "items" key if not using group (group name, icon & tagstyle are optional, section separation will not be displayed).
 services:
-  - name: "Management"
-    icon: "fas fa-tv"
+  - name: "Utilities"
+    icon: "fas fa-gears"
     items:
+      - name: "SearXNG"
+        logo: "assets/homer-icons/png/searxmetasearchengine.png"
+        subtitle: "Metasearch Engine"
+        tag: "app"
+        keywords: "management search searx"
+        url: "https://searxng.danteb.com"
+        target: "_blank" # optional html a tag target attribute
       - name: "Vaultwarden"
         logo: "assets/homer-icons/png/vaultwarden.png"
         subtitle: "Password Manager"
@@ -86,6 +93,9 @@ services:
         keywords: "management password bitwarden"
         url: "https://vaultwarden.danteb.com"
         target: "_blank" # optional html a tag target attribute
+  - name: "Management"
+    icon: "fas fa-tv"
+    items:
       - name: "IPMI"
         logo: "assets/tools/asrock_rack_logo.png"
         subtitle: "BMC Management"
