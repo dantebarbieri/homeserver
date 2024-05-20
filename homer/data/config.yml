@@ -76,57 +76,6 @@ links: [] # Allows for navbar (dark mode, layout, and search) without any links
 # First level array represent a group.
 # Leave only a "items" key if not using group (group name, icon & tagstyle are optional, section separation will not be displayed).
 services:
-  - name: "Utilities"
-    icon: "fas fa-gears"
-    items:
-      - name: "SearXNG"
-        logo: "assets/homer-icons/png/searxmetasearchengine.png"
-        subtitle: "Metasearch Engine"
-        tag: "app"
-        keywords: "management search searx"
-        url: "https://searxng.danteb.com"
-        target: "_blank" # optional html a tag target attribute
-      - name: "Vaultwarden"
-        logo: "assets/homer-icons/png/vaultwarden.png"
-        subtitle: "Password Manager"
-        tag: "app"
-        keywords: "management password bitwarden"
-        url: "https://vaultwarden.danteb.com"
-        target: "_blank" # optional html a tag target attribute
-  - name: "Management"
-    icon: "fas fa-tv"
-    items:
-      - name: "IPMI"
-        logo: "assets/tools/asrock_rack_logo.png"
-        subtitle: "BMC Management"
-        tag: "local"
-        keywords: "management"
-        url: "https://192.168.1.8"
-        target: "_blank" # optional html a tag target attribute
-      - name: "Netgear Nighthawk"
-        logo: "assets/tools/router_logo.png"
-        subtitle: "Router Settings"
-        tag: "local"
-        keywords: "management"
-        url: "https://www.routerlogin.com"
-        target: "_blank" # optional html a tag target attribute
-  - name: "Networking"
-    icon: "fas fa-network-wired"
-    items:
-      - name: "Adguard Home"
-        logo: "assets/homer-icons/svg/adguardhome.svg"
-        subtitle: "Ad-Blocking DNS & DHCP"
-        tag: "app"
-        keywords: "network"
-        url: "https://adguard.danteb.com"
-        target: "_blank" # optional html a tag target attribute
-      - name: "Nginx Proxy Manager"
-        logo: "assets/homer-icons/png/nginxproxymanager.png"
-        subtitle: "Reverse Proxy"
-        tag: "app"
-        keywords: "media"
-        url: "https://nginx-proxy-manager.danteb.com"
-        target: "_blank" # optional html a tag target attribute
   - name: "Game Servers"
     icon: "fas fa-server"
     items:
@@ -144,6 +93,23 @@ services:
         logo: "assets/tools/mc_logo.png"
         subtitle: "survival-mc.danteb.com"
         tag: "server"
+  - name: "Networking"
+    icon: "fas fa-network-wired"
+    items:
+      - name: "Adguard Home"
+        logo: "assets/homer-icons/svg/adguardhome.svg"
+        subtitle: "Ad-Blocking DNS & DHCP"
+        tag: "app"
+        keywords: "network"
+        url: "https://adguard.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Nginx Proxy Manager"
+        logo: "assets/homer-icons/png/nginxproxymanager.png"
+        subtitle: "Reverse Proxy"
+        tag: "app"
+        keywords: "media"
+        url: "https://nginx-proxy-manager.danteb.com"
+        target: "_blank" # optional html a tag target attribute
   - name: "Media"
     icon: "fas fa-tv"
     items:
@@ -212,4 +178,38 @@ services:
         tag: "app"
         keywords: "p2p"
         url: "https://sabnzbd.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+  - name: "Management"
+    icon: "fas fa-tv"
+    items:
+      - name: "IPMI"
+        logo: "assets/tools/asrock_rack_logo.png"
+        subtitle: "BMC Management"
+        tag: "local"
+        keywords: "management"
+        url: "https://192.168.1.8"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Netgear Nighthawk"
+        logo: "assets/tools/router_logo.png"
+        subtitle: "Router Settings"
+        tag: "local"
+        keywords: "management"
+        url: "https://www.routerlogin.com"
+        target: "_blank" # optional html a tag target attribute
+  - name: "Utilities"
+    icon: "fas fa-gears"
+    items:
+      - name: "SearXNG"
+        logo: "assets/homer-icons/png/searxmetasearchengine.png"
+        subtitle: "Metasearch Engine"
+        tag: "app"
+        keywords: "management search searx"
+        url: "https://searxng.danteb.com"
+        target: "_blank" # optional html a tag target attribute
+      - name: "Vaultwarden"
+        logo: "assets/homer-icons/png/vaultwarden.png"
+        subtitle: "Password Manager"
+        tag: "app"
+        keywords: "management password bitwarden"
+        url: "https://vaultwarden.danteb.com"
         target: "_blank" # optional html a tag target attribute
