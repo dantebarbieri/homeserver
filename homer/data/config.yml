@@ -113,18 +113,25 @@ services:
   - name: "Utilities"
     icon: "fas fa-gears"
     items:
+      - name: "Open WebUI"
+        logo: "assets/tools/open_webui_logo.png"
+        subtitle: "Generative AI"
+        tag: "app"
+        keywords: "utilities chat gpt ai llama "
+        url: "https://chat.danteb.com"
+        target: "_blank" # optional html a tag target attribute
       - name: "SearXNG"
         logo: "assets/homer-icons/png/searxmetasearchengine.png"
         subtitle: "Metasearch Engine"
         tag: "app"
-        keywords: "management search searx"
+        keywords: "utilities search searx"
         url: "https://searxng.danteb.com"
         target: "_blank" # optional html a tag target attribute
       - name: "Vaultwarden"
         logo: "assets/homer-icons/png/vaultwarden.png"
         subtitle: "Password Manager"
         tag: "app"
-        keywords: "management password bitwarden"
+        keywords: "utilities password bitwarden"
         url: "https://vaultwarden.danteb.com"
         target: "_blank" # optional html a tag target attribute
   - name: "Media"
