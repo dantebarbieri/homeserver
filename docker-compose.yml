@@ -485,6 +485,7 @@ services:
 
   dash:
     image: mauricenino/dashdot:nvidia
+    container_name: dashdot
     restart: unless-stopped
     privileged: true
     deploy:

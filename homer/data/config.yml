@@ -48,13 +48,13 @@ colors:
     link: "#3273dc"
     link-hover: "#ffdd57"
 
-# # Optional message
-# message:
-#   #url: https://b4bz.io
-#   style: "is-dark" # See https://bulma.io/documentation/components/message/#colors for styling options.
-#   title: "Legal Disclaimer"
-#   icon: "fa fa-scale-balanced"
-#   content: "All Peer to Peer connections are <strong>completely legal connections</strong>. <br /> I support legal Linux ISO exchange over Bittorrent among other legally permissible uses."
+# Optional message
+message:
+  url: https://status.danteb.com
+  style: "is-dark" # See https://bulma.io/documentation/components/message/#colors for styling options.
+  title: "Monitoring"
+  icon: "fa fa-heart-pulse"
+  content: "Monitoring provided by Dash."
 
 # Optional navbar
 links: [] # Allows for navbar (dark mode, layout, and search) without any links
