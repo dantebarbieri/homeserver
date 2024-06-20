@@ -463,13 +463,12 @@ services:
     tty: true
     restart: unless-stopped
     image: ollama/ollama:${OLLAMA_DOCKER_TAG:-latest}
-    
 
   open-webui:
     build:
       context: .
       args:
-        OLLAMA_BASE_URL: '/ollama'
+        OLLAMA_BASE_URL: "/ollama"
       dockerfile: Dockerfile
     image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG:-main}
     container_name: open-webui
@@ -481,8 +480,29 @@ services:
     depends_on:
       - ollama
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
+      - "OLLAMA_BASE_URL=http://ollama:11434"
     restart: unless-stopped
+
+  dash:
+    image: mauricenino/dashdot:nvidia
+    restart: unless-stopped
+    privileged: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
+    networks:
+      - default
+    volumes:
+      - /:/mnt/host:ro
+    environment:
+      DASHDOT_WIDGET_LIST: "os,cpu,storage,ram,network,gpu"
+      DASHDOT_SHOW_HOST: true
+      DASHDOT_ENABLE_CPU_TEMPS: true
+      DASHDOT_NETWORK_LABEL_LIST: type,speed_up,speed_down,interface_speed,public_ip
+      DASHDOT_ACCEPT_OOKLA_EULA: true
 
 networks:
   default:
