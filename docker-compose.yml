@@ -269,7 +269,7 @@ services:
       - default
     volumes:
       - ${DATA}/plex/config:/config
-      - ${DATA}/plex/transcode/temp:/transcode
+      - /tmp/plex:/transcode
       - ${RAID}/shared/media:/data/media
     devices:
       - "/dev/dri:/dev/dri"
