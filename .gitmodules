@@ -1,3 +1,7 @@
 [submodule "homer/data/homer-icons"]
 	path = homer/data/homer-icons
 	url = https://github.com/NX211/homer-icons
+[submodule "VueTorrent"]
+	path = VueTorrent
+	url = https://github.com/VueTorrent/VueTorrent.git
+	branch = latest-release
