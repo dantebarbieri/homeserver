@@ -287,6 +287,7 @@ services:
     volumes:
       - ${DATA}/qbittorrent/config:/config
       - ${RAID}/shared/torrents:/data/torrents
+      - ${CONFIG}/homeserver/VueTorrent:/vuetorrent
     ports:
       - 6881:6881
       - 6881:6881/udp
