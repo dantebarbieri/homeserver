@@ -392,6 +392,20 @@ services:
     volumes:
       - ${DATA}/prowlarr/config:/config
 
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_HTML: ${LOG_HTML:-false}
+      CAPTCHA_SOLVER: ${CAPTCHA_SOLVER:-none}
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    networks:
+      - default
+    restart: unless-stopped
+
   vaultwarden:
     image: vaultwarden/server:latest
     container_name: vaultwarden
