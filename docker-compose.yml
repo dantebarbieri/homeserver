@@ -327,6 +327,20 @@ services:
       - ${DATA}/sonarr/config:/config
       - ${RAID}/shared:/data
 
+  recyclarr:
+    container_name: recyclarr
+    image: ghcr.io/recyclarr/recyclarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    networks:
+      - default
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/recyclarr/config:/config
+
   bazarr:
     container_name: bazarr
     image: ghcr.io/hotio/bazarr:latest
