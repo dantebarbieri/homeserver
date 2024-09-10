@@ -459,6 +459,8 @@ services:
       - open-webui
     volumes:
       - ollama:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0
     container_name: ollama
     pull_policy: always
     tty: true
@@ -481,7 +483,12 @@ services:
     depends_on:
       - ollama
     environment:
-      - "OLLAMA_BASE_URL=http://ollama:11434"
+      ENABLE_RAG_WEB_SEARCH: True
+      OLLAMA_BASE_URL: http://ollama:11434
+      RAG_WEB_SEARCH_ENGINE: "searxng"
+      RAG_WEB_SEARCH_RESULT_COUNT: 3
+      RAG_WEB_SEARCH_CONCURRENT_REQUESTS: 10
+      SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
     restart: unless-stopped
 
   dash:
