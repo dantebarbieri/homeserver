@@ -225,6 +225,7 @@ services:
     volumes:
       - ${DATA}/nginxproxymanager/data:/data
       - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
+      - ${DATA}/nginxproxymanager/snippets:/snippets
 
   ouroboros:
     container_name: ouroboros
