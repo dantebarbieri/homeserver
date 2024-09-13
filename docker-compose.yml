@@ -519,6 +519,16 @@ services:
       SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
     restart: unless-stopped
 
+  monitoring:
+    image: nicolargo/glances:latest
+    restart: always
+    pid: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/os-release:/etc/os-release:ro
+    environment:
+      GLANCES_OPT: -w
+
   dash:
     image: mauricenino/dashdot:nvidia
     container_name: dashdot

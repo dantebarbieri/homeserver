@@ -49,12 +49,12 @@ colors:
     link-hover: "#ffdd57"
 
 # Optional message
-message:
-  url: https://status.danteb.com
-  style: "is-dark" # See https://bulma.io/documentation/components/message/#colors for styling options.
-  title: "Monitoring"
-  icon: "fa fa-heart-pulse"
-  content: "Monitoring provided by Dash."
+# message:
+#   url: https://status.danteb.com
+#   style: "is-dark" # See https://bulma.io/documentation/components/message/#colors for styling options.
+#   title: "Monitoring"
+#   icon: "fa fa-heart-pulse"
+#   content: "Monitoring provided by Dash."
 
 # Optional navbar
 links: [] # Allows for navbar (dark mode, layout, and search) without any links
@@ -142,7 +142,7 @@ services:
         subtitle: "Movies & TV"
         tag: "remote app"
         keywords: "media"
-        url: "https://app.plex.tv"
+        url: "https://plex.danteb.com"
         target: "_blank" # optional html a tag target attribute
       - name: "Immich"
         logo: "assets/homer-icons/svg/immich.svg"
@@ -206,6 +206,13 @@ services:
   - name: "Management"
     icon: "fas fa-tv"
     items:
+      - name: "Glances"
+        logo: "assets/homer-icons/png/glances.png"
+        subtitle: "Router Settings"
+        tag: "app"
+        keywords: "monitoring"
+        url: "https://glances.danteb.com"
+        target: "_blank" # optional html a tag target attribute
       - name: "IPMI"
         logo: "assets/tools/asrock_rack_logo.png"
         subtitle: "BMC Management"
