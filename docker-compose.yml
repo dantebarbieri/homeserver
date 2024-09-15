@@ -248,6 +248,14 @@ services:
     container_name: plex
     image: plexinc/pms-docker
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu
     ports:
       - "32400:32400/tcp"
       - "8324:8324/tcp"
@@ -525,6 +533,7 @@ services:
     build:
       context: .
       dockerfile: whisper-dockerfile.gpu
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
     deploy:
       resources:
         reservations:
@@ -536,6 +545,7 @@ services:
       - default
     environment:
       ASR_MODEL: base
+      ASR_ENGINE: openai_whisper
     volumes:
       - ${DATA}/whisper/app:/app/app
       - cache-pip:/root/.cache/pip
