@@ -520,7 +520,8 @@ services:
       SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
     restart: unless-stopped
 
-  whisper-asr-webservice-gpu:
+  whisper:
+    container_name: whisper
     build:
       context: .
       dockerfile: whisper-dockerfile.gpu
@@ -531,13 +532,16 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    networks:
+      - default
     environment:
-      - ASR_MODEL=base
+      ASR_MODEL: base
     volumes:
       - ${DATA}/whisper/app:/app/app
       - cache-pip:/root/.cache/pip
       - cache-poetry:/root/.cache/poetry
       - cache-whisper:/root/.cache/whisper
+    restart: unless-stopped
 
   monitoring:
     image: nicolargo/glances:latest
