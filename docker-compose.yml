@@ -545,8 +545,6 @@ services:
     environment:
       ASR_MODEL: turbo
       ASR_ENGINE: openai_whisper
-    ports:
-      - "9000:9000"
     deploy:
       resources:
         reservations:
