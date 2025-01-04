@@ -543,8 +543,8 @@ services:
     container_name: whisperasr
     image: onerahmet/openai-whisper-asr-webservice:latest-gpu
     environment:
-      ASR_MODEL: small
-      ASR_ENGINE: faster_whisper
+      ASR_MODEL: large-v2
+      ASR_ENGINE: openai_whisper
     ports:
       - "9000:9000"
     deploy:
