@@ -133,25 +133,25 @@ services:
     image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0@sha256:90724186f0a3517cf6914295b5ab410db9ce23190a2d9d0b9dd6463e3fa298f0
     command:
       [
-        'postgres',
-        '-c',
-        'shared_preload_libraries=vectors.so',
-        '-c',
+        "postgres",
+        "-c",
+        "shared_preload_libraries=vectors.so",
+        "-c",
         'search_path="$$user", public, vectors',
-        '-c',
-        'logging_collector=on',
-        '-c',
-        'max_wal_size=2GB',
-        '-c',
-        'shared_buffers=512MB',
-        '-c',
-        'wal_compression=on',
+        "-c",
+        "logging_collector=on",
+        "-c",
+        "max_wal_size=2GB",
+        "-c",
+        "shared_buffers=512MB",
+        "-c",
+        "wal_compression=on",
       ]
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_DB: ${DB_DATABASE_NAME}
-      POSTGRES_INITDB_ARGS: '--data-checksums'
+      POSTGRES_INITDB_ARGS: "--data-checksums"
     networks:
       - immich
     volumes:
@@ -371,6 +371,8 @@ services:
       TZ: ${TZ}
     networks:
       - default
+    depends_on:
+      - whisperasr
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/bazarr/config:/config
@@ -537,12 +539,14 @@ services:
       SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
     restart: unless-stopped
 
-  whisper:
-    container_name: whisper
-    build:
-      context: .
-      dockerfile: Dockerfile.gpu
+  whisperasr:
+    container_name: whisperasr
     image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    environment:
+      ASR_MODEL: small
+      ASR_ENGINE: faster_whisper
+    ports:
+      - "9000:9000"
     deploy:
       resources:
         reservations:
@@ -550,17 +554,9 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    restart: unless-stopped
     networks:
       - default
-    environment:
-      ASR_MODEL: base
-      ASR_ENGINE: openai_whisper
-    volumes:
-      - ${DATA}/whisper/app:/app/app
-      - cache-pip:/root/.cache/pip
-      - cache-poetry:/root/.cache/poetry
-      - cache-whisper:/root/.cache/whisper
-    restart: unless-stopped
 
   monitoring:
     image: nicolargo/glances:latest
@@ -593,7 +589,7 @@ services:
       DASHDOT_ENABLE_CPU_TEMPS: true
       DASHDOT_NETWORK_LABEL_LIST: type,speed_up,speed_down,interface_speed,public_ip
       DASHDOT_ACCEPT_OOKLA_EULA: true
-  
+
   authelia_postgres:
     image: postgres:alpine
     container_name: authelia_postgres
@@ -620,13 +616,13 @@ services:
     image: authelia/authelia
     container_name: authelia
     volumes:
-      - ${DATA}/authelia/config:/config  # Configuration directory
-      - authelia:/var/lib/authelia  # Storage for user data
+      - ${DATA}/authelia/config:/config # Configuration directory
+      - authelia:/var/lib/authelia # Storage for user data
     environment:
       TZ: ${TZ}
-      AUTHELIA_JWT_SECRET: your-jwt-secret  # Replace with a secret key
-      AUTHELIA_SESSION_SECRET: your-session-secret  # Replace with a session secret
-      AUTHELIA_STORAGE_ENCRYPTION_KEY: your-encryption-key  # Replace with an encryption key
+      AUTHELIA_JWT_SECRET: your-jwt-secret # Replace with a secret key
+      AUTHELIA_SESSION_SECRET: your-session-secret # Replace with a session secret
+      AUTHELIA_STORAGE_ENCRYPTION_KEY: your-encryption-key # Replace with an encryption key
     networks:
       - default
       - authelia
