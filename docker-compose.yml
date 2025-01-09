@@ -163,7 +163,7 @@ services:
       start_interval: 30s
       start_period: 5m
 
-  minecraft-server:
+  rlcraft-minecraft-server:
     image: itzg/minecraft-server:java8
     container_name: minecraft-server
     tty: true
@@ -173,7 +173,7 @@ services:
     environment:
       EULA: true
       MODE: "survival"
-      MOTD: "§a%CF_SLUG%§r §c§l%MODE%§r Minecraft §c§o%VERSION%§r server running §c§o%TYPE%§r."
+      MOTD: "§aRL Craft§r server running Minecraft §c§o%VERSION%§r."
       DIFFICULTY: "hard"
       OPS: |
         DanteVB
@@ -184,14 +184,14 @@ services:
       ENABLE_QUERY: true
       ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 32
-      MEMORY: 24G
+      MEMORY: 12G
       TYPE: "AUTO_CURSEFORGE"
       CF_API_KEY: ${CF_API_KEY}
-      CF_SLUG: ${CF_SLUG}
+      CF_SLUG: rlcraft
     networks:
       - default
     volumes:
-      - minecraft-server:/data
+      - rlcraft-minecraft-server:/data
 
   nginxproxymanager:
     image: "jc21/nginx-proxy-manager:latest"
@@ -614,8 +614,7 @@ volumes:
   cs2:
   pgdata:
   model-cache:
-  minecraft-server:
-  creative-minecraft-server:
+  rlcraft-minecraft-server:
   nextcloud_aio_mastercontainer:
     name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
   ollama:
