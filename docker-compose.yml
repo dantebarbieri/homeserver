@@ -165,7 +165,7 @@ services:
 
   rlcraft-minecraft-server:
     image: itzg/minecraft-server:java8
-    container_name: minecraft-server
+    container_name: rlcraft-minecraft-server
     tty: true
     stdin_open: true
     ports:
