@@ -164,7 +164,7 @@ services:
       start_period: 5m
 
   minecraft-server:
-    image: itzg/minecraft-server
+    image: itzg/minecraft-server:java8
     container_name: minecraft-server
     tty: true
     stdin_open: true
@@ -184,7 +184,7 @@ services:
       ENABLE_QUERY: true
       ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 32
-      MEMORY: 8G
+      MEMORY: 24G
       TYPE: "AUTO_CURSEFORGE"
       CF_API_KEY: ${CF_API_KEY}
       CF_SLUG: ${CF_SLUG}
@@ -192,36 +192,6 @@ services:
       - default
     volumes:
       - minecraft-server:/data
-
-  creative-minecraft-server:
-    image: itzg/minecraft-server
-    container_name: creative-minecraft-server
-    tty: true
-    stdin_open: true
-    ports:
-      - "36677:25565"
-    environment:
-      EULA: true
-      MODE: "creative"
-      ALLOW_FLIGHT: true
-      MOTD: "§aWeekly Games§r §9Discord§r §c§l%MODE%§r Minecraft §c§o%VERSION%§r server running §c§o%TYPE%§r."
-      DIFFICULTY: "hard"
-      OPS: |
-        DanteVB
-        Otakeb
-        Heruth99
-      ICON: "https://cdn.discordapp.com/icons/1132409092917440644/b5d41a2889dcd44fc0d83f4522ab15ed.webp"
-      OVERRIDE_ICON: true
-      ENABLE_QUERY: true
-      ENABLE_COMMAND_BLOCK: true
-      VIEW_DISTANCE: 32
-      MEMORY: 8G
-      TYPE: "Paper"
-      TZ: ${TZ}
-    networks:
-      - default
-    volumes:
-      - creative-minecraft-server:/data
 
   nginxproxymanager:
     image: "jc21/nginx-proxy-manager:latest"
