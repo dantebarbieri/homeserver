@@ -173,19 +173,21 @@ services:
     environment:
       EULA: true
       MODE: "survival"
-      MOTD: "§aWeekly Games§r §9Discord§r §c§l%MODE%§r Minecraft §c§o%VERSION%§r server running §c§o%TYPE%§r."
+      MOTD: "§a%CF_SLUG%§r §c§l%MODE%§r Minecraft §c§o%VERSION%§r server running §c§o%TYPE%§r."
       DIFFICULTY: "hard"
       OPS: |
         DanteVB
         Otakeb
         Heruth99
-      ICON: "https://cdn.discordapp.com/icons/1132409092917440644/b5d41a2889dcd44fc0d83f4522ab15ed.webp"
+      ICON: "https://media.forgecdn.net/avatars/thumbnails/468/243/64/64/637751369169569212.png"
       OVERRIDE_ICON: true
       ENABLE_QUERY: true
       ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 32
       MEMORY: 8G
-      TYPE: "Paper"
+      TYPE: "AUTO_CURSEFORGE"
+      CF_API_KEY: ${CF_API_KEY}
+      CF_SLUG: ${CF_SLUG}
     networks:
       - default
     volumes:
