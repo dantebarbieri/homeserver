@@ -163,6 +163,37 @@ services:
       start_interval: 30s
       start_period: 5m
 
+  custom-minecraft-server:
+    image: itzg/minecraft-server:java8
+    container_name: custom-minecraft-server
+    tty: true
+    stdin_open: true
+    ports:
+      - "36677:25565"
+    environment:
+      EULA: true
+      MODE: "survival"
+      MOTD: "§bCustomized §lTekkit§r Minecraft Server\nRunning Version: §c§o%VERSION%§r."
+      DIFFICULTY: "hard"
+      OPS: |
+        DanteVB
+        ElVonHresvelg
+        Griff Is Here
+      ICON: "/data/assets/tekkit-logo.png"
+      OVERRIDE_ICON: true
+      ENABLE_QUERY: true
+      ENABLE_COMMAND_BLOCK: true
+      VIEW_DISTANCE: 32
+      MEMORY: 12G
+      TYPE: "AUTO_CURSEFORGE"
+      CF_API_KEY: ${CF_API_KEY}
+      CF_SLUG: TODO
+    networks:
+      - default
+    volumes:
+      - custom-minecraft-server:/data
+      - ${CONFIG}/minecraft/assets:/data/assets
+
   rlcraft-minecraft-server:
     image: itzg/minecraft-server:java8
     container_name: rlcraft-minecraft-server
@@ -614,6 +645,7 @@ volumes:
   cs2:
   pgdata:
   model-cache:
+  custom-minecraft-server:
   rlcraft-minecraft-server:
   nextcloud_aio_mastercontainer:
     name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
