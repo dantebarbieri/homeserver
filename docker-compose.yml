@@ -187,7 +187,7 @@ services:
       MEMORY: 12G
       TYPE: "AUTO_CURSEFORGE"
       CF_API_KEY: ${CF_API_KEY}
-      CF_SLUG: TODO
+      CF_SLUG: qol-tekkit
     networks:
       - default
     volumes:
