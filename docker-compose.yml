@@ -177,7 +177,6 @@ services:
       DIFFICULTY: "hard"
       OPS: |
         DanteVB
-        Griff Is Here
       ICON: "/data/assets/tekkit-logo.png"
       OVERRIDE_ICON: true
       ENABLE_QUERY: true
