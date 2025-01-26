@@ -177,6 +177,7 @@ services:
       DIFFICULTY: "hard"
       OPS: |
         DanteVB
+        ElVonHresvelg
       ICON: "/data/assets/tekkit-logo.png"
       OVERRIDE_ICON: true
       ENABLE_QUERY: true
