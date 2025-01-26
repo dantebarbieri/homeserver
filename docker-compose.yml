@@ -560,16 +560,6 @@ services:
     networks:
       - default
 
-  monitoring:
-    image: nicolargo/glances:latest
-    restart: always
-    pid: host
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /etc/os-release:/etc/os-release:ro
-    environment:
-      GLANCES_OPT: -w
-
   dash:
     image: mauricenino/dashdot:nvidia
     container_name: dashdot
@@ -592,64 +582,18 @@ services:
       DASHDOT_NETWORK_LABEL_LIST: type,speed_up,speed_down,interface_speed,public_ip
       DASHDOT_ACCEPT_OOKLA_EULA: true
 
-  authelia_postgres:
-    image: postgres:alpine
-    container_name: authelia_postgres
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - authelia-postgres:/var/lib/postgresql/data
-    networks:
-      - authelia
-    restart: unless-stopped
-
-  # Redis service for Authelia session management
-  authelia_redis:
-    image: redis:alpine
-    container_name: authelia_redis
-    networks:
-      - authelia
-    restart: unless-stopped
-
-  # Authelia service
-  authelia:
-    image: authelia/authelia
-    container_name: authelia
-    volumes:
-      - ${DATA}/authelia/config:/config # Configuration directory
-      - authelia:/var/lib/authelia # Storage for user data
-    environment:
-      TZ: ${TZ}
-      AUTHELIA_JWT_SECRET: your-jwt-secret # Replace with a secret key
-      AUTHELIA_SESSION_SECRET: your-session-secret # Replace with a session secret
-      AUTHELIA_STORAGE_ENCRYPTION_KEY: your-encryption-key # Replace with an encryption key
-    networks:
-      - default
-      - authelia
-    restart: unless-stopped
-
 networks:
-  authelia:
   default:
   immich:
   open-webui:
   searxng:
 
 volumes:
-  authelia:
-  authelia-postgres:
-  cache-pip:
-  cache-poetry:
-  cache-whisper:
   cs2:
   pgdata:
   model-cache:
   custom-minecraft-server:
   rlcraft-minecraft-server:
-  nextcloud_aio_mastercontainer:
-    name: nextcloud_aio_mastercontainer # This line is not allowed to be changed as otherwise the built-in backup solution will not work
   ollama:
   open-webui:
   valkey-data:
