@@ -91,12 +91,14 @@ services:
         tag: "server"
         keywords: "game mc minecraft"
         url: "https://mcsrvstat.us/server/mc.danteb.com"
+        target: "_blank" # optional html a tag target attribute
       - name: "RL Craft Minecraft"
         logo: "https://media.forgecdn.net/avatars/thumbnails/468/243/64/64/637751369169569212.png"
         subtitle: "rlcraft.danteb.com"
         tag: "server"
         keywords: "game mc minecraft"
         url: "https://mcsrvstat.us/server/rlcraft.danteb.com"
+        target: "_blank" # optional html a tag target attribute
   - name: "Networking"
     icon: "fas fa-network-wired"
     items:
