@@ -183,7 +183,7 @@ services:
       ENABLE_QUERY: true
       ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 16
-      MEMORY: 12G
+      MEMORY: 24G
       USE_AIKAR_FLAGS: true
       TYPE: "AUTO_CURSEFORGE"
       CF_API_KEY: ${CF_API_KEY}
