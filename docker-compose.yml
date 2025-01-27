@@ -190,6 +190,12 @@ services:
       TYPE: "AUTO_CURSEFORGE"
       CF_API_KEY: ${CF_API_KEY}
       CF_SLUG: qol-tekkit
+      ALLOW_FLIGHT: true
+      STOP_SERVER_ANNOUNCE_DELAY: 60
+      STOP_DURATION: 60
+      MAX_TICK_TIME: -1
+      LOG_TIMESTAMP: true
+      LOG_IPS: true
     networks:
       - default
     volumes:
