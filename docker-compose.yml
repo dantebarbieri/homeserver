@@ -24,6 +24,7 @@ services:
   cs2-server:
     image: joedwards32/cs2
     container_name: cs2-dedicated
+    restart: unless-stopped
     environment:
       # Server configuration
       SRCDS_TOKEN: ${SRCDS_TOKEN} # Game Server Token from https://steamcommunity.com/dev/managegameservers
@@ -166,6 +167,7 @@ services:
   custom-minecraft-server:
     image: itzg/minecraft-server:java8
     container_name: custom-minecraft-server
+    restart: unless-stopped
     tty: true
     stdin_open: true
     ports:
@@ -197,6 +199,7 @@ services:
   rlcraft-minecraft-server:
     image: itzg/minecraft-server:java8
     container_name: rlcraft-minecraft-server
+    restart: unless-stopped
     tty: true
     stdin_open: true
     ports:
