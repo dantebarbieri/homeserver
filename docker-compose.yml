@@ -71,6 +71,14 @@ services:
       - "27015:27015/udp" # UDP
       - "27020:27020/udp" # UDP
 
+  endlessh:
+    image: shizunge/endlessh-go
+    container_name: endlessh
+    restart: unless-stopped
+    ports:
+      - "22:2222"
+    command: ["-logtostderr", "-v=1"]
+
   homer:
     image: b4bz/homer
     container_name: homer
