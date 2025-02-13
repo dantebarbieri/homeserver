@@ -7,4 +7,4 @@
 	branch = latest-release
 [submodule "danteb.com"]
 	path = danteb.com
-	url = git@github.com:dantebarbieri/danteb.com.git
+	url = https://github.com/dantebarbieri/danteb.com.git
