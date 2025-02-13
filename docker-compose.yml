@@ -10,7 +10,7 @@ services:
     networks:
       - default
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   adguardhome:
     image: adguard/adguardhome
