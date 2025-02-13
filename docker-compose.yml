@@ -1,4 +1,17 @@
 services:
+  danteb:
+    container_name: danteb_container
+    build:
+      context: .
+      dockerfile: Dockerfile.danteb.com
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    networks:
+      - default
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   adguardhome:
     image: adguard/adguardhome
     container_name: adguardhome
