@@ -5,3 +5,6 @@
 	path = VueTorrent
 	url = https://github.com/VueTorrent/VueTorrent.git
 	branch = latest-release
+[submodule "danteb.com"]
+	path = danteb.com
+	url = git@github.com:dantebarbieri/danteb.com.git
