@@ -1,6 +1,5 @@
 services:
   danteb:
-    container_name: danteb_container
     build:
       context: .
       dockerfile: Dockerfile.danteb.com
@@ -8,7 +7,9 @@ services:
       NODE_ENV: production
       PORT: 3000
     networks:
-      - default
+      default:
+        aliases:
+          - danteb
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
