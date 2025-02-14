@@ -50,14 +50,14 @@ echo "[2/4] Rebuilding Docker image with the updated submodule..."
 # while the old one is still serving traffic.
 # NOTE: To enable scaling, remove 'container_name: danteb' from your docker-compose.yml service definition.
 echo "[3/4] Deploying new container instance (scaling to 2 instances)..."
-docker-compose up -d --build --scale danteb=2 danteb
+docker compose up -d --build --scale danteb=2 danteb
 
 echo "Waiting ${HEALTH_WAIT} seconds for the new container to become healthy..."
 sleep "$HEALTH_WAIT"
 
 # Now scale back down to 1 instance, which removes one of the containers.
 echo "[4/4] Scaling back down to 1 instance to complete the deployment..."
-docker-compose up -d --scale danteb=1 danteb
+docker compose up -d --scale danteb=1 danteb
 
 echo "Deployment complete at $(date). New container (commit $new_commit) is running."
 echo "----- Deployment Script Finished -----"
