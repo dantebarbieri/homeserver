@@ -1,12 +1,12 @@
 secrets:
   JWT_SECRET:
-    file: '${PWD}/data/authelia/secrets/JWT_SECRET'
+    file: '${DATA}/authelia/secrets/JWT_SECRET'
   SESSION_SECRET:
-    file: '${PWD}/data/authelia/secrets/SESSION_SECRET'
+    file: '${DATA}/authelia/secrets/SESSION_SECRET'
   STORAGE_PASSWORD:
-    file: '${PWD}/data/authelia/secrets/STORAGE_PASSWORD'
+    file: '${DATA}/authelia/secrets/STORAGE_PASSWORD'
   STORAGE_ENCRYPTION_KEY:
-    file: '${PWD}/data/authelia/secrets/STORAGE_ENCRYPTION_KEY'
+    file: '${DATA}/authelia/secrets/STORAGE_ENCRYPTION_KEY'
 services:
   authelia:
     container_name: 'authelia'
