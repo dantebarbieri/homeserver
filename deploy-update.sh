@@ -18,7 +18,7 @@ fi
 SUBMODULE="$1"
 
 # Ensure the submodule exists in the repo
-if ! grep -q "path = $SUBMODULE" .gitmodules; then
+if ! grep -q "path = $SUBMODULE" "$REPO_DIR/.gitmodules"; then
     echo "Error: Submodule '$SUBMODULE' is not found in .gitmodules."
     exit 1
 fi
