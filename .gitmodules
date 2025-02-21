@@ -8,3 +8,6 @@
 [submodule "danteb.com"]
 	path = danteb.com
 	url = https://github.com/dantebarbieri/danteb.com.git
+[submodule "admin.danteb.com"]
+	path = admin.danteb.com
+	url = https://github.com/dantebarbieri/admin.danteb.com
