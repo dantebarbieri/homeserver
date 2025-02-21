@@ -1,6 +1,81 @@
+secrets:
+  EMAIL_PASSWORD:
+    file: '${DATA}/dms/secrets/EMAIL_PASSWORD'
+  JWT_SECRET:
+    file: '${DATA}/authelia/secrets/JWT_SECRET'
+  SESSION_SECRET:
+    file: '${DATA}/authelia/secrets/SESSION_SECRET'
+  STORAGE_PASSWORD:
+    file: '${DATA}/authelia/secrets/STORAGE_PASSWORD'
+  STORAGE_ENCRYPTION_KEY:
+    file: '${DATA}/authelia/secrets/STORAGE_ENCRYPTION_KEY'
 services:
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: mail.danteb.com
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - ${DATA}/dms/mail-data/:/var/mail/
+      - ${DATA}/dms/mail-state/:/var/mail-state/
+      - ${DATA}/dms/mail-logs/:/var/log/mail/
+      - ${DATA}/dms/config/:/tmp/docker-mailserver/
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENABLE_RSPAMD=1
+      - ENABLE_CLAMAV=1
+      - ENABLE_FAIL2BAN=1
+    cap_add:
+      - NET_ADMIN
+    restart: always
+    networks:
+      - default
+
+  authelia:
+    container_name: 'authelia'
+    image: 'docker.io/authelia/authelia:latest'
+    restart: 'unless-stopped'
+    networks:
+      - authelia
+      - default
+    secrets:
+      - EMAIL_PASSWORD
+      - JWT_SECRET
+      - SESSION_SECRET
+      - STORAGE_PASSWORD
+      - STORAGE_ENCRYPTION_KEY
+    environment:
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE: '/run/secrets/JWT_SECRET'
+      AUTHELIA_SESSION_SECRET_FILE: '/run/secrets/SESSION_SECRET'
+      AUTHELIA_STORAGE_POSTGRES_PASSWORD_FILE: '/run/secrets/STORAGE_PASSWORD'
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: '/run/secrets/STORAGE_ENCRYPTION_KEY'
+      AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE: '/run/secrets/EMAIL_PASSWORD'
+    volumes:
+      - '${DATA}/authelia/config:/config'
+
+  authelia_redis:
+    image: redis
+    restart: unless-stopped
+    networks:
+      - authelia
+  
+  authelia_postgres:
+    image: postgres
+    restart: unless-stopped
+    networks:
+      - authelia
+    secrets:
+      - STORAGE_PASSWORD
+    shm_size: 128mb
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/STORAGE_PASSWORD
+      POSTGRES_USER: authelia
+
   danteb:
-    container_name: danteb_container
     build:
       context: .
       dockerfile: Dockerfile.danteb.com
@@ -8,7 +83,9 @@ services:
       NODE_ENV: production
       PORT: 3000
     networks:
-      - default
+      default:
+        aliases:
+          - danteb
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -613,6 +690,7 @@ services:
       DASHDOT_ACCEPT_OOKLA_EULA: true
 
 networks:
+  authelia:
   default:
   immich:
   open-webui:
