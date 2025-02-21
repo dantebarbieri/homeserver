@@ -2,8 +2,6 @@
 # Dockerfile (Generic for Multiple Sites)
 # ======================================
 
-# Define a build argument for the app directory name
-ARG APP_NAME
 
 # -------------------------------
 # Stage 1: Build the SvelteKit app
@@ -13,8 +11,8 @@ FROM node:18-alpine AS builder
 # Create and switch to the /app directory
 WORKDIR /app
 
-# Set environment variable for app name
-ENV APP_NAME=${APP_NAME}
+# Define a build argument for the app directory name
+ARG APP_NAME
 
 # Copy only the package files to install dependencies (cache-friendly)
 COPY ${APP_NAME}/package*.json ./
@@ -36,8 +34,8 @@ FROM node:18-alpine AS runner
 # Set the working directory
 WORKDIR /app
 
-# Set environment variable for app name
-ENV APP_NAME=${APP_NAME}
+# Define a build argument for the app directory name
+ARG APP_NAME
 
 # Copy only the package files for a clean install of production deps
 COPY ${APP_NAME}/package*.json ./
