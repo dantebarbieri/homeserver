@@ -75,10 +75,28 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/STORAGE_PASSWORD
       POSTGRES_USER: authelia
 
-  danteb:
+  admin.danteb.com:
     build:
       context: .
-      dockerfile: Dockerfile.danteb.com
+      dockerfile: Dockerfile.sveltekit
+      args:
+        APP_NAME: admin.danteb.com
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    networks:
+      default:
+        aliases:
+          - admin-danteb
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  danteb.com:
+    build:
+      context: .
+      dockerfile: Dockerfile.sveltekit
+      args:
+        APP_NAME: danteb.com
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -86,8 +104,6 @@ services:
       default:
         aliases:
           - danteb
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   adguardhome:
     image: adguard/adguardhome

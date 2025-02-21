@@ -1,6 +1,9 @@
 # ======================================
-# Dockerfile.danteb.com
+# Dockerfile (Generic for Multiple Sites)
 # ======================================
+
+# Define a build argument for the app directory name
+ARG APP_NAME
 
 # -------------------------------
 # Stage 1: Build the SvelteKit app
@@ -10,14 +13,17 @@ FROM node:18-alpine AS builder
 # Create and switch to the /app directory
 WORKDIR /app
 
+# Set environment variable for app name
+ENV APP_NAME=${APP_NAME}
+
 # Copy only the package files to install dependencies (cache-friendly)
-COPY danteb.com/package*.json ./
+COPY ${APP_NAME}/package*.json ./
 
 # Install *all* dependencies (dev+prod, needed to build)
 RUN npm ci
 
 # Copy the rest of the app source code
-COPY danteb.com/ .
+COPY ${APP_NAME}/ .
 
 # Build the SvelteKit app
 RUN npm run build
@@ -30,8 +36,11 @@ FROM node:18-alpine AS runner
 # Set the working directory
 WORKDIR /app
 
+# Set environment variable for app name
+ENV APP_NAME=${APP_NAME}
+
 # Copy only the package files for a clean install of production deps
-COPY danteb.com/package*.json ./
+COPY ${APP_NAME}/package*.json ./
 RUN npm ci --omit=dev
 
 # Copy the compiled build output from builder stage
