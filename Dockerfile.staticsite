@@ -8,7 +8,8 @@ ARG APP_NAME
 RUN rm -rf /usr/share/nginx/html/*
 
 # Copy your static files to NGINX's default directory
-COPY ./site /usr/share/nginx/html
+# Copy the rest of the app source code
+COPY ${APP_NAME}/ /usr/share/nginx/html
 
 # Expose port 80 (optional, docker-compose handles port mapping)
 EXPOSE 80
