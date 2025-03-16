@@ -1,0 +1,14 @@
+# Use the official NGINX image
+FROM nginx:alpine
+
+# Define a build argument for the app directory name
+ARG APP_NAME
+
+# Remove default static assets (optional)
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy your static files to NGINX's default directory
+COPY ./site /usr/share/nginx/html
+
+# Expose port 80 (optional, docker-compose handles port mapping)
+EXPOSE 80

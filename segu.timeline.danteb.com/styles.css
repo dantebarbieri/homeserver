@@ -1,0 +1,175 @@
+/* Basic resets and existing rules remain unchanged */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+:root {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+    font-optical-sizing: auto;
+    color: var(--text);
+    background-color: var(--background);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+h1 {
+    text-align: center;
+    margin-top: 20px;
+}
+
+main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin: 0 auto;
+    padding-left: 6vw;
+    padding-right: 6vw;
+}
+
+footer {
+    margin: 0 auto;
+    margin-top: auto;
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+}
+
+/* Timeline container */
+.timeline {
+    position: relative;
+    overflow: visible;
+    padding: 20px;
+    /* Ensure there is enough vertical room for items above and below */
+    min-height: 400px;
+}
+
+/* The horizontal timeline line behind the items */
+.timeline-line {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: #ccc;
+    z-index: 0;
+}
+
+/* Each timeline event is absolutely positioned */
+.timeline-item {
+    position: absolute;
+    transform: translateX(-50%);
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    text-align: center;
+    z-index: 2;
+    /* Ensure photos appear above markers */
+}
+
+/* Default image styling */
+.timeline-item img {
+    width: 75px;
+    height: 75px;
+    object-fit: cover;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    transition: border-color 0.3s ease;
+}
+
+/* Active image styling */
+.timeline-item.active img {
+    border-color: #007BFF;
+    z-index: 3;
+}
+
+/* Timeline label repositioning.
+   The label is centered horizontally relative to the photo.
+   For events above the timeline, it appears at the top edge (away from the timeline);
+   for events below, it appears at the bottom edge.
+*/
+.timeline-label {
+    position: absolute;
+    left: 50%;
+    font-weight: bold;
+    font-size: 14px;
+    color: #333;
+    white-space: nowrap;
+}
+
+.timeline-label.above {
+    top: 0;
+    transform: translate(-50%, -120%);
+}
+
+.timeline-label.below {
+    bottom: 0;
+    transform: translate(-50%, 120%);
+}
+
+/* Styling for the photo marker that connects the photo to the timeline line */
+.photo-marker {
+    position: absolute;
+    width: 2px;
+    background-color: #007BFF;
+    z-index: -1;
+}
+
+/* Year marker styling (handled via CSS using a custom property) */
+.year-marker {
+    position: absolute;
+    width: 1px;
+    height: 10px;
+    background-color: #ccc;
+    top: 0;
+    left: calc(var(--marker-left) - 0.5px);
+}
+
+.year-label {
+    position: absolute;
+    top: 12px;
+    left: -10px;
+    font-size: 10px;
+    color: #666;
+}
+
+.detail-view {
+    background-color: #f7f7f7;
+    border-top: 2px solid #ccc;
+    text-align: center;
+    width: 100%;
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.detail-view #detail-image {
+    max-width: 90%;
+    height: auto;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+}
+
+.memo {
+    font-size: 1.1em;
+    width: 100%;
+    padding: 10px;
+}
