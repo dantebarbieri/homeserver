@@ -696,7 +696,7 @@ services:
     networks:
       - default
 
-  dash:
+  dashdot:
     image: mauricenino/dashdot:nvidia
     container_name: dashdot
     restart: unless-stopped
@@ -717,6 +717,7 @@ services:
       DASHDOT_ENABLE_CPU_TEMPS: true
       DASHDOT_NETWORK_LABEL_LIST: type,speed_up,speed_down,interface_speed,public_ip
       DASHDOT_ACCEPT_OOKLA_EULA: true
+      DASHDOT_USE_NETWORK_INTERFACE: wlp193s0
       DASHDOT_OVERRIDE_OS: Debian 12 (bookworm)
       DASHDOT_OVERRIDE_ARCH: amd64
       DASHDOT_FS_DEVICE_FILTER: nvme1n1,sda,sdb,sdc,sdd,sde,sdf,sdg,sdh,sdi,sdj,sdk,sdl
