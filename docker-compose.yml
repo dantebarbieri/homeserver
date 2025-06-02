@@ -58,12 +58,14 @@ services:
       - '${DATA}/authelia/config:/config'
 
   authelia_redis:
+    container_name: 'authelia_redis'
     image: redis
     restart: unless-stopped
     networks:
       - authelia
   
   authelia_postgres:
+    container_name: 'authelia_postgres'
     image: postgres
     restart: unless-stopped
     networks:
