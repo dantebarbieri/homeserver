@@ -70,6 +70,8 @@ services:
     restart: unless-stopped
     networks:
       - authelia
+    volumes:
+      - authelia-storage:/var/lib/postgresql/data
     secrets:
       - STORAGE_PASSWORD
     shm_size: 128mb
@@ -732,6 +734,7 @@ networks:
 
 volumes:
   cs2:
+  authelia-storage:
   pgdata:
   model-cache:
   custom-minecraft-server:
