@@ -682,18 +682,19 @@ services:
     restart: unless-stopped
 
   whisperasr:
+    # image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: whisperasr
-    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
     environment:
       ASR_MODEL: turbo
       ASR_ENGINE: openai_whisper
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # deploy:
+      # resources:
+        # reservations:
+          # devices:
+            # - driver: nvidia
+              # count: 1
+              # capabilities: [gpu]
     restart: unless-stopped
     networks:
       - default
