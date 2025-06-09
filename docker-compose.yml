@@ -108,17 +108,6 @@ services:
       default:
         aliases:
           - danteb
-  
-  segu.timeline.danteb.com:
-    build:
-      context: .
-      dockerfile: Dockerfile.staticsite
-      args:
-        APP_NAME: segu.timeline.danteb.com
-    networks:
-      default:
-        aliases:
-          - segu-timeline
 
   adguardhome:
     image: adguard/adguardhome
