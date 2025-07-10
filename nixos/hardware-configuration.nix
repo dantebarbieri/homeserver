@@ -5,24 +5,26 @@
 
 {
   # Import auto-detected (non-detected) hardware modules
-  imports =
-    [ (modulesPath + "/installer/scan/not-detected.nix")
-    ];
+  imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
 
   #########################
   # Kernel & initrd modules
   #########################
 
-  # Basic kernel modules for NVMe, USB, LVM, MDADM, etc.
-  boot.initrd.availableKernelModules = [ "nvme" "xhci_pci" "ahci" "mpt3sas" "usbhid" "sd_mod" ];
-
-  # Force inclusion of snapshot support
+  # Basic kernel modules for NVMe, USB, LVM, MDADM
+  boot.initrd.availableKernelModules = [
+    "nvme" "xhci_pci" "ahci" "mpt3sas" "usbhid" "sd_mod"
+  ];
+  # Snapshot support for LVM caching
   boot.initrd.kernelModules = [ "dm-snapshot" ];
 
-  # Auto-assemble MDADM arrays and enable LVM in initrd
-  boot.initrd.mdadm.enable = lib.mkDefault true;
+  # Enable auto-assembly of RAID and scanning of LVM devices
+  boot.initrd.mdadm.enable   = lib.mkDefault true;
   boot.initrd.mdadm.autoScan = lib.mkDefault true;
-  boot.initrd.lvm.enable   = lib.mkDefault true;
+  boot.initrd.lvm.enable     = lib.mkDefault true;
+
+  # Ensure the initrd scans your RAID PV for LVM metadata
+  boot.initrd.lvm.devices    = lib.mkDefault [ "/dev/md0" ];
 
   boot.kernelModules = [ "kvm-amd" ];
   boot.extraModulePackages = [ ];
@@ -31,25 +33,31 @@
   # File Systems
   #########################
 
-  fileSystems."/" =
-    { device = "/dev/disk/by-uuid/b7f21e0b-df90-479c-a5e6-c4057e982d49";
-      fsType = "ext4";
-    };
+  fileSystems."/" = {
+    # Mount the root LV (must exist before install or be created manually)
+    device = "/dev/mapper/homeserver-vg-root";
+    fsType = "ext4";
+  };
 
-  fileSystems."/boot/efi" =
-    { device = "/dev/disk/by-uuid/27EE-4CFA";
-      fsType = "vfat";
-      options = [ "fmask=0077" "dmask=0077" ];
-    };
+  fileSystems."/boot/efi" = {
+    device = "/dev/disk/by-uuid/27EE-4CFA";
+    fsType = "vfat";
+    options = [ "fmask=0077" "dmask=0077" ];
+  };
 
-  fileSystems."/data" =
-    { device = "/dev/disk/by-uuid/e1d59fde-20a5-4372-a878-309bb816106b";
-      fsType = "xfs";
-    };
+  fileSystems."/data" = {
+    # Mount the cached data LV on your RAID array
+    device = "/dev/mapper/vg_redundant-lv_data";
+    fsType = "xfs";
+  };
 
-  swapDevices =
-    [ { device = "/dev/disk/by-uuid/cb496c82-8c21-47b0-899b-b4fc4947ad37"; }
-    ];
+  swapDevices = [
+    { device = "/dev/mapper/homeserver-vg-swap"; }
+  ];
+
+  #########################
+  # Platform & CPU
+  #########################
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
   hardware.cpu.amd.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
