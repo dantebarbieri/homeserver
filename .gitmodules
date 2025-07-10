@@ -6,8 +6,8 @@
 	url = https://github.com/VueTorrent/VueTorrent.git
 	branch = latest-release
 [submodule "danteb.com"]
-	path = danteb.com
+	path = docker/danteb.com
 	url = https://github.com/dantebarbieri/danteb.com.git
 [submodule "admin.danteb.com"]
-	path = admin.danteb.com
-	url = https://github.com/dantebarbieri/admin.danteb.com
+	path = docker/admin.danteb.com
+	url = https://github.com/dantebarbieri/admin.danteb.com.git
