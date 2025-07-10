@@ -4,14 +4,32 @@
 { config, lib, pkgs, modulesPath, ... }:
 
 {
+  # Import auto-detected (non-detected) hardware modules
   imports =
     [ (modulesPath + "/installer/scan/not-detected.nix")
     ];
 
+  #########################
+  # Kernel & initrd modules
+  #########################
+
+  # Basic kernel modules for NVMe, USB, LVM, MDADM, etc.
   boot.initrd.availableKernelModules = [ "nvme" "xhci_pci" "ahci" "mpt3sas" "usbhid" "sd_mod" ];
+
+  # Force inclusion of snapshot support
   boot.initrd.kernelModules = [ "dm-snapshot" ];
+
+  # Auto-assemble MDADM arrays and enable LVM in initrd
+  boot.initrd.mdadm.enable = lib.mkDefault true;
+  boot.initrd.mdadm.autoScan = lib.mkDefault true;
+  boot.initrd.lvm.enable   = lib.mkDefault true;
+
   boot.kernelModules = [ "kvm-amd" ];
   boot.extraModulePackages = [ ];
+
+  #########################
+  # File Systems
+  #########################
 
   fileSystems."/" =
     { device = "/dev/disk/by-uuid/b7f21e0b-df90-479c-a5e6-c4057e982d49";
@@ -27,156 +45,6 @@
   fileSystems."/data" =
     { device = "/dev/disk/by-uuid/e1d59fde-20a5-4372-a878-309bb816106b";
       fsType = "xfs";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/58948ddf8be9f039309089face41b3363fa364d024399837a4c59fda96bf7a4a/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/f658f7ad3c91ec541f28505a8e450e1827e8725859b711cbdec8c7472396db05/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/6354e455d937b0065c252dafbbd93ae26108273ae795e3387bdfc6fa4042909d/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/a1efdbd49e569b47c8d0410828a49d95000ca2a0b961dbe82b61e9fbdb9de811/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/a7d1fe59ca1e59744364238c92a88e279b20f50c3d958a7bfdb90ba9024484b1/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/dc2741e4d960948ef5cae098f5c0b003979215935ca6b4dfb788b0a8a36e3a29/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/53c6f1115d44fab9b15d819c5773bc020eff533808fa51fd89e72ad3057c9430/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/857cd60f43c2ec6c5024d4c0787126896bd02a13b19e8157c61bc353ac6e99a0/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/fd8a98b5adac05303dc6d31a3c9c3bcb1b5f5b4367b63a9ddf46701a0070153f/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/38f4f5de0d719a6361dac3f9fe92f4c2e3515d1e9f4fc7ad14f5da0baaae9a5d/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/e8aa10a569016ba792a97f8d16f3c7be4601db38d0606c3795def1094c78005d/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/96ec3a23fcb55fe05fa601b0d5de1557af67a9d47b001c44290743f2da7470a4/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/a514dc8544b4a94e06db4f143f4005e4d6415d3a6eddf6a1234052e97491ffcf/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/cd8530789b12ff3bb8e5a3b2c86bf64d7ced85af8559d9195e6a6db7646e88db/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/ac1ee26623f14d40355cbd803e5f7d96108ecc39c4dab03a703d00108fbe1494/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/c9cb8fe58f69f31ff6bcc97566f8224f910f1e0e6e392707bcde89e37d8b9287/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/aca0270c0db5f5c22984a2ec27650fcbdb3e92c7fa79efea6b4f15b13162f59b/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/a263026f6837cd9869f9137ba36dd7d4b19375837d057eb3a14349624c5840dc/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/93d8f913f9cb1fdd913a00351238a5833118d96423baaa203432dff572e3c1f7/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/bbacf132931b16ba263d4c9a5a01049e59744aecb9a93f68eb865f0346c6c5e7/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/1f044190035b97f2a648724e69615762e62b08d61fc4a552a3efc0c88e622f8e/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/718abd35b38f71fe745fb17ec3fd0c1cea6ddcfa5cf1ce7075d60d98f33e7bad/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/605f354b279a0a074437f9fdcf73b4c4b74fb3b9646a137f58d632dfdc8268ad/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/dba47a0bea68ec57da5a1ad171d6a77f32d4b958b242a98596ab45690d6f94b4/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/b6d5040224cb7aa3ad906f111b2df6ffc07c8e490d7cffa3df72743c6cbf038f/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/811494c2ddfb2f6c527f9ea7409d26ff67fb50a58fe151a0b5c9a12e41fb7c21/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/fd9200e4332248030f02649307fa931e0c50e0d21329bfd2a5de0a05bc1c4fe4/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/9d072bee8d52bb9e480cae101ee99e28d72d16f70a7b99a4e374427beaea6d9f/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/1aa1fd311ca1f2d188bd9454b2aab68ff6c04620897c291cf7d8440849acf898/merged" =
-    { device = "overlay";
-      fsType = "overlay";
-    };
-
-  fileSystems."/var/lib/docker/overlay2/9977194b8746d0dc95bf21e935deec0eca812e9f2b27ede26b9b3585597c4db1/merged" =
-    { device = "overlay";
-      fsType = "overlay";
     };
 
   swapDevices =
