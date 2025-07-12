@@ -23,9 +23,6 @@
   boot.initrd.mdadm.autoScan = lib.mkDefault true;
   boot.initrd.lvm.enable     = lib.mkDefault true;
 
-  # Ensure the initrd scans your RAID PV for LVM metadata
-  boot.initrd.lvm.devices    = lib.mkDefault [ "/dev/md0" ];
-
   boot.kernelModules = [ "kvm-amd" ];
   boot.extraModulePackages = [ ];
 
