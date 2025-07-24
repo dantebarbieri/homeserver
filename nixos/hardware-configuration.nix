@@ -16,7 +16,7 @@
     "nvme" "xhci_pci" "ahci" "mpt3sas" "usbhid" "sd_mod"
   ];
   # Snapshot support for LVM caching
-  boot.initrd.kernelModules = [ "dm-snapshot" ];
+  boot.initrd.kernelModules = [ "dm-snapshot", "dm-cache-default" ];
 
   # Enable auto-assembly of RAID and scanning of LVM devices
   boot.initrd.mdadm.enable   = lib.mkDefault true;

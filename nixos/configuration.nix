@@ -14,6 +14,9 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
+  # Allow Proprietary
+  nixpkgs.config.allowUnfree = true;
+
   networking.hostName = "homeserver"; # Define your hostname.
 
   # Configure network connections interactively with nmcli or nmtui.
@@ -67,7 +70,7 @@
       extraGroups = [ "docker" "wheel" ]; # Enable ‘sudo’ for the user.
       openssh.authorizedKeys = [
         "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBH5PB799wDZ5lqHUn0HDnEudAaUk9ihMYk2/vE7O8ZZ+ykEEycFa1BFxVP4EnIe9J9jyD9GVYs2vgngMNFEmeAE=" # Dante's iPhone (Termius)
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGSElIxTg8VbjbB3O2WVMvZJYfP4GBzg5uzJSaKKu12f dantevbarbieri@gmail.com"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGSElIxTg8VbjbB3O2WVMvZJYfP4GBzg5uzJSaKKu12f dantevbarbieri@gmail.com" # Dante's MacBook Pro
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPdijU1XLbXrh1yMq7RtrLrIaTtWibnMAFcxTfFm1Y+g dantevbarbieri@gmail.com"
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHGJVxpke1XAdXybnz5HUkZBx9sDLqaJSsghrItLoDRj redmond\dbarbieri@DESKTOP-JG75H93" # Dante Work PC
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFYsa3JuUbgxuC6O+rfxSIC4scGcxhlgig+wXVoEMaCe dantevbarbieri@gmail.com" # Dell Latitude E5550
@@ -100,6 +103,16 @@
   environment.systemPackages = with pkgs; [
     neovim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
     wget
+
+    # Storage tooling
+    mdadm
+    lvm2
+    dosfstools    # FAT/VFAT helpers
+    xfsprogs      # XFS helpers
+    parted        # Partitioning
+
+    # Docker
+    docker-compose
   ];
 
   # Some programs need SUID wrappers, can be configured further or are
@@ -134,6 +147,31 @@
 
   # Enable Docker.
   virtualisation.docker.enable = true;
+
+  # NVIDIA
+  hardware = {
+    graphics = {
+      enable = true;
+
+      extraPackages = with pkgs; [ cudatoolkit ];
+    };
+
+    nvidia = {
+      # Enable kernel modesetting for tear-free output
+      modesetting.enable = true;    # defaults on for driver ≥535
+
+      # Choose the open-source kernel module (Turing+ only)
+      open = true;
+
+      # Whether to install the `nvidia-settings` GUI tool
+      nvidiaSettings.enable = false;# set `true` to add that package
+
+      # Pin a driver version if desired (stable, beta, production, or legacy)
+      # package = config.boot.kernelPackages.nvidiaPackages.stable;
+};
+
+    nvidia-container-toolkit.enable = true;
+  };
 
   # Use DoAs instead of SUDo
   security = {
