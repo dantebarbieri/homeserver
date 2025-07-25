@@ -150,25 +150,21 @@
 
   # NVIDIA
   hardware = {
-    graphics = {
-      enable = true;
-
-      extraPackages = with pkgs; [ cudatoolkit ];
-    };
+    graphics.enable = true;
 
     nvidia = {
       # Enable kernel modesetting for tear-free output
-      modesetting.enable = true;    # defaults on for driver ≥535
+      modesetting.enable = true;
 
       # Choose the open-source kernel module (Turing+ only)
       open = true;
 
       # Whether to install the `nvidia-settings` GUI tool
-      nvidiaSettings.enable = false;# set `true` to add that package
+      nvidiaSettings.enable = false;
 
       # Pin a driver version if desired (stable, beta, production, or legacy)
       # package = config.boot.kernelPackages.nvidiaPackages.stable;
-};
+    };
 
     nvidia-container-toolkit.enable = true;
   };
