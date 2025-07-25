@@ -10,31 +10,6 @@ secrets:
   STORAGE_ENCRYPTION_KEY:
     file: '${DATA}/authelia/secrets/STORAGE_ENCRYPTION_KEY'
 services:
-  mailserver:
-    image: ghcr.io/docker-mailserver/docker-mailserver:latest
-    container_name: mailserver
-    hostname: mail.danteb.com
-    ports:
-      - "25:25"
-      - "465:465"
-      - "587:587"
-      - "993:993"
-    volumes:
-      - ${DATA}/dms/mail-data/:/var/mail/
-      - ${DATA}/dms/mail-state/:/var/mail-state/
-      - ${DATA}/dms/mail-logs/:/var/log/mail/
-      - ${DATA}/dms/config/:/tmp/docker-mailserver/
-      - /etc/localtime:/etc/localtime:ro
-    environment:
-      - ENABLE_RSPAMD=1
-      - ENABLE_CLAMAV=1
-      - ENABLE_FAIL2BAN=1
-    cap_add:
-      - NET_ADMIN
-    restart: always
-    networks:
-      - default
-
   authelia:
     container_name: 'authelia'
     image: 'docker.io/authelia/authelia:latest'
@@ -56,13 +31,6 @@ services:
       AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE: '/run/secrets/EMAIL_PASSWORD'
     volumes:
       - '${DATA}/authelia/config:/config'
-
-  authelia_redis:
-    container_name: 'authelia_redis'
-    image: redis
-    restart: unless-stopped
-    networks:
-      - authelia
   
   authelia_postgres:
     container_name: 'authelia_postgres'
@@ -78,6 +46,13 @@ services:
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/STORAGE_PASSWORD
       POSTGRES_USER: authelia
+
+  authelia_redis:
+    container_name: 'authelia_redis'
+    image: redis
+    restart: unless-stopped
+    networks:
+      - authelia
 
   admin.danteb.com:
     build:
@@ -131,65 +106,6 @@ services:
       - "5443:5443/udp"
       - "6060:6060/tcp"
 
-  cs2-server:
-    image: joedwards32/cs2
-    container_name: cs2-dedicated
-    restart: unless-stopped
-    environment:
-      # Server configuration
-      SRCDS_TOKEN: ${SRCDS_TOKEN} # Game Server Token from https://steamcommunity.com/dev/managegameservers
-      STEAMAPPVALIDATE: 0 # (0 - no validation, 1 - enable validation)
-      CS2_SERVERNAME: ${CS2_NAME} # (Set the visible name for your private server)
-      CS2_CHEATS: 0 # (0 - disable cheats, 1 - enable cheats)
-      CS2_PORT: 27015 # (CS2 server listen port tcp_udp)
-      CS2_SERVER_HIBERNATE: 0 # (Put server in a low CPU state when there are no players. 0 - hibernation disabled, 1 - hibernation enabled)
-      CS2_RCON_PORT: null # (Optional, use a simple TCP proxy to have RCON listen on an alternative port. Useful for services like AWS Fargate which do not support mixed protocol ports.)
-      CS2_LAN: 0 # (0 - LAN mode disabled, 1 - LAN Mode enabled)
-      CS2_RCONPW: ${CS2_RCONPW} # (RCON password)
-      CS2_PW: ${CS2_PW} # (CS2 server password)
-      CS2_MAXPLAYERS: 10 # (Max players)
-      CS2_ADDITIONAL_ARGS: null # (Optional additional arguments to pass into cs2)
-      CS2_CFG_URL: null # HTTP/HTTPS URL to fetch a Tar Gzip bundle of configuration files/mods
-      # Game modes
-      CS2_GAMEALIAS: null # (Game type, e.g. casual, competitive, deathmatch. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
-      CS2_GAMETYPE: 0 # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
-      CS2_GAMEMODE: 1 # (Used if CS2_GAMEALIAS not defined. See https://developer.valvesoftware.com/wiki/Counter-Strike_2/Dedicated_Servers)
-      CS2_MAPGROUP: "mg_active" # (Map pool)
-      CS2_STARTMAP: "de_inferno" # (Start map)
-      # Bots
-      CS2_BOT_DIFFICULTY: null # (0 - easy, 1 - normal, 2 - hard, 3 - expert)
-      CS2_BOT_QUOTA: null # (Number of bots)
-      CS2_BOT_QUOTA_MODE: null # (fill, competitive)
-      # TV
-      TV_AUTORECORD: 0 # Automatically records all games as CSTV demos: 0=off, 1=on.
-      TV_ENABLE: 0 # Activates CSTV on server: 0=off, 1=on.
-      TV_PORT: 27020 # Host SourceTV port
-      TV_PW: ${TV_PW} # CSTV password for clients
-      TV_RELAY_PW: ${TV_RELAY_PW} # CSTV password for relay proxies
-      TV_MAXRATE: 0 # World snapshots to broadcast per second. Affects camera tickrate.
-      TV_DELAY: 0 # Max CSTV spectator bandwidth rate allowed, 0 == unlimited
-      # Logs
-      CS2_LOG: "on" # 'on'/'off'
-      CS2_LOG_MONEY: 0 # Turns money logging on/off: (0=off, 1=on)
-      CS2_LOG_DETAIL: 0 # Combat damage logging: (0=disabled, 1=enemy, 2=friendly, 3=all)
-      CS2_LOG_ITEMS: 0 # Turns item logging on/off: (0=off, 1=on)
-    networks:
-      - default
-    volumes:
-      - cs2:/home/steam/cs2-dedicated/ # Persistent data volume mount point inside container
-    ports:
-      - "27015:27015/tcp" # TCP
-      - "27015:27015/udp" # UDP
-      - "27020:27020/udp" # UDP
-
-  endlessh:
-    image: shizunge/endlessh-go
-    container_name: endlessh
-    restart: unless-stopped
-    ports:
-      - "22:2222"
-    command: ["-logtostderr", "-v=1"]
-
   homer:
     image: b4bz/homer
     container_name: homer
@@ -200,6 +116,33 @@ services:
       - default
     volumes:
       - ${CONFIG}/homeserver/homer/data:/www/assets
+
+  dashdot:
+    image: mauricenino/dashdot:nvidia
+    container_name: dashdot
+    restart: unless-stopped
+    privileged: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
+    networks:
+      - default
+    volumes:
+      - /:/mnt/host:ro
+    environment:
+      DASHDOT_WIDGET_LIST: "os,cpu,storage,ram,network,gpu"
+      DASHDOT_SHOW_HOST: true
+      DASHDOT_ENABLE_CPU_TEMPS: true
+      DASHDOT_NETWORK_LABEL_LIST: type,speed_up,speed_down,interface_speed,public_ip
+      DASHDOT_ACCEPT_OOKLA_EULA: true
+      DASHDOT_USE_NETWORK_INTERFACE: wlp193s0
+      DASHDOT_OVERRIDE_OS: Debian 12 (bookworm)
+      DASHDOT_OVERRIDE_ARCH: amd64
+      DASHDOT_FS_DEVICE_FILTER: nvme1n1,sda,sdb,sdc,sdd,sde,sdf,sdg,sdh,sdi,sdj,sdk,sdl
+      DASHDOT_FS_VIRTUAL_MOUNTS: /dev/mapper/vg_redundant-lv_data
 
   immich-server:
     container_name: immich_server
@@ -238,7 +181,7 @@ services:
     healthcheck:
       disable: false
 
-  immich_redis:
+  immich-redis:
     container_name: immich_redis
     image: docker.io/redis:6.2-alpine@sha256:2ba50e1ac3a0ea17b736ce9db2b0a9f6f8b85d4c27d5f5accc6a416d8f42c6d5
     networks:
@@ -247,7 +190,7 @@ services:
     healthcheck:
       test: redis-cli ping || exit 1
 
-  database:
+  immich-postgres:
     container_name: immich_postgres
     image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0@sha256:90724186f0a3517cf6914295b5ab410db9ce23190a2d9d0b9dd6463e3fa298f0
     command:
@@ -282,9 +225,9 @@ services:
       start_interval: 30s
       start_period: 5m
 
-  custom-minecraft-server:
+  minecraft-server:
     image: itzg/minecraft-server:java8
-    container_name: custom-minecraft-server
+    container_name: minecraft-server
     restart: unless-stopped
     tty: true
     stdin_open: true
@@ -293,21 +236,19 @@ services:
     environment:
       EULA: true
       MODE: "survival"
-      MOTD: "§bCustomized §lTekkit§r Minecraft Server\nRunning Version: §c§o%VERSION%§r."
+      MOTD: "§bHardcore§r Minecraft Server\nRunning Version: §c§o%VERSION%§r."
       DIFFICULTY: "hard"
+      HARDCORE: true
       OPS: |
         DanteVB
         ElVonHresvelg
-      ICON: "/data/assets/tekkit-logo.png"
+      ICON: "/data/assets/hardcore-logo.png"
       OVERRIDE_ICON: true
       ENABLE_QUERY: true
       ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 16
       MEMORY: 24G
       USE_AIKAR_FLAGS: true
-      TYPE: "AUTO_CURSEFORGE"
-      CF_API_KEY: ${CF_API_KEY}
-      CF_SLUG: qol-tekkit
       ALLOW_FLIGHT: true
       STOP_SERVER_ANNOUNCE_DELAY: 60
       STOP_DURATION: 60
@@ -317,7 +258,7 @@ services:
     networks:
       - default
     volumes:
-      - custom-minecraft-server:/data
+      - minecraft-server:/data
       - ${CONFIG}/minecraft/assets:/data/assets
 
   rlcraft-minecraft-server:
@@ -367,23 +308,6 @@ services:
       - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
       - ${DATA}/nginxproxymanager/snippets:/snippets
 
-  ouroboros:
-    container_name: ouroboros
-    hostname: ouroboros
-    image: pyouroboros/ouroboros
-    environment:
-      CLEANUP: true
-      INTERVAL: 300
-      LOG_LEVEL: info
-      SELF_UPDATE: true
-      IGNORE: immich-server immich-microservices immich-machine-learning redis database
-      TZ: ${TZ}
-    restart: unless-stopped
-    networks:
-      - default
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
   plex:
     container_name: plex
     image: plexinc/pms-docker
@@ -424,6 +348,23 @@ services:
       - "/dev/dri:/dev/dri"
     runtime: "nvidia"
 
+  sabnzbd:
+    container_name: sabnzbd
+    image: ghcr.io/hotio/sabnzbd:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    networks:
+      - default
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/sabnzbd/config:/config
+      - ${RAID}/shared/usenet:/data/usenet:rw
+
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
@@ -441,6 +382,20 @@ services:
       - 6881:6881
       - 6881:6881/udp
     restart: unless-stopped
+
+  recyclarr:
+    container_name: recyclarr
+    image: ghcr.io/recyclarr/recyclarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    networks:
+      - default
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/recyclarr/config:/config
 
   radarr:
     container_name: radarr
@@ -476,20 +431,6 @@ services:
       - ${DATA}/sonarr/config:/config
       - ${RAID}/shared:/data
 
-  recyclarr:
-    container_name: recyclarr
-    image: ghcr.io/recyclarr/recyclarr:latest
-    restart: unless-stopped
-    environment:
-      PUID: ${UID}
-      PGID: ${GID}
-      TZ: ${TZ}
-    networks:
-      - default
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${DATA}/recyclarr/config:/config
-
   bazarr:
     container_name: bazarr
     image: ghcr.io/hotio/bazarr:nightly
@@ -509,25 +450,22 @@ services:
       - ${DATA}/bazarr/config:/config
       - ${RAID}/shared/media:/data/media
 
-  sabnzbd:
-    container_name: sabnzbd
-    image: ghcr.io/hotio/sabnzbd:latest
-    restart: unless-stopped
-    logging:
-      driver: json-file
-    ports:
-      - 8989:8080
-      - 9090:9090
+  whisperasr:
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: whisperasr
     environment:
-      PUID: ${UID}
-      PGID: ${GID}
-      TZ: ${TZ}
+      ASR_MODEL: turbo
+      ASR_ENGINE: openai_whisper
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
     networks:
       - default
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${DATA}/sabnzbd/config:/config
-      - ${RAID}/shared/usenet:/data/usenet:rw
 
   overseerr:
     image: ghcr.io/hotio/overseerr:latest
@@ -580,8 +518,8 @@ services:
       - vw-data:/data
     restart: unless-stopped
 
-  redis:
-    container_name: redis
+  searxng_redis:
+    container_name: searxng_redis
     image: cgr.dev/chainguard/valkey:latest
     command: --save 30 1 --loglevel warning
     restart: unless-stopped
@@ -624,8 +562,19 @@ services:
         max-size: "1m"
         max-file: "1"
 
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ${DATA}/ntfy/config:/etc/ntfy
+      - ${DATA}/ntfy/cache:/var/cache/ntfy
+    networks:
+      - default
+
   ollama:
-    # GPU support
     deploy:
       resources:
         reservations:
@@ -670,52 +619,43 @@ services:
       SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
     restart: unless-stopped
 
-  whisperasr:
-    # image: onerahmet/openai-whisper-asr-webservice:latest-gpu
-    image: onerahmet/openai-whisper-asr-webservice:latest
-    container_name: whisperasr
-    environment:
-      ASR_MODEL: small
-      ASR_ENGINE: faster_whisper
-      # ASR_MODEL: turbo
-      # ASR_ENGINE: openai_whisper
-    # deploy:
-      # resources:
-        # reservations:
-          # devices:
-            # - driver: nvidia
-              # count: 1
-              # capabilities: [gpu]
+  ddclient:
+    image: lscr.io/linuxserver/ddclient:latest
+    container_name: ddclient
     restart: unless-stopped
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
+    volumes:
+      - ${DATA}/ddclient/config:/config
     networks:
       - default
 
-  dashdot:
-    image: mauricenino/dashdot:nvidia
-    container_name: dashdot
+  endlessh:
+    image: shizunge/endlessh-go
+    container_name: endlessh
     restart: unless-stopped
-    privileged: true
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities:
-                - gpu
+    ports:
+      - "22:2222"
+    command: ["-logtostderr", "-v=1"]
+
+  ouroboros:
+    container_name: ouroboros
+    hostname: ouroboros
+    image: pyouroboros/ouroboros
+    environment:
+      CLEANUP: true
+      INTERVAL: 300
+      LOG_LEVEL: info
+      SELF_UPDATE: true
+      IGNORE: immich-server immich-microservices immich-machine-learning redis database
+      TZ: ${TZ}
+    restart: unless-stopped
     networks:
       - default
     volumes:
-      - /:/mnt/host:ro
-    environment:
-      DASHDOT_WIDGET_LIST: "os,cpu,storage,ram,network,gpu"
-      DASHDOT_SHOW_HOST: true
-      DASHDOT_ENABLE_CPU_TEMPS: true
-      DASHDOT_NETWORK_LABEL_LIST: type,speed_up,speed_down,interface_speed,public_ip
-      DASHDOT_ACCEPT_OOKLA_EULA: true
-      DASHDOT_USE_NETWORK_INTERFACE: wlp193s0
-      DASHDOT_OVERRIDE_OS: Debian 12 (bookworm)
-      DASHDOT_OVERRIDE_ARCH: amd64
-      DASHDOT_FS_DEVICE_FILTER: nvme1n1,sda,sdb,sdc,sdd,sde,sdf,sdg,sdh,sdi,sdj,sdk,sdl
-      DASHDOT_FS_VIRTUAL_MOUNTS: /dev/mapper/vg_redundant-lv_data
+      - /var/run/docker.sock:/var/run/docker.sock
 
 networks:
   authelia:
@@ -725,11 +665,10 @@ networks:
   searxng:
 
 volumes:
-  cs2:
   authelia-storage:
   pgdata:
   model-cache:
-  custom-minecraft-server:
+  minecraft-server:
   rlcraft-minecraft-server:
   ollama:
   open-webui:
