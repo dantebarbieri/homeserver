@@ -20,7 +20,52 @@
   networking.hostName = "homeserver"; # Define your hostname.
 
   # Configure network connections interactively with nmcli or nmtui.
-  networking.networkmanager.enable = true;
+  networking.networkmanager.enable = false;
+  networking.wireless.enable = true;
+  systemd.network.enable = true;
+
+  networking.wireless.secretsFile = "/run/secrets/wireless.conf";
+  networking.wireless.networks."Aggies R Us".psk = "ext:password";
+
+  systemd.network.networks = {
+    # Wi‑Fi primary (metric 100)
+    "10-wifi" = {
+      matchConfig.Name = "wlp193s0";
+      networkConfig = {
+        # static addresses (primary + floating .100)
+        Address    = [ "192.168.1.26/24" "192.168.1.100/24" ];
+        Gateway    = "192.168.1.1";
+        DNS        = [ "192.168.1.1" "1.1.1.1" ];
+        RouteMetric = 100;
+      };
+    };
+
+    # PowerLine backup 0 (metric 200)
+    "20-pl0" = {
+      matchConfig.Name = "enp66s0f0";
+      networkConfig = {
+        Address     = [ "192.168.1.24/24" ];
+        Gateway     = "192.168.1.1";
+        RouteMetric = 200;
+      };
+      linkConfig = {
+        RequiredForOnline = "no";
+      };
+    };
+
+    # PowerLine backup 1 (metric 300)
+    "30-pl1" = {
+      matchConfig.Name = "enp66s0f1";
+      networkConfig = {
+        Address     = [ "192.168.1.25/24" ];
+        Gateway     = "192.168.1.1";
+        RouteMetric = 300;
+      };
+      linkConfig = {
+        RequiredForOnline = "no";
+      };
+    };
+  };
 
   # Set your time zone.
   time.timeZone = "America/Chicago";
@@ -128,9 +173,11 @@
   # Enable the OpenSSH daemon.
   services.openssh = {
     enable = true;
+    ports = [ 28 ];
     settings = {
       PermitRootLogin = "no";
       PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
     };
   };
 
