@@ -1,0 +1,9 @@
+# Credentials — never commit
+accounts.conf
+*.key
+*.pem
+*.gpg
+*.asc
+
+# aerc runtime / local state
+templates

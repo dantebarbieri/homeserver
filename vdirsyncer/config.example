@@ -1,0 +1,30 @@
+# Copy this to 'config' and fill in your Apple ID.
+#   cp config.example config
+#
+# Credentials are fetched via 'pass' (Linux) or 'security' (macOS).
+# See setup.sh output for instructions on storing your passwords.
+
+[general]
+status_path = "~/.config/vdirsyncer/status/"
+
+[pair icloud_contacts]
+a = "icloud_local"
+b = "icloud_remote"
+collections = [["icloud_contacts", "card", "main"]]
+conflict_resolution = "a wins"
+metadata = ["displayname"]
+
+[storage icloud_local]
+type = "filesystem"
+path = "~/.local/share/vdirsyncer/contacts/icloud/"
+fileext = ".vcf"
+
+[storage icloud_remote]
+type = "carddav"
+url = "https://contacts.icloud.com/"
+# Replace with your Apple ID email:
+username = "YOUR_APPLE_ID@icloud.com"
+# Linux (pass):
+password.fetch = ["command", "pass", "contacts/icloud-app-password"]
+# macOS (keychain) — uncomment and comment out the line above:
+# password.fetch = ["command", "security", "find-generic-password", "-s", "vdirsyncer-icloud", "-w"]

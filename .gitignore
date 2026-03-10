@@ -1,13 +1,4 @@
 # ==============================
-# Credentials & secrets
-# ==============================
-accounts.conf
-*.key
-*.pem
-*.gpg
-*.asc
-
-# ==============================
 # OS files
 # ==============================
 .DS_Store
@@ -26,8 +17,3 @@ Desktop.ini
 *.code-workspace
 tags
 TAGS
-
-# ==============================
-# aerc runtime / local state
-# ==============================
-templates/
