@@ -17,7 +17,9 @@ status_path = "~/.local/share/vdirsyncer/status/"
 [pair icloud_contacts]
 a = "icloud_local"
 b = "icloud_remote"
-collections = [["icloud_contacts", "card", "main"]]
+# Autodiscover collections from both sides so we don't need to
+# hardcode iCloud's internal collection names.
+collections = ["from a", "from b"]
 # iCloud is the source of truth (managed from Apple devices),
 # so remote wins on conflict.
 conflict_resolution = "b wins"
