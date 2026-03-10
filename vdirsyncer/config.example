@@ -3,15 +3,24 @@
 #
 # Credentials are fetched via 'pass' (Linux) or 'security' (macOS).
 # See setup.sh output for instructions on storing your passwords.
+#
+# Note: vdirsyncer only supports password.fetch for credentials.
+# The username must be inline — this is why 'config' is gitignored
+# and only 'config.example' is tracked.
 
 [general]
-status_path = "~/.config/vdirsyncer/status/"
+# Keep status outside the repo to avoid clutter in the working tree.
+# The symlink makes ~/.config/vdirsyncer point into the repo, so
+# storing status here would put sync state alongside tracked files.
+status_path = "~/.local/share/vdirsyncer/status/"
 
 [pair icloud_contacts]
 a = "icloud_local"
 b = "icloud_remote"
 collections = [["icloud_contacts", "card", "main"]]
-conflict_resolution = "a wins"
+# iCloud is the source of truth (managed from Apple devices),
+# so remote wins on conflict.
+conflict_resolution = "b wins"
 metadata = ["displayname"]
 
 [storage icloud_local]

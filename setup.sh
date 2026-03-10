@@ -39,9 +39,9 @@ echo ""
 # --------------------------------------------------
 echo "==> Creating data directories..."
 mkdir -p ~/.local/share/vdirsyncer/contacts/icloud
-mkdir -p ~/.config/vdirsyncer/status
+mkdir -p ~/.local/share/vdirsyncer/status
 echo "    ~/.local/share/vdirsyncer/contacts/icloud"
-echo "    ~/.config/vdirsyncer/status"
+echo "    ~/.local/share/vdirsyncer/status"
 echo ""
 
 # --------------------------------------------------

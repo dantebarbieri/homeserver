@@ -1,9 +1,38 @@
 # Copy this to accounts.conf and fill in your credentials.
+#   cp accounts.conf.example accounts.conf
+#   chmod 600 accounts.conf
+#
 # accounts.conf is gitignored — never commit it.
 #
-# [Personal]
-# source = imaps://user@example.com@imap.example.com:993
-# outgoing = smtps://user@example.com@smtp.example.com:465
-# default = INBOX
-# from = Your Name <user@example.com>
-# copy-to = Sent
+# Replace YOUR_GMAIL and YOUR_ICLOUD with your actual email addresses.
+# The %40 in source/outgoing URLs is the URL-encoded '@' character.
+#
+# Credential commands (choose one per platform):
+#   Linux (pass):     pass email/gmail-app-password
+#   macOS (keychain): security find-generic-password -s "aerc-gmail" -w
+
+[Gmail]
+source            = imaps://YOUR_GMAIL%40gmail.com@imap.gmail.com:993
+outgoing          = smtps://YOUR_GMAIL%40gmail.com@smtp.gmail.com:465
+default           = INBOX
+from              = Your Name <YOUR_GMAIL@gmail.com>
+copy-to           = Sent
+# Linux:
+source-cred-cmd   = pass email/gmail-app-password
+outgoing-cred-cmd = pass email/gmail-app-password
+# macOS (uncomment and comment out the above):
+# source-cred-cmd   = security find-generic-password -s "aerc-gmail" -w
+# outgoing-cred-cmd = security find-generic-password -s "aerc-gmail" -w
+
+[iCloud]
+source            = imaps://YOUR_ICLOUD%40icloud.com@imap.mail.me.com:993
+outgoing          = smtps://YOUR_ICLOUD%40icloud.com@smtp.mail.me.com:587
+default           = INBOX
+from              = Your Name <YOUR_ICLOUD@icloud.com>
+copy-to           = Sent
+# Linux:
+source-cred-cmd   = pass email/icloud-app-password
+outgoing-cred-cmd = pass email/icloud-app-password
+# macOS (uncomment and comment out the above):
+# source-cred-cmd   = security find-generic-password -s "aerc-icloud" -w
+# outgoing-cred-cmd = security find-generic-password -s "aerc-icloud" -w
