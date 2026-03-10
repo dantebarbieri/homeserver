@@ -1,0 +1,9 @@
+# Copy this to accounts.conf and fill in your credentials.
+# accounts.conf is gitignored — never commit it.
+#
+# [Personal]
+# source = imaps://user@example.com@imap.example.com:993
+# outgoing = smtps://user@example.com@smtp.example.com:465
+# default = INBOX
+# from = Your Name <user@example.com>
+# copy-to = Sent

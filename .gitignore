@@ -1,0 +1,33 @@
+# ==============================
+# Credentials & secrets
+# ==============================
+accounts.conf
+*.key
+*.pem
+*.gpg
+*.asc
+
+# ==============================
+# OS files
+# ==============================
+.DS_Store
+Thumbs.db
+Desktop.ini
+._*
+
+# ==============================
+# Editor & IDE files
+# ==============================
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.code-workspace
+tags
+TAGS
+
+# ==============================
+# aerc runtime / local state
+# ==============================
+templates/
