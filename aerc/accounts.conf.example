@@ -16,7 +16,7 @@ source            = imaps://YOUR_GMAIL%40gmail.com@imap.gmail.com:993
 outgoing          = smtps://YOUR_GMAIL%40gmail.com@smtp.gmail.com:465
 default           = INBOX
 from              = Your Name <YOUR_GMAIL@gmail.com>
-copy-to           = Sent
+# Gmail auto-saves sent mail server-side; setting copy-to causes duplicates.
 # Linux:
 source-cred-cmd   = pass email/gmail-app-password
 outgoing-cred-cmd = pass email/gmail-app-password
@@ -26,10 +26,10 @@ outgoing-cred-cmd = pass email/gmail-app-password
 
 [iCloud]
 source            = imaps://YOUR_ICLOUD%40icloud.com@imap.mail.me.com:993
-outgoing          = smtps://YOUR_ICLOUD%40icloud.com@smtp.mail.me.com:587
+outgoing          = smtp+starttls://YOUR_ICLOUD%40icloud.com@smtp.mail.me.com:587
 default           = INBOX
 from              = Your Name <YOUR_ICLOUD@icloud.com>
-copy-to           = Sent
+copy-to           = Sent Messages
 # Linux:
 source-cred-cmd   = pass email/icloud-app-password
 outgoing-cred-cmd = pass email/icloud-app-password
