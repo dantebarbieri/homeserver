@@ -77,7 +77,9 @@ git clone <this-repo> && cd mail-config
    contact storage and sync status.
 4. **Bootstraps credential files** by copying `.example` templates to their
    real names (if they don't already exist). `accounts.conf` is chmod 600.
-5. **Registers a crontab entry** to run `vdirsyncer sync` every 15 minutes.
+5. **Registers periodic contact sync** — adds a crontab entry on systems with
+   cron, or skips gracefully on NixOS (which uses a declarative systemd timer
+   in `configuration.nix` instead).
 
 ## Post-install setup
 

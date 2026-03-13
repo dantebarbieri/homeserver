@@ -74,12 +74,17 @@ echo ""
 # --------------------------------------------------
 CRON_JOB="*/15 * * * * vdirsyncer sync icloud_contacts 2>/dev/null"
 
-echo "==> Setting up crontab for contact sync (every 15 min)..."
-if crontab -l 2>/dev/null | grep -qF "vdirsyncer sync icloud_contacts"; then
-    echo "    Crontab entry already exists, skipping"
+echo "==> Setting up periodic contact sync (every 15 min)..."
+if command -v crontab >/dev/null 2>&1; then
+    if crontab -l 2>/dev/null | grep -qF "vdirsyncer sync icloud_contacts"; then
+        echo "    Crontab entry already exists, skipping"
+    else
+        (crontab -l 2>/dev/null || true; echo "$CRON_JOB") | crontab -
+        echo "    Added: $CRON_JOB"
+    fi
 else
-    (crontab -l 2>/dev/null || true; echo "$CRON_JOB") | crontab -
-    echo "    Added: $CRON_JOB"
+    echo "    crontab not found — if you're on NixOS, the systemd timer"
+    echo "    (vdirsyncer-sync.timer) handles this instead."
 fi
 echo ""
 
