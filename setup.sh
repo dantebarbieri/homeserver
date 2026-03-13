@@ -1,12 +1,12 @@
-#!/bin/bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # --------------------------------------------------
 # 1. Detect platform and set paths
 # --------------------------------------------------
-if [[ "$(uname)" == "Darwin" ]]; then
+if [ "$(uname)" = "Darwin" ]; then
     AERC_TARGET=~/Library/Preferences/aerc
     CONFIG_DIR=~/Library/Preferences
     PLATFORM="macos"
@@ -50,7 +50,7 @@ echo ""
 echo "==> Bootstrapping config files from examples..."
 
 # aerc accounts.conf
-if [[ ! -f "$SCRIPT_DIR/aerc/accounts.conf" ]]; then
+if [ ! -f "$SCRIPT_DIR/aerc/accounts.conf" ]; then
     cp "$SCRIPT_DIR/aerc/accounts.conf.example" "$SCRIPT_DIR/aerc/accounts.conf"
     chmod 600 "$SCRIPT_DIR/aerc/accounts.conf"
     echo "    Created aerc/accounts.conf (chmod 600)"
@@ -61,7 +61,7 @@ else
 fi
 
 # vdirsyncer config
-if [[ ! -f "$SCRIPT_DIR/vdirsyncer/config" ]]; then
+if [ ! -f "$SCRIPT_DIR/vdirsyncer/config" ]; then
     cp "$SCRIPT_DIR/vdirsyncer/config.example" "$SCRIPT_DIR/vdirsyncer/config"
     echo "    Created vdirsyncer/config"
 else
@@ -108,7 +108,7 @@ cat << 'INSTRUCTIONS'
 
 INSTRUCTIONS
 
-if [[ "$PLATFORM" == "macos" ]]; then
+if [ "$PLATFORM" = "macos" ]; then
 cat << 'MACOS_INSTRUCTIONS'
    macOS — using Keychain:
 
