@@ -335,17 +335,9 @@ custom_formats:
   # ==========================================================================
   - trash_ids:
       # HDR Formats
-      - 2b239ed870daba8126a53bd5dc8dc1c8 # DV HDR10Plus
-      - 7878c33f1963fefb3d6c8657d46c2f0a # DV HDR10
-      - 1f733af03141f068a540eec352589a89 # DV HLG
-      - 27954b0a80aab882522a88a4d9eae1cd # DV SDR
-      - 6d0d8de7b57e35518ac0308b0ddf404e # DV
-      - bb019e1cd00f304f80971c965de064dc # HDR (undefined)
-      - 3e2c4e748b64a1a1118e0ea3f4cf6875 # HDR
-      - 3497799d29a085e2ac2df9d468413c94 # HDR10
-      - a3d82cbef5039f8d295478d28a887159 # HDR10+
-      - 17e889ce13117940092308f48b48b45b # HLG
-      - 2a7e3be05d3861d6df7171ec74cad727 # PQ
+      - 505d871304820ba7106b693be6fe4a9e # HDR
+      - 7c3a61a9c6cb04f52f1544be6d44a026 # DV Boost
+      - 0c4b99df9206d2cfac3c05ab897dd62a # HDR10Plus Boost
 
       # Unwanted
       - 85c61753df5da1fb2aab6f2a47426b09 # BR-DISK
@@ -377,7 +369,6 @@ custom_formats:
       - ae58039e1319178e6be73caab5c42166 # SHO
       - 1efe8da11bfd74fbbcd4d8117ddb9213 # STAN
       - 43b3cf48cb385cd3eac608ee6bca7f09 # UHD Streaming Boost
-      - d2d299244a92b8a52d4921ce3897a256 # UHD Streaming Cut
 
       # HQ Source Groups
       - e6258996055b9fbab7e9cb2f75819294 # WEB Tier 01
@@ -388,14 +379,10 @@ custom_formats:
       - name: 4K UHD - 2160p
       - name: At most 2160p
 
-  # HDR Formats (DV WEBDL)
+  # DV (w/o HDR fallback) — penalizes WEBDL DV-only releases with no HDR10 fallback track.
+  # Comment out if all of your users' setups are fully DV compatible.
   - trash_ids:
-      # Comment out the next line if you and all of your users' setups are fully DV compatible
-      - 9b27ab6498ec0f31a3353992e19434ca # DV (WEBDL)
-
-      # HDR10+ Boost - Uncomment the next two lines if any of your devices DO support HDR10+
-      # - 0dad0a507451acddd754fe6dc3a7f5e7 # HDR10+ Boost
-      # - 385e9e8581d33133c3961bdcdeffb7b4 # DV HDR10+ Boost
+      - 9b27ab6498ec0f31a3353992e19434ca # DV (w/o HDR fallback)
     assign_scores_to: *uhd_profiles
 
   # Optional
