@@ -8,24 +8,24 @@ Personal [Recyclarr](https://github.com/recyclarr/recyclarr) configuration that 
 
 ## Key Files
 
-- `recyclarr.yml` — The main file you'll iterate on. Contains all quality profiles, custom format assignments, and score overrides for both Sonarr and Radarr.
+- `recyclarr.yml` — Entry point. Defines Sonarr/Radarr instances, quality definitions, media naming, and `include` directives.
+- `includes/sonarr/quality-profiles.yml` — All Sonarr quality profile definitions.
+- `includes/sonarr/custom-formats.yml` — All Sonarr custom format assignments (uses YAML anchors for profile lists).
+- `includes/radarr/quality-profiles.yml` — All Radarr quality profile definitions.
+- `includes/radarr/custom-formats.yml` — All Radarr custom format assignments (uses YAML anchors for profile lists).
 - `settings.yml` — Instance connection settings. Rarely changes.
 - `secrets.yml` — Gitignored. Contains API keys and URLs. Copy from `secrets.yml.example` to create.
 
 ## Configuration Structure
 
-`recyclarr.yml` is divided into two top-level sections:
+`recyclarr.yml` defines two instances (`sonarr.series` and `radarr.movie`), each with:
+- `base_url` / `api_key` — Instance connection (via `!secret` tags resolved from `secrets.yml`)
+- `quality_definition` — Quality size limits (`series` or `movie`)
+- `include` — References to files in `includes/` for quality profiles and custom formats
+- `media_naming` — Naming scheme references
 
-- `sonarr:` — TV show quality profiles, custom formats, and media naming (plex-tvdb)
-- `radarr:` — Movie quality profiles, custom formats, and media naming (plex-tmdb)
-
-Both sections follow the same pattern:
-1. `quality_definition` — Sets the quality size limits (`series` or `movie`)
-2. `quality_profiles` — Named profiles with `min_format_score`, `quality_sort`, and `qualities` lists
-3. `custom_formats` — Lists of `trash_ids` mapped to profiles with score assignments
-4. `media_naming` — Naming scheme references
-
-Sensitive values use `!secret <key>` YAML tag (e.g., `!secret sonarr_apikey`), resolved from `secrets.yml`.
+Include files use recyclarr's simplified structure (no service type or instance name).
+YAML anchors (`&name` / `*name`) are used in custom format files to deduplicate repeated `assign_scores_to` profile lists.
 
 ## Profiles Defined
 
@@ -42,7 +42,7 @@ Sensitive values use `!secret <key>` YAML tag (e.g., `!secret sonarr_apikey`), r
 
 ```sh
 rsync -av --exclude='.git' --exclude='secrets.yml.example' \
-  recyclarr.yml settings.yml \
+  recyclarr.yml settings.yml includes/ \
   user@server:/path/to/recyclarr/config/
 ```
 
