@@ -31,9 +31,19 @@ custom_formats:
       - name: At most 1080p Anime
       - name: At most 2160p
       - name: At most 2160p Anime
+      - name: SD - 480p Anime (Dub)
+      - name: SD - 576p Anime (Dub)
+      - name: HD - 720p Anime (Dub)
+      - name: HD - 1080p Anime (Dub)
+      - name: 4K UHD - 2160p Anime (Dub)
+      - name: At most 480p Anime (Dub)
+      - name: At most 576p Anime (Dub)
+      - name: At most 720p Anime (Dub)
+      - name: At most 1080p Anime (Dub)
+      - name: At most 2160p Anime (Dub)
 
   # ==========================================================================
-  # Anime scoring — assigned to all Anime profiles
+  # Anime scoring — assigned to all Anime profiles (including Dub)
   # ==========================================================================
   - trash_ids:
       # Anime CF/Scoring
@@ -84,6 +94,16 @@ custom_formats:
       - name: At most 720p Anime
       - name: At most 1080p Anime
       - name: At most 2160p Anime
+      - name: SD - 480p Anime (Dub)
+      - name: SD - 576p Anime (Dub)
+      - name: HD - 720p Anime (Dub)
+      - name: HD - 1080p Anime (Dub)
+      - name: 4K UHD - 2160p Anime (Dub)
+      - name: At most 480p Anime (Dub)
+      - name: At most 576p Anime (Dub)
+      - name: At most 720p Anime (Dub)
+      - name: At most 1080p Anime (Dub)
+      - name: At most 2160p Anime (Dub)
 
   # Uncensored — score: 0 (adjust as desired)
   - trash_ids:
@@ -109,6 +129,26 @@ custom_formats:
         score: 0
       - name: At most 2160p Anime
         score: 0
+      - name: SD - 480p Anime (Dub)
+        score: 0
+      - name: SD - 576p Anime (Dub)
+        score: 0
+      - name: HD - 720p Anime (Dub)
+        score: 0
+      - name: HD - 1080p Anime (Dub)
+        score: 0
+      - name: 4K UHD - 2160p Anime (Dub)
+        score: 0
+      - name: At most 480p Anime (Dub)
+        score: 0
+      - name: At most 576p Anime (Dub)
+        score: 0
+      - name: At most 720p Anime (Dub)
+        score: 0
+      - name: At most 1080p Anime (Dub)
+        score: 0
+      - name: At most 2160p Anime (Dub)
+        score: 0
 
   # 10bit — score: 0 (adjust as desired)
   - trash_ids:
@@ -119,6 +159,100 @@ custom_formats:
   - trash_ids:
       - 4a3b087eea2ce012fcc1ce319259a3be # Anime Dual Audio
     assign_scores_to: *anime_profiles_score0
+
+  # ==========================================================================
+  # Anime (Dub) overrides — prefer English dubs over original language
+  # ==========================================================================
+
+  # Block releases without English audio on dub profiles
+  - trash_ids:
+      - 0dc8aec3bd1c47cd6c40c46ecd27e846 # Language: Not English
+    assign_scores_to:
+      - name: SD - 480p Anime (Dub)
+      - name: SD - 576p Anime (Dub)
+      - name: HD - 720p Anime (Dub)
+      - name: HD - 1080p Anime (Dub)
+      - name: 4K UHD - 2160p Anime (Dub)
+      - name: At most 480p Anime (Dub)
+      - name: At most 576p Anime (Dub)
+      - name: At most 720p Anime (Dub)
+      - name: At most 1080p Anime (Dub)
+      - name: At most 2160p Anime (Dub)
+
+  # Remove Language Not Original penalty for dub profiles
+  - trash_ids:
+      - d6e9318c875905d6cfb5bee961afcea9 # Language Not Original
+    assign_scores_to: &anime_dub_profiles
+      - name: SD - 480p Anime (Dub)
+        score: 0
+      - name: SD - 576p Anime (Dub)
+        score: 0
+      - name: HD - 720p Anime (Dub)
+        score: 0
+      - name: HD - 1080p Anime (Dub)
+        score: 0
+      - name: 4K UHD - 2160p Anime (Dub)
+        score: 0
+      - name: At most 480p Anime (Dub)
+        score: 0
+      - name: At most 576p Anime (Dub)
+        score: 0
+      - name: At most 720p Anime (Dub)
+        score: 0
+      - name: At most 1080p Anime (Dub)
+        score: 0
+      - name: At most 2160p Anime (Dub)
+        score: 0
+
+  # Prefer Dubs Only releases for dub profiles
+  - trash_ids:
+      - b23eae459cc960816f2d6ba84af45055 # Dubs Only
+    assign_scores_to:
+      - name: SD - 480p Anime (Dub)
+        score: 10000
+      - name: SD - 576p Anime (Dub)
+        score: 10000
+      - name: HD - 720p Anime (Dub)
+        score: 10000
+      - name: HD - 1080p Anime (Dub)
+        score: 10000
+      - name: 4K UHD - 2160p Anime (Dub)
+        score: 10000
+      - name: At most 480p Anime (Dub)
+        score: 10000
+      - name: At most 576p Anime (Dub)
+        score: 10000
+      - name: At most 720p Anime (Dub)
+        score: 10000
+      - name: At most 1080p Anime (Dub)
+        score: 10000
+      - name: At most 2160p Anime (Dub)
+        score: 10000
+
+  # Prefer Anime Dual Audio for dub profiles (includes English dub track)
+  - trash_ids:
+      - 4a3b087eea2ce012fcc1ce319259a3be # Anime Dual Audio
+    assign_scores_to:
+      - name: SD - 480p Anime (Dub)
+        score: 5000
+      - name: SD - 576p Anime (Dub)
+        score: 5000
+      - name: HD - 720p Anime (Dub)
+        score: 5000
+      - name: HD - 1080p Anime (Dub)
+        score: 5000
+      - name: 4K UHD - 2160p Anime (Dub)
+        score: 5000
+      - name: At most 480p Anime (Dub)
+        score: 5000
+      - name: At most 576p Anime (Dub)
+        score: 5000
+      - name: At most 720p Anime (Dub)
+        score: 5000
+      - name: At most 1080p Anime (Dub)
+        score: 5000
+      - name: At most 2160p Anime (Dub)
+        score: 5000
 
   # ==========================================================================
   # Non-4K profiles — Movie Versions, HQ, Misc, Unwanted, Streaming
