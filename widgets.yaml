@@ -1,0 +1,14 @@
+# Top-level page widgets
+# https://gethomepage.dev/widgets/
+
+- datetime:
+    text_size: xl
+    format:
+      dateStyle: long
+      timeStyle: short
+      hourCycle: h12
+
+- openmeteo:
+    label: Home
+    units: imperial
+    cache: 5

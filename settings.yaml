@@ -1,0 +1,43 @@
+# Homepage global settings
+# https://gethomepage.dev/configs/settings/
+
+title: Dante's Homeserver
+description: danteb.com
+
+theme: dark
+color: zinc
+
+headerStyle: clean
+statusStyle: dot
+
+# Use SearXNG as the search provider
+search:
+  provider: custom
+  url: https://searxng.danteb.com/search?q=
+
+# Layout controls column count and ordering per group
+layout:
+  Media:
+    style: row
+    columns: 3
+    icon: mdi-multimedia
+  Media Management:
+    style: row
+    columns: 3
+    icon: mdi-movie-edit
+  Downloads:
+    style: row
+    columns: 2
+    icon: mdi-download
+  Network & Communication:
+    style: row
+    columns: 3
+    icon: mdi-network
+  Utilities:
+    style: row
+    columns: 3
+    icon: mdi-toolbox
+  Game Servers:
+    style: row
+    columns: 2
+    icon: mdi-gamepad-variant
