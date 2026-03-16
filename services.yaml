@@ -56,6 +56,7 @@
           type: immich
           url: http://immich_server:2283
           key: "{{HOMEPAGE_VAR_IMMICH_KEY}}"
+          version: 2
     - Komga:
         icon: komga.svg
         href: https://komga.danteb.com
@@ -115,7 +116,7 @@
           url: http://prowlarr:9696
           key: "{{HOMEPAGE_VAR_PROWLARR_KEY}}"
     - Tdarr:
-        icon: https://raw.githubusercontent.com/homarr-labs/dashboard-icons/master/svg/tdarr.svg
+        icon: tdarr.png
         href: https://tdarr.danteb.com
         description: Media Transcoding
         siteMonitor: https://tdarr.danteb.com
