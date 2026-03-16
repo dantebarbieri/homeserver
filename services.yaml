@@ -115,7 +115,7 @@
           url: http://prowlarr:9696
           key: "{{HOMEPAGE_VAR_PROWLARR_KEY}}"
     - Tdarr:
-        icon: tdarr.svg
+        icon: https://raw.githubusercontent.com/homarr-labs/dashboard-icons/master/svg/tdarr.svg
         href: https://tdarr.danteb.com
         description: Media Transcoding
         siteMonitor: https://tdarr.danteb.com
@@ -124,6 +124,7 @@
         widget:
           type: tdarr
           url: http://tdarr:8265
+          key: "{{HOMEPAGE_VAR_TDARR_KEY}}"
 
 - Downloads:
     - qBittorrent:
@@ -136,6 +137,8 @@
         widget:
           type: qbittorrent
           url: http://qbittorrent:8080
+          username: "{{HOMEPAGE_VAR_QBIT_USER}}"
+          password: "{{HOMEPAGE_VAR_QBIT_PASS}}"
     - SABnzbd:
         icon: sabnzbd.svg
         href: https://sabnzbd.danteb.com

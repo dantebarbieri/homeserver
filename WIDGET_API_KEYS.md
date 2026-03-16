@@ -122,6 +122,35 @@ If you prefer a dedicated account, create a new user in NPM's
 
 ---
 
+## Tdarr — `HOMEPAGE_VAR_TDARR_KEY`
+
+Tdarr requires an API key when authentication is enabled.
+
+1. Open Tdarr (e.g. `https://tdarr.danteb.com`).
+2. Go to **Settings** (gear icon).
+3. Under *Authentication*, find or generate the **API Key**.
+4. Copy the key.
+
+> **Note:** This is the same value as `TDARR_API_KEY` in `docker/sample.env`.
+> You can reuse it, but Homepage needs its own `HOMEPAGE_VAR_TDARR_KEY` variable
+> so the key is passed through to the container's environment.
+
+---
+
+## qBittorrent — `HOMEPAGE_VAR_QBIT_USER` / `HOMEPAGE_VAR_QBIT_PASS`
+
+qBittorrent authenticates via username/password.
+
+1. Set `HOMEPAGE_VAR_QBIT_USER` to your qBittorrent Web UI username
+   (default: `admin`).
+2. Set `HOMEPAGE_VAR_QBIT_PASS` to the corresponding password.
+
+> **Tip:** If Homepage has been IP-banned from too many failed login attempts,
+> restart the qBittorrent container to clear the ban:
+> `docker compose restart qbittorrent-app`
+
+---
+
 ## Quick Reference
 
 | Variable | Service | Type |
@@ -139,3 +168,6 @@ If you prefer a dedicated account, create a new user in NPM's
 | `HOMEPAGE_VAR_SABNZBD_KEY` | SABnzbd | API key |
 | `HOMEPAGE_VAR_NPM_USER` | Nginx Proxy Manager | Email |
 | `HOMEPAGE_VAR_NPM_PASS` | Nginx Proxy Manager | Password |
+| `HOMEPAGE_VAR_TDARR_KEY` | Tdarr | API key |
+| `HOMEPAGE_VAR_QBIT_USER` | qBittorrent | Username |
+| `HOMEPAGE_VAR_QBIT_PASS` | qBittorrent | Password |
