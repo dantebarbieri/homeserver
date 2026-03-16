@@ -3,7 +3,11 @@
 Configuration files for [Homepage](https://gethomepage.dev/) — a self-hosted dashboard
 with Docker integration and service status monitoring.
 
-Replaces the previous [Homer](https://github.com/bastienwirtz/homer) dashboard.
+This is the **canonical service catalogue** for the homeserver. All services are
+defined and monitored here.
+
+Replaces the previous [Homer](https://github.com/dantebarbieri/homeserver-homer)
+dashboard, which is now archived.
 
 ## Files
 

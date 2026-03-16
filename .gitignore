@@ -1,0 +1,12 @@
+# Editor / OS artifacts
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
