@@ -116,7 +116,7 @@
           url: http://prowlarr:9696
           key: "{{HOMEPAGE_VAR_PROWLARR_KEY}}"
     - Tdarr:
-        icon: tdarr.png
+        icon: tdarr.webp
         href: https://tdarr.danteb.com
         description: Media Transcoding
         siteMonitor: https://tdarr.danteb.com
@@ -231,7 +231,7 @@
         server: my-docker
         container: ntfy
     - Dashdot:
-        icon: dashdot.png
+        icon: dashdot.webp
         href: https://dashdot.danteb.com
         description: Server Monitoring
         siteMonitor: https://dashdot.danteb.com
