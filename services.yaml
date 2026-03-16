@@ -209,6 +209,18 @@
         container: authelia
 
 - Utilities:
+    - Nextcloud:
+        icon: nextcloud.svg
+        href: https://cloud.danteb.com
+        description: Cloud Storage & Sync
+        siteMonitor: https://cloud.danteb.com
+        server: my-docker
+        container: nextcloud
+        widget:
+          type: nextcloud
+          url: http://nextcloud:80
+          username: "{{HOMEPAGE_VAR_NEXTCLOUD_USER}}"
+          password: "{{HOMEPAGE_VAR_NEXTCLOUD_PASS}}"
     - Vaultwarden:
         icon: vaultwarden.svg
         href: https://vaultwarden.danteb.com

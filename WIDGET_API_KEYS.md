@@ -151,6 +151,22 @@ qBittorrent authenticates via username/password.
 
 ---
 
+## Nextcloud — `HOMEPAGE_VAR_NEXTCLOUD_USER` / `HOMEPAGE_VAR_NEXTCLOUD_PASS`
+
+Nextcloud uses admin credentials to access the serverinfo API.
+
+1. Set `HOMEPAGE_VAR_NEXTCLOUD_USER` to your Nextcloud admin username.
+2. Set `HOMEPAGE_VAR_NEXTCLOUD_PASS` to the corresponding password.
+
+If you prefer a dedicated account, create an app password in
+**Settings → Security → Devices & sessions** and use the admin username
+with the generated app password.
+
+> **Note:** The serverinfo API (`/ocs/v2.php/apps/serverinfo/api/v1/info`)
+> requires admin privileges. A non-admin user will not work.
+
+---
+
 ## Quick Reference
 
 | Variable | Service | Type |
@@ -171,3 +187,5 @@ qBittorrent authenticates via username/password.
 | `HOMEPAGE_VAR_TDARR_KEY` | Tdarr | API key |
 | `HOMEPAGE_VAR_QBIT_USER` | qBittorrent | Username |
 | `HOMEPAGE_VAR_QBIT_PASS` | qBittorrent | Password |
+| `HOMEPAGE_VAR_NEXTCLOUD_USER` | Nextcloud | Username (admin) |
+| `HOMEPAGE_VAR_NEXTCLOUD_PASS` | Nextcloud | Password / app password |
