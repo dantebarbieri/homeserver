@@ -231,7 +231,7 @@
         server: my-docker
         container: ntfy
     - Dashdot:
-        icon: dash-dot.svg
+        icon: dashdot.png
         href: https://dashdot.danteb.com
         description: Server Monitoring
         siteMonitor: https://dashdot.danteb.com
