@@ -41,6 +41,9 @@ These require API keys from each service's settings page.
 Uncomment and set the `HOMEPAGE_VAR_*` environment variables in
 `compose.dashboards.yml`, or edit the keys directly in `services.yaml`.
 
+👉 **[Widget API Keys Guide](WIDGET_API_KEYS.md)** — step-by-step instructions
+for obtaining every token.
+
 See the [Homepage widget docs](https://gethomepage.dev/widgets/services/) for
 details on each service's widget configuration.
 
