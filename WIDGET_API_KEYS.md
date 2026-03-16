@@ -155,12 +155,15 @@ qBittorrent authenticates via username/password.
 
 Nextcloud uses admin credentials to access the serverinfo API.
 
-1. Set `HOMEPAGE_VAR_NEXTCLOUD_USER` to your Nextcloud admin username.
-2. Set `HOMEPAGE_VAR_NEXTCLOUD_PASS` to the corresponding password.
+**Recommended: Use an app password** (avoids special character escaping issues in `.env`):
 
-If you prefer a dedicated account, create an app password in
-**Settings → Security → Devices & sessions** and use the admin username
-with the generated app password.
+1. Log in to Nextcloud as admin.
+2. Go to **Settings** → **Security** → **Devices & sessions**.
+3. Enter a name (e.g., `homepage`) and click **Create new app password**.
+4. Set `HOMEPAGE_VAR_NEXTCLOUD_USER` to your admin username.
+5. Set `HOMEPAGE_VAR_NEXTCLOUD_PASS` to the generated app password.
+
+Alternatively, set `HOMEPAGE_VAR_NEXTCLOUD_PASS` to the admin account password directly. If the password contains special characters (`$`, `#`, `!`, `\`, backticks), wrap the value in single quotes in `.env` to prevent Docker Compose from interpreting them.
 
 > **Note:** The serverinfo API (`/ocs/v2.php/apps/serverinfo/api/v1/info`)
 > requires admin privileges. A non-admin user will not work.
