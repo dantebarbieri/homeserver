@@ -38,13 +38,25 @@ This repo is intentionally small so that AI coding tools (Claude Code, Copilot, 
 
 ## Deployment
 
-After editing configs locally, sync them to your server:
+The recyclarr container runs via the [homeserver-docker](https://github.com/dantebarbieri/homeserver-docker) repo, with config mounted at `${DATA}/recyclarr/config:/config`.
+
+After editing configs locally, sync them to the server and run recyclarr:
 
 ```sh
-# Example: rsync to server
+# 1. Copy configs to the server's recyclarr config directory
 rsync -av --exclude='.git' --exclude='secrets.yml.example' \
-  recyclarr.yml settings.yml configs/ includes/ \
-  user@server:/path/to/recyclarr/config/
+  recyclarr.yml settings.yml includes/ \
+  user@server:$DATA/recyclarr/config/
+
+# 2. Run recyclarr sync (from the docker repo directory on the server)
+docker compose -f compose.starr.yml run --rm recyclarr sync
 ```
 
-> **Note:** You'll still need to manage `secrets.yml` on the server directly.
+Or to only sync one service:
+
+```sh
+docker compose -f compose.starr.yml run --rm recyclarr sync sonarr
+docker compose -f compose.starr.yml run --rm recyclarr sync radarr
+```
+
+> **Note:** `secrets.yml` must be managed on the server directly — never committed to this repo.
