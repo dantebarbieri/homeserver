@@ -6,41 +6,26 @@
 
 custom_formats:
   # ==========================================================================
-  # Language — assigned to ALL profiles
+  # Language — standard (non-anime) profiles only
+  # Anime profiles do NOT use Language CFs because Sonarr/Radarr's language
+  # detection (LanguageSpecification) is unreliable for anime — it often
+  # misidentifies dual-audio releases as single-language. Anime-specific
+  # CFs (Dubs Only, Anime Dual Audio, quality tiers) handle language
+  # preference via release-title matching instead.
   # ==========================================================================
   - trash_ids:
       - d6e9318c875905d6cfb5bee961afcea9 # Language Not Original
-    assign_scores_to: &all_profiles
+    assign_scores_to: &standard_profiles
       - name: SD - 480p
-      - name: SD - 480p Anime
       - name: SD - 576p
-      - name: SD - 576p Anime
       - name: HD - 720p
-      - name: HD - 720p Anime
       - name: HD - 1080p
-      - name: HD - 1080p Anime
       - name: 4K UHD - 2160p
-      - name: 4K UHD - 2160p Anime
       - name: At most 480p
-      - name: At most 480p Anime
       - name: At most 576p
-      - name: At most 576p Anime
       - name: At most 720p
-      - name: At most 720p Anime
       - name: At most 1080p
-      - name: At most 1080p Anime
       - name: At most 2160p
-      - name: At most 2160p Anime
-      - name: SD - 480p Anime (Dub)
-      - name: SD - 576p Anime (Dub)
-      - name: HD - 720p Anime (Dub)
-      - name: HD - 1080p Anime (Dub)
-      - name: 4K UHD - 2160p Anime (Dub)
-      - name: At most 480p Anime (Dub)
-      - name: At most 576p Anime (Dub)
-      - name: At most 720p Anime (Dub)
-      - name: At most 1080p Anime (Dub)
-      - name: At most 2160p Anime (Dub)
 
   # ==========================================================================
   # Anime scoring — assigned to all Anime profiles (including Dub)
@@ -161,48 +146,13 @@ custom_formats:
     assign_scores_to: *anime_profiles_score0
 
   # ==========================================================================
-  # Anime (Dub) overrides — prefer English dubs over original language
+  # Anime (Dub) overrides — prefer English dubs
+  # Language: Not English is intentionally NOT used here because Radarr's
+  # LanguageSpecification misdetects dual-audio anime as single-language.
+  # Instead, we rely on positive scoring: Dubs Only (+10000) and Anime
+  # Dual Audio (+5000) strongly prefer English content, while releases
+  # without English score much lower and lose to upgrades naturally.
   # ==========================================================================
-
-  # Block releases without English audio on dub profiles
-  - trash_ids:
-      - 0dc8aec3bd1c47cd6c40c46ecd27e846 # Language: Not English
-    assign_scores_to:
-      - name: SD - 480p Anime (Dub)
-      - name: SD - 576p Anime (Dub)
-      - name: HD - 720p Anime (Dub)
-      - name: HD - 1080p Anime (Dub)
-      - name: 4K UHD - 2160p Anime (Dub)
-      - name: At most 480p Anime (Dub)
-      - name: At most 576p Anime (Dub)
-      - name: At most 720p Anime (Dub)
-      - name: At most 1080p Anime (Dub)
-      - name: At most 2160p Anime (Dub)
-
-  # Remove Language Not Original penalty for dub profiles
-  - trash_ids:
-      - d6e9318c875905d6cfb5bee961afcea9 # Language Not Original
-    assign_scores_to: &anime_dub_profiles
-      - name: SD - 480p Anime (Dub)
-        score: 0
-      - name: SD - 576p Anime (Dub)
-        score: 0
-      - name: HD - 720p Anime (Dub)
-        score: 0
-      - name: HD - 1080p Anime (Dub)
-        score: 0
-      - name: 4K UHD - 2160p Anime (Dub)
-        score: 0
-      - name: At most 480p Anime (Dub)
-        score: 0
-      - name: At most 576p Anime (Dub)
-        score: 0
-      - name: At most 720p Anime (Dub)
-        score: 0
-      - name: At most 1080p Anime (Dub)
-        score: 0
-      - name: At most 2160p Anime (Dub)
-        score: 0
 
   # Prefer Dubs Only releases for dub profiles
   - trash_ids:

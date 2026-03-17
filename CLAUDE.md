@@ -38,6 +38,14 @@ YAML anchors (`&name` / `*name`) are used in custom format files to deduplicate 
 | `anime-sonarr` / `anime-radarr` | Anime with BD/Web tier scoring |
 | `at-most-480p`, `at-most-720p`, `at-most-1080p` | Restrictive upper-bound profiles |
 
+## Anime Language Strategy
+
+Language CFs (`Language: Not Original`, `Language: Not English`) are **only assigned to standard (non-anime) profiles**. They are intentionally excluded from all anime profiles because Sonarr/Radarr's `LanguageSpecification` is unreliable for anime—it frequently misidentifies dual-audio releases as single-language.
+
+Anime profiles rely on anime-specific CFs for language preference instead:
+- **Regular Anime**: `Dubs Only` (−10000) penalizes dub-only releases; `Anime Raws` (−10000) penalizes raw releases. Quality tiers naturally prefer Japanese fansub groups.
+- **Anime (Dub)**: `Dubs Only` (+10000 override) and `Anime Dual Audio` (+5000 override) strongly prefer English content. Releases without English score much lower and lose to upgrades.
+
 ## Deployment
 
 ```sh
