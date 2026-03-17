@@ -34,9 +34,9 @@ and look for `X-Plex-Token`.
 
 ---
 
-## Overseerr — `HOMEPAGE_VAR_OVERSEERR_KEY`
+## Seerr — `HOMEPAGE_VAR_SEERR_KEY`
 
-1. Open Overseerr (e.g. `https://overseerr.danteb.com`).
+1. Open Seerr (e.g. `https://seerr.danteb.com`).
 2. Go to **Settings**.
 3. The **API Key** is displayed at the top of the General Settings page.
 4. Copy the key.
@@ -176,7 +176,7 @@ Alternatively, set `HOMEPAGE_VAR_NEXTCLOUD_PASS` to the admin account password d
 |---|---|---|
 | `HOMEPAGE_VAR_PLEX_TOKEN` | Plex | Account token |
 | `HOMEPAGE_VAR_JELLYFIN_KEY` | Jellyfin | API key |
-| `HOMEPAGE_VAR_OVERSEERR_KEY` | Overseerr | API key |
+| `HOMEPAGE_VAR_SEERR_KEY` | Seerr | API key |
 | `HOMEPAGE_VAR_IMMICH_KEY` | Immich | API key |
 | `HOMEPAGE_VAR_KOMGA_USER` | Komga | Username |
 | `HOMEPAGE_VAR_KOMGA_PASS` | Komga | Password |

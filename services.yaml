@@ -34,17 +34,17 @@
           url: http://jellyfin:8096
           key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
           enableNowPlaying: true
-    - Overseerr:
-        icon: overseerr.svg
-        href: https://overseerr.danteb.com
+    - Seerr:
+        icon: seerr.svg
+        href: https://seerr.danteb.com
         description: Request Content
-        siteMonitor: https://overseerr.danteb.com
+        siteMonitor: https://seerr.danteb.com
         server: my-docker
-        container: overseerr
+        container: seerr
         widget:
-          type: overseerr
-          url: http://overseerr:5055
-          key: "{{HOMEPAGE_VAR_OVERSEERR_KEY}}"
+          type: seerr
+          url: http://seerr:5055
+          key: "{{HOMEPAGE_VAR_SEERR_KEY}}"
     - Immich:
         icon: immich.svg
         href: https://immich.danteb.com
