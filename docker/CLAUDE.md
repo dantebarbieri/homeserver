@@ -49,3 +49,12 @@ All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 - External project paths use env vars (`${TRAVEL_PLANNER_PATH}`, `${INTERVIEW_WORKSPACE_PATH}`), not relative paths
 - Secrets: Authelia uses Docker secrets (files in `${DATA}/authelia/secrets/`). Everything else uses `.env` variables.
 - Use `docker compose` (not `docker-compose`)
+
+## IPv6
+
+Docker's daemon has `ipv6 = true` with `fixed-cidr-v6 = "fd00::/80"` (ULA) and `ip6tables = true` (NAT masquerade). This means containers use internal ULA addresses but can reach the internet over IPv6 via NAT to the host's public GUA — identical to how Docker handles IPv4.
+
+- The `proxy` network has `enable_ipv6: true` — services on it can accept inbound IPv6 (via port mapping) and make outbound IPv6 connections.
+- The `ddns` network (in `compose.core.yml`) also has `enable_ipv6: true` — used by ddclient for IPv6 address detection.
+- Compose's auto-created `compose_default` network does **not** have IPv6. Services that need IPv6 must be on an explicitly IPv6-enabled network.
+- When adding a new service that needs IPv6 connectivity, either put it on an existing IPv6-enabled network or create a new one with `enable_ipv6: true`.

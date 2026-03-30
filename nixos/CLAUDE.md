@@ -13,7 +13,7 @@ This file provides guidance to Claude Code when working with the `nixos/` direct
 
 1. **`let` block** — Reusable values and scripts (`ntfyUrl`, `ntfyTopic`, alert scripts as `pkgs.writeShellScriptBin`)
 2. **Boot/Loader** — systemd-boot, EFI, kernel packages
-3. **Networking** — systemd-networkd (not NetworkManager), static IP, no global DHCP
+3. **Networking** — systemd-networkd (not NetworkManager), static IPv4, IPv6 via SLAAC, firewall
 4. **Storage** — LVM, RAID (mdadm), XFS on `/data`
 5. **Users/Shell** — zsh default, zim framework, packages
 6. **System packages** — `environment.systemPackages`
@@ -80,12 +80,20 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 | `drive-health-check` | Every 6 hours | RAID + LVM health → ntfy |
 | `mdadm-scrub` | Weekly Sunday 02:00 | RAID parity scrub |
 
+## Networking & IPv6
+
+- **IPv4**: Static `192.168.50.100/24` on `enp66s0f1`, gateway `192.168.50.1`
+- **IPv6**: Received via SLAAC from ASUS GT-BE98 Pro router (Spectrum ISP, `2603:8080:1e00:1c97::/64` prefix). `tempAddress = "disabled"` ensures a stable EUI-64 address for the AAAA DNS record.
+- **Firewall**: NixOS firewall is enabled by default and blocks all inbound except SSH. `networking.firewall.allowedTCPPorts` / `allowedUDPPorts` must explicitly list every port that needs inbound access (80, 443, game ports, Coturn, Plex, LiveKit, etc.). Port 28 (SSH) is auto-opened by `services.openssh`.
+- **Router IPv6 firewall**: The ASUS router also has an IPv6 firewall (separate from IPv4 port forwarding). Inbound IPv6 rules must be added in the router admin under **Firewall > IPv6 Firewall** for each service port, specifying the server's GUA as Local IP.
+
 ## Important Caveats
 
 - Use full Nix store paths in scripts: `${pkgs.curl}/bin/curl`, not just `curl` (unless added to `path`)
 - Services don't inherit shell aliases/functions — use `path` and `environment` explicitly
 - The docker-compose-update service uses `git -c safe.directory=/srv/homeserver` because the repo is owned by `danteb` but the service runs as root
 - `sudo-rs` replaces classic sudo — the Rust implementation
+- When adding a new externally-exposed port, update **three places**: (1) `networking.firewall` in `configuration.nix`, (2) router IPv4 port forwarding, (3) router IPv6 firewall inbound rules
 
 ## Commands
 

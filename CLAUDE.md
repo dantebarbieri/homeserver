@@ -58,11 +58,12 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 ### Networking Patterns
 
-- **`proxy` network** — shared by all services with a web UI behind Nginx Proxy Manager. IPv6 enabled, defined in `docker-compose.yml`. Each category file redeclares it for standalone compatibility.
+- **`proxy` network** — shared by all services with a web UI behind Nginx Proxy Manager. IPv6 enabled, defined in `docker-compose.yml`. Each category file redeclares it for standalone compatibility. Do not put non-web services on this network.
+- **`ddns` network** — IPv6-enabled network for ddclient DDNS operations (defined in `compose.core.yml`).
 - **Internal networks** — purpose-specific (e.g., `authelia`, `immich`, `starr`, `komics`). Web-facing services join both `proxy` + internal; pure backends (DBs, caches) join only internal.
 - **VPN namespace** — `vpn-netns` (pause container) → `gluetun` → `qbittorrent` share one network via `network_mode: "container:vpn-netns"`. The pause container joins `proxy` with alias `qbittorrent`.
 - **Game servers** — direct host port mapping, no networks defined.
-- **No-network services** (ddclient, endlessh) — fall through to Docker's default bridge.
+- **No-network services** (endlessh) — fall through to Docker's default bridge. Note: ddclient uses the dedicated `ddns` network for IPv6.
 - Cross-stack communication uses shared internal networks (e.g., `flaresolverr`) rather than putting non-proxied services on `proxy`.
 
 ### Environment Variables (from `.env`, not committed)
@@ -83,6 +84,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 2. Extend from `compose.common.yml` — choose `common-service`, `hotio-service`, `linuxserver-service`, or `gpu-service`.
 3. Mount config to `${DATA}/<service>/config:/config`, bulk data under `${RAID}/shared/...`.
 4. Web UI services → join `proxy` + a dedicated internal network. Pure backends → internal only. No-comms services → no networks.
+5. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
 
 ### Commands
 
@@ -100,7 +102,8 @@ docker compose config                             # Validate merged config
 `configuration.nix` is the single-file declarative system config for the homeserver (hostname: `homeserver`, IP: `192.168.1.100/24`).
 
 Key system services managed by NixOS:
-- **Docker daemon** — IPv6, CDI, live-restore enabled
+- **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore enabled
+- **Firewall** — explicitly opened ports for HTTP/HTTPS, Plex, Coturn, LiveKit, game servers
 - **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`
 - **RAID/drive monitoring** — `smartd`, `mdadm-ntfy`, 6-hourly health checks, weekly Sunday parity scrub — all alert via ntfy
 - **vdirsyncer** — syncs iCloud contacts every 15 minutes via CardDAV
@@ -143,3 +146,5 @@ Common sources: ddclient (dynamic DNS), Nginx Proxy Manager (reverse proxy, TLS 
 - **NPM → Coturn**: Let's Encrypt certs from NPM are passed to Matrix's Coturn for RTC
 - **Recyclarr → Starr**: runs as a container in `compose.starr.yml`, syncs quality profiles to Radarr/Sonarr via their APIs
 - **Mail → NixOS**: vdirsyncer (in `mail-config/`) runs as a NixOS systemd timer on the server, syncing iCloud contacts every 15 minutes
+- **ddclient → Cloudflare**: updates A (IPv4) and AAAA (IPv6) DNS records for `danteb.com` every 5 minutes. Requires an IPv6-enabled Docker network (`ddns`) so it can detect the host's public GUA via NAT.
+- **Router → Server (IPv6)**: Unlike IPv4 port forwarding, IPv6 uses firewall allow-rules on the ASUS router (Firewall > IPv6 Firewall) specifying the server's GUA and permitted ports
