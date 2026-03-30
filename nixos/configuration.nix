@@ -111,6 +111,7 @@ in
 
   networking.interfaces.bond0 = {
     useDHCP = false;
+    macAddress = "9c:6b:00:45:2b:c2";  # Match enp66s0f1 so IPv6 EUI-64 stays stable
     ipv4.addresses = [
       { address = "192.168.50.100"; prefixLength = 24; }
     ];
