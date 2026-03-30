@@ -25,7 +25,6 @@ services:
       service: linuxserver-service
     image: lscr.io/linuxserver/ddclient:latest
     container_name: ddclient
-    network_mode: host  # Required for IPv6 — Docker's default bridge uses ULA (fd00::/80)
     volumes:
       - ${DATA}/ddclient/config:/config
 

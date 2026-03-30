@@ -344,6 +344,7 @@ in
     daemon.settings = {
       features = { cdi = true; };
       fixed-cidr-v6 = "fd00::/80";
+      ip6tables = true;  # IPv6 NAT — masquerade ULA to host's public GUA, like IPv4
       ipv6 = true;
       live-restore = true;
       userland-proxy = true;
