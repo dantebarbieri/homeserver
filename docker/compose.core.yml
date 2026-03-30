@@ -26,7 +26,7 @@ services:
     image: lscr.io/linuxserver/ddclient:latest
     container_name: ddclient
     networks:
-      - proxy  # IPv6 enabled — needed for AAAA record detection via ipv6.icanhazip.com
+      - ddns
     volumes:
       - ${DATA}/ddclient/config:/config
 
@@ -41,4 +41,6 @@ services:
     command: ["-logtostderr", "-v=1"]
 
 networks:
+  ddns:
+    enable_ipv6: true
   proxy:
