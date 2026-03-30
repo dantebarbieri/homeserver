@@ -1,0 +1,23 @@
+# Bookmarks — external links and local-only management pages
+# https://gethomepage.dev/configs/bookmarks/
+
+- Developer:
+    - GitHub Docker:
+        - icon: si-github
+          href: https://github.com/dantebarbieri/homeserver-docker
+    - GitHub NixOS:
+        - icon: si-github
+          href: https://github.com/dantebarbieri/homeserver-nixos
+    - GitHub Homer:
+        - icon: si-github
+          href: https://github.com/dantebarbieri/homeserver-homer
+
+- Management:
+    - IPMI (BMC):
+        - icon: mdi-server
+          href: https://192.168.1.8
+          description: ASRock Rack BMC
+    - Netgear Nighthawk:
+        - icon: mdi-router-wireless
+          href: https://www.routerlogin.com
+          description: Router Settings

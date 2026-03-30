@@ -1,0 +1,5 @@
+# Docker socket integration for container status monitoring
+# https://gethomepage.dev/configs/docker/
+
+my-docker:
+  socket: /var/run/docker.sock
