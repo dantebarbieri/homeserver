@@ -345,9 +345,11 @@ in
     script = ''
       git -c safe.directory=/srv/homeserver pull && \
       cd docker && \
-      docker compose pull --quiet && \
-      docker compose build --quiet && \
-      docker compose up -d --remove-orphans
+      docker compose pull --ignore-buildable && \
+      docker compose build --pull && \
+      docker compose up -d --remove-orphans && \
+      docker image prune -f && \
+      docker network prune -f
     '';
   };
 
