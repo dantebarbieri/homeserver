@@ -1,0 +1,157 @@
+# Starr apps and media management
+# radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr
+
+services:
+  recyclarr:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: recyclarr
+    image: ghcr.io/recyclarr/recyclarr:8
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    networks:
+      - starr
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/recyclarr/config:/config
+
+  radarr:
+    extends:
+      file: compose.common.yml
+      service: hotio-service
+    container_name: radarr
+    image: ghcr.io/hotio/radarr:latest
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/radarr/config:/config
+      - ${RAID}/shared:/data
+
+  sonarr:
+    extends:
+      file: compose.common.yml
+      service: hotio-service
+    container_name: sonarr
+    image: ghcr.io/hotio/sonarr:latest
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/sonarr/config:/config
+      - ${RAID}/shared:/data
+
+  bazarr:
+    extends:
+      file: compose.common.yml
+      service: hotio-service
+    container_name: bazarr
+    image: ghcr.io/hotio/bazarr:nightly
+    networks:
+      - proxy
+      - starr
+    depends_on:
+      - whisperasr
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/bazarr/config:/config
+      - ${RAID}/shared/media:/data/media
+
+  whisperasr:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: whisperasr
+    restart: unless-stopped
+    environment:
+      ASR_ENGINE: faster_whisper
+      ASR_MODEL: large-v3
+      ASR_DEVICE: cuda
+      ASR_QUANTIZATION: float16
+    networks:
+      - starr
+
+  seerr:
+    extends:
+      file: compose.common.yml
+      service: hotio-service
+    image: ghcr.io/hotio/seerr:latest
+    container_name: seerr
+    environment:
+      LOG_LEVEL: debug
+      UMASK: "002"
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - ${DATA}/seerr/config:/config
+
+  prowlarr:
+    extends:
+      file: compose.common.yml
+      service: hotio-service
+    container_name: prowlarr
+    image: ghcr.io/hotio/prowlarr:latest
+    environment:
+      UMASK: "002"
+    networks:
+      - proxy
+      - starr
+      - flaresolverr
+    volumes:
+      - ${DATA}/prowlarr/config:/config
+
+  tdarr:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    container_name: tdarr
+    image: ghcr.io/haveagitgat/tdarr:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    cpus: 12
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+      UMASK_SET: "002"
+      serverIP: 0.0.0.0
+      serverPort: 8266
+      serverURL: http://127.0.0.1:8266
+      webUIPort: 8265
+      internalNode: true
+      inContainer: true
+      ffmpegVersion: 7
+      nodeName: HomeServer
+      auth: true
+      apiKey: ${TDARR_API_KEY}
+      maxLogSizeMB: 10
+      transcodecpuWorkers: 4
+      transcodegpuWorkers: 0
+      healthcheckcpuWorkers: 4
+      healthcheckgpuWorkers: 0
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/tdarr/server:/app/server
+      - ${DATA}/tdarr/configs:/app/configs
+      - ${DATA}/tdarr/logs:/app/logs
+      - ${RAID}/shared/media:/data/media
+      - /tmp/tdarr_transcode_cache:/temp
+
+networks:
+  proxy:
+  starr:
+  flaresolverr:

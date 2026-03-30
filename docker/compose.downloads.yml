@@ -1,0 +1,154 @@
+# Download services
+# VPN stack (vpn-netns, gluetun, qbittorrent, qbit-port-sync), sabnzbd, flaresolverr
+
+services:
+  vpn-netns:
+    image: registry.k8s.io/pause:3.9
+    container_name: vpn-netns
+    networks:
+      proxy:
+        aliases:
+          - qbittorrent
+    restart: always
+
+  gluetun:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    network_mode: "container:vpn-netns"
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun]
+    environment:
+      VPN_SERVICE_PROVIDER: protonvpn
+      VPN_TYPE: wireguard
+      WIREGUARD_PRIVATE_KEY: ${WG_PRIVATE_KEY}
+      WIREGUARD_ADDRESSES: ${WG_ADDRESS}
+      SERVER_COUNTRIES: ${SERVER_COUNTRY}
+      SERVER_CITIES: ${SERVER_CITIES}
+      PORT_FORWARD_ONLY: on
+      VPN_PORT_FORWARDING: on
+      TZ: ${TZ}
+      FIREWALL_OUTBOUND_SUBNETS: 192.168.1.0/24,172.18.0.0/16
+      FIREWALL_INPUT_PORTS: 8080
+    volumes:
+      - ${DATA}/gluetun:/gluetun
+      - gluetun-tmp:/tmp/gluetun
+    depends_on: [vpn-netns]
+
+  qbittorrent:
+    extends:
+      file: compose.common.yml
+      service: linuxserver-service
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent-app
+    network_mode: "container:vpn-netns"
+    volumes:
+      - ${DATA}/qbittorrent/config:/config
+      - ${RAID}/shared/torrents:/data/torrents
+      - ${DATA}/qbittorrent/VueTorrent:/vuetorrent
+      - ${DATA}/qbittorrent/iQbit/release:/iqbit
+    depends_on:
+      gluetun:
+        condition: service_healthy
+      vpn-netns:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8080 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: always
+
+  qbit-port-sync:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: curlimages/curl:latest
+    network_mode: "container:vpn-netns"
+    environment:
+      QUSER: ${QUSER}
+      QPASS: ${QPASS}
+      PORT_FILE: /tmp/gluetun/forwarded_port
+      QHOST: 127.0.0.1:8080
+    volumes:
+      - gluetun-tmp:/tmp/gluetun:ro
+      - ${DATA}/gluetun/port-sync.sh:/usr/local/bin/port-sync.sh:ro
+    entrypoint: ["/bin/sh", "-c", "/usr/local/bin/port-sync.sh"]
+    depends_on:
+      gluetun:
+        condition: service_healthy
+      vpn-netns:
+        condition: service_started
+
+  sabnzbd:
+    extends:
+      file: compose.common.yml
+      service: hotio-service
+    container_name: sabnzbd
+    image: ghcr.io/hotio/sabnzbd:latest
+    networks:
+      - proxy
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/sabnzbd/config:/config
+      - ${RAID}/shared/usenet:/data/usenet:rw
+
+  flaresolverr:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_HTML: ${LOG_HTML:-false}
+      CAPTCHA_SOLVER: ${CAPTCHA_SOLVER:-none}
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    networks:
+      - flaresolverr
+
+  qbit-manage:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/stuffanthings/qbit_manage:latest
+    container_name: qbit-manage
+    network_mode: "container:vpn-netns"
+    environment:
+      QBT_RUN: false
+      QBT_SCHEDULE: 30
+      QBT_CONFIG: /config/config.yml
+      QBT_LOGFILE: /config/logs/qbitmanage.log
+      QBT_CROSS_SEED: false
+      QBT_RECHECK: false
+      QBT_CAT_UPDATE: true
+      QBT_TAG_UPDATE: true
+      QBT_REM_UNREGISTERED: true
+      QBT_REM_ORPHANED: false
+      QBT_TAG_NOHARDLINKS: true
+      QBT_SHARE_LIMITS: true
+      QBT_SKIP_CLEANUP: false
+      QBT_DRY_RUN: true
+      QBT_LOG_LEVEL: INFO
+      QBT_DIVIDER: "="
+      QBT_WIDTH: 100
+    volumes:
+      - ${DATA}/qbit-manage/config:/config:rw
+      - ${RAID}/shared/torrents:/data/torrents:rw
+    depends_on:
+      qbittorrent:
+        condition: service_healthy
+      vpn-netns:
+        condition: service_started
+
+volumes:
+  gluetun-tmp:
+
+networks:
+  proxy:
+  flaresolverr:

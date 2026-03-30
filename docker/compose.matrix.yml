@@ -1,0 +1,105 @@
+# Matrix communication stack
+# synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service
+
+services:
+  synapse:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: synapse
+    image: matrixdotorg/synapse:latest
+    networks:
+      - matrix
+      - proxy
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ${DATA}/synapse/data:/data
+    depends_on:
+      synapse_postgres:
+        condition: service_healthy
+
+  synapse_postgres:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: synapse_postgres
+    image: postgres:16-alpine
+    networks:
+      - matrix
+    volumes:
+      - synapse-storage:/var/lib/postgresql/data
+    shm_size: 128mb
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: ${SYNAPSE_DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: --encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  element:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: element
+    image: vectorim/element-web:latest
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/element/config.json:/app/config.json:ro
+
+  coturn:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: coturn
+    image: coturn/coturn:latest
+    network_mode: host
+    volumes:
+      - ${DATA}/coturn/turnserver.conf:/etc/turnserver.conf:ro
+      - ${DATA}/nginxproxymanager/letsencrypt/live/npm-2/fullchain.pem:/etc/coturn/fullchain.pem:ro
+      - ${DATA}/nginxproxymanager/letsencrypt/live/npm-2/privkey.pem:/etc/coturn/privkey.pem:ro
+
+  livekit:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: livekit
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    networks:
+      - matrix
+      - proxy
+    ports:
+      - 7881:7881/tcp
+      - 7882-7913:7882-7913/udp
+    volumes:
+      - ${DATA}/livekit/config.yaml:/etc/livekit.yaml:ro
+
+  lk-jwt-service:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: lk-jwt-service
+    image: ghcr.io/element-hq/lk-jwt-service:0.4.1
+    networks:
+      - matrix
+      - proxy
+    environment:
+      LIVEKIT_URL: wss://livekit.danteb.com/livekit/sfu
+      LIVEKIT_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_FULL_ACCESS_HOMESERVERS: ${SYNAPSE_SERVER_NAME}
+    depends_on:
+      - livekit
+
+networks:
+  proxy:
+  matrix:
+
+volumes:
+  synapse-storage:

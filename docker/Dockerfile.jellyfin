@@ -1,0 +1,5 @@
+FROM jellyfin/jellyfin:latest
+
+# Patch index.html to inject Finity "Complete" theme scripts before </head>
+# See: https://github.com/prism2001/finity#installation
+RUN sed -i 's|</head>|<script src="https://cdn.jsdelivr.net/npm/marked@15.0.11/marked.min.js"></script><script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.5/dist/purify.min.js"></script><script async src="https://cdn.jsdelivr.net/gh/prism2001/finity@main/clickableTitles.js"></script><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/prism2001/finity@main/complete/slideshowpure.css" /><script defer src="https://cdn.jsdelivr.net/gh/prism2001/jellyfin-featured-slideshow@main/slideshowpure.js"></script></head>|' /jellyfin/jellyfin-web/index.html

@@ -1,0 +1,38 @@
+# Docker Compose - Main Index File
+# This file includes all service categories and defines shared resources
+# Run: docker compose up -d
+
+include:
+  # Note: compose.common.yml is NOT included here - it's only used via extends:
+  - compose.core.yml
+  - compose.auth.yml
+  - compose.dashboards.yml
+  - compose.downloads.yml
+  - compose.gaming.yml
+  - compose.immich.yml
+  - compose.matrix.yml
+  - compose.media.yml
+  - compose.nextcloud.yml
+  - compose.searxng.yml
+  - compose.starr.yml
+  - compose.utilities.yml
+  - compose.websites.yml
+  - compose.interview.yml    # temporary - YipitData interview portal
+
+# Network for services behind the reverse proxy (Nginx Proxy Manager)
+networks:
+  proxy:
+    enable_ipv6: true
+
+# Centralized secrets for security visibility
+secrets:
+  EMAIL_PASSWORD:
+    file: '${DATA}/authelia/secrets/EMAIL_PASSWORD'
+  JWT_SECRET:
+    file: '${DATA}/authelia/secrets/JWT_SECRET'
+  SESSION_SECRET:
+    file: '${DATA}/authelia/secrets/SESSION_SECRET'
+  AUTHELIA_STORAGE_PASSWORD:
+    file: '${DATA}/authelia/secrets/STORAGE_PASSWORD'
+  STORAGE_ENCRYPTION_KEY:
+    file: '${DATA}/authelia/secrets/STORAGE_ENCRYPTION_KEY'

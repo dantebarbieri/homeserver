@@ -1,0 +1,165 @@
+# Media consumption services
+# plex, jellyfin, komga, komf, suwayomi, suwayomi_postgres
+
+services:
+  plex:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    container_name: plex
+    image: plexinc/pms-docker
+    restart: unless-stopped
+    ports:
+      - "32400:32400/tcp"
+      - "8324:8324/tcp"
+      - "32469:32469/tcp"
+      - "1900:1900/udp"
+      - "32410:32410/udp"
+      - "32412:32412/udp"
+      - "32413:32413/udp"
+      - "32414:32414/udp"
+    environment:
+      PLEX_UID: ${UID}
+      PLEX_GID: ${GID}
+      TZ: ${TZ}
+      PLEX_CLAIM: ${PLEX_CLAIM}
+      ADVERTISE_IP: ${ADVERTISE_IP}
+      LAN_NETWORKS: 192.168.1.0/24,172.16.0.0/16
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/plex/config:/config
+      - /tmp/plex:/transcode
+      - ${RAID}/shared/media:/data/media
+
+  jellyfin:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    container_name: jellyfin
+    build:
+      context: .
+      dockerfile: Dockerfile.jellyfin
+      pull: true
+    image: jellyfin-finity:latest
+    restart: unless-stopped
+    user: "${UID}:${GID}"
+    environment:
+      TZ: ${TZ}
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    networks:
+      - proxy
+      - anime
+    volumes:
+      - ${DATA}/jellyfin/config:/config
+      - ${DATA}/jellyfin/cache:/cache
+      - /tmp/jellyfin:/config/transcodes
+      - ${RAID}/shared/media:/data/media:ro
+      - ${DATA}/jellyfin/webroot/list.txt:/jellyfin/jellyfin-web/list.txt:ro
+
+  arm-server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: arm-server
+    build: https://github.com/BeeeQueue/arm-server.git
+    image: arm-server:latest
+    networks:
+      - anime
+
+  komga:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: komga
+    image: gotson/komga:latest
+    user: "${UID}:${GID}"
+    environment:
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=85
+      TZ: ${TZ}
+    networks:
+      - proxy
+      - komics
+    volumes:
+      - ${DATA}/komga/config:/config
+      - ${RAID}/shared/reading:/data
+
+  komf:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: komf
+    image: sndxr/komf:latest
+    user: "${UID}:${GID}"
+    environment:
+      JAVA_TOOL_OPTIONS: -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact -XX:ShenandoahGuaranteedGCInterval=3600000 -XX:TrimNativeHeapInterval=3600000
+      KOMF_LOG_LEVEL: INFO
+      TZ: ${TZ}
+    networks:
+      - komics
+    volumes:
+      - ${DATA}/komf/config:/config
+    depends_on:
+      - komga
+
+  suwayomi:
+    container_name: suwayomi
+    image: ghcr.io/suwayomi/suwayomi-server:stable
+    restart: on-failure:3
+    user: "${UID}:${GID}"
+    environment:
+      TZ: ${TZ}
+      FLARESOLVERR_ENABLED: true
+      FLARESOLVERR_URL: http://flaresolverr:8191
+      DATABASE_TYPE: POSTGRESQL
+      DATABASE_USERNAME: ${SUWAYOMI_USER}
+      DATABASE_PASSWORD: ${SUWAYOMI_PASS}
+      DATABASE_URL: postgresql://suwayomi_postgres:5432/${SUWAYOMI_DB}
+    depends_on:
+      suwayomi_postgres:
+        condition: service_healthy
+    networks:
+      - proxy
+      - suwayomi
+      - flaresolverr
+    volumes:
+      - ${RAID}/shared/reading:/home/suwayomi/.local/share/Tachidesk/downloads
+      - ${DATA}/suwayomi/config:/home/suwayomi/.local/share/Tachidesk
+
+  suwayomi_postgres:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: suwayomi_postgres
+    image: postgres
+    networks:
+      - suwayomi
+    volumes:
+      - suwayomi-storage:/var/lib/postgresql
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: ${SUWAYOMI_USER}
+      POSTGRES_PASSWORD: ${SUWAYOMI_PASS}
+      POSTGRES_DB: ${SUWAYOMI_DB}
+      PGDATA: /var/lib/postgresql/data
+      TZ: ${TZ}
+      PGTZ: ${TZ}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${SUWAYOMI_DB} -U ${SUWAYOMI_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  proxy:
+  anime:
+  komics:
+  suwayomi:
+  flaresolverr:
+
+volumes:
+  suwayomi-storage:

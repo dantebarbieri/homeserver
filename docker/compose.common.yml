@@ -1,0 +1,51 @@
+# Shared service templates for Docker Compose
+# These are not started directly - they're extended by other services
+# Usage: extends: { file: compose.common.yml, service: <template-name> }
+
+# NOTE: This file is NOT included in docker-compose.yml
+# It's only referenced via 'extends:' from other compose files
+
+services:
+  # GPU passthrough for NVIDIA
+  gpu-service:
+    image: alpine  # placeholder - overridden by extending service
+    devices:
+      - "nvidia.com/gpu=all"
+
+  # Base template with restart policy and logging
+  common-service:
+    image: alpine  # placeholder - overridden by extending service
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Template for Hotio images (radarr, sonarr, bazarr, prowlarr, sabnzbd, seerr)
+  hotio-service:
+    image: alpine  # placeholder - overridden by extending service
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+
+  # Template for LinuxServer.io images (qbittorrent, ddclient)
+  linuxserver-service:
+    image: alpine  # placeholder - overridden by extending service
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}

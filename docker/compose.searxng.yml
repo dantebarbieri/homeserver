@@ -1,0 +1,38 @@
+# SearXNG search engine stack
+# searxng, searxng_redis
+
+services:
+  searxng_redis:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: searxng_redis
+    image: cgr.dev/chainguard/valkey:latest
+    command: --save 30 1 --loglevel warning
+    networks: [searxng]
+    volumes: [valkey-data:/data]
+    cap_drop: [ALL]
+    cap_add: [SETGID, SETUID, DAC_OVERRIDE]
+
+  searxng:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: searxng
+    image: docker.io/searxng/searxng:latest
+    networks:
+      - proxy
+      - searxng
+    volumes:
+      - ${DATA}/searxng/config:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: "https://${SEARXNG_HOSTNAME:-localhost}/"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+
+networks:
+  proxy:
+  searxng:
+
+volumes:
+  valkey-data:

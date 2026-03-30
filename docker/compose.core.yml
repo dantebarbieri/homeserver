@@ -1,0 +1,42 @@
+# Core infrastructure services
+# nginxproxymanager, ddclient, endlessh
+
+services:
+  nginxproxymanager:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: "jc21/nginx-proxy-manager:latest"
+    container_name: nginxproxymanager
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/nginxproxymanager/data:/data
+      - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
+      - ${DATA}/nginxproxymanager/snippets:/snippets
+
+  ddclient:
+    extends:
+      file: compose.common.yml
+      service: linuxserver-service
+    image: lscr.io/linuxserver/ddclient:latest
+    container_name: ddclient
+    volumes:
+      - ${DATA}/ddclient/config:/config
+
+  endlessh:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: shizunge/endlessh-go
+    container_name: endlessh
+    ports:
+      - "22:2222"
+    command: ["-logtostderr", "-v=1"]
+
+networks:
+  proxy:

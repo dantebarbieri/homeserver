@@ -1,0 +1,84 @@
+# Web hosting services
+# Uncomment services as needed
+
+services:
+  travel-planner:
+    build:
+      context: ../../travel-planner
+      dockerfile: Dockerfile
+    container_name: travel-planner
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file: ../../travel-planner/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      ORIGIN: https://travel.danteb.com
+      DATABASE_PATH: /app/data/cache.db
+      TRUST_PROXY: "true"
+    volumes:
+      - ${DATA}/travel-planner:/app/data
+    networks:
+      proxy:
+        aliases:
+          - travel-planner
+
+  # admin.danteb.com:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.sveltekit
+  #     args:
+  #       APP_NAME: admin.danteb.com
+  #   environment:
+  #     NODE_ENV: production
+  #     PORT: 3000
+  #   networks:
+  #     proxy:
+  #       aliases:
+  #         - admin-danteb
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+
+  # danteb.com:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.sveltekit
+  #     args:
+  #       APP_NAME: danteb.com
+  #   environment:
+  #     NODE_ENV: production
+  #     PORT: 3000
+  #   networks:
+  #     proxy:
+  #       aliases:
+  #         - danteb
+
+  # adguardhome:
+  #   image: adguard/adguardhome
+  #   container_name: adguardhome
+  #   restart: unless-stopped
+  #   networks:
+  #     - proxy
+  #   volumes:
+  #     - ${DATA}/adguardhome/workdir:/opt/adguardhome/work
+  #     - ${DATA}/adguardhome/confdir:/opt/adguardhome/conf
+  #   ports:
+  #     - "53:53/tcp"
+  #     - "53:53/udp"
+  #     - "67:67/udp"
+  #     - "68:68/udp"
+  #     - "443:443/udp"
+  #     - "3000:3000/tcp"
+  #     - "853:853/tcp"
+  #     - "853:853/udp"
+  #     - "5443:5443/tcp"
+  #     - "5443:5443/udp"
+  #     - "6060:6060/tcp"
+
+networks:
+  proxy:

@@ -1,0 +1,11 @@
+# Ignore node_modules from host
+danteb.com/node_modules
+
+# If you have a local /build or .svelte-kit folder
+danteb.com/build
+danteb.com/.svelte-kit
+
+# Ignore local Git or editor files
+.git
+.vscode
+*.log

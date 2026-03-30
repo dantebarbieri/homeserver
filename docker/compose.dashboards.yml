@@ -1,0 +1,60 @@
+# Dashboard and monitoring services
+# homepage, dashdot
+
+services:
+  homepage:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: ${HOMEPAGE_ALLOWED_HOSTS}
+      HOMEPAGE_VAR_PLEX_TOKEN: ${HOMEPAGE_VAR_PLEX_TOKEN}
+      HOMEPAGE_VAR_JELLYFIN_KEY: ${HOMEPAGE_VAR_JELLYFIN_KEY}
+      HOMEPAGE_VAR_SEERR_KEY: ${HOMEPAGE_VAR_SEERR_KEY}
+      HOMEPAGE_VAR_IMMICH_KEY: ${HOMEPAGE_VAR_IMMICH_KEY}
+      HOMEPAGE_VAR_KOMGA_USER: ${HOMEPAGE_VAR_KOMGA_USER}
+      HOMEPAGE_VAR_KOMGA_PASS: ${HOMEPAGE_VAR_KOMGA_PASS}
+      HOMEPAGE_VAR_RADARR_KEY: ${HOMEPAGE_VAR_RADARR_KEY}
+      HOMEPAGE_VAR_SONARR_KEY: ${HOMEPAGE_VAR_SONARR_KEY}
+      HOMEPAGE_VAR_BAZARR_KEY: ${HOMEPAGE_VAR_BAZARR_KEY}
+      HOMEPAGE_VAR_PROWLARR_KEY: ${HOMEPAGE_VAR_PROWLARR_KEY}
+      HOMEPAGE_VAR_SABNZBD_KEY: ${HOMEPAGE_VAR_SABNZBD_KEY}
+      HOMEPAGE_VAR_NPM_USER: ${HOMEPAGE_VAR_NPM_USER}
+      HOMEPAGE_VAR_NPM_PASS: ${HOMEPAGE_VAR_NPM_PASS}
+      HOMEPAGE_VAR_TDARR_KEY: ${HOMEPAGE_VAR_TDARR_KEY}
+      HOMEPAGE_VAR_QBIT_USER: ${HOMEPAGE_VAR_QBIT_USER}
+      HOMEPAGE_VAR_QBIT_PASS: ${HOMEPAGE_VAR_QBIT_PASS}
+      HOMEPAGE_VAR_NEXTCLOUD_USER: ${HOMEPAGE_VAR_NEXTCLOUD_USER}
+      HOMEPAGE_VAR_NEXTCLOUD_PASS: ${HOMEPAGE_VAR_NEXTCLOUD_PASS}
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/homepage/config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  dashdot:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    image: mauricenino/dashdot:nvidia
+    container_name: dashdot
+    restart: unless-stopped
+    privileged: true
+    networks:
+      - proxy
+    volumes:
+      - /:/mnt/host:ro
+    environment:
+      DASHDOT_WIDGET_LIST: "os,cpu,storage,ram,network,gpu"
+      DASHDOT_SHOW_HOST: true
+      DASHDOT_ENABLE_CPU_TEMPS: true
+      DASHDOT_NETWORK_LABEL_LIST: type,speed_up,speed_down,interface_speed,public_ip
+      DASHDOT_ACCEPT_OOKLA_EULA: true
+      DASHDOT_USE_NETWORK_INTERFACE: bond0
+      DASHDOT_FS_DEVICE_FILTER: nvme1n1,sda,sdb,sdc,sdd,sde,sdf,sdg,sdh,sdi,sdj,sdk,sdl
+      DASHDOT_FS_VIRTUAL_MOUNTS: /dev/mapper/vg_redundant-lv_data
+
+networks:
+  proxy:

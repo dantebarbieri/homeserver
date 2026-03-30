@@ -1,0 +1,123 @@
+# Game servers
+# minecraft-server, rlcraft-minecraft-server, hytale-server, satisfactory-server
+
+services:
+  hytale-server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: deinfreu/hytale-server:latest
+    container_name: hytale-server
+    tty: true
+    stdin_open: true
+    mem_limit: 24g
+    memswap_limit: 24g
+    ports:
+      - "5205:5520/udp"
+    environment:
+      SERVER_IP: "0.0.0.0"
+      SERVER_PORT: 5520
+      PROD: TRUE
+      DEBUG: FALSE
+      TZ: ${TZ}
+    volumes:
+      - hytale-server:/home/container
+      - /etc/machine-id:/etc/machine-id:ro
+
+  minecraft-server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: itzg/minecraft-server:latest
+    container_name: minecraft-server
+    tty: true
+    stdin_open: true
+    ports:
+      - "36677:25565"
+    environment:
+      EULA: true
+      MODE: "survival"
+      MOTD: "§bHardcore§r Minecraft Server\nRunning Version: §c§o%VERSION%§r."
+      DIFFICULTY: "hard"
+      HARDCORE: true
+      OPS: |
+        DanteVB
+        ElVonHresvelg
+      ICON: "/data/assets/hardcore-logo.png"
+      OVERRIDE_ICON: true
+      ENABLE_QUERY: true
+      ENABLE_COMMAND_BLOCK: true
+      VIEW_DISTANCE: 16
+      MEMORY: 24G
+      USE_AIKAR_FLAGS: true
+      ALLOW_FLIGHT: true
+      STOP_SERVER_ANNOUNCE_DELAY: 60
+      STOP_DURATION: 60
+      MAX_TICK_TIME: -1
+      LOG_TIMESTAMP: true
+      LOG_IPS: true
+    volumes:
+      - minecraft-server:/data
+      - ${DATA}/minecraft/assets:/data/assets
+
+  rlcraft-minecraft-server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: itzg/minecraft-server:java8
+    container_name: rlcraft-minecraft-server
+    tty: true
+    stdin_open: true
+    ports:
+      - "36676:25565"
+    environment:
+      EULA: true
+      MODE: "survival"
+      MOTD: "§aRL Craft§r server running Minecraft §c§o%VERSION%§r."
+      DIFFICULTY: "hard"
+      OPS: |
+        DanteVB
+        Otakeb
+        Heruth99
+      ICON: "https://media.forgecdn.net/avatars/thumbnails/468/243/64/64/637751369169569212.png"
+      OVERRIDE_ICON: true
+      ENABLE_QUERY: true
+      ENABLE_COMMAND_BLOCK: true
+      VIEW_DISTANCE: 16
+      MEMORY: 12G
+      USE_AIKAR_FLAGS: true
+      TYPE: "AUTO_CURSEFORGE"
+      CF_API_KEY: ${CF_API_KEY}
+      CF_SLUG: rlcraft
+    volumes:
+      - rlcraft-minecraft-server:/data
+
+  satisfactory-server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: satisfactory-server
+    hostname: satisfactory-server
+    image: wolveix/satisfactory-server:latest
+    ports:
+      - "7778:7777/tcp"
+      - "7778:7777/udp"
+      - "8888:8888/tcp"
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      MAXPLAYERS: 4
+      STEAMBETA: false
+    volumes:
+      - ${DATA}/satisfactory-server:/config
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          memory: 8G
+
+volumes:
+  hytale-server:
+  minecraft-server:
+  rlcraft-minecraft-server:
