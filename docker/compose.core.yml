@@ -25,6 +25,8 @@ services:
       service: linuxserver-service
     image: lscr.io/linuxserver/ddclient:latest
     container_name: ddclient
+    networks:
+      - proxy  # IPv6 enabled — needed for AAAA record detection via ipv6.icanhazip.com
     volumes:
       - ${DATA}/ddclient/config:/config
 
