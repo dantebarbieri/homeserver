@@ -96,10 +96,20 @@ in
   networking.useNetworkd = true;
   services.resolved.enable = true;
 
-  # TODO: Restore bond0 (enp66s0f0 + enp66s0f1) now that the ASUS ROG router
-  # has replaced the Netgear Nighthawk — the flaky traffic was likely the old router.
-  # Single NIC - enp66s0f0 is dead/flaky, using endpoint enp66s0f1 only
-  networking.interfaces.enp66s0f1 = {
+  # Bond: enp66s0f0 + enp66s0f1 → bond0 (active-backup)
+  # The ASUS GT-BE98 Pro does NOT support LACP on its 2.5G LAN ports,
+  # so we use active-backup (mode 1) for fault tolerance. enp66s0f1 is
+  # the primary (known-good) link; enp66s0f0 is the failover.
+  networking.bonds.bond0 = {
+    interfaces = [ "enp66s0f0" "enp66s0f1" ];
+    driverOptions = {
+      mode = "active-backup";
+      primary = "enp66s0f1";
+      miimon = "100";
+    };
+  };
+
+  networking.interfaces.bond0 = {
     useDHCP = false;
     ipv4.addresses = [
       { address = "192.168.50.100"; prefixLength = 24; }
@@ -110,7 +120,7 @@ in
   # default gateway + DNS
   networking.defaultGateway = {
     address = "192.168.50.1";
-    interface = "enp66s0f1";
+    interface = "bond0";
   };
   networking.nameservers   = [ "192.168.50.1" "1.1.1.1" "8.8.8.8" ];
 
@@ -149,9 +159,11 @@ in
     ];
   };
 
-  # Make boot wait for real network readiness
-  systemd.network.wait-online.enable = true;
-  # (defaults to waiting for at least one configured interface; fine here)
+  # Make boot wait for bond0 to be online before starting network services
+  systemd.network.wait-online = {
+    enable = true;
+    extraArgs = [ "--interface=bond0" ];
+  };
 
   # Time / locale / console
   time.timeZone = "America/Chicago";

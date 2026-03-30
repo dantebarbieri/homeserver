@@ -82,7 +82,8 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 
 ## Networking & IPv6
 
-- **IPv4**: Static `192.168.50.100/24` on `enp66s0f1`, gateway `192.168.50.1`
+- **Bond**: `bond0` (active-backup, mode 1) bonding `enp66s0f0` + `enp66s0f1` with `enp66s0f1` as primary. The ASUS GT-BE98 Pro does not support LACP on its 2.5G LAN ports, so active-backup provides fault tolerance only (no aggregated throughput).
+- **IPv4**: Static `192.168.50.100/24` on `bond0`, gateway `192.168.50.1`
 - **IPv6**: Received via SLAAC from ASUS GT-BE98 Pro router (Spectrum ISP, `2603:8080:1e00:1c97::/64` prefix). `tempAddress = "disabled"` ensures a stable EUI-64 address for the AAAA DNS record.
 - **Firewall**: NixOS firewall is enabled by default and blocks all inbound except SSH. `networking.firewall.allowedTCPPorts` / `allowedUDPPorts` must explicitly list every port that needs inbound access (80, 443, game ports, Coturn, Plex, LiveKit, etc.). Port 28 (SSH) is auto-opened by `services.openssh`.
 - **Router IPv6 firewall**: The ASUS router also has an IPv6 firewall (separate from IPv4 port forwarding). Inbound IPv6 rules must be added in the router admin under **Firewall > IPv6 Firewall** for each service port, specifying the server's GUA as Local IP.
