@@ -250,6 +250,14 @@ in
         nix shell "''${args[@]}"
       }
 
+      # ── Search nixpkgs by name or description ──
+      # Usage: nss neovim   →   nix search nixpkgs neovim
+      nss() { nix search nixpkgs "$@"; }
+
+      # ── Find which package provides a binary ──
+      # Usage: nwp arp   →   nix-locate --top-level -w "/bin/arp"
+      nwp() { nix-locate --top-level -w "/bin/$1"; }
+
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
       [[ $SHLVL -eq 1 ]] && fastfetch
     '';
@@ -290,6 +298,8 @@ in
       any-nix-shell
       # Storage tooling
       mdadm lvm2 dosfstools xfsprogs parted smartmontools
+      # Nix tooling
+      nix-index          # nix-locate — find which package provides a binary
       # Docker
       docker-compose
       # Mail (aerc + contact sync)
