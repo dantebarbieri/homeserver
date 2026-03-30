@@ -340,10 +340,11 @@ in
     };
     serviceConfig = {
       Type = "oneshot";
-      WorkingDirectory = "/srv/docker/compose";
+      WorkingDirectory = "/srv/homeserver";
     };
     script = ''
-      git pull --recurse-submodules && \
+      git pull && \
+      cd docker && \
       docker compose pull --quiet && \
       docker compose build --quiet && \
       docker compose up -d --remove-orphans

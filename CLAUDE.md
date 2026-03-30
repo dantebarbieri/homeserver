@@ -4,10 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A multi-component homeserver infrastructure managed across several independent subdirectories. The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, software RAID with LVM, and ntfy-based alerting.
+A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, ~66TB RAID6 XFS storage, and ntfy-based alerting. All services are reverse-proxied via Nginx Proxy Manager with Authelia SSO.
 
-**Git-tracked repos:** `docker/`, `nixos/`, `homepage/`, `mail-config/`, `recyclarr-configs/`
-**Production config copies (read-only reference):** `ddclient/`, `nginxproxymanager/` — these are configs copied directly from the production server. They are useful for debugging proxy routing and dynamic DNS issues, but should be treated as read-only. Do not modify them, do not track them in git, and take care not to leak any secrets they contain.
+### Repository Layout
+
+| Directory | Purpose |
+|-----------|---------|
+| `docker/` | Docker Compose orchestration — 17 category files, 50+ services |
+| `nixos/` | NixOS system configuration — single `configuration.nix` |
+| `homepage/` | Homepage dashboard YAML config |
+| `mail-config/` | Portable email/contacts setup (aerc, khard, vdirsyncer) — also used on macOS |
+| `recyclarr-configs/` | TRaSH Guides quality profiles for Sonarr/Radarr |
+| `production-configs/` | Gitignored dir for production config copies (only `README.md` tracked) |
+
+### Production Server Paths
+
+- **Monorepo clone**: `/srv/homeserver` (owned by root, pulled by systemd timer)
+- **Docker data**: `/srv/docker/data` (persistent service configs)
+- **Backward-compat symlink**: `/srv/docker/compose` → `/srv/homeserver/docker`
+- **Bulk storage**: `/data` (RAID6 mount, referenced as `${RAID}`)
+
+### External Projects (not in this repo)
+
+Some Docker Compose services build from repos outside this monorepo. Their paths are configured via environment variables in `.env` (see `docker/sample.env`):
+- `${TRAVEL_PLANNER_PATH}` — SvelteKit travel planning app (`compose.websites.yml`)
+- `${INTERVIEW_WORKSPACE_PATH}` — YipitData interview portal (`compose.interview.yml`)
 
 ## Docker Compose (`docker/`)
 
@@ -71,7 +92,7 @@ docker compose -f compose.<category>.yml up -d    # Start one category
 docker compose up -d <service>                    # Start one service
 docker compose pull && docker compose up -d       # Update all
 docker compose config                             # Validate merged config
-./deploy-update.sh <submodule-name>               # Zero-downtime submodule deploy
+./deploy-update.sh <service-name>                  # Zero-downtime service deploy
 ```
 
 ## NixOS (`nixos/`)
@@ -80,7 +101,7 @@ docker compose config                             # Validate merged config
 
 Key system services managed by NixOS:
 - **Docker daemon** — IPv6, CDI, live-restore enabled
-- **Auto-update timer** — daily at 04:00, pulls from GitHub (`/srv/docker/compose`), runs `docker compose pull && build && up -d`
+- **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`
 - **RAID/drive monitoring** — `smartd`, `mdadm-ntfy`, 6-hourly health checks, weekly Sunday parity scrub — all alert via ntfy
 - **vdirsyncer** — syncs iCloud contacts every 15 minutes via CardDAV
 - **SSH** — key-only on port 28
@@ -108,19 +129,17 @@ TRaSH Guides quality profiles synced to Sonarr/Radarr. See `recyclarr-configs/CL
 docker compose -f compose.starr.yml run --rm recyclarr sync
 ```
 
-## Production Config Copies (`ddclient/`, `nginxproxymanager/`)
+## Production Config Copies (`production-configs/`)
 
-These directories contain configuration files copied directly from the production server for reference:
+Copy production configs here for local debugging — all contents except `README.md` are gitignored. See `production-configs/README.md` for details on what to copy and where it lives on the server.
 
-- **`ddclient/config/ddclient.conf`** — Dynamic DNS configuration (provider settings, update intervals, domain mappings)
-- **`nginxproxymanager/`** — Reverse proxy config including the SQLite database, generated nginx configs, Let's Encrypt certificates, and Authelia SSO integration snippets (`snippets/authelia-authrequest.conf`, `snippets/authelia-location.conf`, `snippets/proxy.conf`)
-
-These are read-only references for debugging. **Do not modify, do not commit to git, and do not expose secrets from these files.**
+Common sources: ddclient (dynamic DNS), Nginx Proxy Manager (reverse proxy, TLS certs, Authelia SSO snippets). **These contain secrets — never commit them.**
 
 ## Integration Points
 
-- **NixOS → Docker**: NixOS enables the Docker daemon and runs the daily auto-update timer that pulls the `docker/` repo and restarts services
+- **NixOS → Docker**: NixOS enables the Docker daemon and runs the daily auto-update timer that pulls this monorepo and restarts services
 - **Homepage → Docker**: mounted Docker socket for container status; service API widgets for live stats
-- **NPM → Authelia**: nginx snippets in `nginxproxymanager/snippets/` provide SSO middleware
-- **NPM → Coturn**: Let's Encrypt certs from `nginxproxymanager/letsencrypt/` are passed to Matrix's Coturn for RTC
+- **NPM → Authelia**: nginx snippets in NPM config provide SSO middleware (see `production-configs/` for reference copies)
+- **NPM → Coturn**: Let's Encrypt certs from NPM are passed to Matrix's Coturn for RTC
 - **Recyclarr → Starr**: runs as a container in `compose.starr.yml`, syncs quality profiles to Radarr/Sonarr via their APIs
+- **Mail → NixOS**: vdirsyncer (in `mail-config/`) runs as a NixOS systemd timer on the server, syncing iCloud contacts every 15 minutes

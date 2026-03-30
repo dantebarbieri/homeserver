@@ -4,7 +4,7 @@
 services:
   travel-planner:
     build:
-      context: ../../travel-planner
+      context: ${TRAVEL_PLANNER_PATH:?Set TRAVEL_PLANNER_PATH in .env}
       dockerfile: Dockerfile
     container_name: travel-planner
     restart: unless-stopped
@@ -13,7 +13,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    env_file: ../../travel-planner/.env
+    env_file: ${TRAVEL_PLANNER_PATH:?Set TRAVEL_PLANNER_PATH in .env}/.env
     environment:
       NODE_ENV: production
       PORT: 3000
