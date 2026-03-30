@@ -104,6 +104,7 @@ in
     ipv4.addresses = [
       { address = "192.168.50.100"; prefixLength = 24; }
     ];
+    tempAddress = "disabled";  # Use stable EUI-64 IPv6 (no rotating privacy addresses)
   };
 
   # default gateway + DNS
