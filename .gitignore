@@ -1,0 +1,11 @@
+# Production config copies — only README.md is tracked (git needs it to track the dir)
+production-configs/*
+!production-configs/README.md
+
+# Secrets and environment
+.env
+docker/.env
+recyclarr-configs/secrets.yml
+
+# Editor/tool state
+.claude/
