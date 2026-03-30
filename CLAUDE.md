@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, ~66TB RAID6 XFS storage, and ntfy-based alerting. All services are reverse-proxied via Nginx Proxy Manager with Authelia SSO.
+A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, ~66TB RAID6 XFS storage, and ntfy-based alerting. All services are reverse-proxied via Nginx Proxy Manager with Authelia SSO. Dual-stack IPv4/IPv6 with Spectrum ISP, ASUS GT-BE98 Pro router, and Cloudflare DNS (DNS-only, no proxy).
 
 ### Repository Layout
 
@@ -19,6 +19,8 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 
 ### Production Server Paths
 
+- **Server IP**: `192.168.50.100` (IPv4), `2603:8080:1e00:1c97:9e6b:ff:fe45:2bc2` (IPv6 GUA)
+- **Network**: `bond0` (active-backup) — `enp66s0f0` + `enp66s0f1`, MAC pinned to `enp66s0f1`
 - **Monorepo clone**: `/srv/homeserver` (owned by root, pulled by systemd timer)
 - **Docker data**: `/srv/docker/data` (persistent service configs)
 - **Backward-compat symlink**: `/srv/docker/compose` → `/srv/homeserver/docker`
