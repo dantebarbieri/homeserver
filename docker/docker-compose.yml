@@ -2,6 +2,11 @@
 # This file includes all service categories and defines shared resources
 # Run: docker compose up -d
 
+# Explicit project name — matches the original /srv/docker/compose directory name.
+# Changing this would orphan 13 named Docker volumes (pgdata, vw-data, etc.)
+# and require manual volume migration. Keep as "compose".
+name: compose
+
 include:
   # Note: compose.common.yml is NOT included here - it's only used via extends:
   - compose.core.yml
