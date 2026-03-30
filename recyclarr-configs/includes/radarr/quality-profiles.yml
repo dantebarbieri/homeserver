@@ -1,0 +1,710 @@
+# Radarr quality profiles
+# See: https://recyclarr.dev/wiki/yaml/config-reference/quality-profiles/
+
+quality_profiles:
+  # ============================================================
+  # EXACT resolution profiles (no cross-resolution upgrades)
+  # ============================================================
+
+  - name: SD - 480p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 480p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+
+  - name: SD - 480p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 480p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+
+  - name: SD - 480p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 480p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+
+  - name: SD - 576p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: Bluray-576p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: Bluray-576p
+
+  - name: SD - 576p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: Bluray-576p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: Bluray-576p
+
+  - name: SD - 576p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: Bluray-576p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: Bluray-576p
+
+  - name: HD - 720p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 720p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+
+  - name: HD - 720p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 720p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+
+  - name: HD - 720p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 720p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+
+  - name: HD - 1080p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 1080p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+
+  - name: HD - 1080p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 1080p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+
+  - name: HD - 1080p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 1080p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+
+  - name: 4K UHD - 2160p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 2160p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 2160p
+        qualities:
+          - WEBRip-2160p
+          - WEBDL-2160p
+          - Remux-2160p
+          - HDTV-2160p
+          - Bluray-2160p
+
+  - name: 4K UHD - 2160p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 2160p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 2160p
+        qualities:
+          - WEBRip-2160p
+          - WEBDL-2160p
+          - Remux-2160p
+          - HDTV-2160p
+          - Bluray-2160p
+
+  - name: 4K UHD - 2160p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 2160p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 2160p
+        qualities:
+          - WEBRip-2160p
+          - WEBDL-2160p
+          - Remux-2160p
+          - HDTV-2160p
+          - Bluray-2160p
+
+  # ============================================================
+  # "AT MOST" profiles (upgrade from lower resolutions up to max)
+  # ============================================================
+
+  - name: At most 480p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 480p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 480p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 480p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 480p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 480p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 576p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: Bluray-576p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 576p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: Bluray-576p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 576p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: Bluray-576p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 720p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 720p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 720p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 720p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 720p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 720p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 1080p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 1080p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 1080p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 1080p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 1080p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 1080p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+        qualities:
+          - DVD
+          - DVD-R
+      - name: SDTV
+
+  - name: At most 2160p
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 2160p
+      until_score: 10000
+    min_format_score: 0
+    quality_sort: top
+    qualities:
+      - name: 2160p
+        qualities:
+          - WEBRip-2160p
+          - WEBDL-2160p
+          - Remux-2160p
+          - HDTV-2160p
+          - Bluray-2160p
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD-R
+      - name: DVD
+      - name: SDTV
+
+  - name: At most 2160p Anime
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 2160p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 2160p
+        qualities:
+          - WEBRip-2160p
+          - WEBDL-2160p
+          - Remux-2160p
+          - HDTV-2160p
+          - Bluray-2160p
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+      - name: SDTV
+
+  - name: At most 2160p Anime (Dub)
+    score_set: anime-sonarr
+    reset_unmatched_scores:
+      enabled: true
+    upgrade:
+      allowed: true
+      until_quality: 2160p
+      until_score: 10000
+    min_format_score: 100
+    quality_sort: top
+    qualities:
+      - name: 2160p
+        qualities:
+          - WEBRip-2160p
+          - WEBDL-2160p
+          - Remux-2160p
+          - HDTV-2160p
+          - Bluray-2160p
+      - name: 1080p
+        qualities:
+          - WEBRip-1080p
+          - WEBDL-1080p
+          - Remux-1080p
+          - HDTV-1080p
+          - Bluray-1080p
+      - name: 720p
+        qualities:
+          - WEBRip-720p
+          - WEBDL-720p
+          - HDTV-720p
+          - Bluray-720p
+      - name: Bluray-576p
+      - name: 480p
+        qualities:
+          - WEBRip-480p
+          - WEBDL-480p
+          - Bluray-480p
+      - name: DVD
+      - name: SDTV
