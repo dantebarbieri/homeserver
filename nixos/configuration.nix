@@ -337,17 +337,13 @@ in
     path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash ];
     environment = {
       GIT_SSH_COMMAND = "ssh -i /root/.ssh/docker-compose-deploy -o StrictHostKeyChecking=accept-new";
-      # Repo is owned by danteb, service runs as root — allow git operations
-      GIT_CONFIG_COUNT = "1";
-      GIT_CONFIG_KEY_0 = "safe.directory";
-      GIT_CONFIG_VALUE_0 = "/srv/homeserver";
     };
     serviceConfig = {
       Type = "oneshot";
       WorkingDirectory = "/srv/homeserver";
     };
     script = ''
-      git pull && \
+      git -c safe.directory=/srv/homeserver pull && \
       cd docker && \
       docker compose pull --quiet && \
       docker compose build --quiet && \
