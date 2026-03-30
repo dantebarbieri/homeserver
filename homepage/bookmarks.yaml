@@ -2,22 +2,16 @@
 # https://gethomepage.dev/configs/bookmarks/
 
 - Developer:
-    - GitHub Docker:
+    - GitHub:
         - icon: si-github
-          href: https://github.com/dantebarbieri/homeserver-docker
-    - GitHub NixOS:
-        - icon: si-github
-          href: https://github.com/dantebarbieri/homeserver-nixos
-    - GitHub Homer:
-        - icon: si-github
-          href: https://github.com/dantebarbieri/homeserver-homer
+          href: https://github.com/dantebarbieri/HomeServer
 
 - Management:
     - IPMI (BMC):
         - icon: mdi-server
-          href: https://192.168.1.8
+          href: https://192.168.50.50
           description: ASRock Rack BMC
-    - Netgear Nighthawk:
+    - ASUS Router:
         - icon: mdi-router-wireless
-          href: https://www.routerlogin.com
-          description: Router Settings
+          href: http://www.asusrouter.com
+          description: GT-BE98 Pro

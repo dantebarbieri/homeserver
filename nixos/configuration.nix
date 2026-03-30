@@ -528,8 +528,11 @@ in
     nvidia-container-toolkit.enable = true;
   };
 
-  # Prevent nixos-rebuild switch from failing due to in-use NVIDIA modules
+  # Prevent nixos-rebuild switch from failing due to in-use NVIDIA modules.
+  # During --upgrade the new driver is on disk but old modules are in memory;
+  # restarting these services before a reboot causes version-mismatch failures.
   systemd.services.nvidia-persistenced.restartIfChanged = false;
+  systemd.services.nvidia-container-toolkit-cdi-generator.restartIfChanged = false;
 
   # sudo-rs — memory-safe Rust sudo with credential caching + asterisk feedback
   security = {

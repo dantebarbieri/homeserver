@@ -87,6 +87,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 3. Mount config to `${DATA}/<service>/config:/config`, bulk data under `${RAID}/shared/...`.
 4. Web UI services → join `proxy` + a dedicated internal network. Pure backends → internal only. No-comms services → no networks.
 5. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
+6. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env`, and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
 
 ### Commands
 
@@ -101,7 +102,7 @@ docker compose config                             # Validate merged config
 
 ## NixOS (`nixos/`)
 
-`configuration.nix` is the single-file declarative system config for the homeserver (hostname: `homeserver`, IP: `192.168.1.100/24`).
+`configuration.nix` is the single-file declarative system config for the homeserver (hostname: `homeserver`, IP: `192.168.50.100/24`).
 
 Key system services managed by NixOS:
 - **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore enabled
@@ -115,7 +116,9 @@ Rebuild: `sudo nixos-rebuild switch`
 
 ## Homepage Dashboard (`homepage/`)
 
-YAML-based config for the [Homepage](https://gethomepage.dev/) dashboard. `services.yaml` defines all services with Docker container status monitoring, health checks via `siteMonitor`, and service-specific API widgets. See `WIDGET_API_KEYS.md` for obtaining API tokens.
+YAML-based config for the [Homepage](https://gethomepage.dev/) dashboard. `services.yaml` defines all services with Docker container status monitoring, health checks via `siteMonitor`, and service-specific API widgets. `bookmarks.yaml` has external links and local management UIs (router, IPMI). See `WIDGET_API_KEYS.md` for obtaining API tokens.
+
+When changing service URLs, IPs, or removing/renaming services, update the corresponding entries in `homepage/services.yaml` and `homepage/bookmarks.yaml` to keep the dashboard in sync.
 
 ## Mail Config (`mail-config/`)
 
