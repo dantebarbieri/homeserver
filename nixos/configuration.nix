@@ -96,6 +96,8 @@ in
   networking.useNetworkd = true;
   services.resolved.enable = true;
 
+  # TODO: Restore bond0 (enp66s0f0 + enp66s0f1) now that the ASUS ROG router
+  # has replaced the Netgear Nighthawk — the flaky traffic was likely the old router.
   # Single NIC - enp66s0f0 is dead/flaky, using endpoint enp66s0f1 only
   networking.interfaces.enp66s0f1 = {
     useDHCP = false;
@@ -111,6 +113,40 @@ in
   };
   networking.nameservers   = [ "192.168.50.1" "1.1.1.1" "8.8.8.8" ];
 
+  # Firewall — NixOS enables the firewall by default and blocks all inbound
+  # except SSH. Open ports for services exposed via Docker port mappings and
+  # host-networked containers (coturn). Port 28 (SSH) is auto-opened by
+  # services.openssh; Docker's userland-proxy handles container→host mapping
+  # but the kernel firewall still drops inbound packets before they reach it.
+  networking.firewall = {
+    allowedTCPPorts = [
+      80      # HTTP → Nginx Proxy Manager
+      443     # HTTPS → Nginx Proxy Manager
+      22      # endlessh SSH honeypot
+      32400   # Plex direct access
+      8324    # Plex companion
+      32469   # Plex DLNA
+      3478    # Coturn TURN (host-networked)
+      5349    # Coturn TURNS TLS (host-networked)
+      7881    # LiveKit ICE/TCP fallback
+      8888    # Satisfactory TCP
+    ];
+    allowedUDPPorts = [
+      1900    # Plex SSDP/DLNA discovery
+      3478    # Coturn TURN (host-networked)
+      5205    # Hytale
+      7778    # Satisfactory
+      32410 32412 32413 32414  # Plex GDM discovery
+    ];
+    allowedTCPPortRanges = [
+      { from = 36676; to = 36677; }  # Minecraft servers
+    ];
+    allowedUDPPortRanges = [
+      { from = 7882;  to = 7913;  }  # LiveKit WebRTC UDP mux
+      { from = 36676; to = 36677; }  # Minecraft servers
+      { from = 49152; to = 49999; }  # Coturn relay port range
+    ];
+  };
 
   # Make boot wait for real network readiness
   systemd.network.wait-online.enable = true;
