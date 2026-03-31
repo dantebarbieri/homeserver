@@ -66,6 +66,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
+    image: qbit-port-sync
     build:
       context: .
       dockerfile: Dockerfile.port-sync

@@ -45,6 +45,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
+    image: bmc-ip-monitor
     build:
       context: .
       dockerfile: Dockerfile.bmc-monitor
