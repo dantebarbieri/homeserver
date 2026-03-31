@@ -53,6 +53,7 @@ services:
       start_period: 40s
     environment:
       TZ: ${TZ}
+      NTFY_UPSTREAM_BASE_URL: "https://ntfy.sh"
     volumes:
       - ${DATA}/ntfy/config:/etc/ntfy
       - ${DATA}/ntfy/cache:/var/cache/ntfy
