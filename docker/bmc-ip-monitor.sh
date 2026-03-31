@@ -1,13 +1,7 @@
 #!/bin/sh
 set -eu
 
-NPM_HOST=${NPM_HOST:-nginxproxymanager}
-NPM_PORT=${NPM_PORT:-81}
 NPM_API="http://${NPM_HOST}:${NPM_PORT}/api"
-PROXY_DOMAIN=${PROXY_DOMAIN:-ipmi.danteb.com}
-CHECK_INTERVAL=${CHECK_INTERVAL:-900}
-NTFY_URL=${NTFY_URL:-https://ntfy.danteb.com}
-NTFY_TOPIC=${NTFY_TOPIC:-homeserver-alerts}
 
 log() { echo "[$(date -Iseconds)] $*"; }
 

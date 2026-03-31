@@ -28,6 +28,7 @@ All services should extend one of these:
 - `Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
 - `Dockerfile.sveltekit` — Multi-stage Node 18 alpine build, parameterized via `ARG APP_NAME`
 - `Dockerfile.bmc-monitor` — Alpine with ipmitool, curl, jq for BMC IP monitoring
+- `Dockerfile.port-sync` — curlimages/curl with port-sync script for qBittorrent VPN port updates
 
 ## Shell Scripts
 
@@ -37,6 +38,7 @@ All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 - `setup-vpn-watcher.sh` — One-time setup, copies vpn-watcher.sh to `${DATA}` path
 - `vpn-watcher.sh` — Long-running Docker event monitor (POSIX sh, debounced restarts)
 - `bmc-ip-monitor.sh` — Polls BMC IP via ipmitool, auto-updates NPM proxy host if DHCP lease changes (POSIX sh, sleep loop)
+- `port-sync.sh` — Syncs gluetun's forwarded VPN port to qBittorrent's listen_port (POSIX sh, sleep loop)
 
 ## Service-Specific Docs
 

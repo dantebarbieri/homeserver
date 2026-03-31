@@ -66,17 +66,20 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: curlimages/curl:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.port-sync
     network_mode: "container:vpn-netns"
     environment:
       QUSER: ${QUSER}
       QPASS: ${QPASS}
       PORT_FILE: /tmp/gluetun/forwarded_port
       QHOST: 127.0.0.1:8080
+      CHECK_INTERVAL: 300
+      NTFY_URL: https://ntfy.danteb.com
+      NTFY_TOPIC: homeserver-alerts
     volumes:
       - gluetun-tmp:/tmp/gluetun:ro
-      - ${DATA}/gluetun/port-sync.sh:/usr/local/bin/port-sync.sh:ro
-    entrypoint: ["/bin/sh", "-c", "/usr/local/bin/port-sync.sh"]
     depends_on:
       gluetun:
         condition: service_healthy
