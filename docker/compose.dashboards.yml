@@ -31,7 +31,7 @@ services:
     networks:
       - proxy
     volumes:
-      - ${DATA}/homepage/config:/app/config
+      - ${HOMEPAGE_CONFIG_PATH}:/app/config
       - /var/run/docker.sock:/var/run/docker.sock
 
   dashdot:
