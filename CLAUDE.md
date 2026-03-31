@@ -45,7 +45,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 | File | Services |
 |------|----------|
-| `compose.core.yml` | nginxproxymanager, ddclient, endlessh |
+| `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
 | `compose.dashboards.yml` | homepage, dashdot |
 | `compose.downloads.yml` | vpn-netns, gluetun, qbittorrent, sabnzbd, flaresolverr, qbit-manage |
@@ -153,5 +153,5 @@ Common sources: ddclient (dynamic DNS), Nginx Proxy Manager (reverse proxy, TLS 
 - **Recyclarr → Starr**: runs as a container in `compose.starr.yml`, syncs quality profiles to Radarr/Sonarr via their APIs
 - **Mail → NixOS**: vdirsyncer (in `mail-config/`) runs as a NixOS systemd timer on the server, syncing iCloud contacts every 15 minutes
 - **ddclient → Cloudflare**: updates A (IPv4) and AAAA (IPv6) DNS records for `danteb.com` every 5 minutes. Requires an IPv6-enabled Docker network (`ddns`) so it can detect the host's public GUA via NAT.
-- **NPM → BMC (IPMI)**: reverse-proxies `ipmi.danteb.com` to the ASRock Rack BMC at `https://192.168.50.50` with Authelia SSO (admins group, two-factor). Requires `proxy_ssl_verify off` (self-signed cert) and BMC bonding disabled (otherwise host→BMC traffic is blocked by NCSI sideband)
+- **NPM → BMC (IPMI)**: reverse-proxies `ipmi.danteb.com` to the ASRock Rack BMC at `https://192.168.50.50` with Authelia SSO (admins group, two-factor). Requires `proxy_ssl_verify off` (self-signed cert) and BMC bonding disabled (otherwise host→BMC traffic is blocked by NCSI sideband). The `bmc-ip-monitor` container auto-updates the proxy host if the BMC's DHCP IP changes.
 - **Router → Server (IPv6)**: Unlike IPv4 port forwarding, IPv6 uses firewall allow-rules on the ASUS router (Firewall > IPv6 Firewall) specifying the server's GUA and permitted ports
