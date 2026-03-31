@@ -252,11 +252,18 @@ in
 
       # ── Search nixpkgs by name or description ──
       # Usage: nss neovim   →   nix search nixpkgs neovim
-      nss() { nix search nixpkgs "$@"; }
+      nss() { nix search nixpkgs "$@" 2>/dev/null; }
 
-      # ── Find which package provides a binary ──
+      # ── Find which package provides a binary (requires nix-index database) ──
       # Usage: nwp arp   →   nix-locate -w "/bin/arp"
-      nwp() { nix-locate -w "/bin/$1"; }
+      nwp() {
+        local db="$HOME/.cache/nix-index/files"
+        if [[ ! -f "$db" ]]; then
+          echo "nix-index database not found, building (this takes ~10 min)..." >&2
+          nix-index
+        fi
+        nix-locate -w "/bin/$1"
+      }
 
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
       [[ $SHLVL -eq 1 ]] && fastfetch
@@ -298,8 +305,6 @@ in
       any-nix-shell
       # Storage tooling
       mdadm lvm2 dosfstools xfsprogs parted smartmontools
-      # Nix tooling
-      nix-index          # nix-locate — find which package provides a binary
       # Docker
       docker-compose
       # Mail (aerc + contact sync)
@@ -319,6 +324,7 @@ in
 
   programs.gnupg.agent.enable = true;
   programs.ssh.startAgent = true;
+  programs.nix-index.enable = true;   # nix-locate — find which package provides a binary
 
   services.openssh = {
     enable = true;
@@ -357,6 +363,29 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*:0/15";
+      Persistent = true;
+    };
+  };
+
+  # nix-index — weekly database rebuild for nix-locate / nwp
+  systemd.services.nix-index-update = {
+    description = "Rebuild nix-index database for nix-locate";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "danteb";
+    };
+    path = with pkgs; [ nix-index ];
+    script = ''
+      nix-index
+    '';
+  };
+
+  systemd.timers.nix-index-update = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "weekly";
       Persistent = true;
     };
   };
