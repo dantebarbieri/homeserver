@@ -25,6 +25,7 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 - **Docker data**: `/srv/docker/data` (persistent service configs)
 - **Backward-compat symlink**: `/srv/docker/compose` → `/srv/homeserver/docker`
 - **Bulk storage**: `/data` (RAID6 mount, referenced as `${RAID}`)
+- **BMC (IPMI)**: `192.168.50.50` (ASRock Rack, dedicated IPMI port) — reverse-proxied at `https://ipmi.danteb.com` via NPM with Authelia SSO (admins-only, two-factor). BMC bonding must be **disabled** in BMC web UI (Settings → Network → Network Bond Configuration) or the host cannot reach the BMC. The BMC uses HTTPS (self-signed) with `proxy_ssl_verify off` in NPM.
 
 ### External Projects (not in this repo)
 
@@ -152,4 +153,5 @@ Common sources: ddclient (dynamic DNS), Nginx Proxy Manager (reverse proxy, TLS 
 - **Recyclarr → Starr**: runs as a container in `compose.starr.yml`, syncs quality profiles to Radarr/Sonarr via their APIs
 - **Mail → NixOS**: vdirsyncer (in `mail-config/`) runs as a NixOS systemd timer on the server, syncing iCloud contacts every 15 minutes
 - **ddclient → Cloudflare**: updates A (IPv4) and AAAA (IPv6) DNS records for `danteb.com` every 5 minutes. Requires an IPv6-enabled Docker network (`ddns`) so it can detect the host's public GUA via NAT.
+- **NPM → BMC (IPMI)**: reverse-proxies `ipmi.danteb.com` to the ASRock Rack BMC at `https://192.168.50.50` with Authelia SSO (admins group, two-factor). Requires `proxy_ssl_verify off` (self-signed cert) and BMC bonding disabled (otherwise host→BMC traffic is blocked by NCSI sideband)
 - **Router → Server (IPv6)**: Unlike IPv4 port forwarding, IPv6 uses firewall allow-rules on the ASUS router (Firewall > IPv6 Firewall) specifying the server's GUA and permitted ports

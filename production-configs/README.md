@@ -33,6 +33,15 @@ Subdirectories are created on demand — just copy what you need. When you're do
   - `letsencrypt/` — TLS certificates (also used by Matrix Coturn for RTC)
 - **Secrets**: TLS private keys, database credentials
 
+### authelia
+- **Server path**: `/srv/docker/data/authelia/`
+- **Contains**: Authelia SSO configuration, user database, secrets
+- **Key files**:
+  - `config/configuration.yml` — Main config: access control rules, session, storage, notification providers
+  - `config/users_database.yml` — Local user database (argon2id hashed passwords, groups)
+  - `secrets/` — Docker secrets (session, JWT, storage password, encryption key, email password)
+- **Secrets**: Hashed passwords, encryption keys, SMTP credentials
+
 ## Warning
 
 These files contain secrets (API tokens, TLS keys, database credentials). **Never commit them to git.** The `.gitignore` at the repo root prevents this, but always double-check with `git status` before committing.

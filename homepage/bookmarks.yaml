@@ -9,7 +9,7 @@
 - Management:
     - IPMI (BMC):
         - icon: mdi-server
-          href: https://192.168.50.50
+          href: https://ipmi.danteb.com
           description: ASRock Rack BMC
     - ASUS Router:
         - icon: mdi-router-wireless
