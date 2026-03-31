@@ -9,8 +9,6 @@ This file provides guidance to Claude Code when working with the `docker/` direc
 - `compose.*.yml` — Self-contained category files. Each can run independently: `docker compose -f compose.<category>.yml up -d`.
 - `hwaccel.transcoding.yml` / `hwaccel.ml.yml` — GPU passthrough profiles (nvenc, cuda, vaapi, etc.) consumed via `extends:`.
 - `sample.env` — Template for `.env` (not committed). Documents all required variables.
-- `deploy-update.sh` — Zero-downtime deploy: pulls monorepo, rebuilds one service, scales to 2, waits, scales back to 1.
-- `setup-vpn-watcher.sh` / `vpn-watcher.sh` — Monitors gluetun health, auto-restarts qBittorrent on VPN failure.
 
 ## Service Templates (`compose.common.yml`)
 
@@ -23,29 +21,27 @@ All services should extend one of these:
 | `linuxserver-service` | + PUID/PGID/TZ for LinuxServer.io images |
 | `gpu-service` | + `devices: ["nvidia.com/gpu=all"]` |
 
-## Custom Dockerfiles
+## Custom Dockerfiles (`dockerfiles/`)
 
-- `Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
-- `Dockerfile.sveltekit` — Multi-stage Node 18 alpine build, parameterized via `ARG APP_NAME`
-- `Dockerfile.bmc-monitor` — Alpine with ipmitool, curl, jq for BMC IP monitoring
-- `Dockerfile.port-sync` — curlimages/curl with port-sync script for qBittorrent VPN port updates
+- `dockerfiles/Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
+- `dockerfiles/Dockerfile.sveltekit` — Multi-stage Node 18 alpine build, parameterized via `ARG APP_NAME`
+- `dockerfiles/bmc-monitor/` — Alpine with ipmitool, curl, jq + `bmc-ip-monitor.sh` polling script
+- `dockerfiles/port-sync/` — curlimages/curl + `port-sync.sh` qBittorrent VPN port sync script
 
-## Shell Scripts
+## Shell Scripts (`scripts/`)
 
 All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 
-- `deploy-update.sh <service>` — Pull, rebuild, zero-downtime restart
-- `setup-vpn-watcher.sh` — One-time setup, copies vpn-watcher.sh to `${DATA}` path
-- `vpn-watcher.sh` — Long-running Docker event monitor (POSIX sh, debounced restarts)
-- `bmc-ip-monitor.sh` — Polls BMC IP via ipmitool, auto-updates NPM proxy host if DHCP lease changes (POSIX sh, sleep loop)
-- `port-sync.sh` — Syncs gluetun's forwarded VPN port to qBittorrent's listen_port (POSIX sh, sleep loop)
+- `scripts/deploy-update.sh <service>` — Pull, rebuild, zero-downtime restart
+- `scripts/setup-vpn-watcher.sh` — One-time setup, copies vpn-watcher.sh to `${DATA}` path
+- `scripts/vpn-watcher.sh` — Long-running Docker event monitor (POSIX sh, debounced restarts)
 
-## Service-Specific Docs
+## Service-Specific Docs (`docs/`)
 
-- `MATRIX.md` — Synapse, Element, Coturn, PostgreSQL setup
-- `MATRIX-RTC.md` — LiveKit voice/video call integration
-- `NEXTCLOUD.md` — PostgreSQL, Redis, cron, reverse proxy config
-- `TDARR.md` — HEVC compression, library setup, Sonarr/Radarr integration
+- `docs/MATRIX.md` — Synapse, Element, Coturn, PostgreSQL setup
+- `docs/MATRIX-RTC.md` — LiveKit voice/video call integration
+- `docs/NEXTCLOUD.md` — PostgreSQL, Redis, cron, reverse proxy config
+- `docs/TDARR.md` — HEVC compression, library setup, Sonarr/Radarr integration
 
 ## Conventions
 

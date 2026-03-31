@@ -3,9 +3,10 @@ set -e
 
 echo "🔧 Setting up VPN Watcher..."
 
-# Get the directory where docker-compose.yml is located
+# Get the docker/ directory (parent of scripts/)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+DOCKER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$DOCKER_DIR"
 
 # Source the .env file to get DATA path
 if [ -f .env ]; then
@@ -29,9 +30,8 @@ mkdir -p "${DATA}/vpn-watcher/logs"
 
 # Copy and set permissions for vpn-watcher script
 echo "📋 Copying vpn-watcher.sh to ${DATA}/vpn-watcher/..."
-cp -f vpn-watcher.sh "${DATA}/vpn-watcher/vpn-watcher.sh"
+cp -f "$SCRIPT_DIR/vpn-watcher.sh" "${DATA}/vpn-watcher/vpn-watcher.sh"
 chmod +x "${DATA}/vpn-watcher/vpn-watcher.sh"
-chmod +x vpn-watcher.sh
 
 echo "✅ Setup complete!"
 echo ""

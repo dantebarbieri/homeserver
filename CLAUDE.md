@@ -78,8 +78,10 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 ### Custom Dockerfiles
 
-- `Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
-- `Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
+- `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
+- `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
+- `dockerfiles/bmc-monitor/` — BMC IP monitor (ipmitool + NPM API updater)
+- `dockerfiles/port-sync/` — qBittorrent VPN port sync (gluetun forwarded port → qBit API)
 
 ### Adding a New Service
 
@@ -98,7 +100,7 @@ docker compose -f compose.<category>.yml up -d    # Start one category
 docker compose up -d <service>                    # Start one service
 docker compose pull && docker compose up -d       # Update all
 docker compose config                             # Validate merged config
-./deploy-update.sh <service-name>                  # Zero-downtime service deploy
+./scripts/deploy-update.sh <service-name>            # Zero-downtime service deploy
 ```
 
 ## NixOS (`nixos/`)

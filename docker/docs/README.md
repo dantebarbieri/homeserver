@@ -22,7 +22,10 @@ Docker Compose configuration for my home server, organized into logical service 
 ├── compose.websites.yml    # Web hosting (custom sites)
 ├── hwaccel.transcoding.yml # Hardware acceleration for transcoding
 ├── hwaccel.ml.yml          # Hardware acceleration for ML
-└── .env                    # Environment variables (not in git)
+├── .env                    # Environment variables (not in git)
+├── scripts/                # Operational shell scripts
+├── dockerfiles/            # Custom Dockerfiles and container scripts
+└── docs/                   # Service-specific documentation
 ```
 
 ## Usage

@@ -47,8 +47,7 @@ services:
       service: common-service
     image: bmc-ip-monitor
     build:
-      context: .
-      dockerfile: Dockerfile.bmc-monitor
+      context: dockerfiles/bmc-monitor
     container_name: bmc-ip-monitor
     devices:
       - /dev/ipmi0:/dev/ipmi0

@@ -31,7 +31,7 @@ services:
   # admin.danteb.com:
   #   build:
   #     context: .
-  #     dockerfile: Dockerfile.sveltekit
+  #     dockerfile: dockerfiles/Dockerfile.sveltekit
   #     args:
   #       APP_NAME: admin.danteb.com
   #   environment:
@@ -47,7 +47,7 @@ services:
   # danteb.com:
   #   build:
   #     context: .
-  #     dockerfile: Dockerfile.sveltekit
+  #     dockerfile: dockerfiles/Dockerfile.sveltekit
   #     args:
   #       APP_NAME: danteb.com
   #   environment:

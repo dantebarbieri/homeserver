@@ -41,7 +41,7 @@ services:
     container_name: jellyfin
     build:
       context: .
-      dockerfile: Dockerfile.jellyfin
+      dockerfile: dockerfiles/Dockerfile.jellyfin
       pull: true
     image: jellyfin-finity:latest
     restart: unless-stopped

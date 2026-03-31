@@ -68,8 +68,7 @@ services:
       service: common-service
     image: qbit-port-sync
     build:
-      context: .
-      dockerfile: Dockerfile.port-sync
+      context: dockerfiles/port-sync
     network_mode: "container:vpn-netns"
     environment:
       QUSER: ${QUSER}
