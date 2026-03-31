@@ -7,19 +7,20 @@ Docker Compose configuration for my home server, organized into logical service 
 ```
 ├── docker-compose.yml      # Main index file (includes all categories)
 ├── compose.common.yml      # Shared templates (extends only, not included)
-├── compose.core.yml        # Core infrastructure (nginx proxy, ddclient, endlessh)
+├── compose.core.yml        # Core infrastructure (NPM, ddclient, endlessh, bmc-ip-monitor)
 ├── compose.auth.yml        # Authelia authentication stack
 ├── compose.dashboards.yml  # Homepage, Dashdot
-├── compose.downloads.yml   # VPN/torrent stack, SABnzbd, Flaresolverr
+├── compose.downloads.yml   # VPN/torrent stack, SABnzbd, Flaresolverr, qbit-manage
 ├── compose.gaming.yml      # Game servers (Minecraft, Hytale, Satisfactory)
 ├── compose.immich.yml      # Immich photo management stack
-├── compose.matrix.yml      # Matrix communication stack (Synapse, Element, Coturn)
+├── compose.interview.yml   # YipitData interview portal (temporary)
+├── compose.matrix.yml      # Matrix communication stack (Synapse, Element, Coturn, LiveKit)
+├── compose.media.yml       # Media consumption (Plex, Jellyfin, ARM, Komga, Suwayomi)
 ├── compose.nextcloud.yml   # Nextcloud cloud storage stack
-├── compose.media.yml       # Media consumption (Plex, Jellyfin, Komga, Suwayomi)
 ├── compose.searxng.yml     # SearXNG search engine stack
-├── compose.starr.yml       # *arr apps + Seerr + Whisper ASR
+├── compose.starr.yml       # *arr apps + Seerr + Whisper ASR + Tdarr
 ├── compose.utilities.yml   # Utilities (Vaultwarden, Syncthing, ntfy)
-├── compose.websites.yml    # Web hosting (custom sites)
+├── compose.websites.yml    # Web hosting (travel-planner)
 ├── hwaccel.transcoding.yml # Hardware acceleration for transcoding
 ├── hwaccel.ml.yml          # Hardware acceleration for ML
 ├── .env                    # Environment variables (not in git)
@@ -48,19 +49,20 @@ docker compose -f compose.gaming.yml up -d
 
 | Category | Services |
 |----------|----------|
-| **Core** | nginxproxymanager, ddclient, endlessh |
+| **Core** | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | **Auth** | authelia, authelia_postgres, authelia_redis |
 | **Dashboards** | homepage, dashdot |
-| **Downloads** | vpn-netns, gluetun, qbittorrent, qbit-port-sync, sabnzbd, flaresolverr |
-| **Gaming** | minecraft-server, rlcraft-minecraft-server, hytale-server, satisfactory-server |
+| **Downloads** | vpn-netns, gluetun, qbittorrent, qbit-port-sync, qbit-manage, sabnzbd, flaresolverr |
+| **Gaming** | hytale-server, minecraft-server, rlcraft-minecraft-server, satisfactory-server |
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
+| **Interview** | yipitdata-db, yipitdata-backend, yipitdata-frontend |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
+| **Media** | plex, jellyfin, arm-server, komga, komf, suwayomi, suwayomi_postgres |
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |
-| **Media** | plex, jellyfin, komga, komf, suwayomi, suwayomi_postgres |
 | **SearXNG** | searxng, searxng_redis |
 | **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
 | **Utilities** | vaultwarden, syncthing, ntfy |
-| **Websites** | (custom web apps) |
+| **Websites** | travel-planner |
 
 ## Shared Templates
 
@@ -83,17 +85,17 @@ services:
 
 ## Matrix Setup
 
-See [MATRIX.md](MATRIX.md) for the full Matrix stack setup guide (Synapse, Element, Coturn, PostgreSQL).
+See [MATRIX.md](docs/MATRIX.md) for the full Matrix stack setup guide (Synapse, Element, Coturn, PostgreSQL).
 
-See [MATRIX-RTC.md](MATRIX-RTC.md) for adding voice/video call support via LiveKit (MatrixRTC).
+See [MATRIX-RTC.md](docs/MATRIX-RTC.md) for adding voice/video call support via LiveKit (MatrixRTC).
 
 ## Nextcloud Setup
 
-See [NEXTCLOUD.md](NEXTCLOUD.md) for the full Nextcloud cloud storage setup guide (PostgreSQL, Redis, cron, reverse proxy).
+See [NEXTCLOUD.md](docs/NEXTCLOUD.md) for the full Nextcloud cloud storage setup guide (PostgreSQL, Redis, cron, reverse proxy).
 
 ## Tdarr Setup
 
-See [TDARR.md](TDARR.md) for the full Tdarr configuration guide (HEVC compression, library setup, transcode flows, Sonarr/Radarr integration).
+See [TDARR.md](docs/TDARR.md) for the full Tdarr configuration guide (HEVC compression, library setup, transcode flows, Sonarr/Radarr integration).
 
 ## Service Catalogue
 
