@@ -255,8 +255,8 @@ in
       nss() { nix search nixpkgs "$@"; }
 
       # ── Find which package provides a binary ──
-      # Usage: nwp arp   →   nix-locate --top-level -w "/bin/arp"
-      nwp() { nix-locate --top-level -w "/bin/$1"; }
+      # Usage: nwp arp   →   nix-locate -w "/bin/arp"
+      nwp() { nix-locate -w "/bin/$1"; }
 
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
       [[ $SHLVL -eq 1 ]] && fastfetch
