@@ -626,16 +626,9 @@ fi
 
 Services listed in order of interest, highest first.
 
-### IT-Tools ⭐
+### ~~IT-Tools~~ ✅ Done
 
-Collection of 30+ developer/sysadmin utilities in a single web UI (base64 encode/decode, JWT debugger, cron expression parser, hash generators, UUID generator, regex tester, etc.). Extremely lightweight — no database, no state, no maintenance.
-
-- Image: `corentinth/it-tools:latest`
-- Single container, no database, no state
-- Add to `compose.utilities.yml`, join `proxy` network
-- Proxy at `https://tools.danteb.com` (no auth needed — stateless client-side JS, nothing to protect)
-
-**Verification**: Access the URL, test a few tools (base64 encode a string, parse a cron expression). No API keys needed.
+Deployed at `https://tools.danteb.com`. In `compose.utilities.yml` + homepage dashboard.
 
 ### Forgejo (self-hosted git) ⭐
 
