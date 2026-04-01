@@ -111,11 +111,26 @@ docker compose config                             # Validate merged config
 ./scripts/deploy-update.sh <service-name>            # Zero-downtime service deploy
 ```
 
+### Shell Convenience Functions
+
+Defined in `nixos/docker-functions.zsh` and available system-wide on the server via ZSH:
+
+| Function | Usage | Purpose |
+|----------|-------|---------|
+| `dci <svc>` | `dci bazarr` | Show image info (repo, tag, digest, created) |
+| `dce <svc> <cmd...>` | `dce postgres psql -U myuser mydb` | Exec command in running container |
+| `dcs <svc>` | `dcs bazarr` | Interactive shell (tries bash, then sh) |
+| `dcl [-s <time>] <svcs...>` | `dcl -s 30m bazarr whisperasr` | Follow logs with optional --since |
+| `dcr [svcs...]` | `dcr bazarr whisperasr` | Restart/recreate services |
+| `dcu` | `dcu` | Quick update: git pull, pull/build/up, light prune |
+| `dcupdate` | `dcupdate` | Full update: down, git pull+push, pull/build/up, heavy prune |
+
 ## NixOS (`nixos/`)
 
 `configuration.nix` is the single-file declarative system config for the homeserver (hostname: `homeserver`, IP: `192.168.50.100/24`).
 
 Key system services managed by NixOS:
+- **ZSH + zimfw** — default shell with plugin manager, Docker convenience functions in `nixos/docker-functions.zsh`, zoxide, and nix helper functions — all sourced via `interactiveShellInit`
 - **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore enabled
 - **Firewall** — explicitly opened ports for HTTP/HTTPS, Plex, Coturn, LiveKit, game servers
 - **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`

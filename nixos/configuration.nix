@@ -283,6 +283,12 @@ in
         fi
       }
 
+      # ── Docker Compose convenience functions ──
+      source ${./docker-functions.zsh}
+
+      # ── zoxide: smart cd ──
+      eval "$(${pkgs.zoxide}/bin/zoxide init zsh)"
+
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
       [[ $SHLVL -eq 1 ]] && fastfetch
     '';

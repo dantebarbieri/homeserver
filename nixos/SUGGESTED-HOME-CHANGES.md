@@ -141,9 +141,34 @@ nix shell nixpkgs#hello
 
 ---
 
+## 6. Remove Docker convenience functions from `~/.zshrc`
+
+**Why:** The Docker functions (`dci`, `dce`, `dcs`, `dcl`, `dcr`, `dcu`,
+`dcupdate`) are now tracked in `nixos/docker-functions.zsh` and sourced
+by the system-wide `interactiveShellInit`.
+
+**Action:** Remove all the Docker function definitions (everything in the
+`# Functions & Aliases` section).
+
+---
+
+## 7. Remove `zoxide init` from `~/.zshrc`
+
+**Why:** `zoxide` is a system package and its shell init is now handled
+by `interactiveShellInit` in `configuration.nix`.
+
+**Action:** Remove this line from `~/.zshrc`:
+
+```zsh
+# REMOVE — now system-wide:
+eval "$(zoxide init zsh)"
+```
+
+---
+
 ## Summary of `~/.zshrc` After Cleanup
 
-After applying changes 2–4, your `~/.zshrc` should look approximately like:
+After applying changes 2–7, your `~/.zshrc` should look approximately like:
 
 ```zsh
 # Zsh configuration (history, input, etc.)
@@ -174,10 +199,6 @@ for key ('k') bindkey -M vicmd ${key} history-substring-search-up
 for key ('j') bindkey -M vicmd ${key} history-substring-search-down
 unset key
 
-# Functions & Aliases
-dcu() ( ... )
-dcupdate() ( ... )
-
-# Tools
-eval "$(zoxide init zsh)"
+# Load default SSH key into agent on first login
+ssh-add -l &>/dev/null || ssh-add 2>/dev/null
 ```
