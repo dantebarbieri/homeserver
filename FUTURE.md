@@ -254,76 +254,108 @@ All settings are real Linux kernel sysctls and the values follow CIS benchmark /
 
 Homepage's `siteMonitor` only shows current state — no history, no trend detection, no alerting on repeated flaps. More importantly, a self-hosted status page goes down when the server goes down — exactly when friends need to check status.
 
-### The DNS problem (and why it's not a problem)
+### Completed
 
-All `*.danteb.com` subdomains CNAME to `danteb.com`, which uses DDNS for A/AAAA records. If the server is down, everything is unreachable — including any self-hosted status page.
+- **Uptime Kuma deployed** — running at `https://uptime.danteb.com` in `compose.dashboards.yml`, Homepage widget configured with `HOMEPAGE_VAR_KUMA_SLUG`, status page created with slug `homeserver`
+- **Upptime repo created** — `dantebarbieri/homeserver-status` (from Upptime template), `.upptimerc.yml` configured with 11 services, local clone at `~/Programming/HomeServer-Status`
 
-**Solution:** You do NOT need to change all ~30 subdomains. Only `status.danteb.com` needs its own DNS record pointing elsewhere. In Cloudflare DNS, a specific record overrides a wildcard/CNAME:
+### Remaining: Configure Uptime Kuma Monitors
 
+The Uptime Kuma container is running and the status page exists, but no monitors have been added yet. This is the remaining work.
+
+#### 1. Create monitors
+
+In Uptime Kuma (`https://uptime.danteb.com`), click **"Add New Monitor"** for each service. Use type **HTTP(s)** for all web services.
+
+**Recommended monitors** — all public-facing services with a web UI or API:
+
+| Monitor Name | URL | Notes |
+|-------------|-----|-------|
+| Plex | `https://plex.danteb.com` | |
+| Jellyfin | `https://jellyfin.danteb.com` | |
+| Seerr | `https://seerr.danteb.com` | |
+| Immich | `https://immich.danteb.com` | |
+| Komga | `https://komga.danteb.com` | |
+| Radarr | `https://radarr.danteb.com` | |
+| Sonarr | `https://sonarr.danteb.com` | |
+| Bazarr | `https://bazarr.danteb.com` | |
+| Prowlarr | `https://prowlarr.danteb.com` | |
+| Tdarr | `https://tdarr.danteb.com` | |
+| qBittorrent | `https://qbittorrent.danteb.com` | |
+| SABnzbd | `https://sabnzbd.danteb.com` | |
+| Suwayomi | `https://suwayomi.danteb.com` | |
+| SearXNG | `https://searxng.danteb.com` | |
+| Nginx Proxy Manager | `https://nginx-proxy-manager.danteb.com` | Critical — if this is down, everything is down |
+| Element | `https://element.danteb.com` | |
+| Synapse | `https://matrix.danteb.com` | |
+| Authelia | `https://authelia.danteb.com` | |
+| Nextcloud | `https://cloud.danteb.com` | |
+| AdGuard Home | `https://adguardhome.danteb.com` | |
+| Vaultwarden | `https://vaultwarden.danteb.com` | |
+| Syncthing | `https://syncthing.danteb.com` | |
+| ntfy | `https://ntfy.danteb.com` | Monitor this even though it's the notification target — if ntfy is down, you want to see it in the dashboard |
+| Dashdot | `https://dashdot.danteb.com` | |
+| IT-Tools | `https://tools.danteb.com` | |
+| Homepage | `https://homepage.danteb.com` | |
+| Travel Planner | `https://travel.danteb.com` | |
+
+**Skip these** — game servers use raw TCP/UDP ports, not HTTP, and are only online when actively used:
+- Minecraft servers (mc.danteb.com, rlcraft.danteb.com)
+- Hytale server
+- Satisfactory server
+
+**Monitor settings** — good defaults for all HTTP monitors:
+- Heartbeat Interval: `60` seconds (default)
+- Retries: `3` (avoids false alerts from transient network hiccups)
+- Accepted Status Codes: `200-299` (some services may return 401/403 — adjust per-service if needed)
+
+#### 2. Configure ntfy notifications
+
+Go to **Settings → Notifications → Setup Notification**:
+- Notification Type: **ntfy**
+- Topic URL: `https://ntfy.danteb.com/homeserver-alerts`
+- Priority: `high` (for down alerts)
+- Check **"Apply on all existing monitors"** to enable globally
+- Click **Test** to confirm a notification arrives on your phone
+
+#### 3. Add monitors to the status page
+
+Go to `/status/homeserver?edit`:
+1. Click **"+ Add Group"** — create groups to organize (e.g., "Media", "Infrastructure", "Utilities") or use a single "Services" group
+2. Within each group, click **"Add a monitor"** and select from your created monitors
+3. Click **Save**
+
+#### 4. Set the Homepage widget slug
+
+```zsh
+# Edit .env and set:
+# HOMEPAGE_VAR_KUMA_SLUG=homeserver
+# Then:
+docker compose up -d homepage
 ```
-status.danteb.com  CNAME  <your-github-username>.github.io
-```
 
-All other subdomains continue working exactly as they do today.
+#### 5. Verify
 
-**Confirmed:** Per [Cloudflare's wildcard DNS documentation](https://developers.cloudflare.com/dns/manage-dns-records/reference/wildcard-dns-records/), a specific DNS record always takes priority over a wildcard. This is standard DNS behavior and Cloudflare explicitly supports it.
+- All monitors should show green "UP" status within 60 seconds of creation
+- Stop a container (`docker compose stop jellyfin`), confirm Uptime Kuma detects downtime within ~60s and ntfy fires an alert
+- Restart the container, confirm recovery notification
+- Check Homepage — the Uptime Kuma widget should show monitor counts (up/down)
 
-### Two-layer approach (recommended)
+### Remaining: Upptime (External Status Page)
 
-1. **Upptime + GitHub Pages** (external, survives server outages) — A GitHub repo with a GitHub Actions workflow that pings your services every 5 minutes from GitHub's infrastructure. Results are committed to the repo and published as a static status page on GitHub Pages. Completely free, zero maintenance, independent of your server. This is what `status.danteb.com` points to.
+The repo `dantebarbieri/homeserver-status` is created and `.upptimerc.yml` is configured. Remaining manual steps:
 
-2. **Uptime Kuma** (internal, detailed monitoring) — Self-hosted container on your server for rich dashboards, detailed response time graphs, and ntfy integration. This is for *you*, not for friends — it provides granular monitoring when the server is running.
+1. **Add `GH_PAT` secret** — Create a fine-grained PAT with read-write permissions for Actions, Contents, Issues, Workflows. Add as repo secret `GH_PAT` in Settings → Secrets.
+2. **Enable GitHub Pages** — repo Settings → Pages → Source: "Deploy from a branch" → Branch: `gh-pages` / `/(root)`
+3. **Cloudflare DNS** — Add CNAME record: `status.danteb.com` → `dantebarbieri.github.io`. This specific record overrides the wildcard — all other `*.danteb.com` subdomains continue working normally. Confirmed per [Cloudflare wildcard DNS docs](https://developers.cloudflare.com/dns/manage-dns-records/reference/wildcard-dns-records/).
+4. **GitHub Pages custom domain** — repo Settings → Pages → Custom domain: `status.danteb.com`. GitHub auto-provisions TLS.
+5. **Enable workflows** — visit the Actions tab and enable them
 
-### Upptime setup
+#### Upptime verification
 
-1. Use the [Upptime template](https://github.com/upptime/upptime) to create a new GitHub repo (e.g., `danteb-status`)
-2. Configure `.upptimerc.yml` with your services:
-   ```yaml
-   sites:
-     - name: Plex
-       url: https://plex.danteb.com
-     - name: Jellyfin
-       url: https://jellyfin.danteb.com
-     - name: Nextcloud
-       url: https://cloud.danteb.com
-     # ... etc
-   ```
-3. Enable GitHub Pages on the repo (Settings → Pages → Source: GitHub Actions)
-4. In Cloudflare DNS, add: `status.danteb.com  CNAME  <username>.github.io`
-5. In the GitHub repo settings, add `status.danteb.com` as a custom domain
-
-Cost: **$0**. GitHub Actions + Pages are free for public repos.
-
-### Uptime Kuma setup
-
-Single container (louislam/uptime-kuma). Configure monitors for all public-facing services. Connect to ntfy for alerting.
-
-### Files to modify
-
-- **Upptime**: New GitHub repo (not in this monorepo). Cloudflare DNS record for `status.danteb.com`.
-- `docker/compose.dashboards.yml` — Add uptime-kuma service (extends `common-service`, joins `proxy` network, volume at `${DATA}/uptime-kuma:/app/data`)
-- `docker/sample.env` — Add `HOMEPAGE_VAR_KUMA_USER`, `HOMEPAGE_VAR_KUMA_PASS` or `HOMEPAGE_VAR_KUMA_SLUG` (for widget)
-- `homepage/services.yaml` — Add Uptime Kuma to Utilities or a new Infrastructure section
-- `nixos/configuration.nix` — No changes (internal port only, proxied via NPM)
-- NPM — Add proxy host for `https://uptime.danteb.com` (internal Uptime Kuma dashboard)
-
-### Verification
-
-**Upptime (external):**
-- After repo setup, check GitHub Actions tab — workflow should run every 5 minutes
-- Visit `https://status.danteb.com` — should show the static status page with all monitors
-- Stop a service on the server, wait for the next Upptime check (~5 min), confirm the status page shows it as down
-- Restart the service, confirm recovery is reflected on next check
-- Test full server outage scenario: `status.danteb.com` should still load (it's on GitHub Pages) and show services as down
-
-**Uptime Kuma (internal):**
-- `docker compose -f compose.dashboards.yml up -d uptime-kuma` — container starts
-- Access at `https://uptime.danteb.com`, create admin account
-- Add a monitor for `https://plex.danteb.com` — should show "UP" within 60 seconds
-- Configure ntfy notification: add a notification provider (type: ntfy, URL: `https://ntfy.danteb.com/homeserver-alerts`)
-- Temporarily stop a container (`docker compose stop jellyfin`), wait for Uptime Kuma to detect downtime (default 60s interval), confirm ntfy alert fires on phone
-- Restart the container, confirm Uptime Kuma shows recovery and ntfy sends an "up" notification
-- Homepage widget: add `type: uptimekuma` with `url` and `slug` — verify it renders monitor status
+- Check GitHub Actions tab — "Uptime CI" workflow should run every 5 minutes
+- Visit `https://status.danteb.com` — should show the status page with all monitors
+- Test from phone on cellular (not home WiFi) — page should load even if the server is down (it's hosted on GitHub Pages)
 
 ---
 
