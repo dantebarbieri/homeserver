@@ -48,15 +48,25 @@ nwp() {
       continue
     fi
     if [[ -t 1 ]]; then
+      # Interactive: show all matches, highlight the best one
+      local best
+      best=$(echo "$results" | awk -v bin="$bin" '$1 == bin {print $1; exit}')
+      [[ -z "$best" ]] && best=$(echo "$results" | head -1 | awk '{print $1}')
       echo "$results" | while read -r pkg bytes; do
+        local prefix=""
+        [[ "$pkg" == "$best" ]] && prefix="* "
         if [[ -n "$bytes" && "$bytes" -gt 0 ]] 2>/dev/null; then
-          printf "%s  (%s)\n" "$pkg" "$(numfmt --to=iec "$bytes")"
+          printf "%s%s  (%s)\n" "$prefix" "$pkg" "$(numfmt --to=iec "$bytes")"
         else
-          printf "%s\n" "$pkg"
+          printf "%s%s\n" "$prefix" "$pkg"
         fi
       done
     else
-      all_results+=("$(echo "$results" | head -1 | awk '{print $1}')")
+      # Pipe mode: prefer exact match (package name == binary name), else first result
+      local best
+      best=$(echo "$results" | awk -v bin="$bin" '$1 == bin {print $1; exit}')
+      [[ -z "$best" ]] && best=$(echo "$results" | head -1 | awk '{print $1}')
+      all_results+=("$best")
     fi
   done
 
