@@ -246,7 +246,7 @@
         icon: adguard-home.svg
         href: https://adguardhome.danteb.com
         description: Network-wide DNS Ad Blocker
-        siteMonitor: https://adguard.danteb.com
+        siteMonitor: https://adguardhome.danteb.com
         server: my-docker
         container: adguardhome
         widget:

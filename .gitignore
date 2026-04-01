@@ -7,5 +7,11 @@ production-configs/*
 docker/.env
 recyclarr-configs/secrets.yml
 
+# Homepage auto-generated defaults (created on first run)
+homepage/custom.css
+homepage/custom.js
+homepage/kubernetes.yaml
+homepage/proxmox.yaml
+
 # Claude Code — track shared config (hooks, skills, settings.json), ignore local
 .claude/settings.local.json
