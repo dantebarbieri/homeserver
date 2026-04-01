@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, ~66TB RAID6 XFS storage, and ntfy-based alerting. All services are reverse-proxied via Nginx Proxy Manager with Authelia SSO. Dual-stack IPv4/IPv6 with Spectrum ISP, ASUS GT-BE98 Pro router, and Cloudflare DNS (DNS-only, no proxy).
+A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, ~66TB RAID6 XFS storage, and ntfy-based alerting. All services are reverse-proxied via Nginx Proxy Manager, with Authelia SSO for services that lack built-in auth. Dual-stack IPv4/IPv6 with Spectrum ISP, ASUS GT-BE98 Pro router, and Cloudflare DNS (DNS-only, no proxy).
 
 ### Repository Layout
 
@@ -97,8 +97,9 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 2. Extend from `compose.common.yml` — choose `common-service`, `hotio-service`, `linuxserver-service`, or `gpu-service`.
 3. Mount config to `${DATA}/<service>/config:/config`, bulk data under `${RAID}/shared/...`.
 4. Web UI services → join `proxy` + a dedicated internal network. Pure backends → internal only. No-comms services → no networks.
-5. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
-6. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env` **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly passed through — `.env` alone is not enough), and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
+5. **Authelia SSO** — Only add Authelia protection if the service has **no built-in auth** (e.g., Dashdot, Prometheus) or has **notoriously weak/untrustworthy auth** (e.g., BMC/IPMI web portals). Services with solid built-in authentication (e.g., Grafana, Vaultwarden, Nextcloud) should handle their own security — do not double up with Authelia.
+6. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
+7. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env` **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly passed through — `.env` alone is not enough), and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
 
 ### Commands
 

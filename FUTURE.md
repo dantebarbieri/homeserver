@@ -128,6 +128,20 @@ Currently only Dashdot (system stats) and ntfy (alerts) exist. No historical met
 
 Create `docker/compose.monitoring.yml` with all five services on a dedicated `monitoring` internal network. Grafana also joins `proxy` for web access. Prometheus scrapes cAdvisor, node-exporter, and any services with built-in Prometheus endpoints (Authelia, Synapse, Nextcloud, AdGuard all support `/metrics`).
 
+### Authentication & exposure
+
+| Service | Publicly exposed? | Auth approach |
+|---------|-------------------|---------------|
+| **Grafana** | Yes (`grafana.danteb.com`) | Built-in auth (local accounts, RBAC) — solid, no Authelia needed |
+| **Prometheus** | No — internal only | No built-in web auth. Do not expose publicly. Grafana queries it over the `monitoring` network. |
+| **Loki** | No — internal only | No built-in web auth. Grafana queries it over the `monitoring` network. |
+| **cAdvisor** | No — internal only | No built-in web auth. Prometheus scrapes it internally. |
+| **node-exporter** | No — internal only | No built-in web auth. Prometheus scrapes it internally. |
+
+Only Grafana joins the `proxy` network. Prometheus, Loki, cAdvisor, and node-exporter stay on the internal `monitoring` network only — they have no authentication and must never be exposed publicly.
+
+**Security note:** Loki aggregates all Docker container logs, which may contain sensitive data (environment variables in error messages, request paths, user activity, stack traces). Ensure Grafana is configured with a strong admin password and anonymous access disabled. This is handled by Grafana's own auth — not a reason to add Authelia on top.
+
 ### Files to modify
 
 - New `docker/compose.monitoring.yml` — Prometheus, Grafana, Loki, Promtail, node-exporter, cAdvisor
@@ -153,9 +167,19 @@ Create `docker/compose.monitoring.yml` with all five services on a dedicated `mo
 
 Currently no way to access the homeserver remotely except SSH on port 28. A VPN server allows secure access to all services (including internal-only ones) from phone/laptop on untrusted networks.
 
-### Option A: Tailscale (recommended)
+### Option A: WireGuard in Docker (recommended)
 
-NixOS has a first-class module. Zero-config, NAT traversal, MagicDNS. No port forwarding needed.
+Run as a Docker container using `wg-easy` (web management UI for peer/client management). Keeps all service logic in Docker for portability — if you ever migrate off NixOS, the VPN moves with the compose stack.
+
+- Image: `ghcr.io/wg-easy/wg-easy:latest`
+- Add to `docker/compose.core.yml` or `docker/compose.utilities.yml`
+- Join `proxy` network for the web UI (has built-in password auth — no Authelia needed for the management UI, but consider Authelia since it's a VPN management portal)
+- Requires UDP port 51820 opened on NixOS firewall + router (IPv4 port forward + IPv6 firewall rule)
+- Environment variables: `WG_HOST` (public hostname/IP), `PASSWORD_HASH` (for web UI), `WG_DEFAULT_DNS` (optional, point to local DNS)
+
+### Option B: Tailscale (alternative — NixOS-native)
+
+NixOS has a first-class module. Zero-config, NAT traversal, MagicDNS. No port forwarding needed. However, this ties the VPN to NixOS rather than Docker, making it less portable.
 
 ```nix
 services.tailscale.enable = true;
@@ -163,20 +187,16 @@ services.tailscale.enable = true;
 
 After `nixos-rebuild switch`, run `sudo tailscale up` to authenticate. Install Tailscale on phone/laptop. All devices see each other on a private `100.x.x.x` mesh.
 
-### Option B: WireGuard (lighter, no external dependency)
-
-Run as a Docker container (e.g., `wg-easy` for a web UI) or natively via NixOS `networking.wireguard`. Requires opening a UDP port (e.g., 51820) on the NixOS firewall + router.
-
 ### Files to modify
 
+- **WireGuard (recommended)**: New entry in `docker/compose.core.yml` or `docker/compose.utilities.yml`, `docker/sample.env` for `WG_HOST` and password hash, `networking.firewall.allowedUDPPorts` in `configuration.nix` (add 51820), router IPv4 port forwarding for UDP 51820, and router IPv6 firewall rule for UDP 51820
 - **Tailscale**: `nixos/configuration.nix` — Add `services.tailscale.enable = true;` and `networking.firewall.trustedInterfaces = [ "tailscale0" ];`
-- **WireGuard container**: New entry in `docker/compose.core.yml` or `docker/compose.utilities.yml`, plus `networking.firewall.allowedUDPPorts` in `configuration.nix` and router port forwarding (IPv4) + IPv6 firewall rule
 
 ### Verification
 
+- **WireGuard**: Access `https://vpn.danteb.com` (or chosen subdomain), log in to wg-easy UI, create a client config. Import on phone. Disconnect from home WiFi, use cellular. Access `https://jellyfin.danteb.com` — should work via the tunnel. Run `curl ifconfig.me` on the client to confirm traffic routes through the VPN.
 - **Tailscale**: After `sudo tailscale up`, run `tailscale status` to confirm the server appears. From another Tailscale device, `ping 100.x.x.x` (the server's Tailscale IP). Access `http://100.x.x.x:8096` (Jellyfin) to confirm internal services are reachable.
-- **WireGuard**: Generate client config, import on phone. Disconnect from home WiFi, use cellular. Access `https://jellyfin.danteb.com` — should work via the tunnel. Run `curl ifconfig.me` on the client to confirm traffic routes through the VPN.
-- For either: test from a non-home network (cellular, coffee shop WiFi) to confirm NAT traversal works
+- For either: test from a non-home network (cellular, coffee shop WiFi) to confirm remote access works
 
 ---
 
@@ -196,6 +216,19 @@ boot.kernel.sysctl = {
   "kernel.unprivileged_bpf_disabled" = 1; # Disable unprivileged BPF
 };
 ```
+
+### What each setting does
+
+All settings are real Linux kernel sysctls and the values follow CIS benchmark / KSPP hardening recommendations. None will break Docker containers — containers don't use SysRq, don't read `/proc/kallsyms`, and typically don't need `ptrace` or unprivileged BPF.
+
+| Setting | Value | Explanation |
+|---------|-------|-------------|
+| `kernel.sysrq` | `0` | **Disables the Magic SysRq key.** SysRq lets you send commands directly to the kernel via a keyboard combo (force reboot, sync disks, kill all processes, etc.). On a headless server with no physical keyboard, there's no legitimate use — but an attacker with console access (e.g., via IPMI/BMC) could abuse it to reboot or crash the system. |
+| `kernel.kptr_restrict` | `2` | **Hides kernel pointer addresses from ALL users, including root.** `/proc/kallsyms` and similar interfaces normally expose the memory addresses of kernel functions. Attackers need these to bypass KASLR (Kernel Address Space Layout Randomization) — knowing where kernel code lives in memory is the first step in most kernel exploits. Value `2` = hidden from everyone; `1` = hidden from non-root only. |
+| `kernel.dmesg_restrict` | `1` | **Restricts `dmesg` to processes with `CAP_SYSLOG`.** The kernel ring buffer (`dmesg`) logs hardware info, driver details, memory addresses, and boot messages — useful for reconnaissance. `CAP_SYSLOG` is a Linux capability specifically for reading syslog/dmesg. Normal users and most processes don't have it; only root or processes explicitly granted the capability can read the kernel log. |
+| `kernel.yama.ptrace_scope` | `2` | **Restricts `ptrace` to processes with `CAP_SYS_PTRACE`.** `ptrace` (process trace) lets one process inspect and modify another process's memory — it's how debuggers like `gdb` work, but also how attackers dump secrets (API keys, passwords, tokens) from running processes. Value `0` = any process can trace any other (dangerous); `1` = only a parent can trace its child; `2` = only processes with `CAP_SYS_PTRACE` (almost nothing on a server needs this). |
+| `net.core.bpf_jit_harden` | `2` | **Hardens the BPF JIT compiler.** BPF (Berkeley Packet Filter) is a kernel subsystem that runs sandboxed programs inside the kernel — used for networking (iptables, tc), tracing (perf, bpftrace), and security tools (seccomp). The JIT (Just-In-Time) compiler converts BPF bytecode to native machine code for performance. Without hardening, the JIT output is predictable and can be exploited for kernel code execution via JIT spraying attacks. Value `2` = hardened for all users including root (enables constant blinding and disables optimizations that could leak info). |
+| `kernel.unprivileged_bpf_disabled` | `1` | **Prevents non-root users from loading BPF programs.** While BPF is powerful and useful, it has been a frequent source of kernel privilege escalation vulnerabilities (multiple CVEs per year). Restricting BPF loading to root significantly reduces the kernel's attack surface. Docker containers and normal services don't need to load BPF programs. |
 
 ### Files to modify
 
@@ -232,6 +265,8 @@ status.danteb.com  CNAME  <your-github-username>.github.io
 ```
 
 All other subdomains continue working exactly as they do today.
+
+**Confirmed:** Per [Cloudflare's wildcard DNS documentation](https://developers.cloudflare.com/dns/manage-dns-records/reference/wildcard-dns-records/), a specific DNS record always takes priority over a wildcard. This is standard DNS behavior and Cloudflare explicitly supports it.
 
 ### Two-layer approach (recommended)
 
@@ -298,9 +333,11 @@ Most containers run with default capabilities, no resource limits, and read-writ
 
 ### What to implement
 
-#### 6a. Resource limits
+#### 6a. Resource limits (low urgency)
 
-Add `deploy.resources.limits` to memory-hungry services. Start with the biggest consumers:
+With 100+ GB of RAM, resource conservation is not a concern. These limits are **safety nets against runaway processes**, not resource management. The consequence of NOT setting limits: a memory leak in one container (e.g., Synapse is notorious for this) could consume all available RAM and trigger the Linux OOM killer, which may kill a random important process (like Postgres) instead of the leaky one. With limits, only the misbehaving container gets killed by Docker.
+
+Given the large memory headroom, this is low urgency — the suggested limits below are generous and unlikely to constrain normal operation:
 
 | Service | Suggested memory limit | Rationale |
 |---------|----------------------|-----------|
@@ -308,7 +345,7 @@ Add `deploy.resources.limits` to memory-hungry services. Start with the biggest 
 | jellyfin | 8G | Same |
 | immich-machine-learning | 6G | CUDA ML models |
 | immich-server | 4G | Photo processing |
-| synapse | 2G | Matrix homeserver |
+| synapse | 2G | Matrix homeserver (known for memory leaks) |
 | nextcloud | 2G | PHP workers |
 | All Postgres instances | 1G each | Shared buffers |
 | All Redis instances | 512M each | In-memory cache |
@@ -317,9 +354,15 @@ Add `deploy.resources.limits` to memory-hungry services. Start with the biggest 
 
 Game servers (Minecraft 24G/12G, Satisfactory 16G) already have memory settings — add matching `deploy` limits so Docker enforces them.
 
-#### 6b. Capability dropping
+#### 6b. Capability dropping (incremental, not global)
 
-Add to `compose.common.yml` templates or per-service:
+**Do NOT add `cap_drop: [ALL]` to `common-service` globally** — this would affect 50+ services at once and breakage may not be immediately obvious (some services fail silently or only break under specific conditions).
+
+Instead, apply incrementally per-service, starting with the simplest stateless services that are easiest to validate:
+
+**Wave 1 (low risk):** Redis/Valkey instances, flaresolverr, lk-jwt-service, bmc-ip-monitor, qbit-port-sync
+**Wave 2 (medium risk):** Starr apps (Radarr, Sonarr, Bazarr, Prowlarr), Komga, Komf, Suwayomi
+**Wave 3 (test carefully):** Plex, Jellyfin, Nextcloud, Synapse, Immich
 
 ```yaml
 cap_drop:
@@ -328,10 +371,13 @@ cap_add:
   - NET_BIND_SERVICE  # only if binding ports < 1024
 ```
 
-Services that need additional capabilities:
+Services known to need additional capabilities:
+- `gluetun`: `NET_ADMIN` (already configured — VPN tunnel setup)
 - `coturn`: `NET_BIND_SERVICE`, `NET_RAW` (TURN protocol)
 - `adguardhome`: `NET_BIND_SERVICE` (port 53)
-- `dashdot`: runs privileged (required for hardware access — exception)
+- `dashdot`: runs privileged (required for hardware access — permanent exception)
+
+Test each service individually after adding, monitor for 24-48 hours before moving to the next wave.
 
 #### 6c. Read-only root filesystems
 
@@ -352,13 +398,12 @@ Add `healthcheck:` to services that currently lack them:
 
 ### Files to modify
 
-- `docker/compose.common.yml` — Add `cap_drop: [ALL]` to `common-service` template (applies globally)
-- Individual `compose.*.yml` files — Add `cap_add` overrides, `deploy.resources.limits`, `read_only`, `tmpfs` per service
+- Individual `compose.*.yml` files — Add `cap_drop`/`cap_add` per service (wave by wave), `deploy.resources.limits`, `read_only`, `tmpfs`
 - Test each service after changes to ensure it still starts
 
 ### Verification
 
-- After adding `cap_drop: [ALL]` to `common-service`: `docker compose config` to validate YAML, then `docker compose up -d` — watch for any container crash loops
+- After adding `cap_drop: [ALL]` to a wave of services: `docker compose config` to validate YAML, then `docker compose up -d` — watch for any container crash loops
 - Check resource limits are applied: `docker inspect <container> | grep -A5 Memory` — should show the configured limit
 - Check capabilities: `docker inspect <container> --format '{{.HostConfig.CapDrop}}'` — should show `[ALL]`
 - For read-only: `docker exec <container> touch /test-file` — should fail with "Read-only file system"
@@ -369,7 +414,9 @@ Add `healthcheck:` to services that currently lack them:
 
 ## Priority 7: Paperless-ngx
 
-Document scanning, OCR, full-text search, and automatic tagging. The NVIDIA RTX 2070 SUPER can accelerate OCR processing. Good complement to Nextcloud for document management.
+**Lower priority** — depends on increased Nextcloud usage first. Consider moving contacts to Nextcloud (from iCloud via vdirsyncer) and becoming a regular Nextcloud user before adding another document management layer. Paperless-ngx complements Nextcloud well once you're actively using it.
+
+Document scanning, OCR, full-text search, and automatic tagging. The NVIDIA RTX 2070 SUPER can accelerate OCR processing.
 
 ### What to implement
 
@@ -458,12 +505,12 @@ jobs:
             config list --config /config/recyclarr.yml
 ```
 
-Note: `recyclarr config list` parses and validates the YAML without connecting to Sonarr/Radarr. The `sync --preview` command would require API access and isn't suitable for CI.
+Note: This does use Docker-in-CI, but it's a quick validation-only command — `recyclarr config list` parses and validates the YAML without connecting to Sonarr/Radarr, and the Docker image is lightweight. The CI job should complete in well under 60 seconds. The `sync --preview` command would require API access and isn't suitable for CI.
 
 ### Also consider
 
-- YAML lint (`yamllint`) as a second validation step
-- Docker Compose validation: `docker compose -f docker/compose.*.yml config` in CI for all compose files
+- **`yamllint`** as a fast pre-check before the Docker step — runs natively (no Docker), catches syntax errors instantly. Add as a first step in the workflow.
+- Docker Compose validation: `docker compose -f docker/compose.*.yml config` in CI for all compose files (separate workflow)
 
 ### Files to modify
 
@@ -485,14 +532,15 @@ Lower priority but keeps the dashboard accurate.
 
 ### Missing services to add
 
-- **arm-server** — Has a web UI, currently running in `compose.media.yml` but not on the dashboard. Add to Media section.
 - **Uptime Kuma** — If added (Priority 5), Homepage has a built-in `uptimekuma` widget.
 - **Grafana** — If added (Priority 2), Homepage has a built-in `grafana` widget.
 
+**Note:** arm-server does NOT have a web UI — it's an API-only service for mapping anime IDs between AniList, AniDB, MAL, and Kitsu. The [docs site](https://arm.haglund.dev/docs) is API documentation, not a dashboard. It's consumed internally by other services (Komf, etc.) and should not be added to the homepage.
+
 ### Missing widgets for existing services
 
-- **Suwayomi** — Listed but has no widget. It has a GraphQL API but no native Homepage widget. Add a `customapi` widget if desired, or leave as-is.
-- **Gluetun VPN status** — Not on the dashboard. Gluetun exposes a REST API at `http://gluetun:8000/v1/openvpn/status` (or wireguard equivalent). Could add as a `customapi` widget showing connected server and public IP.
+- **Suwayomi** — Listed but has no widget. Homepage has a native [`suwayomi` widget](https://gethomepage.dev/widgets/services/suwayomi/) that shows chapter counts by category. Add with `type: suwayomi`, `url`, and optional `username`/`password` fields.
+- **Gluetun VPN status (optional)** — Gluetun doesn't need its own dashboard entry since qBittorrent already covers the download workflow. However, Gluetun exposes a REST API at `http://gluetun:8000/v1/openvpn/status` (or wireguard equivalent). Could add as a `customapi` widget on the existing qBittorrent entry or as a standalone entry showing the forwarded port and connected server — nice-to-have, not essential.
 
 ### Layout consideration
 
@@ -500,7 +548,7 @@ If monitoring services are added (Grafana, Uptime Kuma), create a new "Infrastru
 
 ### Files to modify
 
-- `homepage/services.yaml` — Add arm-server, new monitoring services, optional gluetun widget
+- `homepage/services.yaml` — Add Suwayomi widget, new monitoring services, optional gluetun widget
 - `homepage/settings.yaml` — Add Infrastructure section to `layout` (if creating new section)
 - `docker/compose.dashboards.yml` — Pass through any new `HOMEPAGE_VAR_*` env vars
 - `docker/sample.env` — Add templates for new API keys
@@ -576,85 +624,87 @@ fi
 
 ## Priority 12: Additional Services
 
-### IT-Tools
+Services listed in order of interest, highest first.
 
-Collection of 30+ developer/sysadmin utilities in a single web UI (base64 encode/decode, JWT debugger, cron expression parser, hash generators, UUID generator, etc.). Extremely lightweight.
+### IT-Tools ⭐
+
+Collection of 30+ developer/sysadmin utilities in a single web UI (base64 encode/decode, JWT debugger, cron expression parser, hash generators, UUID generator, regex tester, etc.). Extremely lightweight — no database, no state, no maintenance.
 
 - Image: `corentinth/it-tools:latest`
 - Single container, no database, no state
 - Add to `compose.utilities.yml`, join `proxy` network
-- Proxy at `https://tools.danteb.com`
+- Proxy at `https://tools.danteb.com` with Authelia SSO (no built-in auth)
 
 **Verification**: Access the URL, test a few tools (base64 encode a string, parse a cron expression). No API keys needed.
 
-### Changedetection.io
+### Forgejo (self-hosted git) ⭐
 
-Monitors web pages for changes and sends notifications. Useful for tracking software releases, ISP service notices, price changes.
+Self-hosted git server. Mirror GitHub repos for redundancy, host private repos without GitHub dependency. Forgejo is the community fork of Gitea, more actively developed.
 
-- Image: `ghcr.io/dgtlmoon/changedetection.io:latest`
-- Needs a playwright/chrome container for JS-rendered pages
-- Add to `compose.utilities.yml`, join `proxy` network
-- Proxy at `https://changedetection.danteb.com`
-- Connect to ntfy for notifications
-
-**Verification**: Add a monitor for a page that changes frequently (e.g., a GitHub releases page). Wait for a change, confirm ntfy notification arrives.
-
-### pgAdmin
-
-Web-based Postgres management GUI for the 5+ Postgres instances.
-
-- Image: `dpage/pgadmin4:latest`
-- Add to a suitable compose file (perhaps `compose.utilities.yml` or `compose.dashboards.yml`)
-- Join `proxy` + internal networks that contain Postgres instances (`authelia`, `matrix`, `nextcloud`, `immich`, `suwayomi`)
-- Proxy at `https://pgadmin.danteb.com` with Authelia SSO (admins-only)
-
-**Verification**: Access the URL, log in, add a server connection to one of the Postgres instances (e.g., `authelia_postgres:5432`). Browse tables, run a simple query.
-
-### Gitea / Forgejo
-
-Self-hosted git server. Mirror GitHub repos for redundancy, host private repos without GitHub dependency.
-
-- Image: `codeberg.org/forgejo/forgejo:latest` (Forgejo is the community fork, more actively developed)
+- Image: `codeberg.org/forgejo/forgejo:latest`
 - Needs its own Postgres instance
 - Add as new `compose.git.yml`
-- Proxy at `https://git.danteb.com`
-- Optional: mirror this homeserver monorepo for disaster recovery
+- Proxy at `https://git.danteb.com` (has solid built-in auth — no Authelia)
+- Key use case: mirror this homeserver monorepo for disaster recovery
 
 **Verification**: Access the URL, create admin account, create a test repo, push a commit. Set up a mirror of a GitHub repo, confirm it syncs.
 
-### Home Assistant
+### Calibre-web ⭐
 
-Only valuable if you have smart home devices (lights, sensors, cameras, locks). Powerful automation engine.
+Self-hosted ebook library with a web reader. Good for ebooks beyond manga/comics (Komga already covers those). Especially useful for migrating Kindle library from parent's Amazon account — download via Calibre desktop, import into Calibre-web, access from any device.
+
+- Image: `lscr.io/linuxserver/calibre-web:latest`
+- Needs a Calibre database (can create empty one on first run)
+- Mount ebook library from RAID (e.g., `${RAID}/shared/reading/ebooks`)
+- Add to `compose.media.yml`
+- Proxy at `https://books.danteb.com` (has built-in auth — no Authelia)
+
+**Verification**: Access the URL, upload a test EPUB. Verify the web reader renders it correctly. Test OPDS feed if you use a mobile reader app.
+
+### Code-server
+
+VS Code in the browser. Useful alongside nvim for when a GUI editor is more convenient (complex refactors, extensions, visual diff).
+
+- Image: `lscr.io/linuxserver/code-server:latest`
+- Add to `compose.utilities.yml`
+- Mount project directories as needed (e.g., `/srv/homeserver`)
+- Proxy at `https://code.danteb.com` with Authelia SSO (code-server has basic password auth, but Authelia is recommended for a code execution environment)
+
+**Verification**: Access the URL, open a terminal, verify you can edit files. Install extensions, confirm they persist across container restarts.
+
+### Home Assistant (future — low priority)
+
+Only valuable once you have smart home devices (lights, sensors, cameras, locks). Powerful automation engine. Worth adding the compose file now so it's ready when needed, but no rush.
 
 - Image: `ghcr.io/home-assistant/home-assistant:stable`
 - Needs `privileged: true` or specific device access for Zigbee/Z-Wave dongles
 - Add as new `compose.home.yml`
-- Proxy at `https://ha.danteb.com`
+- Proxy at `https://ha.danteb.com` (has solid built-in auth — no Authelia)
 
 **Verification**: Access the URL, complete onboarding. If you have any smart devices, verify they're discoverable.
 
-### Code-server
+### Changedetection.io (optional)
 
-VS Code in the browser. Useful if you SSH into the server often and want a GUI editor.
+Monitors web pages for changes and sends notifications. Use cases: tracking software release pages, ISP service notices/outage pages, price monitoring for hardware, detecting changes to terms of service.
 
-- Image: `lscr.io/linuxserver/code-server:latest`
+- Image: `ghcr.io/dgtlmoon/changedetection.io:latest`
+- Needs a playwright/chrome container for JS-rendered pages
+- Add to `compose.utilities.yml`, join `proxy` network
+- Proxy at `https://changedetection.danteb.com` (has built-in auth — no Authelia)
+- Connect to ntfy for notifications
+
+**Verification**: Add a monitor for a page that changes frequently (e.g., a GitHub releases page). Wait for a change, confirm ntfy notification arrives.
+
+### pgAdmin (optional)
+
+Web-based Postgres management GUI for the 5+ Postgres instances. Mostly useful for debugging — databases are service-managed and rarely need manual intervention.
+
+- Image: `dpage/pgadmin4:latest`
 - Add to `compose.utilities.yml`
-- Mount project directories as needed
-- Proxy at `https://code.danteb.com` with Authelia SSO
+- Join `proxy` + internal networks that contain Postgres instances (`authelia`, `matrix`, `nextcloud`, `immich`, `suwayomi`)
+- Proxy at `https://pgadmin.danteb.com` (has solid built-in auth — no Authelia)
 
-**Verification**: Access the URL, open a terminal, verify you can edit files. Install extensions, confirm they persist across container restarts.
-
-### Calibre-web
-
-Self-hosted ebook library with a web reader. Good for ebooks beyond manga/comics (Komga already covers those).
-
-- Image: `lscr.io/linuxserver/calibre-web:latest`
-- Needs a Calibre database (can create empty one on first run)
-- Mount ebook library from RAID
-- Add to `compose.media.yml`
-- Proxy at `https://books.danteb.com`
-
-**Verification**: Access the URL, upload a test EPUB. Verify the web reader renders it correctly. Test OPDS feed if you use a mobile reader app.
+**Verification**: Access the URL, log in, add a server connection to one of the Postgres instances (e.g., `authelia_postgres:5432`). Browse tables, run a simple query.
 
 ---
 
@@ -700,18 +750,18 @@ services.fail2ban = {
 
 ## Summary Table
 
-| # | Item | Area | Risk | Effort |
-|---|------|------|------|--------|
-| 1 | Backup automation | NixOS + Docker | Fixes critical gap | Medium |
-| 2 | Monitoring stack (Prometheus/Grafana/Loki) | Docker | None (additive) | Medium-High |
-| 3 | VPN server (Tailscale/WireGuard) | NixOS | Low | Low |
-| 4 | Kernel hardening (sysctl) | NixOS | Low (test first) | Low |
-| 5 | Uptime Kuma | Docker | None (additive) | Low |
-| 6 | Container hardening (limits, caps, read-only) | Docker | Medium (test each) | Medium |
-| 7 | Paperless-ngx | Docker | None (additive) | Medium |
-| 8 | NixOS auto-upgrade | NixOS | Low (no auto-reboot) | Low |
-| 9 | Recyclarr CI validation | GitHub Actions | None | Low |
-| 10 | Homepage dashboard updates | Homepage | None | Low |
-| 11 | Mail calendar sync + setup.sh validation | Mail | None | Low |
-| 12 | Additional services (IT-Tools, pgAdmin, etc.) | Docker | None (additive) | Low-Medium each |
-| 13 | fail2ban for SSH | NixOS | Low | Low |
+| # | Item | Area | Risk | Effort | Notes |
+|---|------|------|------|--------|-------|
+| 1 | Backup automation | NixOS + Docker | Fixes critical gap | Medium | |
+| 2 | Monitoring stack (Prometheus/Grafana/Loki) | Docker | None (additive) | Medium-High | Grafana uses own auth; Prometheus/cAdvisor internal only |
+| 3 | VPN server (WireGuard in Docker) | Docker | Low | Low | wg-easy container; portable across OS |
+| 4 | Kernel hardening (sysctl) | NixOS | Low (test first) | Low | All settings validated against CIS/KSPP |
+| 5 | Uptime monitoring (Upptime + Kuma) | Docker + GitHub | None (additive) | Low | Cloudflare wildcard override confirmed |
+| 6 | Container hardening (limits, caps, read-only) | Docker | Medium (test each) | Medium | Incremental per-service, not global; limits are safety nets |
+| 7 | Paperless-ngx | Docker | None (additive) | Medium | Lower priority — increase Nextcloud usage first |
+| 8 | NixOS auto-upgrade | NixOS | Low (no auto-reboot) | Low | |
+| 9 | Recyclarr CI validation | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
+| 10 | Homepage dashboard updates | Homepage | None | Low | Suwayomi widget, arm-server is API-only (no dashboard) |
+| 11 | Mail calendar sync + setup.sh validation | Mail | None | Low | |
+| 12 | Additional services | Docker | None (additive) | Low-Medium each | Priority: IT-Tools > Forgejo > Calibre-web > Code-server |
+| 13 | fail2ban for SSH | NixOS | Low | Low | |
