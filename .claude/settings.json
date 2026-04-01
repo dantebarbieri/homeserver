@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote:*)",
+      "Bash(git config:*)",
+
+      "Bash(docker compose:*)",
+
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(wc:*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(docker/.env)",
+      "Edit(.env)",
+      "Edit(docker/.env)",
+      "Read(recyclarr-configs/secrets.yml)",
+      "Edit(recyclarr-configs/secrets.yml)",
+      "Edit(production-configs/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/nixos-verify.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

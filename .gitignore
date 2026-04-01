@@ -7,5 +7,5 @@ production-configs/*
 docker/.env
 recyclarr-configs/secrets.yml
 
-# Editor/tool state
-.claude/
+# Claude Code — track shared config (hooks, skills, settings.json), ignore local
+.claude/settings.local.json
