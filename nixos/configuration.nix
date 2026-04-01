@@ -79,6 +79,16 @@ in
   #   boot.kernelPackages = pkgs.linuxPackages_6_12;
   # Check NVIDIA compatibility at: https://www.nvidia.com/en-us/drivers/unix/
 
+  # Kernel hardening (CIS / KSPP recommendations)
+  boot.kernel.sysctl = {
+    "kernel.sysrq" = 0;                     # Disable Magic SysRq key (no physical keyboard on headless server)
+    "kernel.kptr_restrict" = 2;              # Hide kernel pointers from all users (hardens KASLR)
+    "kernel.dmesg_restrict" = 1;             # Restrict dmesg to CAP_SYSLOG
+    "kernel.yama.ptrace_scope" = 2;          # Restrict ptrace to CAP_SYS_PTRACE
+    "net.core.bpf_jit_harden" = 2;          # Harden BPF JIT compiler
+    "kernel.unprivileged_bpf_disabled" = 1;  # Disable unprivileged BPF
+  };
+
   # Unfree + NVIDIA EULA
   nixpkgs.config.allowUnfree = true;
   nixpkgs.config.nvidia.acceptLicense = true;
