@@ -10,7 +10,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Lint YAML syntax
         run: |
@@ -22,6 +22,7 @@ jobs:
           # Provide dummy secrets so recyclarr can resolve !secret tags
           cp recyclarr-configs/secrets.yml.example recyclarr-configs/secrets.yml
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v ${{ github.workspace }}/recyclarr-configs:/config \
             ghcr.io/recyclarr/recyclarr:latest \
             config list local
