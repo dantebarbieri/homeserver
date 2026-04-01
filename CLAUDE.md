@@ -103,14 +103,17 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 ### Commands
 
+**WARNING: Never use `docker compose -f compose.<category>.yml up -d` on the server.** Running a category file standalone creates a separate Docker network (e.g., `docker_proxy` instead of `compose_proxy`), which breaks inter-container networking and causes 502 errors in NPM. Always use the main `docker-compose.yml` entry point so all services share the correct networks.
+
 ```bash
 docker compose up -d                              # Start all
-docker compose -f compose.<category>.yml up -d    # Start one category
 docker compose up -d <service>                    # Start one service
 docker compose pull && docker compose up -d       # Update all
 docker compose config                             # Validate merged config
 ./scripts/deploy-update.sh <service-name>            # Zero-downtime service deploy
 ```
+
+`docker compose -f compose.<category>.yml config` is safe for **validation only** (it doesn't create containers or networks).
 
 ### Shell Convenience Functions
 
