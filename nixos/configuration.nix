@@ -442,7 +442,7 @@ in
     after = [ "docker.service" "network-online.target" ];
     requires = [ "docker.service" ];
     wants = [ "network-online.target" ];
-    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash ];
+    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils ];
     environment = {
       GIT_SSH_COMMAND = "ssh -i /root/.ssh/docker-compose-deploy -o StrictHostKeyChecking=accept-new";
     };
@@ -452,6 +452,7 @@ in
     };
     script = ''
       git -c safe.directory=/srv/homeserver pull && \
+      chown -R danteb:docker .git && \
       cd docker && \
       docker compose pull --ignore-buildable && \
       docker compose build --pull && \
