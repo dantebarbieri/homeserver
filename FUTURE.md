@@ -18,7 +18,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 - [Priority 10: Homepage Dashboard Updates](#priority-10-homepage-dashboard-updates)
 - [Priority 11: Mail Config Improvements](#priority-11-mail-config-improvements)
 - [Priority 12: Additional Services](#priority-12-additional-services)
-- [Priority 13: fail2ban for SSH](#priority-13-fail2ban-for-ssh)
+- [~~Priority 13: fail2ban for SSH~~](#priority-13-fail2ban-for-ssh) ✅ Done
 
 ---
 
@@ -701,7 +701,7 @@ Web-based Postgres management GUI for the 5+ Postgres instances. Mostly useful f
 
 ---
 
-## Priority 13: fail2ban for SSH
+## ~~Priority 13: fail2ban for SSH~~ ✅ Done
 
 Endlessh is a honeypot on port 22 but doesn't protect the real SSH on port 28. fail2ban would rate-limit brute-force attempts.
 
@@ -757,4 +757,4 @@ services.fail2ban = {
 | 10 | Homepage dashboard updates | Homepage | None | Low | Suwayomi widget, arm-server is API-only (no dashboard) |
 | 11 | Mail calendar sync + setup.sh validation | Mail | None | Low | |
 | 12 | Additional services | Docker | None (additive) | Low-Medium each | Priority: IT-Tools > Forgejo > Calibre-web > Code-server |
-| 13 | fail2ban for SSH | NixOS | Low | Low | |
+| 13 | ~~fail2ban for SSH~~ ✅ | NixOS | Low | Low | |
