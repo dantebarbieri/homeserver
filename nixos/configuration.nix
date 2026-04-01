@@ -267,28 +267,18 @@ in
           nix-index
         fi
         local results
-        # nix-locate output: "output.package  SIZE x  /nix/store/.../bin/NAME"
-        # Extract package name (field after first dot) and raw byte size (strip commas)
-        results=$(nix-locate -w "/bin/$1" | awk -F'.' '{print $2}' | awk '{
-          pkg=$1; gsub(/,/, "", $2); bytes=$2+0
-          if (!seen[pkg]++) print pkg, bytes
+        results=$(nix-locate -w "/bin/$1" | awk -F'.' '{print $2}' | awk '!seen[$1]++ {
+          gsub(/,/, "", $2); print $1, $2
         }')
         if [[ -z "$results" ]]; then
           echo "no package found providing /bin/$1" >&2
           return 1
         fi
         if [[ -t 1 ]]; then
-          # Interactive: show package names with human-readable sizes (like ls -h)
-          echo "$results" | awk '{
-            pkg=$1; b=$2
-            if (b >= 1073741824)    printf "%s  (%.1fG)\n", pkg, b/1073741824
-            else if (b >= 1048576)  printf "%s  (%.1fM)\n", pkg, b/1048576
-            else if (b >= 1024)     printf "%s  (%.0fK)\n", pkg, b/1024
-            else if (b > 0)        printf "%s  (%dB)\n", pkg, b
-            else                    print pkg
-          }'
+          echo "$results" | while read -r pkg bytes; do
+            printf "%s  (%s)\n" "$pkg" "$(numfmt --to=iec "$bytes")"
+          done
         else
-          # Piped: output only the first package name (for nsp chaining)
           echo "$results" | head -1 | awk '{print $1}'
         fi
       }
