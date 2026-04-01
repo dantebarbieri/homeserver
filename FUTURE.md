@@ -633,7 +633,7 @@ Collection of 30+ developer/sysadmin utilities in a single web UI (base64 encode
 - Image: `corentinth/it-tools:latest`
 - Single container, no database, no state
 - Add to `compose.utilities.yml`, join `proxy` network
-- Proxy at `https://tools.danteb.com` with Authelia SSO (no built-in auth)
+- Proxy at `https://tools.danteb.com` (no auth needed — stateless client-side JS, nothing to protect)
 
 **Verification**: Access the URL, test a few tools (base64 encode a string, parse a cron expression). No API keys needed.
 
