@@ -95,7 +95,7 @@ in
   # Switch to systemd-networkd + resolved
   networking.useNetworkd = true;
   services.resolved.enable = true;
-  services.resolved.settings.DNSStubListener = "no";  # free port 53 for AdGuard Home
+  services.resolved.settings.Resolve.DNSStubListener = "no";  # free port 53 for AdGuard Home
 
   # Bond: enp66s0f0 + enp66s0f1 → bond0 (active-backup)
   # The ASUS GT-BE98 Pro does NOT support LACP on its 2.5G LAN ports,
