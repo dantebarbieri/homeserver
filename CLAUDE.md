@@ -141,6 +141,8 @@ Key system services managed by NixOS:
 
 Rebuild: `sudo nixos-rebuild switch`
 
+**Shell preference:** The server uses `zoxide` — always use `z` instead of `cd` when suggesting commands (e.g., `z /srv/homeserver`, not `cd /srv/homeserver`).
+
 ## Homepage Dashboard (`homepage/`)
 
 YAML-based config for the [Homepage](https://gethomepage.dev/) dashboard. `services.yaml` defines all services with Docker container status monitoring, health checks via `siteMonitor`, and service-specific API widgets. `bookmarks.yaml` has external links and local management UIs (router, IPMI). See `WIDGET_API_KEYS.md` for obtaining API tokens.

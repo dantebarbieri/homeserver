@@ -19,7 +19,8 @@
       "Bash(chmod:*)",
       "Bash(wc:*)",
 
-      "Skill(nixos-option)"
+      "Skill(nixos-option)",
+      "Skill(future)"
     ],
     "deny": [
       "Read(.env)",
