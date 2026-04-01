@@ -242,6 +242,18 @@
         siteMonitor: https://ntfy.danteb.com
         server: my-docker
         container: ntfy
+    - AdGuard Home:
+        icon: adguard-home.svg
+        href: https://adguard.danteb.com
+        description: Network-wide DNS Ad Blocker
+        siteMonitor: https://adguard.danteb.com
+        server: my-docker
+        container: adguardhome
+        widget:
+          type: adguard
+          url: http://adguardhome:3000
+          username: "{{HOMEPAGE_VAR_ADGUARD_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_ADGUARD_PASSWORD}}"
     - Dashdot:
         icon: dashdot.webp
         href: https://dashdot.danteb.com

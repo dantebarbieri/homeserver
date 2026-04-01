@@ -170,6 +170,17 @@ Alternatively, set `HOMEPAGE_VAR_NEXTCLOUD_PASS` to the admin account password d
 
 ---
 
+## AdGuard Home — `HOMEPAGE_VAR_ADGUARD_USERNAME` / `HOMEPAGE_VAR_ADGUARD_PASSWORD`
+
+AdGuard Home authenticates via the admin credentials created during initial setup.
+
+1. Set `HOMEPAGE_VAR_ADGUARD_USERNAME` to the admin username chosen during setup.
+2. Set `HOMEPAGE_VAR_ADGUARD_PASSWORD` to the corresponding password.
+
+📖 [AdGuard Home Wiki](https://github.com/AdguardTeam/AdGuardHome/wiki)
+
+---
+
 ## Quick Reference
 
 | Variable | Service | Type |
@@ -192,3 +203,5 @@ Alternatively, set `HOMEPAGE_VAR_NEXTCLOUD_PASS` to the admin account password d
 | `HOMEPAGE_VAR_QBIT_PASS` | qBittorrent | Password |
 | `HOMEPAGE_VAR_NEXTCLOUD_USER` | Nextcloud | Username (admin) |
 | `HOMEPAGE_VAR_NEXTCLOUD_PASS` | Nextcloud | Password / app password |
+| `HOMEPAGE_VAR_ADGUARD_USERNAME` | AdGuard Home | Username |
+| `HOMEPAGE_VAR_ADGUARD_PASSWORD` | AdGuard Home | Password |

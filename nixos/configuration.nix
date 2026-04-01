@@ -95,6 +95,7 @@ in
   # Switch to systemd-networkd + resolved
   networking.useNetworkd = true;
   services.resolved.enable = true;
+  services.resolved.extraConfig = "DNSStubListener=no";  # free port 53 for AdGuard Home
 
   # Bond: enp66s0f0 + enp66s0f1 → bond0 (active-backup)
   # The ASUS GT-BE98 Pro does NOT support LACP on its 2.5G LAN ports,
@@ -123,7 +124,7 @@ in
     address = "192.168.50.1";
     interface = "bond0";
   };
-  networking.nameservers   = [ "192.168.50.1" "1.1.1.1" "8.8.8.8" ];
+  networking.nameservers   = [ "127.0.0.1" "1.1.1.1" "8.8.8.8" ];  # AdGuard Home (local), with public fallbacks
 
   # Firewall — NixOS enables the firewall by default and blocks all inbound
   # except SSH. Open ports for services exposed via Docker port mappings and
@@ -132,6 +133,7 @@ in
   # but the kernel firewall still drops inbound packets before they reach it.
   networking.firewall = {
     allowedTCPPorts = [
+      53      # DNS → AdGuard Home
       80      # HTTP → Nginx Proxy Manager
       443     # HTTPS → Nginx Proxy Manager
       22      # endlessh SSH honeypot
@@ -144,6 +146,7 @@ in
       8888    # Satisfactory TCP
     ];
     allowedUDPPorts = [
+      53      # DNS → AdGuard Home
       1900    # Plex SSDP/DLNA discovery
       3478    # Coturn TURN (host-networked)
       5205    # Hytale
