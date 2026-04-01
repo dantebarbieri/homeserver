@@ -152,23 +152,9 @@ by the system-wide `interactiveShellInit`.
 
 ---
 
-## 7. Remove `zoxide init` from `~/.zshrc`
-
-**Why:** `zoxide` is a system package and its shell init is now handled
-by `interactiveShellInit` in `configuration.nix`.
-
-**Action:** Remove this line from `~/.zshrc`:
-
-```zsh
-# REMOVE — now system-wide:
-eval "$(zoxide init zsh)"
-```
-
----
-
 ## Summary of `~/.zshrc` After Cleanup
 
-After applying changes 2–7, your `~/.zshrc` should look approximately like:
+After applying changes 2–6, your `~/.zshrc` should look approximately like:
 
 ```zsh
 # Zsh configuration (history, input, etc.)
@@ -201,4 +187,7 @@ unset key
 
 # Load default SSH key into agent on first login
 ssh-add -l &>/dev/null || ssh-add 2>/dev/null
+
+# Tools — must run after zimfw init
+eval "$(zoxide init zsh)"
 ```

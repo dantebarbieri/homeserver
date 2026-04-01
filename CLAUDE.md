@@ -130,7 +130,7 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 `configuration.nix` is the single-file declarative system config for the homeserver (hostname: `homeserver`, IP: `192.168.50.100/24`).
 
 Key system services managed by NixOS:
-- **ZSH + zimfw** — default shell with plugin manager, Docker convenience functions in `nixos/docker-functions.zsh`, zoxide, and nix helper functions — all sourced via `interactiveShellInit`
+- **ZSH + zimfw** — default shell with plugin manager, Docker convenience functions in `nixos/docker-functions.zsh`, and nix helper functions — all sourced via `interactiveShellInit`
 - **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore enabled
 - **Firewall** — explicitly opened ports for HTTP/HTTPS, Plex, Coturn, LiveKit, game servers
 - **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`

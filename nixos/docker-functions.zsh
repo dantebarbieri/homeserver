@@ -70,7 +70,11 @@ dcl() (
     shift 2
   fi
 
-  docker compose logs -f -t ${since:+--since "$since"} "$@"
+  if [[ -n "$since" ]]; then
+    docker compose logs -f -t --since "$since" "$@"
+  else
+    docker compose logs -f -t "$@"
+  fi
 )
 
 # Restart services — recreates containers to pick up any changes
