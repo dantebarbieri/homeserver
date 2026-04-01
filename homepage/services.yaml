@@ -261,6 +261,13 @@
         siteMonitor: https://dashdot.danteb.com
         server: my-docker
         container: dashdot
+    - IT-Tools:
+        icon: it-tools.svg
+        href: https://tools.danteb.com
+        description: Developer & Sysadmin Utilities
+        siteMonitor: https://tools.danteb.com
+        server: my-docker
+        container: it-tools
     - Travel Planner:
         icon: mdi-airplane
         href: https://travel.danteb.com

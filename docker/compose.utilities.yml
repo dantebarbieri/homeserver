@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome
+# vaultwarden, syncthing, ntfy, adguardhome, it-tools
 
 services:
   vaultwarden:
@@ -72,6 +72,15 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
+    networks:
+      - proxy
+
+  it-tools:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: corentinth/it-tools:latest
+    container_name: it-tools
     networks:
       - proxy
 
