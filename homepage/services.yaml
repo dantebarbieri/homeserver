@@ -167,6 +167,18 @@
         container: searxng
 
 - Network & Communication:
+    - Nginx Proxy Manager:
+        icon: nginx-proxy-manager.svg
+        href: https://nginx-proxy-manager.danteb.com
+        description: Reverse Proxy
+        siteMonitor: https://nginx-proxy-manager.danteb.com
+        server: my-docker
+        container: nginxproxymanager
+        widget:
+          type: npm
+          url: http://nginxproxymanager:81
+          username: "{{HOMEPAGE_VAR_NPM_USER}}"
+          password: "{{HOMEPAGE_VAR_NPM_PASS}}"
     - Element:
         icon: element.svg
         href: https://element.danteb.com
@@ -188,18 +200,6 @@
         siteMonitor: https://livekit.danteb.com
         server: my-docker
         container: livekit
-    - Nginx Proxy Manager:
-        icon: nginx-proxy-manager.svg
-        href: https://nginx-proxy-manager.danteb.com
-        description: Reverse Proxy
-        siteMonitor: https://nginx-proxy-manager.danteb.com
-        server: my-docker
-        container: nginxproxymanager
-        widget:
-          type: npm
-          url: http://nginxproxymanager:81
-          username: "{{HOMEPAGE_VAR_NPM_USER}}"
-          password: "{{HOMEPAGE_VAR_NPM_PASS}}"
     - Authelia:
         icon: authelia.svg
         href: https://authelia.danteb.com
@@ -221,6 +221,18 @@
           url: http://nextcloud:80
           username: "{{HOMEPAGE_VAR_NEXTCLOUD_USER}}"
           password: "{{HOMEPAGE_VAR_NEXTCLOUD_PASS}}"
+    - AdGuard Home:
+        icon: adguard-home.svg
+        href: https://adguardhome.danteb.com
+        description: Network-wide DNS Ad Blocker
+        siteMonitor: https://adguardhome.danteb.com
+        server: my-docker
+        container: adguardhome
+        widget:
+          type: adguard
+          url: http://adguardhome:80
+          username: "{{HOMEPAGE_VAR_ADGUARD_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_ADGUARD_PASSWORD}}"
     - Vaultwarden:
         icon: vaultwarden.svg
         href: https://vaultwarden.danteb.com
@@ -242,18 +254,6 @@
         siteMonitor: https://ntfy.danteb.com
         server: my-docker
         container: ntfy
-    - AdGuard Home:
-        icon: adguard-home.svg
-        href: https://adguardhome.danteb.com
-        description: Network-wide DNS Ad Blocker
-        siteMonitor: https://adguardhome.danteb.com
-        server: my-docker
-        container: adguardhome
-        widget:
-          type: adguard
-          url: http://adguardhome:80
-          username: "{{HOMEPAGE_VAR_ADGUARD_USERNAME}}"
-          password: "{{HOMEPAGE_VAR_ADGUARD_PASSWORD}}"
     - Dashdot:
         icon: dashdot.webp
         href: https://dashdot.danteb.com
