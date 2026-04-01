@@ -245,43 +245,8 @@ in
       # ── any-nix-shell: stay in ZSH inside nix-shell / nix develop ──
       ${pkgs.any-nix-shell}/bin/any-nix-shell zsh --info-right | source /dev/stdin
 
-      # ── Convenience function: try packages without installing ──
-      # Usage: nsp hello cowsay   →   nix shell nixpkgs#hello nixpkgs#cowsay
-      nsp() {
-        local args=()
-        for pkg in "$@"; do args+=("nixpkgs#$pkg"); done
-        nix shell "''${args[@]}"
-      }
-
-      # ── Search nixpkgs by name or description ──
-      # Usage: nss neovim   →   nix search nixpkgs neovim
-      nss() { nix search nixpkgs "$@" 2>/dev/null; }
-
-      # ── Find which package provides a binary (requires nix-index database) ──
-      # Usage: nwp dig        →   dnsutils  (169K)
-      # Chain: nsp $(nwp dig) →   nix shell nixpkgs#dnsutils
-      nwp() {
-        local db="$HOME/.cache/nix-index/files"
-        if [[ ! -f "$db" ]]; then
-          echo "nix-index database not found, building (this takes ~10 min)..." >&2
-          nix-index
-        fi
-        local results
-        results=$(nix-locate -w "/bin/$1" | awk -F'.' '{print $2}' | awk '!seen[$1]++ {
-          gsub(/,/, "", $2); print $1, $2
-        }')
-        if [[ -z "$results" ]]; then
-          echo "no package found providing /bin/$1" >&2
-          return 1
-        fi
-        if [[ -t 1 ]]; then
-          echo "$results" | while read -r pkg bytes; do
-            printf "%s  (%s)\n" "$pkg" "$(numfmt --to=iec "$bytes")"
-          done
-        else
-          echo "$results" | head -1 | awk '{print $1}'
-        fi
-      }
+      # ── Nix convenience functions (nsp, nss, nwp) ──
+      source ${./nix-functions.zsh}
 
       # ── Docker Compose convenience functions ──
       source ${./docker-functions.zsh}
