@@ -9,7 +9,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 - [Priority 1: Backup Automation](#priority-1-backup-automation)
 - [Priority 2: Monitoring Stack](#priority-2-monitoring-stack)
 - [Priority 3: VPN Server for Remote Access](#priority-3-vpn-server-for-remote-access)
-- [Priority 4: NixOS Kernel Hardening](#priority-4-nixos-kernel-hardening)
+- [~~Priority 4: NixOS Kernel Hardening~~](#priority-4-nixos-kernel-hardening) ✅ Done
 - [Priority 5: Uptime Monitoring & External Status Page](#priority-5-uptime-monitoring--external-status-page)
 - [Priority 6: Docker Container Hardening](#priority-6-docker-container-hardening)
 - [Priority 7: Paperless-ngx](#priority-7-paperless-ngx)
@@ -200,7 +200,7 @@ After `nixos-rebuild switch`, run `sudo tailscale up` to authenticate. Install T
 
 ---
 
-## Priority 4: NixOS Kernel Hardening
+## ~~Priority 4: NixOS Kernel Hardening~~ ✅ Done
 
 Quick win, low risk. No kernel parameters are currently set beyond defaults.
 
@@ -748,7 +748,7 @@ services.fail2ban = {
 | 1 | Backup automation | NixOS + Docker | Fixes critical gap | Medium | |
 | 2 | Monitoring stack (Prometheus/Grafana/Loki) | Docker | None (additive) | Medium-High | Grafana uses own auth; Prometheus/cAdvisor internal only |
 | 3 | VPN server (WireGuard in Docker) | Docker | Low | Low | wg-easy container; portable across OS |
-| 4 | Kernel hardening (sysctl) | NixOS | Low (test first) | Low | All settings validated against CIS/KSPP |
+| 4 | ~~Kernel hardening (sysctl)~~ ✅ | NixOS | Low (test first) | Low | All settings validated against CIS/KSPP |
 | 5 | Uptime monitoring (Upptime + Kuma) | Docker + GitHub | None (additive) | Low | Cloudflare wildcard override confirmed |
 | 6 | Container hardening (limits, caps, read-only) | Docker | Medium (test each) | Medium | Incremental per-service, not global; limits are safety nets |
 | 7 | Paperless-ngx | Docker | None (additive) | Medium | Lower priority — increase Nextcloud usage first |
