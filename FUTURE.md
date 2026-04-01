@@ -14,7 +14,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 - [Priority 6: Docker Container Hardening](#priority-6-docker-container-hardening)
 - [Priority 7: Paperless-ngx](#priority-7-paperless-ngx)
 - [~~Priority 8: NixOS Auto-Upgrade~~](#priority-8-nixos-auto-upgrade) ✅ Done
-- [Priority 9: Recyclarr CI Validation](#priority-9-recyclarr-ci-validation)
+- [~~Priority 9: Recyclarr CI Validation~~](#priority-9-recyclarr-ci-validation) ✅ Done
 - [Priority 10: Homepage Dashboard Updates](#priority-10-homepage-dashboard-updates)
 - [Priority 11: Mail Config Improvements](#priority-11-mail-config-improvements)
 - [Priority 12: Additional Services](#priority-12-additional-services)
@@ -476,7 +476,7 @@ With `allowReboot = false`, this only downloads and builds the new system closur
 
 ---
 
-## Priority 9: Recyclarr CI Validation
+## ~~Priority 9: Recyclarr CI Validation~~ ✅ Done
 
 The recyclarr config is excellent but has no automated validation. Since you commit directly to main, a GitHub Actions workflow would catch YAML errors and recyclarr config issues before the server pulls the update.
 
@@ -753,7 +753,7 @@ services.fail2ban = {
 | 6 | Container hardening (limits, caps, read-only) | Docker | Medium (test each) | Medium | Incremental per-service, not global; limits are safety nets |
 | 7 | Paperless-ngx | Docker | None (additive) | Medium | Lower priority — increase Nextcloud usage first |
 | 8 | ~~NixOS auto-upgrade~~ ✅ | NixOS | Low (no auto-reboot) | Low | |
-| 9 | Recyclarr CI validation | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
+| 9 | ~~Recyclarr CI validation~~ ✅ | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
 | 10 | Homepage dashboard updates | Homepage | None | Low | Suwayomi widget, arm-server is API-only (no dashboard) |
 | 11 | Mail calendar sync + setup.sh validation | Mail | None | Low | |
 | 12 | Additional services | Docker | None (additive) | Low-Medium each | Priority: IT-Tools > Forgejo > Calibre-web > Code-server |
