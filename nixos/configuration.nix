@@ -468,6 +468,15 @@ in
     };
   };
 
+  # NixOS auto-upgrade (daily at 04:30, after Docker update at 04:00)
+  # Downloads and builds new system closure but does NOT auto-reboot.
+  # Manually reboot or run `nixos-rebuild switch` to activate.
+  system.autoUpgrade = {
+    enable = true;
+    dates = "04:30";
+    allowReboot = false;
+  };
+
   # ── Drive health monitoring (RAID + LVM → ntfy) ───────────────────────────
 
   # Periodic check — catches issues that event handlers might miss
