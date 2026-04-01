@@ -27,6 +27,14 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 - **Bulk storage**: `/data` (RAID6 mount, referenced as `${RAID}`)
 - **BMC (IPMI)**: `192.168.50.50` (ASRock Rack, dedicated IPMI port) — reverse-proxied at `https://ipmi.danteb.com` via NPM with Authelia SSO (admins-only, two-factor). BMC bonding must be **disabled** in BMC web UI (Settings → Network → Network Bond Configuration) or the host cannot reach the BMC. The BMC uses HTTPS (self-signed) with `proxy_ssl_verify off` in NPM.
 
+### Router (ASUS GT-BE98 Pro)
+
+**WARNING: Assume any router settings change triggers a reboot.** The ASUS GT-BE98 Pro reboots on many configuration changes (including DHCP DNS settings), causing a brief network outage for all LAN devices. Always warn the user before recommending router changes and suggest making them during a low-usage window. Never assert a router change is safe unless there is confirmed evidence it does not reboot.
+
+| Setting Change | Reboots? |
+|----------------|----------|
+| LAN → DHCP Server → DNS Server | **Yes** |
+
 ### External Projects (not in this repo)
 
 Some Docker Compose services build from repos outside this monorepo. Their paths are configured via environment variables in `.env` (see `docker/sample.env`):
