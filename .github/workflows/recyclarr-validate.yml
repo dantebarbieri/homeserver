@@ -1,6 +1,7 @@
 name: Validate Recyclarr Config
 
 on:
+  workflow_dispatch:
   push:
     paths: ['recyclarr-configs/**']
   pull_request:
