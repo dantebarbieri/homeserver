@@ -1,5 +1,5 @@
 # Dashboard and monitoring services
-# homepage, dashdot
+# homepage, dashdot, uptime-kuma
 
 services:
   homepage:
@@ -30,6 +30,7 @@ services:
       HOMEPAGE_VAR_NEXTCLOUD_PASS: ${HOMEPAGE_VAR_NEXTCLOUD_PASS}
       HOMEPAGE_VAR_ADGUARD_USERNAME: ${HOMEPAGE_VAR_ADGUARD_USERNAME}
       HOMEPAGE_VAR_ADGUARD_PASSWORD: ${HOMEPAGE_VAR_ADGUARD_PASSWORD}
+      HOMEPAGE_VAR_KUMA_SLUG: ${HOMEPAGE_VAR_KUMA_SLUG}
     networks:
       - proxy
     volumes:
@@ -57,6 +58,17 @@ services:
       DASHDOT_USE_NETWORK_INTERFACE: bond0
       DASHDOT_FS_DEVICE_FILTER: nvme1n1,sda,sdb,sdc,sdd,sde,sdf,sdg,sdh,sdi,sdj,sdk,sdl
       DASHDOT_FS_VIRTUAL_MOUNTS: /dev/mapper/vg_redundant-lv_data
+
+  uptime-kuma:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    volumes:
+      - ${DATA}/uptime-kuma:/app/data
+    networks:
+      - proxy
 
 networks:
   proxy:

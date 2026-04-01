@@ -181,6 +181,19 @@ AdGuard Home authenticates via the admin credentials created during initial setu
 
 ---
 
+## Uptime Kuma — `HOMEPAGE_VAR_KUMA_SLUG`
+
+Uptime Kuma's Homepage widget reads data from a **status page**, not an API key.
+
+1. Open Uptime Kuma (e.g. `https://uptime.danteb.com`).
+2. Go to **Status Pages** (sidebar).
+3. Create a status page (e.g., "homeserver") and add your monitors.
+4. The slug is the last segment of the status page URL:
+   `https://uptime.danteb.com/status/<slug>`.
+5. Set `HOMEPAGE_VAR_KUMA_SLUG` to that slug value (e.g., `homeserver`).
+
+---
+
 ## Quick Reference
 
 | Variable | Service | Type |
@@ -205,3 +218,4 @@ AdGuard Home authenticates via the admin credentials created during initial setu
 | `HOMEPAGE_VAR_NEXTCLOUD_PASS` | Nextcloud | Password / app password |
 | `HOMEPAGE_VAR_ADGUARD_USERNAME` | AdGuard Home | Username |
 | `HOMEPAGE_VAR_ADGUARD_PASSWORD` | AdGuard Home | Password |
+| `HOMEPAGE_VAR_KUMA_SLUG` | Uptime Kuma | Status page slug |

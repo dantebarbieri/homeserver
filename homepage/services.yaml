@@ -261,6 +261,17 @@
         siteMonitor: https://dashdot.danteb.com
         server: my-docker
         container: dashdot
+    - Uptime Kuma:
+        icon: uptime-kuma.svg
+        href: https://uptime.danteb.com
+        description: Uptime Monitoring
+        siteMonitor: https://uptime.danteb.com
+        server: my-docker
+        container: uptime-kuma
+        widget:
+          type: uptimekuma
+          url: http://uptime-kuma:3001
+          slug: "{{HOMEPAGE_VAR_KUMA_SLUG}}"
     - IT-Tools:
         icon: it-tools.svg
         href: https://tools.danteb.com
