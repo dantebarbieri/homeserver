@@ -13,7 +13,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 - [Priority 5: Uptime Monitoring & External Status Page](#priority-5-uptime-monitoring--external-status-page)
 - [Priority 6: Docker Container Hardening](#priority-6-docker-container-hardening)
 - [Priority 7: Paperless-ngx](#priority-7-paperless-ngx)
-- [Priority 8: NixOS Auto-Upgrade](#priority-8-nixos-auto-upgrade)
+- [~~Priority 8: NixOS Auto-Upgrade~~](#priority-8-nixos-auto-upgrade) ✅ Done
 - [Priority 9: Recyclarr CI Validation](#priority-9-recyclarr-ci-validation)
 - [Priority 10: Homepage Dashboard Updates](#priority-10-homepage-dashboard-updates)
 - [Priority 11: Mail Config Improvements](#priority-11-mail-config-improvements)
@@ -444,7 +444,7 @@ Document scanning, OCR, full-text search, and automatic tagging. The NVIDIA RTX 
 
 ---
 
-## Priority 8: NixOS Auto-Upgrade
+## ~~Priority 8: NixOS Auto-Upgrade~~ ✅ Done
 
 Currently the daily timer updates Docker containers, but NixOS itself requires manual `nixos-rebuild switch`. This means security patches for the kernel, OpenSSH, and system packages are only applied when you remember to rebuild.
 
@@ -752,7 +752,7 @@ services.fail2ban = {
 | 5 | Uptime monitoring (Upptime + Kuma) | Docker + GitHub | None (additive) | Low | Cloudflare wildcard override confirmed |
 | 6 | Container hardening (limits, caps, read-only) | Docker | Medium (test each) | Medium | Incremental per-service, not global; limits are safety nets |
 | 7 | Paperless-ngx | Docker | None (additive) | Medium | Lower priority — increase Nextcloud usage first |
-| 8 | NixOS auto-upgrade | NixOS | Low (no auto-reboot) | Low | |
+| 8 | ~~NixOS auto-upgrade~~ ✅ | NixOS | Low (no auto-reboot) | Low | |
 | 9 | Recyclarr CI validation | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
 | 10 | Homepage dashboard updates | Homepage | None | Low | Suwayomi widget, arm-server is API-only (no dashboard) |
 | 11 | Mail calendar sync + setup.sh validation | Mail | None | Low | |
