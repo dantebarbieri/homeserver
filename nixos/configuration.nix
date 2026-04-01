@@ -258,14 +258,33 @@ in
       nss() { nix search nixpkgs "$@" 2>/dev/null; }
 
       # ── Find which package provides a binary (requires nix-index database) ──
-      # Usage: nwp arp   →   nix-locate -w "/bin/arp"
+      # Usage: nwp dig        →   dnsutils  (172,592 B)
+      # Chain: nsp $(nwp dig) →   nix shell nixpkgs#dnsutils
       nwp() {
         local db="$HOME/.cache/nix-index/files"
         if [[ ! -f "$db" ]]; then
           echo "nix-index database not found, building (this takes ~10 min)..." >&2
           nix-index
         fi
-        nix-locate -w "/bin/$1"
+        local results
+        results=$(nix-locate -w "/bin/$1" | awk -F'.' '{print $2}' | awk '{
+          pkg=$1; size=$2; unit=$3
+          if (!seen[pkg]++) print pkg, size, unit
+        }')
+        if [[ -z "$results" ]]; then
+          echo "no package found providing /bin/$1" >&2
+          return 1
+        fi
+        if [[ -t 1 ]]; then
+          # Interactive: show package names with sizes
+          echo "$results" | awk '{
+            if ($2 != "") printf "%s  (%s %s)\n", $1, $2, $3
+            else print $1
+          }'
+        else
+          # Piped: output only the first package name (for nsp chaining)
+          echo "$results" | head -1 | awk '{print $1}'
+        fi
       }
 
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
