@@ -85,6 +85,8 @@ services:
         condition: service_healthy
       vpn-netns:
         condition: service_started
+      qbittorrent:
+        condition: service_healthy
 
   sabnzbd:
     extends:

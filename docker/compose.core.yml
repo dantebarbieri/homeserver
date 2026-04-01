@@ -49,6 +49,9 @@ services:
     build:
       context: dockerfiles/bmc-monitor
     container_name: bmc-ip-monitor
+    depends_on:
+      nginxproxymanager:
+        condition: service_started
     devices:
       - /dev/ipmi0:/dev/ipmi0
     networks:
@@ -60,6 +63,7 @@ services:
       NPM_PORT: 81
       PROXY_DOMAIN: ipmi.danteb.com
       CHECK_INTERVAL: 900
+      MAX_FAILURES: 3
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
 

@@ -27,8 +27,10 @@ npm_login() {
 }
 
 LAST_IP=""
+FAIL_COUNT=0
+MAX_FAILURES="${MAX_FAILURES:-3}"
 
-log "[bmc-ip-monitor] starting (domain=${PROXY_DOMAIN}, interval=${CHECK_INTERVAL}s)"
+log "[bmc-ip-monitor] starting (domain=${PROXY_DOMAIN}, interval=${CHECK_INTERVAL}s, max_failures=${MAX_FAILURES})"
 
 while :; do
   # Step 1: Get current BMC IP via IPMI system interface
@@ -36,11 +38,19 @@ while :; do
     | grep "IP Address" | grep -v "Source" | awk '{print $NF}') || true
 
   if [ -z "$BMC_IP" ]; then
-    log "ERROR: could not read BMC IP via ipmitool"
-    ntfy "BMC IP Monitor Failed" "Could not read BMC IP via ipmitool" "high" "warning,computer"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    log "WARNING: could not read BMC IP via ipmitool (failure ${FAIL_COUNT}/${MAX_FAILURES})"
+    if [ "$FAIL_COUNT" -ge "$MAX_FAILURES" ]; then
+      ntfy "BMC Unreachable" \
+        "Could not read BMC IP for ${FAIL_COUNT} consecutive checks (~$(( FAIL_COUNT * CHECK_INTERVAL / 60 )) min)" \
+        "high" "warning,computer"
+    fi
     sleep "$CHECK_INTERVAL"
     continue
   fi
+
+  # BMC responded — reset failure counter
+  FAIL_COUNT=0
 
   # Step 2: Skip if unchanged
   if [ "$BMC_IP" = "$LAST_IP" ]; then

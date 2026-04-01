@@ -12,7 +12,23 @@ ntfy() {
     "${NTFY_URL}/${NTFY_TOPIC}" >/dev/null || log "WARNING: ntfy send failed"
 }
 
-log "[port-sync] starting (host=${QHOST}, port_file=${PORT_FILE})"
+API_FAIL_COUNT=0
+MAX_API_FAILURES="${MAX_API_FAILURES:-3}"
+
+log "[port-sync] starting (host=${QHOST}, port_file=${PORT_FILE}, max_failures=${MAX_API_FAILURES})"
+
+# Wait for qBittorrent API to be fully ready
+log "Waiting for qBittorrent API..."
+ATTEMPT=0
+while [ "$ATTEMPT" -lt 5 ]; do
+  if curl -sf "http://${QHOST}/api/v2/app/version" >/dev/null 2>&1; then
+    log "qBittorrent API is ready"
+    break
+  fi
+  ATTEMPT=$((ATTEMPT + 1))
+  log "API not ready (attempt ${ATTEMPT}/5), retrying in 10s..."
+  sleep 10
+done
 
 while :; do
   PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
@@ -23,12 +39,17 @@ while :; do
     if ! curl -sf -c /tmp/c \
       -d "username=${QUSER}&password=${QPASS}" \
       "http://${QHOST}/api/v2/auth/login" >/dev/null; then
-      log "ERROR: qBittorrent login failed"
-      ntfy "qBit Port Sync: Login Failed" \
-        "Could not authenticate to qBittorrent at ${QHOST}"
+      API_FAIL_COUNT=$((API_FAIL_COUNT + 1))
+      log "ERROR: qBittorrent login failed (failure ${API_FAIL_COUNT}/${MAX_API_FAILURES})"
+      if [ "$API_FAIL_COUNT" -ge "$MAX_API_FAILURES" ]; then
+        ntfy "qBit Port Sync: Login Failed" \
+          "Could not authenticate to qBittorrent at ${QHOST} for ${API_FAIL_COUNT} consecutive attempts"
+      fi
       sleep "${CHECK_INTERVAL}"
       continue
     fi
+
+    API_FAIL_COUNT=0
 
     # Set preference
     if ! curl -sf -b /tmp/c \
