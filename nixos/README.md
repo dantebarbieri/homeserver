@@ -10,7 +10,7 @@ Docker-based services (see [homeserver-docker](https://github.com/dantebarbieri/
 | Item | Value |
 |---|---|
 | Hostname | `homeserver` |
-| IP | `192.168.1.100/24` (static, bonded NICs) |
+| IP | `192.168.50.100/24` (static, bonded NICs) |
 | OS | NixOS 25.11 (`system.stateVersion`) |
 | Shell | Zsh |
 | Editor | Neovim ([kickstart.nvim](https://github.com/nvim-lua/kickstart.nvim)) |
@@ -22,7 +22,8 @@ Docker-based services (see [homeserver-docker](https://github.com/dantebarbieri/
 
 - **Bond** (`bond0`): `enp66s0f0` + `enp66s0f1` in `active-backup` mode.
 - **Stack**: `systemd-networkd` + `systemd-resolved` (NetworkManager disabled).
-- **DNS**: `192.168.1.1`, `1.1.1.1`, `8.8.8.8`.
+- **IPv6**: SLAAC from router (`2603:8080:1e00:1c97::/64`); stable EUI-64 GUA `2603:8080:1e00:1c97:9e6b:ff:fe45:2bc2`.
+- **DNS**: `127.0.0.1` (AdGuard Home), `1.1.1.1`, `8.8.8.8`.
 - Boot waits for network readiness (`systemd.network.wait-online`).
 
 ## Storage
@@ -47,7 +48,7 @@ only — it does **not** enable X11.
 A systemd timer (`docker-compose-update.timer`) runs daily at 04:00 (±5 min
 jitter). The corresponding oneshot service:
 
-1. `git pull --recurse-submodules` from `/srv/docker/compose`
+1. `git pull --recurse-submodules` from `/srv/homeserver`
 2. `docker compose pull && build && up -d --remove-orphans`
 
 A deploy key is auto-generated on first activation at

@@ -55,7 +55,7 @@ docker compose -f compose.<category>.yml up -d    # Start one category
 docker compose up -d <service>                    # Start one service
 docker compose pull && docker compose up -d       # Update all
 docker compose config                             # Validate merged config
-./deploy-update.sh <service-name>                 # Zero-downtime deploy
+./scripts/deploy-update.sh <service-name>           # Zero-downtime deploy
 ```
 
 ### Adding a new service
