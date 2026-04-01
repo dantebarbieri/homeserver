@@ -1,0 +1,27 @@
+name: Validate Recyclarr Config
+
+on:
+  push:
+    paths: ['recyclarr-configs/**']
+  pull_request:
+    paths: ['recyclarr-configs/**']
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint YAML syntax
+        run: |
+          pip install --quiet yamllint
+          yamllint -c recyclarr-configs/.yamllint.yml recyclarr-configs/
+
+      - name: Validate recyclarr config
+        run: |
+          # Provide dummy secrets so recyclarr can resolve !secret tags
+          cp recyclarr-configs/secrets.yml.example recyclarr-configs/secrets.yml
+          docker run --rm \
+            -v ${{ github.workspace }}/recyclarr-configs:/config \
+            ghcr.io/recyclarr/recyclarr:latest \
+            config list local
