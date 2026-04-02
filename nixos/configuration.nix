@@ -305,7 +305,7 @@ in
       # Docker
       docker-compose
       # Mail (aerc + contact sync)
-      aerc khard vdirsyncer
+      aerc khard khal vdirsyncer
       w3m              # HTML-to-text — used by aerc's built-in html filter
       pass             # password store — credential backend for aerc & vdirsyncer
       # Typing practice
@@ -368,7 +368,7 @@ in
 
   # vdirsyncer contact sync (every 15 min)
   systemd.services.vdirsyncer-sync = {
-    description = "Sync iCloud contacts via vdirsyncer";
+    description = "Sync iCloud contacts and calendars via vdirsyncer";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
     serviceConfig = {
@@ -377,7 +377,7 @@ in
     };
     path = with pkgs; [ vdirsyncer pass gnupg ];
     script = ''
-      vdirsyncer sync icloud_contacts
+      vdirsyncer sync icloud_contacts icloud_calendars
     '';
   };
 

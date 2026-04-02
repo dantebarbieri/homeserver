@@ -39,3 +39,27 @@ username = "YOUR_APPLE_ID@icloud.com"
 password.fetch = ["command", "pass", "contacts/icloud-app-password"]
 # macOS (keychain) — uncomment and comment out the line above:
 # password.fetch = ["command", "security", "find-generic-password", "-s", "vdirsyncer-icloud", "-w"]
+
+# ── iCloud Calendar Sync ──────────────────────────
+
+[pair icloud_calendars]
+a = "icloud_cal_local"
+b = "icloud_cal_remote"
+collections = ["from a", "from b"]
+conflict_resolution = "b wins"
+metadata = ["displayname", "color"]
+
+[storage icloud_cal_local]
+type = "filesystem"
+path = "~/.local/share/vdirsyncer/calendars/icloud/"
+fileext = ".ics"
+
+[storage icloud_cal_remote]
+type = "caldav"
+url = "https://caldav.icloud.com/"
+# Uses the same Apple ID and app password as contacts:
+username = "YOUR_APPLE_ID@icloud.com"
+# Linux (pass):
+password.fetch = ["command", "pass", "contacts/icloud-app-password"]
+# macOS (keychain) — uncomment and comment out the line above:
+# password.fetch = ["command", "security", "find-generic-password", "-s", "vdirsyncer-icloud", "-w"]

@@ -21,6 +21,34 @@ echo "==> Config dir: $CONFIG_DIR"
 echo ""
 
 # --------------------------------------------------
+# 1b. Validate required tools
+# --------------------------------------------------
+echo "==> Checking required tools..."
+
+missing=0
+for cmd in aerc khard vdirsyncer; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "    WARNING: '$cmd' not found — install it before using this config"
+        missing=1
+    fi
+done
+
+if [ "$PLATFORM" = "linux" ] && ! command -v pass >/dev/null 2>&1; then
+    echo "    WARNING: 'pass' not found. Install it for credential storage."
+    missing=1
+fi
+
+if [ "$PLATFORM" = "macos" ] && ! command -v security >/dev/null 2>&1; then
+    echo "    WARNING: 'security' command not found (should be built into macOS)."
+    missing=1
+fi
+
+if [ "$missing" = "0" ]; then
+    echo "    All required tools found"
+fi
+echo ""
+
+# --------------------------------------------------
 # 2. Create symlinks
 # --------------------------------------------------
 echo "==> Creating symlinks..."
@@ -39,8 +67,10 @@ echo ""
 # --------------------------------------------------
 echo "==> Creating data directories..."
 mkdir -p ~/.local/share/vdirsyncer/contacts/icloud
+mkdir -p ~/.local/share/vdirsyncer/calendars/icloud
 mkdir -p ~/.local/share/vdirsyncer/status
 echo "    ~/.local/share/vdirsyncer/contacts/icloud"
+echo "    ~/.local/share/vdirsyncer/calendars/icloud"
 echo "    ~/.local/share/vdirsyncer/status"
 echo ""
 
@@ -72,11 +102,11 @@ echo ""
 # --------------------------------------------------
 # 5. Register crontab for vdirsyncer sync
 # --------------------------------------------------
-CRON_JOB="*/15 * * * * vdirsyncer sync icloud_contacts 2>/dev/null"
+CRON_JOB="*/15 * * * * vdirsyncer sync icloud_contacts icloud_calendars 2>/dev/null"
 
-echo "==> Setting up periodic contact sync (every 15 min)..."
+echo "==> Setting up periodic contact & calendar sync (every 15 min)..."
 if command -v crontab >/dev/null 2>&1; then
-    if crontab -l 2>/dev/null | grep -qF "vdirsyncer sync icloud_contacts"; then
+    if crontab -l 2>/dev/null | grep -qF "vdirsyncer sync"; then
         echo "    Crontab entry already exists, skipping"
     else
         (crontab -l 2>/dev/null || true; echo "$CRON_JOB") | crontab -
@@ -157,7 +187,13 @@ cat << 'FINAL'
      vdirsyncer sync icloud_contacts
      khard list    # verify contacts appear
 
-4. TEST AERC
+4. INITIAL CALENDAR SYNC
+
+     vdirsyncer discover icloud_calendars
+     vdirsyncer sync icloud_calendars
+     khal list    # verify events appear (requires khal)
+
+5. TEST AERC
 
      aerc
 
