@@ -161,6 +161,8 @@
         widget:
           type: suwayomi
           url: http://suwayomi:4567
+          username: "{{HOMEPAGE_VAR_SUWAYOMI_USER}}"
+          password: "{{HOMEPAGE_VAR_SUWAYOMI_PASS}}"
     - SearXNG:
         icon: searxng.svg
         href: https://searxng.danteb.com
