@@ -15,7 +15,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 - [Priority 7: Paperless-ngx](#priority-7-paperless-ngx)
 - [~~Priority 8: NixOS Auto-Upgrade~~](#priority-8-nixos-auto-upgrade) ✅ Done
 - [~~Priority 9: Recyclarr CI Validation~~](#priority-9-recyclarr-ci-validation) ✅ Done
-- [Priority 10: Homepage Dashboard Updates](#priority-10-homepage-dashboard-updates)
+- [Priority 10: Homepage Dashboard Updates](#priority-10-homepage-dashboard-updates) 🔶 Partial
 - [Priority 11: Mail Config Improvements](#priority-11-mail-config-improvements)
 - [Priority 12: Additional Services](#priority-12-additional-services)
 - [~~Priority 13: fail2ban for SSH~~](#priority-13-fail2ban-for-ssh) ✅ Done
@@ -555,7 +555,7 @@ Lower priority but keeps the dashboard accurate.
 
 ### Missing widgets for existing services
 
-- **Suwayomi** — Listed but has no widget. Homepage has a native [`suwayomi` widget](https://gethomepage.dev/widgets/services/suwayomi/) that shows chapter counts by category. Add with `type: suwayomi`, `url`, and optional `username`/`password` fields.
+- ~~**Suwayomi**~~ ✅ Done — Widget added with `type: suwayomi`, `url: http://suwayomi:4567`, and basic auth credentials via `HOMEPAGE_VAR_SUWAYOMI_USER`/`HOMEPAGE_VAR_SUWAYOMI_PASS`.
 - **Gluetun VPN status (optional)** — Gluetun doesn't need its own dashboard entry since qBittorrent already covers the download workflow. However, Gluetun exposes a REST API at `http://gluetun:8000/v1/openvpn/status` (or wireguard equivalent). Could add as a `customapi` widget on the existing qBittorrent entry or as a standalone entry showing the forwarded port and connected server — nice-to-have, not essential.
 
 ### Layout consideration
@@ -770,7 +770,7 @@ services.fail2ban = {
 | 7 | Paperless-ngx | Docker | None (additive) | Medium | Lower priority — increase Nextcloud usage first |
 | 8 | ~~NixOS auto-upgrade~~ ✅ | NixOS | Low (no auto-reboot) | Low | |
 | 9 | ~~Recyclarr CI validation~~ ✅ | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
-| 10 | Homepage dashboard updates | Homepage | None | Low | Suwayomi widget, arm-server is API-only (no dashboard) |
+| 10 | Homepage dashboard updates 🔶 | Homepage | None | Low | ~~Suwayomi widget~~ ✅; Uptime Kuma/Grafana widgets blocked on P2/P5 |
 | 11 | Mail calendar sync + setup.sh validation | Mail | None | Low | |
 | 12 | Additional services | Docker | None (additive) | Low-Medium each | Priority: IT-Tools > Forgejo > Calibre-web > Code-server |
 | 13 | ~~fail2ban for SSH~~ ✅ | NixOS | Low | Low | |
