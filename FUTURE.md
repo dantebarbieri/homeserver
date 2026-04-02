@@ -10,7 +10,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 - [Priority 2: Monitoring Stack](#priority-2-monitoring-stack)
 - [~~Priority 3: VPN Server for Remote Access~~](#priority-3-vpn-server-for-remote-access) ✅ Done
 - [~~Priority 4: NixOS Kernel Hardening~~](#priority-4-nixos-kernel-hardening) ✅ Done
-- [Priority 5: Uptime Monitoring & External Status Page](#priority-5-uptime-monitoring--external-status-page) 🔶 Partial
+- [~~Priority 5: Uptime Monitoring & External Status Page~~](#priority-5-uptime-monitoring--external-status-page) ✅ Done
 - [Priority 6: Docker Container Hardening](#priority-6-docker-container-hardening)
 - [Priority 7: Paperless-ngx](#priority-7-paperless-ngx)
 - [~~Priority 8: NixOS Auto-Upgrade~~](#priority-8-nixos-auto-upgrade) ✅ Done
@@ -250,96 +250,13 @@ All settings are real Linux kernel sysctls and the values follow CIS benchmark /
 
 ---
 
-## Priority 5: Uptime Monitoring & External Status Page
+## ~~Priority 5: Uptime Monitoring & External Status Page~~ ✅ Done
 
 Homepage's `siteMonitor` only shows current state — no history, no trend detection, no alerting on repeated flaps. More importantly, a self-hosted status page goes down when the server goes down — exactly when friends need to check status.
 
-### Completed
-
-- **Uptime Kuma deployed** — running at `https://uptime.danteb.com` in `compose.dashboards.yml`, Homepage widget configured with `HOMEPAGE_VAR_KUMA_SLUG`, status page created with slug `homeserver`
-- **Upptime live** — `dantebarbieri/homeserver-status` repo, `https://status.danteb.com` on GitHub Pages, PAT configured, Cloudflare CNAME set, monitoring 11 services. Local clone at `~/Programming/HomeServer-Status`. Note: Upptime follows redirects automatically — only add `expectedStatusCodes` for true non-OK responses like 401 (Plex), NOT for 302/307 redirects (Jellyfin, Nextcloud, Seerr) which resolve to 200 at their destination.
-
-### Remaining: Configure Uptime Kuma Monitors
-
-The Uptime Kuma container is running and the status page exists, but no monitors have been added yet. This is the remaining work.
-
-#### 1. Create monitors
-
-In Uptime Kuma (`https://uptime.danteb.com`), click **"Add New Monitor"** for each service. Use type **HTTP(s)** for all web services.
-
-**Recommended monitors** — all public-facing services with a web UI or API:
-
-| Monitor Name | URL | Notes |
-|-------------|-----|-------|
-| Plex | `https://plex.danteb.com` | |
-| Jellyfin | `https://jellyfin.danteb.com` | |
-| Seerr | `https://seerr.danteb.com` | |
-| Immich | `https://immich.danteb.com` | |
-| Komga | `https://komga.danteb.com` | |
-| Radarr | `https://radarr.danteb.com` | |
-| Sonarr | `https://sonarr.danteb.com` | |
-| Bazarr | `https://bazarr.danteb.com` | |
-| Prowlarr | `https://prowlarr.danteb.com` | |
-| Tdarr | `https://tdarr.danteb.com` | |
-| qBittorrent | `https://qbittorrent.danteb.com` | |
-| SABnzbd | `https://sabnzbd.danteb.com` | |
-| Suwayomi | `https://suwayomi.danteb.com` | |
-| SearXNG | `https://searxng.danteb.com` | |
-| Nginx Proxy Manager | `https://nginx-proxy-manager.danteb.com` | Critical — if this is down, everything is down |
-| Element | `https://element.danteb.com` | |
-| Synapse | `https://matrix.danteb.com` | |
-| Authelia | `https://authelia.danteb.com` | |
-| Nextcloud | `https://cloud.danteb.com` | |
-| AdGuard Home | `https://adguardhome.danteb.com` | |
-| Vaultwarden | `https://vaultwarden.danteb.com` | |
-| Syncthing | `https://syncthing.danteb.com` | |
-| ntfy | `https://ntfy.danteb.com` | Monitor this even though it's the notification target — if ntfy is down, you want to see it in the dashboard |
-| Dashdot | `https://dashdot.danteb.com` | |
-| IT-Tools | `https://tools.danteb.com` | |
-| Homepage | `https://homepage.danteb.com` | |
-| Travel Planner | `https://travel.danteb.com` | |
-
-**Skip these** — game servers use raw TCP/UDP ports, not HTTP, and are only online when actively used:
-- Minecraft servers (mc.danteb.com, rlcraft.danteb.com)
-- Hytale server
-- Satisfactory server
-
-**Monitor settings** — good defaults for all HTTP monitors:
-- Heartbeat Interval: `60` seconds (default)
-- Retries: `3` (avoids false alerts from transient network hiccups)
-- Accepted Status Codes: `200-299` (some services may return 401/403 — adjust per-service if needed)
-
-#### 2. Configure ntfy notifications
-
-Go to **Settings → Notifications → Setup Notification**:
-- Notification Type: **ntfy**
-- Topic URL: `https://ntfy.danteb.com/homeserver-alerts`
-- Priority: `high` (for down alerts)
-- Check **"Apply on all existing monitors"** to enable globally
-- Click **Test** to confirm a notification arrives on your phone
-
-#### 3. Add monitors to the status page
-
-Go to `/status/homeserver?edit`:
-1. Click **"+ Add Group"** — create groups to organize (e.g., "Media", "Infrastructure", "Utilities") or use a single "Services" group
-2. Within each group, click **"Add a monitor"** and select from your created monitors
-3. Click **Save**
-
-#### 4. Set the Homepage widget slug
-
-```zsh
-# Edit .env and set:
-# HOMEPAGE_VAR_KUMA_SLUG=homeserver
-# Then:
-docker compose up -d homepage
-```
-
-#### 5. Verify
-
-- All monitors should show green "UP" status within 60 seconds of creation
-- Stop a container (`docker compose stop jellyfin`), confirm Uptime Kuma detects downtime within ~60s and ntfy fires an alert
-- Restart the container, confirm recovery notification
-- Check Homepage — the Uptime Kuma widget should show monitor counts (up/down)
+- **Uptime Kuma deployed** — running at `https://uptime.danteb.com` in `compose.dashboards.yml`, Homepage widget configured with `HOMEPAGE_VAR_KUMA_SLUG=homeserver`
+- **Uptime Kuma monitors configured** — 33 HTTP(s) monitors across 6 groups (Media, Media Management, Downloads, Communication, Infrastructure, Utilities) with group-level rollup monitors, ntfy notifications on `homeserver-alerts` topic, status page at `/status/homeserver`
+- **Upptime live** — `dantebarbieri/homeserver-status` repo, `https://status.danteb.com` on GitHub Pages, PAT configured, Cloudflare CNAME set, monitoring all 33 web-accessible services. Note: Upptime follows redirects automatically — only add `expectedStatusCodes` for true non-OK responses like 401 (Plex), NOT for 302/307 redirects which resolve to 200 at their destination.
 
 ---
 
@@ -548,7 +465,7 @@ Lower priority but keeps the dashboard accurate.
 
 ### Missing services to add
 
-- **Uptime Kuma** — If added (Priority 5), Homepage has a built-in `uptimekuma` widget.
+- ~~**Uptime Kuma**~~ ✅ — Homepage `uptimekuma` widget configured with `HOMEPAGE_VAR_KUMA_SLUG=homeserver`
 - **Grafana** — If added (Priority 2), Homepage has a built-in `grafana` widget.
 
 **Note:** arm-server does NOT have a web UI — it's an API-only service for mapping anime IDs between AniList, AniDB, MAL, and Kitsu. The [docs site](https://arm.haglund.dev/docs) is API documentation, not a dashboard. It's consumed internally by other services (Komf, etc.) and should not be added to the homepage.
@@ -742,7 +659,7 @@ services.fail2ban = {
 | 2 | Monitoring stack (Prometheus/Grafana/Loki) | Docker | None (additive) | Medium-High | Grafana uses own auth; Prometheus/cAdvisor internal only |
 | 3 | ~~VPN server (WireGuard in Docker)~~ ✅ | Docker | Low | Low | wg-easy container; portable across OS |
 | 4 | ~~Kernel hardening (sysctl)~~ ✅ | NixOS | Low (test first) | Low | All settings validated against CIS/KSPP |
-| 5 | Uptime monitoring (Upptime + Kuma) 🔶 | Docker + GitHub | None (additive) | Low | Kuma deployed, Upptime live; monitors + Homepage slug remaining |
+| 5 | ~~Uptime monitoring (Upptime + Kuma)~~ ✅ | Docker + GitHub | None (additive) | Low | Kuma monitors configured with ntfy alerts, Upptime expanded to 33 services |
 | 6 | Container hardening (limits, caps, read-only) | Docker | Medium (test each) | Medium | Incremental per-service, not global; limits are safety nets |
 | 7 | Paperless-ngx | Docker | None (additive) | Medium | Lower priority — increase Nextcloud usage first |
 | 8 | ~~NixOS auto-upgrade~~ ✅ | NixOS | Low (no auto-reboot) | Low | |
