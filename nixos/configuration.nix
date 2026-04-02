@@ -79,6 +79,9 @@ in
   #   boot.kernelPackages = pkgs.linuxPackages_6_12;
   # Check NVIDIA compatibility at: https://www.nvidia.com/en-us/drivers/unix/
 
+  # Load iptables kernel modules for containers that use legacy iptables (e.g., wg-easy)
+  boot.kernelModules = [ "iptable_nat" "iptable_filter" ];
+
   # Kernel hardening (CIS / KSPP recommendations)
   boot.kernel.sysctl = {
     "kernel.sysrq" = 0;                     # Disable Magic SysRq key (no physical keyboard on headless server)
