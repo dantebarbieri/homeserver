@@ -80,6 +80,29 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 - **No-network services** (endlessh) — fall through to Docker's default bridge. Note: ddclient uses the dedicated `ddns` network for IPv6.
 - Cross-stack communication uses shared internal networks (e.g., `flaresolverr`) rather than putting non-proxied services on `proxy`.
 
+### Subdomain Naming Convention
+
+The default rule is: **use the container/service name as the subdomain** (e.g., `radarr.danteb.com`, `sonarr.danteb.com`, `authelia.danteb.com`). Then add NPM **redirection hosts** for common alternative names people might type (e.g., `torrent.danteb.com` → `qbittorrent.danteb.com`, `vpn.danteb.com` → `wireguard.danteb.com`).
+
+**Exceptions** — some services use a shorter or more meaningful subdomain instead of the container name:
+
+| Subdomain | Container | Why |
+|-----------|-----------|-----|
+| `calibre` | calibre-web | The library matters, not the frontend app |
+| `cloud` | nextcloud | Canonical name in Nextcloud docs |
+| `code` | code-server | Short canonical name |
+| `git` | forgejo | The hosting concept matters, not the Gitea fork |
+| `immich` | immich_server | Project name, not the `_server` suffix |
+| `ipmi` | (BMC at 192.168.50.50) | Describes the protocol/interface |
+| `matrix` | synapse | Matrix is the protocol, Synapse is the implementation |
+| `tools` | it-tools | Short canonical name |
+| `travel` | travel-planner | Shortened |
+| `uptime` | uptime-kuma | The concept matters, not the tool |
+| `wireguard` | wg-easy | WireGuard is the protocol, wg-easy is the UI |
+| `yipitdata` | yipitdata-frontend | Simplified |
+
+The guiding principle: prefer the **concept, protocol, or canonical project name** over the specific container/implementation name when they differ meaningfully. If someone swaps the underlying app (e.g., Forgejo → Gitea → GitLab), the subdomain should still make sense.
+
 ### Environment Variables (from `.env`, not committed)
 
 - `${DATA}` — persistent service config/data (e.g., `/srv/docker/data`)
@@ -102,7 +125,8 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 4. Web UI services → join `proxy` + a dedicated internal network. Pure backends → internal only. No-comms services → no networks.
 5. **Authelia SSO** — Only add Authelia protection if the service has **no built-in auth** (e.g., Dashdot, Prometheus) or has **notoriously weak/untrustworthy auth** (e.g., BMC/IPMI web portals). Services with solid built-in authentication (e.g., Grafana, Vaultwarden, Nextcloud) should handle their own security — do not double up with Authelia.
 6. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
-7. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env` **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly passed through — `.env` alone is not enough), and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
+7. **NPM proxy host** — create the proxy host in NPM. Use the container/service name as the subdomain by default; use a shorter/canonical name if it fits the exceptions in [Subdomain Naming Convention](#subdomain-naming-convention). Add redirection hosts for common alternative names (e.g., `vpn` → `wireguard`).
+8. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env` **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly passed through — `.env` alone is not enough), and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
 
 ### Commands
 

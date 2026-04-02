@@ -30,7 +30,7 @@ This file provides guidance to Claude Code when working with the `homepage/` dir
 ### Checklist
 
 1. Place in the correct category group (Media, Media Management, Downloads, etc.)
-2. Use `https://service.danteb.com` for public `href` and `siteMonitor`
+2. Use `https://service.danteb.com` for public `href` and `siteMonitor` — the subdomain should match the NPM proxy host (see [Subdomain Naming Convention](../CLAUDE.md#subdomain-naming-convention) in the root CLAUDE.md)
 3. Use `http://container-name:port` for widget `url` (internal Docker network)
 4. `server` is always `my-docker`
 5. `container` must match the Docker container name exactly

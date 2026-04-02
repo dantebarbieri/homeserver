@@ -46,6 +46,7 @@ All services reference variables from `docker/.env` (not committed; see `docker/
 - **VPN namespace** — `vpn-netns` → `gluetun` → `qbittorrent` share one network via `network_mode: "container:vpn-netns"`.
 - **Game servers** — direct host port mapping, no networks.
 - Each compose file that references `proxy` declares it in its own `networks:` section for standalone compatibility.
+- **Subdomain naming** — default: use the container name as the subdomain (e.g., `radarr.danteb.com`), with NPM redirection hosts for common aliases (e.g., `vpn` → `wireguard`). Exception: use a shorter or canonical name when the concept/protocol matters more than the implementation (e.g., `git` not `forgejo`, `wireguard` not `wg-easy`, `cloud` not `nextcloud`).
 
 ### Commands (run from `docker/`)
 
