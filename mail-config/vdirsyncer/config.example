@@ -71,11 +71,16 @@ password.fetch = ["command", "pass", "contacts/icloud-app-password"]
 # Requires a Google Cloud OAuth2 client ID + secret.
 # Create at: https://console.cloud.google.com/apis/credentials
 #   1. Create project (or use existing)
-#   2. Enable "Google Calendar API"
-#   3. Create OAuth 2.0 Client ID (Desktop app type)
-#   4. Copy client_id and client_secret below
-#   5. Run: vdirsyncer discover google_calendars
-#      (opens browser for one-time OAuth consent)
+#   2. Enable the "CalDAV API" (not just "Google Calendar API"):
+#      https://console.developers.google.com/apis/api/caldav.googleapis.com
+#   3. Configure OAuth consent screen (branding), add yourself as test user
+#   4. Create OAuth 2.0 Client ID (Desktop app type)
+#   5. Copy client_id and client_secret below
+#   6. Run: vdirsyncer discover google_calendars
+#      (prints URL — open in browser, complete OAuth consent)
+#   Note: on a headless server, set up an SSH tunnel first:
+#      ssh -L <port>:127.0.0.1:<port> server
+#   so the OAuth redirect reaches vdirsyncer's local listener.
 
 [pair google_calendars]
 a = "google_cal_local"
