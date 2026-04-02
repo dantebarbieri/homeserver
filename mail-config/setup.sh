@@ -55,10 +55,12 @@ echo "==> Creating symlinks..."
 
 ln -sfn "$SCRIPT_DIR/aerc"       "$AERC_TARGET"
 ln -sfn "$SCRIPT_DIR/khard"      "$CONFIG_DIR/khard"
+ln -sfn "$SCRIPT_DIR/khal"       "$CONFIG_DIR/khal"
 ln -sfn "$SCRIPT_DIR/vdirsyncer" "$CONFIG_DIR/vdirsyncer"
 
 echo "    aerc       -> $AERC_TARGET"
 echo "    khard      -> $CONFIG_DIR/khard"
+echo "    khal       -> $CONFIG_DIR/khal"
 echo "    vdirsyncer -> $CONFIG_DIR/vdirsyncer"
 echo ""
 
