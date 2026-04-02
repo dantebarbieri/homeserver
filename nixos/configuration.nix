@@ -268,7 +268,7 @@ in
       # ── khal: show today's calendar events on login ──
       if [[ $SHLVL -eq 1 ]] && command -v khal &>/dev/null; then
         local _khal_out
-        _khal_out="$(khal list today today 2>/dev/null)"
+        _khal_out="$(khal list --day-format "" --format "{start-end-time-style} {title}" today today 2>/dev/null)"
         if [[ -n "$_khal_out" ]]; then
           echo ""
           echo "\e[1;34m📅 Today's events:\e[0m"
