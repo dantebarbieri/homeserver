@@ -207,6 +207,13 @@
         siteMonitor: https://authelia.danteb.com
         server: my-docker
         container: authelia
+    - WireGuard:
+        icon: wireguard.svg
+        href: https://wireguard.danteb.com
+        description: VPN Server
+        siteMonitor: https://wireguard.danteb.com
+        server: my-docker
+        container: wg-easy
 
 - Utilities:
     - Nextcloud:

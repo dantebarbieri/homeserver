@@ -162,6 +162,7 @@ in
       5205    # Hytale
       7778    # Satisfactory
       32410 32412 32413 32414  # Plex GDM discovery
+      51820   # WireGuard VPN (wg-easy)
     ];
     allowedTCPPortRanges = [
       { from = 36676; to = 36677; }  # Minecraft servers
