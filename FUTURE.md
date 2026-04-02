@@ -654,16 +654,9 @@ Deployed at `https://git.danteb.com`. In `compose.git.yml` with Postgres + Homep
 
 Deployed at `https://calibre.danteb.com`. In `compose.media.yml` + Homepage dashboard. Gmail SMTP configured for Send to Kindle. Library at `${RAID}/shared/reading/ebooks`.
 
-### Code-server
+### ~~Code-server~~ ✅ Done
 
-VS Code in the browser. Useful alongside nvim for when a GUI editor is more convenient (complex refactors, extensions, visual diff).
-
-- Image: `lscr.io/linuxserver/code-server:latest`
-- Add to `compose.utilities.yml`
-- Mount project directories as needed (e.g., `/srv/homeserver`)
-- Proxy at `https://code.danteb.com` with Authelia SSO (code-server has basic password auth, but Authelia is recommended for a code execution environment)
-
-**Verification**: Access the URL, open a terminal, verify you can edit files. Install extensions, confirm they persist across container restarts.
+Deployed at `https://code.danteb.com`. In `compose.utilities.yml` with LinuxServer base, Homepage dashboard configured. Mounts `/srv/homeserver` and `/srv/docker/data` for service config editing.
 
 ### Home Assistant (future — low priority)
 
@@ -756,5 +749,5 @@ services.fail2ban = {
 | 9 | ~~Recyclarr CI validation~~ ✅ | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
 | 10 | Homepage dashboard updates 🔶 | Homepage | None | Low | ~~Suwayomi widget~~ ✅; Uptime Kuma/Grafana widgets blocked on P2/P5 |
 | 11 | ~~Mail calendar sync + setup.sh validation~~ ✅ | Mail | None | Low | |
-| 12 | Additional services | Docker | None (additive) | Low-Medium each | ~~IT-Tools~~ ✅, ~~Forgejo~~ ✅, ~~Calibre-web~~ ✅; remaining: Code-server, Home Assistant, Changedetection, pgAdmin |
+| 12 | Additional services | Docker | None (additive) | Low-Medium each | ~~IT-Tools~~ ✅, ~~Forgejo~~ ✅, ~~Calibre-web~~ ✅, ~~Code-server~~ ✅; remaining: Home Assistant, Changedetection, pgAdmin |
 | 13 | ~~fail2ban for SSH~~ ✅ | NixOS | Low | Low | |
