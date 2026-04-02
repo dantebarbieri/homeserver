@@ -264,6 +264,18 @@ in
 
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
       [[ $SHLVL -eq 1 ]] && fastfetch
+
+      # ── khal: show today's calendar events on login ──
+      if [[ $SHLVL -eq 1 ]] && command -v khal &>/dev/null; then
+        local _khal_out
+        _khal_out="$(khal list today today 2>/dev/null)"
+        if [[ -n "$_khal_out" ]]; then
+          echo ""
+          echo "\e[1;34m📅 Today's events:\e[0m"
+          echo "$_khal_out"
+          echo ""
+        fi
+      fi
     '';
     shellAliases = {
       ns = "nix shell";
