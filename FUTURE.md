@@ -16,7 +16,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 - [~~Priority 8: NixOS Auto-Upgrade~~](#priority-8-nixos-auto-upgrade) ✅ Done
 - [~~Priority 9: Recyclarr CI Validation~~](#priority-9-recyclarr-ci-validation) ✅ Done
 - [Priority 10: Homepage Dashboard Updates](#priority-10-homepage-dashboard-updates) 🔶 Partial
-- [Priority 11: Mail Config Improvements](#priority-11-mail-config-improvements)
+- [~~Priority 11: Mail Config Improvements~~](#priority-11-mail-config-improvements) ✅ Done
 - [Priority 12: Additional Services](#priority-12-additional-services)
 - [~~Priority 13: fail2ban for SSH~~](#priority-13-fail2ban-for-ssh) ✅ Done
 
@@ -579,7 +579,7 @@ If monitoring services are added (Grafana, Uptime Kuma), create a new "Infrastru
 
 ---
 
-## Priority 11: Mail Config Improvements
+## ~~Priority 11: Mail Config Improvements~~ ✅ Done
 
 ### 11a. iCloud Calendar Sync
 
@@ -771,6 +771,6 @@ services.fail2ban = {
 | 8 | ~~NixOS auto-upgrade~~ ✅ | NixOS | Low (no auto-reboot) | Low | |
 | 9 | ~~Recyclarr CI validation~~ ✅ | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
 | 10 | Homepage dashboard updates 🔶 | Homepage | None | Low | ~~Suwayomi widget~~ ✅; Uptime Kuma/Grafana widgets blocked on P2/P5 |
-| 11 | Mail calendar sync + setup.sh validation | Mail | None | Low | |
+| 11 | ~~Mail calendar sync + setup.sh validation~~ ✅ | Mail | None | Low | |
 | 12 | Additional services | Docker | None (additive) | Low-Medium each | Priority: IT-Tools > Forgejo > Calibre-web > Code-server |
 | 13 | ~~fail2ban for SSH~~ ✅ | NixOS | Low | Low | |
