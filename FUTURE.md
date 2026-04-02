@@ -194,7 +194,7 @@ After `nixos-rebuild switch`, run `sudo tailscale up` to authenticate. Install T
 
 ### Verification
 
-- **WireGuard**: Access `https://vpn.danteb.com` (or chosen subdomain), log in to wg-easy UI, create a client config. Import on phone. Disconnect from home WiFi, use cellular. Access `https://jellyfin.danteb.com` — should work via the tunnel. Run `curl ifconfig.me` on the client to confirm traffic routes through the VPN.
+- **WireGuard**: Access `https://wireguard.danteb.com` (`vpn.danteb.com` redirects here), log in to wg-easy UI, create a client config. Import on phone. Disconnect from home WiFi, use cellular. Access `https://jellyfin.danteb.com` — should work via the tunnel. Run `curl ifconfig.me` on the client to confirm traffic routes through the VPN.
 - **Tailscale**: After `sudo tailscale up`, run `tailscale status` to confirm the server appears. From another Tailscale device, `ping 100.x.x.x` (the server's Tailscale IP). Access `http://100.x.x.x:8096` (Jellyfin) to confirm internal services are reachable.
 - For either: test from a non-home network (cellular, coffee shop WiFi) to confirm remote access works
 

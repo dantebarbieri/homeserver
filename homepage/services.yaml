@@ -294,7 +294,7 @@
         server: my-docker
         container: it-tools
     - Code Server:
-        icon: code-server.svg
+        icon: code-server.webp
         href: https://code.danteb.com
         description: VS Code in Browser
         siteMonitor: https://code.danteb.com
