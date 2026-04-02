@@ -70,9 +70,11 @@ echo ""
 echo "==> Creating data directories..."
 mkdir -p ~/.local/share/vdirsyncer/contacts/icloud
 mkdir -p ~/.local/share/vdirsyncer/calendars/icloud
+mkdir -p ~/.local/share/vdirsyncer/calendars/google
 mkdir -p ~/.local/share/vdirsyncer/status
 echo "    ~/.local/share/vdirsyncer/contacts/icloud"
 echo "    ~/.local/share/vdirsyncer/calendars/icloud"
+echo "    ~/.local/share/vdirsyncer/calendars/google"
 echo "    ~/.local/share/vdirsyncer/status"
 echo ""
 
@@ -104,7 +106,7 @@ echo ""
 # --------------------------------------------------
 # 5. Register crontab for vdirsyncer sync
 # --------------------------------------------------
-CRON_JOB="*/15 * * * * vdirsyncer sync icloud_contacts icloud_calendars 2>/dev/null"
+CRON_JOB="*/15 * * * * vdirsyncer sync icloud_contacts icloud_calendars google_calendars 2>/dev/null"
 
 echo "==> Setting up periodic contact & calendar sync (every 15 min)..."
 if command -v crontab >/dev/null 2>&1; then
@@ -140,6 +142,9 @@ cat << 'INSTRUCTIONS'
    vdirsyncer/config
      - Replace YOUR_APPLE_ID@icloud.com with your
        actual Apple ID
+     - Replace YOUR_GOOGLE_CLIENT_ID and
+       YOUR_GOOGLE_CLIENT_SECRET with your
+       Google Cloud OAuth2 credentials
 
 2. STORE YOUR APP PASSWORDS
 
@@ -193,6 +198,11 @@ cat << 'FINAL'
 
      vdirsyncer discover icloud_calendars
      vdirsyncer sync icloud_calendars
+
+     # Google Calendar (requires OAuth2 — opens browser):
+     vdirsyncer discover google_calendars
+     vdirsyncer sync google_calendars
+
      khal list    # verify events appear (requires khal)
 
 5. TEST AERC

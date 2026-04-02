@@ -1,7 +1,10 @@
-# Copy this to 'config' and fill in your Apple ID.
+# Copy this to 'config' and fill in your credentials.
 #   cp config.example config
 #
-# Credentials are fetched via 'pass' (Linux) or 'security' (macOS).
+# iCloud credentials are fetched via 'pass' (Linux) or 'security' (macOS).
+# Google Calendar uses OAuth2 — run 'vdirsyncer discover google_calendars'
+# to complete the browser-based consent flow (one-time).
+#
 # See setup.sh output for instructions on storing your passwords.
 #
 # Note: vdirsyncer only supports password.fetch for credentials.
@@ -63,3 +66,31 @@ username = "YOUR_APPLE_ID@icloud.com"
 password.fetch = ["command", "pass", "contacts/icloud-app-password"]
 # macOS (keychain) — uncomment and comment out the line above:
 # password.fetch = ["command", "security", "find-generic-password", "-s", "vdirsyncer-icloud", "-w"]
+
+# ── Google Calendar Sync ──────────────────────────
+# Requires a Google Cloud OAuth2 client ID + secret.
+# Create at: https://console.cloud.google.com/apis/credentials
+#   1. Create project (or use existing)
+#   2. Enable "Google Calendar API"
+#   3. Create OAuth 2.0 Client ID (Desktop app type)
+#   4. Copy client_id and client_secret below
+#   5. Run: vdirsyncer discover google_calendars
+#      (opens browser for one-time OAuth consent)
+
+[pair google_calendars]
+a = "google_cal_local"
+b = "google_cal_remote"
+collections = ["from a", "from b"]
+conflict_resolution = "b wins"
+metadata = ["displayname", "color"]
+
+[storage google_cal_local]
+type = "filesystem"
+path = "~/.local/share/vdirsyncer/calendars/google/"
+fileext = ".ics"
+
+[storage google_cal_remote]
+type = "google_calendar"
+token_file = "~/.local/share/vdirsyncer/google_calendar_token"
+client_id = "YOUR_GOOGLE_CLIENT_ID"
+client_secret = "YOUR_GOOGLE_CLIENT_SECRET"

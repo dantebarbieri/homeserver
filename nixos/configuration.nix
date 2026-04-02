@@ -377,7 +377,7 @@ in
     };
     path = with pkgs; [ vdirsyncer pass gnupg ];
     script = ''
-      vdirsyncer sync icloud_contacts icloud_calendars
+      vdirsyncer sync icloud_contacts icloud_calendars google_calendars
     '';
   };
 
