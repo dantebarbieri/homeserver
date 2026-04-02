@@ -555,7 +555,7 @@ Lower priority but keeps the dashboard accurate.
 
 ### Missing widgets for existing services
 
-- ~~**Suwayomi**~~ ✅ Done — Widget added with `type: suwayomi`, `url: http://suwayomi:4567`, and basic auth credentials via `HOMEPAGE_VAR_SUWAYOMI_USER`/`HOMEPAGE_VAR_SUWAYOMI_PASS`.
+- ~~**Suwayomi**~~ — **Not worth it.** Homepage's suwayomi widget requires HTTP Basic Auth, but Suwayomi is configured with `simple_login` (form-based auth). Switching to `basic_auth` mode would degrade the web UI login experience. Leave as status-only.
 - **Gluetun VPN status (optional)** — Gluetun doesn't need its own dashboard entry since qBittorrent already covers the download workflow. However, Gluetun exposes a REST API at `http://gluetun:8000/v1/openvpn/status` (or wireguard equivalent). Could add as a `customapi` widget on the existing qBittorrent entry or as a standalone entry showing the forwarded port and connected server — nice-to-have, not essential.
 
 ### Layout consideration

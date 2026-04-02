@@ -194,14 +194,6 @@ Uptime Kuma's Homepage widget reads data from a **status page**, not an API key.
 
 ---
 
-## Suwayomi — `HOMEPAGE_VAR_SUWAYOMI_USER` / `HOMEPAGE_VAR_SUWAYOMI_PASS`
-
-Use the username and password configured for Suwayomi's basic authentication.
-These are the credentials you use to log into the Suwayomi web UI at
-`https://suwayomi.danteb.com`.
-
----
-
 ## Quick Reference
 
 | Variable | Service | Type |
@@ -226,6 +218,4 @@ These are the credentials you use to log into the Suwayomi web UI at
 | `HOMEPAGE_VAR_NEXTCLOUD_PASS` | Nextcloud | Password / app password |
 | `HOMEPAGE_VAR_ADGUARD_USERNAME` | AdGuard Home | Username |
 | `HOMEPAGE_VAR_ADGUARD_PASSWORD` | AdGuard Home | Password |
-| `HOMEPAGE_VAR_SUWAYOMI_USER` | Suwayomi | Username |
-| `HOMEPAGE_VAR_SUWAYOMI_PASS` | Suwayomi | Password |
 | `HOMEPAGE_VAR_KUMA_SLUG` | Uptime Kuma | Status page slug |
