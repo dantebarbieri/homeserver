@@ -118,6 +118,7 @@ services:
     volumes:
       - ${DATA}/code-server/config:/config
       - /srv/homeserver:/srv/homeserver
+      - /srv/docker/data:/srv/docker/data
     networks:
       - proxy
 
