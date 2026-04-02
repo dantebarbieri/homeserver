@@ -174,7 +174,7 @@ Run as a Docker container using `wg-easy` (web management UI for peer/client man
 - Image: `ghcr.io/wg-easy/wg-easy:latest`
 - Add to `docker/compose.core.yml` or `docker/compose.utilities.yml`
 - Join `proxy` network for the web UI (has built-in password auth — no Authelia needed for the management UI, but consider Authelia since it's a VPN management portal)
-- Requires UDP port 51820 opened on NixOS firewall + router (IPv4 port forward + IPv6 firewall rule)
+- Requires UDP port 51820 opened on NixOS firewall + router — **router IPv4 port forward and IPv6 firewall rule already added** (2026-04-01), NixOS firewall still needed
 - Environment variables: `WG_HOST` (public hostname/IP), `PASSWORD_HASH` (for web UI), `WG_DEFAULT_DNS` (optional, point to local DNS)
 
 ### Option B: Tailscale (alternative — NixOS-native)
@@ -189,7 +189,7 @@ After `nixos-rebuild switch`, run `sudo tailscale up` to authenticate. Install T
 
 ### Files to modify
 
-- **WireGuard (recommended)**: New entry in `docker/compose.core.yml` or `docker/compose.utilities.yml`, `docker/sample.env` for `WG_HOST` and password hash, `networking.firewall.allowedUDPPorts` in `configuration.nix` (add 51820), router IPv4 port forwarding for UDP 51820, and router IPv6 firewall rule for UDP 51820
+- **WireGuard (recommended)**: New entry in `docker/compose.core.yml` or `docker/compose.utilities.yml`, `docker/sample.env` for `WG_HOST` and password hash, `networking.firewall.allowedUDPPorts` in `configuration.nix` (add 51820). Router IPv4 port forwarding and IPv6 firewall rule for UDP 51820 are already done.
 - **Tailscale**: `nixos/configuration.nix` — Add `services.tailscale.enable = true;` and `networking.firewall.trustedInterfaces = [ "tailscale0" ];`
 
 ### Verification
