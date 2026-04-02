@@ -158,6 +158,9 @@
         siteMonitor: https://suwayomi.danteb.com
         server: my-docker
         container: suwayomi
+        widget:
+          type: suwayomi
+          url: http://suwayomi:4567
     - SearXNG:
         icon: searxng.svg
         href: https://searxng.danteb.com
