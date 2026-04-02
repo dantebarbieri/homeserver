@@ -293,6 +293,13 @@
         siteMonitor: https://tools.danteb.com
         server: my-docker
         container: it-tools
+    - Code Server:
+        icon: code-server.svg
+        href: https://code.danteb.com
+        description: VS Code in Browser
+        siteMonitor: https://code.danteb.com
+        server: my-docker
+        container: code-server
     - Travel Planner:
         icon: mdi-airplane
         href: https://travel.danteb.com

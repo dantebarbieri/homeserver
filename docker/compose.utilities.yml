@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools
+# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server
 
 services:
   vaultwarden:
@@ -106,6 +106,18 @@ services:
       service: common-service
     image: corentinth/it-tools:latest
     container_name: it-tools
+    networks:
+      - proxy
+
+  code-server:
+    extends:
+      file: compose.common.yml
+      service: linuxserver-service
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: code-server
+    volumes:
+      - ${DATA}/code-server/config:/config
+      - /srv/homeserver:/srv/homeserver
     networks:
       - proxy
 
