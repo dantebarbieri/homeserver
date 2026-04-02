@@ -91,6 +91,8 @@ services:
       WG_HOST: ${WGEASY_HOST}
       PASSWORD_HASH: ${WGEASY_PASSWORD_HASH}
       WG_DEFAULT_DNS: 192.168.50.100
+      WG_POST_UP: "iptables-nft -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE; iptables-nft -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables-nft -A FORWARD -i wg0 -j ACCEPT; iptables-nft -A FORWARD -o wg0 -j ACCEPT;"
+      WG_POST_DOWN: "iptables-nft -t nat -D POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE; iptables-nft -D INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables-nft -D FORWARD -i wg0 -j ACCEPT; iptables-nft -D FORWARD -o wg0 -j ACCEPT;"
     volumes:
       - ${DATA}/wg-easy:/etc/wireguard
     ports:
