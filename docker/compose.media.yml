@@ -154,6 +154,18 @@ services:
       retries: 5
       start_period: 30s
 
+  calibre-web:
+    extends:
+      file: compose.common.yml
+      service: linuxserver-service
+    container_name: calibre-web
+    image: lscr.io/linuxserver/calibre-web:latest
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/calibre-web/config:/config
+      - ${RAID}/shared/reading/ebooks:/books
+
 networks:
   proxy:
   anime:

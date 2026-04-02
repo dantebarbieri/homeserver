@@ -69,6 +69,13 @@
           url: http://komga:25600
           username: "{{HOMEPAGE_VAR_KOMGA_USER}}"
           password: "{{HOMEPAGE_VAR_KOMGA_PASS}}"
+    - Calibre-web:
+        icon: calibre-web.svg
+        href: https://books.danteb.com
+        description: Ebook Library
+        siteMonitor: https://books.danteb.com
+        server: my-docker
+        container: calibre-web
 
 - Media Management:
     - Radarr:
@@ -293,6 +300,13 @@
         siteMonitor: https://travel.danteb.com
         server: my-docker
         container: travel-planner
+    - Forgejo:
+        icon: forgejo.svg
+        href: https://git.danteb.com
+        description: Self-hosted Git
+        siteMonitor: https://git.danteb.com
+        server: my-docker
+        container: forgejo
 
 - Game Servers:
     - Hardcore Minecraft:

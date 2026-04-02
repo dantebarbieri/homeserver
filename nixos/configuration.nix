@@ -147,6 +147,7 @@ in
       80      # HTTP → Nginx Proxy Manager
       443     # HTTPS → Nginx Proxy Manager
       22      # endlessh SSH honeypot
+      2222    # Forgejo Git SSH
       32400   # Plex direct access
       8324    # Plex companion
       32469   # Plex DLNA

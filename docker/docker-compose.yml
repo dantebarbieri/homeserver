@@ -14,6 +14,7 @@ include:
   - compose.dashboards.yml
   - compose.downloads.yml
   - compose.gaming.yml
+  - compose.git.yml
   - compose.immich.yml
   - compose.matrix.yml
   - compose.media.yml
