@@ -34,6 +34,8 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 | Setting Change | Reboots? |
 |----------------|----------|
 | LAN → DHCP Server → DNS Server | **Yes** |
+| Firewall → IPv6 Firewall inbound rules | **Yes** |
+| WAN → Virtual Server / Port Forwarding (IPv4) | No |
 
 ### External Projects (not in this repo)
 

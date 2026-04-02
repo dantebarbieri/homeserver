@@ -71,9 +71,9 @@
           password: "{{HOMEPAGE_VAR_KOMGA_PASS}}"
     - Calibre-web:
         icon: calibre-web.svg
-        href: https://books.danteb.com
+        href: https://calibre.danteb.com
         description: Ebook Library
-        siteMonitor: https://books.danteb.com
+        siteMonitor: https://calibre.danteb.com
         server: my-docker
         container: calibre-web
 

@@ -646,29 +646,13 @@ Services listed in order of interest, highest first.
 
 Deployed at `https://tools.danteb.com`. In `compose.utilities.yml` + homepage dashboard.
 
-### Forgejo (self-hosted git) ⭐
+### ~~Forgejo (self-hosted git)~~ ✅ Done
 
-Self-hosted git server. Mirror GitHub repos for redundancy, host private repos without GitHub dependency. Forgejo is the community fork of Gitea, more actively developed.
+Deployed at `https://git.danteb.com`. In `compose.git.yml` with Postgres + Homepage dashboard. Git SSH on port 2222, NixOS firewall opened. Using `codeberg.org/forgejo/forgejo:14` image.
 
-- Image: `codeberg.org/forgejo/forgejo:latest`
-- Needs its own Postgres instance
-- Add as new `compose.git.yml`
-- Proxy at `https://git.danteb.com` (has solid built-in auth — no Authelia)
-- Key use case: mirror this homeserver monorepo for disaster recovery
+### ~~Calibre-web~~ ✅ Done
 
-**Verification**: Access the URL, create admin account, create a test repo, push a commit. Set up a mirror of a GitHub repo, confirm it syncs.
-
-### Calibre-web ⭐
-
-Self-hosted ebook library with a web reader. Good for ebooks beyond manga/comics (Komga already covers those). Especially useful for migrating Kindle library from parent's Amazon account — download via Calibre desktop, import into Calibre-web, access from any device.
-
-- Image: `lscr.io/linuxserver/calibre-web:latest`
-- Needs a Calibre database (can create empty one on first run)
-- Mount ebook library from RAID (e.g., `${RAID}/shared/reading/ebooks`)
-- Add to `compose.media.yml`
-- Proxy at `https://books.danteb.com` (has built-in auth — no Authelia)
-
-**Verification**: Access the URL, upload a test EPUB. Verify the web reader renders it correctly. Test OPDS feed if you use a mobile reader app.
+Deployed at `https://calibre.danteb.com`. In `compose.media.yml` + Homepage dashboard. Gmail SMTP configured for Send to Kindle. Library at `${RAID}/shared/reading/ebooks`.
 
 ### Code-server
 
@@ -772,5 +756,5 @@ services.fail2ban = {
 | 9 | ~~Recyclarr CI validation~~ ✅ | GitHub Actions | None | Low | Keep Docker-based CI; add yamllint pre-check |
 | 10 | Homepage dashboard updates 🔶 | Homepage | None | Low | ~~Suwayomi widget~~ ✅; Uptime Kuma/Grafana widgets blocked on P2/P5 |
 | 11 | ~~Mail calendar sync + setup.sh validation~~ ✅ | Mail | None | Low | |
-| 12 | Additional services | Docker | None (additive) | Low-Medium each | Priority: IT-Tools > Forgejo > Calibre-web > Code-server |
+| 12 | Additional services | Docker | None (additive) | Low-Medium each | ~~IT-Tools~~ ✅, ~~Forgejo~~ ✅, ~~Calibre-web~~ ✅; remaining: Code-server, Home Assistant, Changedetection, pgAdmin |
 | 13 | ~~fail2ban for SSH~~ ✅ | NixOS | Low | Low | |
