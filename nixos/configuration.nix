@@ -356,6 +356,12 @@ in
     enable = true;
     autodetect = true;
     defaults.autodetected = "-a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,45,55 -m root -M exec ${smartdAlert}";
+    # NVMe drives run hotter than HDDs (normal at 50-60°C, throttle at 70-85°C).
+    # Explicit entries are processed before DEVICESCAN, which then skips them.
+    devices = [
+      { device = "/dev/nvme0"; options = "-a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,60,70 -m root -M exec ${smartdAlert}"; }
+      { device = "/dev/nvme1"; options = "-a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,60,70 -m root -M exec ${smartdAlert}"; }
+    ];
     notifications.wall.enable = false;
   };
 
