@@ -160,6 +160,8 @@ services:
       service: linuxserver-service
     container_name: calibre-web
     image: lscr.io/linuxserver/calibre-web:latest
+    environment:
+      DOCKER_MODS: linuxserver/mods:universal-calibre
     networks:
       - proxy
     volumes:
