@@ -50,10 +50,12 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 | `/data/Segu-raw/` (videotape digitization) | 179 GB | Static (one-time digitization) |
 | `/data/backups/` (FCP edits + travel vlog) | 25 GB | Static |
 | `/data/nextcloud/` (user files) | 220 MB | Active |
+| `/srv/docker/data/` (selective service configs) | ~4.5 GB | Active |
 | Database dumps (Postgres compressed) | ~29 MB | Daily |
 | Vaultwarden vault (SQLite) | Tiny | Active |
-| `/srv/docker/data/authelia/` (config + secrets) | 168 KB | Rare |
-| **Total** | **~578 GB** | |
+| **Total** | **~583 GB** | |
+
+**`/srv/docker/data/` exclusions:** `plex/` (17 GB), `jellyfin/` (11 GB), `satisfactory-server/` (4.3 GB), `syncthing/` (2.2 GB) — all regenerable or synced externally. `tdarr/logs/` also excluded (logs only). Everything else (~4.5 GB) is backed up including NPM configs, Sonarr/Radarr databases, Tdarr server state, and all small service configs. Measured 2026-04-04; total `/srv/docker/data` is 39 GB.
 
 ### Measured database sizes (2026-04-01)
 

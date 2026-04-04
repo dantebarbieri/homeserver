@@ -317,6 +317,8 @@ in
       mdadm lvm2 dosfstools xfsprogs parted smartmontools
       # Docker
       docker-compose
+      # Backup
+      rclone
       # Mail (aerc + contact sync)
       aerc khard khal vdirsyncer
       w3m              # HTML-to-text — used by aerc's built-in html filter
@@ -595,6 +597,246 @@ in
     timerConfig = {
       OnCalendar = "Sun *-*-* 02:00:00";
       Persistent = true;
+    };
+  };
+
+  # ── Backup automation (Postgres dumps + Vaultwarden + rclone offsite) ─────
+
+  systemd.services.postgres-backup = {
+    description = "Dump all Postgres databases and copy Vaultwarden data";
+    after = [ "docker.service" "network-online.target" ];
+    requires = [ "docker.service" ];
+    wants = [ "network-online.target" ];
+    path = with pkgs; [ docker coreutils gzip curl gnutar findutils ];
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+    };
+    script = ''
+      set -uo pipefail
+
+      BACKUP_ROOT="/data/automated-backups"
+      PG_DIR="$BACKUP_ROOT/postgres"
+      VW_DIR="$BACKUP_ROOT/vaultwarden"
+      DATE=$(date +%Y-%m-%d)
+      DOW=$(date +%u)  # 1=Monday, 7=Sunday
+
+      mkdir -p "$PG_DIR/daily" "$PG_DIR/weekly" "$VW_DIR"
+
+      FAILED=""
+      SUCCEEDED=""
+
+      # Format: "container:user:database"
+      DATABASES="
+        immich_postgres:postgres:immich
+        authelia_postgres:authelia:authelia
+        synapse_postgres:synapse:synapse
+        nextcloud_postgres:nextcloud:nextcloud
+        forgejo_postgres:forgejo:forgejo
+        suwayomi_postgres:suwayomi:suwayomi_db
+      "
+
+      for entry in $DATABASES; do
+        CONTAINER=$(echo "$entry" | cut -d: -f1)
+        USER=$(echo "$entry" | cut -d: -f2)
+        DB=$(echo "$entry" | cut -d: -f3)
+        DUMP_FILE="$PG_DIR/daily/''${CONTAINER}-''${DATE}.sql.gz"
+
+        if docker exec "$CONTAINER" pg_dump -U "$USER" "$DB" 2>/dev/null | gzip > "$DUMP_FILE"; then
+          # Verify non-empty (gzip header alone is ~20 bytes)
+          if [ "$(stat -c%s "$DUMP_FILE" 2>/dev/null || echo 0)" -gt 100 ]; then
+            SUCCEEDED="$SUCCEEDED $CONTAINER"
+          else
+            FAILED="$FAILED $CONTAINER(empty)"
+            rm -f "$DUMP_FILE"
+          fi
+        else
+          FAILED="$FAILED $CONTAINER"
+          rm -f "$DUMP_FILE"
+        fi
+      done
+
+      # Weekly rotation: copy Sunday's dumps
+      if [ "$DOW" = "7" ]; then
+        for f in "$PG_DIR/daily/"*-"$DATE".sql.gz; do
+          [ -f "$f" ] && cp "$f" "$PG_DIR/weekly/"
+        done
+      fi
+
+      # Retention: 7 daily, 4 weekly
+      find "$PG_DIR/daily" -name "*.sql.gz" -mtime +7 -delete
+      find "$PG_DIR/weekly" -name "*.sql.gz" -mtime +28 -delete
+
+      # Vaultwarden backup (SQLite WAL-mode safe for file copy)
+      VW_FAILED=""
+      if docker cp vaultwarden:/data/. "$VW_DIR/" 2>/dev/null; then
+        VW_STATUS="ok"
+      else
+        VW_FAILED="vaultwarden"
+      fi
+
+      # ntfy notification
+      SUCCEEDED=$(echo "$SUCCEEDED" | xargs)
+      FAILED=$(echo "$FAILED $VW_FAILED" | xargs)
+
+      if [ -z "$FAILED" ]; then
+        curl -s \
+          -H "Title: Backup OK on ${config.networking.hostName}" \
+          -H "Priority: low" \
+          -H "Tags: white_check_mark,floppy_disk" \
+          -d "All databases dumped successfully: $SUCCEEDED. Vaultwarden: $VW_STATUS" \
+          "${ntfyUrl}/${ntfyTopic}"
+      else
+        curl -s \
+          -H "Title: Backup FAILED on ${config.networking.hostName}" \
+          -H "Priority: high" \
+          -H "Tags: warning,floppy_disk" \
+          -d "FAILED: $FAILED | Succeeded: $SUCCEEDED" \
+          "${ntfyUrl}/${ntfyTopic}"
+      fi
+    '';
+  };
+
+  systemd.timers.postgres-backup = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 03:00:00";
+      Persistent = true;
+      RandomizedDelaySec = "5m";
+    };
+  };
+
+  systemd.services.rclone-offsite-daily = {
+    description = "Daily rclone sync of backups, configs, and active data to Google Drive";
+    after = [ "postgres-backup.service" "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      TimeoutStartSec = "4h";
+    };
+    path = with pkgs; [ rclone curl coreutils ];
+    script = ''
+      set -uo pipefail
+
+      REMOTE="gdrive-crypt:homeserver-backups"
+      FAILED=""
+
+      # Database dumps + Vaultwarden
+      if ! rclone sync /data/automated-backups/ "$REMOTE/automated-backups/" \
+          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+        FAILED="$FAILED automated-backups"
+      fi
+
+      # Nextcloud user files
+      if ! rclone sync /data/nextcloud/ "$REMOTE/nextcloud/" \
+          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+        FAILED="$FAILED nextcloud"
+      fi
+
+      # Selective /srv/docker/data (service configs, ~4.5 GB)
+      if ! rclone sync /srv/docker/data/ "$REMOTE/docker-data/" \
+          --exclude "plex/**" \
+          --exclude "jellyfin/**" \
+          --exclude "satisfactory-server/**" \
+          --exclude "syncthing/**" \
+          --exclude "tdarr/logs/**" \
+          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+        FAILED="$FAILED docker-data"
+      fi
+
+      FAILED=$(echo "$FAILED" | xargs)
+
+      if [ -z "$FAILED" ]; then
+        curl -s \
+          -H "Title: Daily offsite sync OK on ${config.networking.hostName}" \
+          -H "Priority: low" \
+          -H "Tags: white_check_mark,cloud" \
+          -d "All daily rclone syncs completed successfully." \
+          "${ntfyUrl}/${ntfyTopic}"
+      else
+        curl -s \
+          -H "Title: Daily offsite sync FAILED on ${config.networking.hostName}" \
+          -H "Priority: high" \
+          -H "Tags: warning,cloud" \
+          -d "Failed sync targets: $FAILED" \
+          "${ntfyUrl}/${ntfyTopic}"
+      fi
+    '';
+  };
+
+  systemd.timers.rclone-offsite-daily = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 03:30:00";
+      Persistent = true;
+      RandomizedDelaySec = "5m";
+    };
+  };
+
+  systemd.services.rclone-offsite-weekly = {
+    description = "Weekly rclone sync of large static media to Google Drive";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      TimeoutStartSec = "24h";
+    };
+    path = with pkgs; [ rclone curl coreutils ];
+    script = ''
+      set -uo pipefail
+
+      REMOTE="gdrive-crypt:homeserver-backups"
+      FAILED=""
+
+      # Home videos (374 GB, rare changes)
+      if ! rclone sync /data/shared/media/other/ "$REMOTE/media/home-videos/" \
+          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+        FAILED="$FAILED home-videos"
+      fi
+
+      # Videotape digitization (179 GB, static)
+      if ! rclone sync /data/Segu-raw/ "$REMOTE/media/segu-raw/" \
+          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+        FAILED="$FAILED segu-raw"
+      fi
+
+      # FCP edits + travel vlog (25 GB, static)
+      if ! rclone sync /data/backups/ "$REMOTE/media/fcp-backups/" \
+          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+        FAILED="$FAILED fcp-backups"
+      fi
+
+      FAILED=$(echo "$FAILED" | xargs)
+
+      if [ -z "$FAILED" ]; then
+        curl -s \
+          -H "Title: Weekly offsite sync OK on ${config.networking.hostName}" \
+          -H "Priority: low" \
+          -H "Tags: white_check_mark,cloud" \
+          -d "All weekly rclone syncs completed successfully (media)." \
+          "${ntfyUrl}/${ntfyTopic}"
+      else
+        curl -s \
+          -H "Title: Weekly offsite sync FAILED on ${config.networking.hostName}" \
+          -H "Priority: high" \
+          -H "Tags: warning,cloud" \
+          -d "Failed sync targets: $FAILED" \
+          "${ntfyUrl}/${ntfyTopic}"
+      fi
+    '';
+  };
+
+  systemd.timers.rclone-offsite-weekly = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 05:00:00";
+      Persistent = true;
+      RandomizedDelaySec = "15m";
     };
   };
 
