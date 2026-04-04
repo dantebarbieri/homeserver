@@ -63,7 +63,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: louislam/uptime-kuma:latest
+    image: louislam/uptime-kuma:2
     container_name: uptime-kuma
     volumes:
       - ${DATA}/uptime-kuma:/app/data
