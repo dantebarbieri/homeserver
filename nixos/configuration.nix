@@ -717,6 +717,7 @@ in
       IOSchedulingClass = "idle";
       TimeoutStartSec = "4h";
     };
+    environment.RCLONE_CONFIG = "/root/.config/rclone/rclone.conf";
     path = with pkgs; [ rclone curl coreutils ];
     script = ''
       set -uo pipefail
@@ -786,6 +787,7 @@ in
       IOSchedulingClass = "idle";
       TimeoutStartSec = "24h";
     };
+    environment.RCLONE_CONFIG = "/root/.config/rclone/rclone.conf";
     path = with pkgs; [ rclone curl coreutils ];
     script = ''
       set -uo pipefail
