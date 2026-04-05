@@ -306,7 +306,7 @@
         server: my-docker
         container: it-tools
     - ConvertX:
-        icon: convertx.svg
+        icon: convertx.webp
         href: https://convertx.danteb.com
         description: File Format Conversion
         siteMonitor: https://convertx.danteb.com
