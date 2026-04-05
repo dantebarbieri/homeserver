@@ -98,11 +98,16 @@ services:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor
     privileged: true
+    command:
+      - "--docker_only=true"
+      - "--store_container_labels=true"
+      - "--housekeeping_interval=10s"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - monitoring
 

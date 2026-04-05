@@ -17,3 +17,9 @@ scrape_configs:
   - job_name: "cadvisor"
     static_configs:
       - targets: ["cadvisor:8080"]
+    # Extract container name from Docker labels added by --store_container_labels
+    # and create a 'name' label that community dashboards expect
+    metric_relabel_configs:
+      - source_labels: [container_label_com_docker_compose_service]
+        target_label: name
+        action: replace
