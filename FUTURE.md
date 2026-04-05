@@ -7,7 +7,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 ## Table of Contents
 
 - [~~Priority 1: Backup Automation~~](#priority-1-backup-automation) ✅ Done
-- [Priority 2: Monitoring Stack](#priority-2-monitoring-stack)
+- [~~Priority 2: Monitoring Stack~~](#priority-2-monitoring-stack) ✅ Done
 - [~~Priority 3: VPN Server for Remote Access~~](#priority-3-vpn-server-for-remote-access) ✅ Done
 - [~~Priority 4: NixOS Kernel Hardening~~](#priority-4-nixos-kernel-hardening) ✅ Done
 - [~~Priority 5: Uptime Monitoring & External Status Page~~](#priority-5-uptime-monitoring--external-status-page) ✅ Done
@@ -130,7 +130,7 @@ The encrypted `gdrive-crypt:` backup is great for disaster recovery but you can'
 
 ---
 
-## Priority 2: Monitoring Stack
+## ~~Priority 2: Monitoring Stack~~ ✅ Done
 
 Currently only Dashdot (system stats) and ntfy (alerts) exist. No historical metrics, no per-container resource tracking, no log aggregation, no trend detection.
 
@@ -674,7 +674,7 @@ services.fail2ban = {
 | # | Item | Area | Risk | Effort | Notes |
 |---|------|------|------|--------|-------|
 | 1 | ~~Backup automation~~ ✅ | NixOS + Docker | Fixes critical gap | Medium | |
-| 2 | Monitoring stack (Prometheus/Grafana/Loki) | Docker | None (additive) | Medium-High | Grafana uses own auth; Prometheus/cAdvisor internal only |
+| 2 | ~~Monitoring stack (Prometheus/Grafana/Loki)~~ ✅ | Docker | None (additive) | Medium-High | Grafana uses own auth; Prometheus/cAdvisor internal only |
 | 3 | ~~VPN server (WireGuard in Docker)~~ ✅ | Docker | Low | Low | wg-easy container; portable across OS |
 | 4 | ~~Kernel hardening (sysctl)~~ ✅ | NixOS | Low (test first) | Low | All settings validated against CIS/KSPP |
 | 5 | ~~Uptime monitoring (Upptime + Kuma)~~ ✅ | Docker + GitHub | None (additive) | Low | Kuma monitors configured with ntfy alerts, Upptime expanded to 33 services |
