@@ -104,7 +104,6 @@ services:
       - "--housekeeping_interval=10s"
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
