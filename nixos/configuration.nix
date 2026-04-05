@@ -715,7 +715,7 @@ in
       Type = "oneshot";
       Nice = 19;
       IOSchedulingClass = "idle";
-      TimeoutStartSec = "4h";
+      TimeoutStartSec = "8h";
     };
     environment.RCLONE_CONFIG = "/root/.config/rclone/rclone.conf";
     path = with pkgs; [ rclone curl coreutils ];
@@ -744,6 +744,7 @@ in
           --exclude "satisfactory-server/**" \
           --exclude "syncthing/**" \
           --exclude "tdarr/logs/**" \
+          --exclude "nextcloud/html/**" \
           --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED docker-data"
       fi
