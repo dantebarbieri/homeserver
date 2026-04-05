@@ -107,7 +107,7 @@ services:
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
-      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /run/docker/containerd/containerd.sock:/run/containerd/containerd.sock:ro
     networks:
       - monitoring
