@@ -48,6 +48,11 @@ let
         TAGS="rotating_light,computer"
         ;;
       Rebuild*|RebuildFinished)
+        MD_NAME="''${MD_DEVICE##*/}"
+        SYNC_ACTION=$(cat "/sys/block/$MD_NAME/md/sync_action" 2>/dev/null || echo "unknown")
+        if [ "$SYNC_ACTION" = "check" ] || [ "$SYNC_ACTION" = "repair" ]; then
+          exit 0
+        fi
         PRIORITY="high"
         TAGS="construction,computer"
         ;;
