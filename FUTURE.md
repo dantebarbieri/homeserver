@@ -6,7 +6,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 
 ## Table of Contents
 
-- [Priority 1: Backup Automation](#priority-1-backup-automation)
+- [~~Priority 1: Backup Automation~~](#priority-1-backup-automation) ✅ Done
 - [Priority 2: Monitoring Stack](#priority-2-monitoring-stack)
 - [~~Priority 3: VPN Server for Remote Access~~](#priority-3-vpn-server-for-remote-access) ✅ Done
 - [~~Priority 4: NixOS Kernel Hardening~~](#priority-4-nixos-kernel-hardening) ✅ Done
@@ -22,7 +22,7 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 
 ---
 
-## Priority 1: Backup Automation
+## ~~Priority 1: Backup Automation~~ ✅ Done
 
 **The single biggest gap in the setup.** Five Postgres instances (Authelia, Synapse, Nextcloud, Suwayomi, Immich), the Vaultwarden vault, irreplaceable media, and all service configs under `/srv/docker/data` have no automated backup.
 
@@ -657,7 +657,7 @@ services.fail2ban = {
 
 | # | Item | Area | Risk | Effort | Notes |
 |---|------|------|------|--------|-------|
-| 1 | Backup automation | NixOS + Docker | Fixes critical gap | Medium | |
+| 1 | ~~Backup automation~~ ✅ | NixOS + Docker | Fixes critical gap | Medium | |
 | 2 | Monitoring stack (Prometheus/Grafana/Loki) | Docker | None (additive) | Medium-High | Grafana uses own auth; Prometheus/cAdvisor internal only |
 | 3 | ~~VPN server (WireGuard in Docker)~~ ✅ | Docker | Low | Low | wg-easy container; portable across OS |
 | 4 | ~~Kernel hardening (sysctl)~~ ✅ | NixOS | Low (test first) | Low | All settings validated against CIS/KSPP |
