@@ -327,7 +327,7 @@ Add `read_only: true` + `tmpfs: ["/tmp", "/run"]` to stateless services:
 
 Add `healthcheck:` to services that currently lack them:
 - `flaresolverr` — `curl -f http://localhost:8191/health`
-- `arm-server` — `curl -f http://localhost:8080/health` (check actual health endpoint)
+- `anime-relations` — `curl -f http://localhost:8080/health` (check actual health endpoint)
 - `komga` — `curl -f http://localhost:25600/api/v1/actuator/health`
 - `komf` — `curl -f http://localhost:8085/health` (check actual port/endpoint)
 
@@ -470,7 +470,7 @@ Lower priority but keeps the dashboard accurate.
 - ~~**Uptime Kuma**~~ ✅ — Homepage `uptimekuma` widget configured with `HOMEPAGE_VAR_KUMA_SLUG=homeserver`
 - **Grafana** — If added (Priority 2), Homepage has a built-in `grafana` widget.
 
-**Note:** arm-server does NOT have a web UI — it's an API-only service for mapping anime IDs between AniList, AniDB, MAL, and Kitsu. The [docs site](https://arm.haglund.dev/docs) is API documentation, not a dashboard. It's consumed internally by other services (Komf, etc.) and should not be added to the homepage.
+**Note:** anime-relations does NOT have a web UI — it's an API-only service for mapping anime IDs between AniList, AniDB, MAL, and Kitsu. The [docs site](https://arm.haglund.dev/docs) is API documentation, not a dashboard. It's consumed internally by other services (Komf, etc.) and should not be added to the homepage.
 
 ### Missing widgets for existing services
 

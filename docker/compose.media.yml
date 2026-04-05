@@ -60,13 +60,14 @@ services:
       - ${RAID}/shared/media:/data/media:ro
       - ${DATA}/jellyfin/webroot/list.txt:/jellyfin/jellyfin-web/list.txt:ro
 
-  arm-server:
+  anime-relations:
     extends:
       file: compose.common.yml
       service: common-service
-    container_name: arm-server
+    container_name: anime-relations
     build: https://github.com/BeeeQueue/arm-server.git
-    image: arm-server:latest
+    image: anime-relations:latest
+    hostname: arm-server
     networks:
       - anime
 

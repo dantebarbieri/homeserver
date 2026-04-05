@@ -63,7 +63,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.git.yml` | forgejo, postgres |
 | `compose.immich.yml` | immich-server, immich-machine-learning, redis, postgres |
 | `compose.matrix.yml` | synapse, element, coturn, livekit, lk-jwt-service, postgres |
-| `compose.media.yml` | plex, jellyfin, arm-server, komga, komf, suwayomi, calibre-web, postgres |
+| `compose.media.yml` | plex, jellyfin, anime-relations, komga, komf, suwayomi, calibre-web, postgres |
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.searxng.yml` | searxng, redis (valkey) |
 | `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, whisperasr, seerr, tdarr, recyclarr |

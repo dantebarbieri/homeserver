@@ -57,7 +57,7 @@ docker compose -f compose.gaming.yml up -d
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
 | **Interview** | yipitdata-db, yipitdata-backend, yipitdata-frontend |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
-| **Media** | plex, jellyfin, arm-server, komga, komf, suwayomi, suwayomi_postgres |
+| **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres |
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |
 | **SearXNG** | searxng, searxng_redis |
 | **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
