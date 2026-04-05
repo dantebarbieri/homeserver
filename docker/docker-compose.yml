@@ -21,6 +21,7 @@ include:
   - compose.nextcloud.yml
   - compose.searxng.yml
   - compose.starr.yml
+  - compose.monitoring.yml
   - compose.utilities.yml
   - compose.websites.yml
   - compose.interview.yml    # temporary - YipitData interview portal

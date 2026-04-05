@@ -751,6 +751,9 @@ in
           --exclude "tdarr/logs/**" \
           --exclude "nextcloud/html/**" \
           --exclude "nginxproxymanager/data/logs/**" \
+          --exclude "prometheus/**" \
+          --exclude "loki/**" \
+          --exclude "alloy/**" \
           --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED docker-data"
       fi

@@ -194,6 +194,15 @@ Uptime Kuma's Homepage widget reads data from a **status page**, not an API key.
 
 ---
 
+## Grafana — `HOMEPAGE_VAR_GRAFANA_USER` / `HOMEPAGE_VAR_GRAFANA_PASS`
+
+Grafana's Homepage widget uses the built-in admin credentials (same as login).
+
+1. Set `HOMEPAGE_VAR_GRAFANA_USER` to your Grafana admin username (default: `admin`).
+2. Set `HOMEPAGE_VAR_GRAFANA_PASS` to your Grafana admin password (the value you set in `GRAFANA_ADMIN_PASSWORD`).
+
+---
+
 ## Quick Reference
 
 | Variable | Service | Type |
@@ -219,3 +228,5 @@ Uptime Kuma's Homepage widget reads data from a **status page**, not an API key.
 | `HOMEPAGE_VAR_ADGUARD_USERNAME` | AdGuard Home | Username |
 | `HOMEPAGE_VAR_ADGUARD_PASSWORD` | AdGuard Home | Password |
 | `HOMEPAGE_VAR_KUMA_SLUG` | Uptime Kuma | Status page slug |
+| `HOMEPAGE_VAR_GRAFANA_USER` | Grafana | Username (admin) |
+| `HOMEPAGE_VAR_GRAFANA_PASS` | Grafana | Password |

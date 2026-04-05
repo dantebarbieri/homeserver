@@ -279,6 +279,18 @@
         siteMonitor: https://ntfy.danteb.com
         server: my-docker
         container: ntfy
+    - Grafana:
+        icon: grafana.svg
+        href: https://grafana.danteb.com
+        description: Metrics & Dashboards
+        siteMonitor: https://grafana.danteb.com
+        server: my-docker
+        container: grafana
+        widget:
+          type: grafana
+          url: http://grafana:3000
+          username: "{{HOMEPAGE_VAR_GRAFANA_USER}}"
+          password: "{{HOMEPAGE_VAR_GRAFANA_PASS}}"
     - Dashdot:
         icon: dashdot.webp
         href: https://dashdot.danteb.com
