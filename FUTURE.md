@@ -112,6 +112,22 @@ iCloud is not viable for this — there's no reliable CLI for iCloud Drive on Li
 - **Media restore test:** Pick one file from `/data/shared/media/other`, delete it locally, restore from Google Drive, verify integrity (`md5sum` before/after should match).
 - Schedule a monthly calendar reminder to test a full restore of at least one database and one media file
 
+### Future enhancement: Unencrypted Google Photos sync for home videos
+
+The encrypted `gdrive-crypt:` backup is great for disaster recovery but you can't browse the videos. Add a **separate** rclone sync job using the `gphotos:` backend to upload home videos (`/data/shared/media/other/`) unencrypted to Google Photos, which auto-syncs to Apple Photos via iCloud.
+
+**Caveats to investigate:**
+- Google Photos API has a **10 GB per-file limit** for video uploads — check if any home videos exceed this
+- Uploads land in an "rclone" album (API can't organize into arbitrary albums)
+- Google may re-encode videos — must confirm "original quality" storage is active
+- If original quality is confirmed, this **replaces** the encrypted `gdrive-crypt:` backup for home videos (no need for two copies). Remove `/data/shared/media/other/` from `rclone-offsite-weekly` in that case. If Google re-encodes, keep both.
+
+**Implementation sketch:**
+- New `rclone-gphotos-sync` systemd service + timer (weekly, after `rclone-offsite-weekly`)
+- Requires a separate `rclone config` OAuth flow for the `gphotos:` remote
+- Use `--immutable` flag so rclone never deletes from Google Photos (append-only)
+- Before going live: upload a test video, re-download it, compare checksums to verify no re-encoding
+
 ---
 
 ## Priority 2: Monitoring Stack
