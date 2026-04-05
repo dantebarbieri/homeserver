@@ -313,7 +313,7 @@
         server: my-docker
         container: convertx
     - Code Server:
-        icon: code-server.webp
+        icon: vscode.webp
         href: https://code.danteb.com
         description: VS Code in Browser
         siteMonitor: https://code.danteb.com
