@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Workflow Rules
+
+- **Commit-and-push before suggesting a pull.** Whenever you tell the user to pull changes on the server (or try something that requires the latest code), you **must** commit and push first. Never say "pull and try" without having already pushed the commits.
+
 ## What This Is
 
 A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, ~66TB RAID6 XFS storage, and ntfy-based alerting. All services are reverse-proxied via Nginx Proxy Manager, with Authelia SSO for services that lack built-in auth. Dual-stack IPv4/IPv6 with Spectrum ISP, ASUS GT-BE98 Pro router, and Cloudflare DNS (DNS-only, no proxy).
@@ -67,7 +71,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.searxng.yml` | searxng, redis (valkey) |
 | `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, whisperasr, seerr, tdarr, recyclarr |
-| `compose.utilities.yml` | vaultwarden, syncthing, ntfy |
+| `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx |
 | `compose.websites.yml` | travel-planner |
 
 ### Networking Patterns

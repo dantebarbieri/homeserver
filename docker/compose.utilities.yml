@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server
+# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx
 
 services:
   vaultwarden:
@@ -119,6 +119,21 @@ services:
       - ${DATA}/code-server/config:/config
       - /srv/homeserver:/srv/homeserver
       - /srv/docker/data:/srv/docker/data
+    networks:
+      - proxy
+
+  convertx:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/c4illin/convertx:latest
+    container_name: convertx
+    environment:
+      JWT_SECRET: ${CONVERTX_JWT_SECRET}
+      HTTP_ALLOWED: "true"
+      ACCOUNT_REGISTRATION: "false"
+    volumes:
+      - ${DATA}/convertx/data:/app/data
     networks:
       - proxy
 
