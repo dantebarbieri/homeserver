@@ -26,6 +26,7 @@ All services should extend one of these:
 - `dockerfiles/Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
 - `dockerfiles/Dockerfile.sveltekit` — Multi-stage Node 18 alpine build, parameterized via `ARG APP_NAME`
 - `dockerfiles/bmc-monitor/` — Alpine with ipmitool, curl, jq + `bmc-ip-monitor.sh` polling script
+- `dockerfiles/pi-monitor/` — Alpine with nmap, curl, jq + `pi-ip-monitor.sh` ARP scan polling script
 - `dockerfiles/port-sync/` — curlimages/curl + `port-sync.sh` qBittorrent VPN port sync script
 
 ## Shell Scripts (`scripts/`)

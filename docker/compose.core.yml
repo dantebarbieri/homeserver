@@ -1,5 +1,5 @@
 # Core infrastructure services
-# nginxproxymanager, ddclient, endlessh, bmc-ip-monitor
+# nginxproxymanager, ddclient, endlessh, bmc-ip-monitor, pi-ip-monitor
 
 services:
   nginxproxymanager:
@@ -62,6 +62,31 @@ services:
       NPM_HOST: nginxproxymanager
       NPM_PORT: 81
       PROXY_DOMAIN: ipmi.danteb.com
+      CHECK_INTERVAL: 900
+      MAX_FAILURES: 3
+      NTFY_URL: https://ntfy.danteb.com
+      NTFY_TOPIC: homeserver-alerts
+
+  pi-ip-monitor:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: pi-ip-monitor
+    build:
+      context: dockerfiles/pi-monitor
+    container_name: pi-ip-monitor
+    depends_on:
+      nginxproxymanager:
+        condition: service_started
+    network_mode: host
+    environment:
+      NPM_EMAIL: ${NPM_EMAIL}
+      NPM_PASSWORD: ${NPM_PASSWORD}
+      NPM_HOST: localhost
+      NPM_PORT: 81
+      PROXY_DOMAIN: openclaw.danteb.com
+      TARGET_MAC: "D8:3A:DD:15:6A:8E"
+      SCAN_SUBNET: "192.168.50.0/24"
       CHECK_INTERVAL: 900
       MAX_FAILURES: 3
       NTFY_URL: https://ntfy.danteb.com

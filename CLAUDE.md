@@ -59,7 +59,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 | File | Services |
 |------|----------|
-| `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
+| `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor, pi-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
 | `compose.dashboards.yml` | homepage, dashdot |
 | `compose.downloads.yml` | vpn-netns, gluetun, qbittorrent, sabnzbd, flaresolverr, qbit-manage |
@@ -119,6 +119,7 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 - `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
 - `dockerfiles/bmc-monitor/` — BMC IP monitor (ipmitool + NPM API updater)
+- `dockerfiles/pi-monitor/` — Raspberry Pi IP monitor (nmap ARP scan + NPM API updater)
 - `dockerfiles/port-sync/` — qBittorrent VPN port sync (gluetun forwarded port → qBit API)
 
 ### Adding a New Service
