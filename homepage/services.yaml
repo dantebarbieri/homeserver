@@ -326,6 +326,11 @@
         siteMonitor: https://travel.danteb.com
         server: my-docker
         container: travel-planner
+    - OpenClaw:
+        icon: openclaw.svg
+        href: https://openclaw.danteb.com
+        description: AI Agent Admin Panel
+        siteMonitor: https://openclaw.danteb.com
     - Forgejo:
         icon: forgejo.svg
         href: https://git.danteb.com

@@ -11,10 +11,6 @@
         - icon: mdi-server
           href: https://ipmi.danteb.com
           description: ASRock Rack BMC
-    - OpenClaw:
-        - icon: mdi-robot
-          href: https://openclaw.danteb.com
-          description: AI Agent Admin Panel (Raspberry Pi)
     - ASUS Router:
         - icon: mdi-router-wireless
           href: http://www.asusrouter.com
