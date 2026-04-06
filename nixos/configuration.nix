@@ -219,7 +219,6 @@ in
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGSElIxTg8VbjbB3O2WVMvZJYfP4GBzg5uzJSaKKu12f dantevbarbieri@gmail.com" # Dante's MacBook Pro
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPdijU1XLbXrh1yMq7RtrLrIaTtWibnMAFcxTfFm1Y+g dantevbarbieri@gmail.com"
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEd1FMM7tj/1D8AIKc0ESGKLYx4Q6vEbDx8HxQAVD/IB REDMOND\dbarbieri@DESKTOP-PFQPS83" # Dante Work PC
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFYsa3JuUbgxuC6O+rfxSIC4scGcxhlgig+wXVoEMaCe dantevbarbieri@gmail.com" # Dell Latitude E5550
       ];
       packages = with pkgs; [
         tree
