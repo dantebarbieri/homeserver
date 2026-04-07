@@ -326,11 +326,6 @@
         siteMonitor: https://travel.danteb.com
         server: my-docker
         container: travel-planner
-    - OpenClaw:
-        icon: openclaw.svg
-        href: https://openclaw.danteb.com
-        description: AI Agent Admin Panel
-        siteMonitor: https://openclaw.danteb.com
     - Forgejo:
         icon: forgejo.svg
         href: https://git.danteb.com
@@ -338,6 +333,32 @@
         siteMonitor: https://git.danteb.com
         server: my-docker
         container: forgejo
+
+- AI:
+    - Open WebUI:
+        icon: open-webui.svg
+        href: https://openwebui.danteb.com
+        description: AI Chat Interface
+        siteMonitor: https://openwebui.danteb.com
+        server: my-docker
+        container: open-webui
+    - LiteLLM:
+        icon: mdi-api
+        href: https://litellm.danteb.com
+        description: LLM Proxy & Router
+        siteMonitor: https://litellm.danteb.com
+        server: my-docker
+        container: litellm
+    - OpenClaw:
+        icon: openclaw.svg
+        href: https://openclaw.danteb.com
+        description: AI Agent Admin Panel
+        siteMonitor: https://openclaw.danteb.com
+    - Whisper ASR:
+        icon: mdi-microphone
+        description: Speech Recognition
+        server: my-docker
+        container: whisperasr
 
 - Game Servers:
     - Hardcore Minecraft:

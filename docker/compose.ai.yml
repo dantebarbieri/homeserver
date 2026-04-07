@@ -1,0 +1,97 @@
+# AI services stack
+# litellm, litellm_postgres, open-webui, whisperasr
+
+services:
+  litellm:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    command: --config /app/config.yaml --port 4000
+    networks:
+      - proxy
+      - ai
+    environment:
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD}@litellm_postgres:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    volumes:
+      - ${DATA}/litellm/config/config.yaml:/app/config.yaml:ro
+    depends_on:
+      litellm_postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/health/liveliness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  litellm_postgres:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: postgres:16-alpine
+    container_name: litellm_postgres
+    shm_size: 128mb
+    networks:
+      - ai
+    volumes:
+      - litellm-pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD}
+      POSTGRES_DB: litellm
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  open-webui:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    networks:
+      - proxy
+      - ai
+    environment:
+      OPENAI_API_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      WEBUI_SECRET_KEY: ${OPENWEBUI_SECRET_KEY}
+      ENABLE_OLLAMA_API: "false"
+    volumes:
+      - openwebui-data:/app/backend/data
+    depends_on:
+      litellm:
+        condition: service_healthy
+
+  whisperasr:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
+    container_name: whisperasr
+    environment:
+      ASR_ENGINE: faster_whisper
+      ASR_MODEL: large-v3
+      ASR_DEVICE: cuda
+      ASR_QUANTIZATION: float16
+    networks:
+      - ai
+      - starr
+
+networks:
+  proxy:
+  ai:
+  starr:
+
+volumes:
+  litellm-pgdata:
+  openwebui-data:

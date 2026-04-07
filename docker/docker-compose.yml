@@ -9,6 +9,7 @@ name: compose
 
 include:
   # Note: compose.common.yml is NOT included here - it's only used via extends:
+  - compose.ai.yml
   - compose.core.yml
   - compose.auth.yml
   - compose.dashboards.yml

@@ -10,6 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs NixOS with 50+ Docker containers, an NVIDIA RTX 2070 SUPER for transcoding/ML, ~66TB RAID6 XFS storage, and ntfy-based alerting. All services are reverse-proxied via Nginx Proxy Manager, with Authelia SSO for services that lack built-in auth. Dual-stack IPv4/IPv6 with Spectrum ISP, ASUS GT-BE98 Pro router, and Cloudflare DNS (DNS-only, no proxy).
 
+**DNS**: `*.danteb.com` is a wildcard CNAME pointing to `danteb.com`, which has A + AAAA records updated by ddclient. New subdomains need only an NPM proxy host — no Cloudflare changes required.
+
 ### Repository Layout
 
 | Directory | Purpose |
@@ -59,6 +61,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 | File | Services |
 |------|----------|
+| `compose.ai.yml` | litellm, open-webui, whisperasr, postgres |
 | `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor, pi-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
 | `compose.dashboards.yml` | homepage, dashdot |
@@ -70,7 +73,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.media.yml` | plex, jellyfin, anime-relations, komga, komf, suwayomi, calibre-web, postgres |
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.searxng.yml` | searxng, redis (valkey) |
-| `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, whisperasr, seerr, tdarr, recyclarr |
+| `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
 | `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx |
 | `compose.websites.yml` | travel-planner |
 
@@ -128,9 +131,9 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 2. Extend from `compose.common.yml` — choose `common-service`, `hotio-service`, `linuxserver-service`, or `gpu-service`.
 3. Mount config to `${DATA}/<service>/config:/config`, bulk data under `${RAID}/shared/...`.
 4. Web UI services → join `proxy` + a dedicated internal network. Pure backends → internal only. No-comms services → no networks.
-5. **Authelia SSO** — Only add Authelia protection if the service has **no built-in auth** (e.g., Dashdot, Prometheus) or has **notoriously weak/untrustworthy auth** (e.g., BMC/IPMI web portals). Services with solid built-in authentication (e.g., Grafana, Vaultwarden, Nextcloud) should handle their own security — do not double up with Authelia.
+5. **Authelia SSO** — **Default stance: protect everything that doesn't protect itself.** Add Authelia (NPM forward auth) to any service with **no built-in auth** (e.g., Dashdot, OpenClaw, Prometheus) or **weak/untrustworthy auth** (e.g., BMC/IPMI). Services with solid built-in authentication (e.g., Grafana, Vaultwarden, Nextcloud, Open WebUI) handle their own security — do not double up. A few intentionally public services (e.g., IT-Tools) skip Authelia by design.
 6. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
-7. **NPM proxy host** — create the proxy host in NPM. Use the container/service name as the subdomain by default; use a shorter/canonical name if it fits the exceptions in [Subdomain Naming Convention](#subdomain-naming-convention). Add redirection hosts for common alternative names (e.g., `vpn` → `wireguard`).
+7. **NPM proxy host** — create the proxy host in NPM. Use the container/service name as the subdomain by default; use a shorter/canonical name if it fits the exceptions in [Subdomain Naming Convention](#subdomain-naming-convention). Add **redirection hosts** (301) for common alternative names (e.g., `chat.danteb.com` → `openwebui.danteb.com`, `vpn.danteb.com` → `wireguard.danteb.com`). Enable **WebSockets** for services that stream (chat UIs, real-time dashboards). Enable **Block Common Exploits** for standard web apps but skip it for API proxies where it may interfere with large POST bodies.
 8. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env` **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly passed through — `.env` alone is not enough), and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
 
 ### Commands

@@ -37,6 +37,10 @@ layout:
     style: row
     columns: 3
     icon: mdi-toolbox
+  AI:
+    style: row
+    columns: 2
+    icon: mdi-robot
   Game Servers:
     style: row
     columns: 2
