@@ -19,6 +19,7 @@ services:
       - ${DATA}/nginxproxymanager/data:/data
       - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
       - ${DATA}/nginxproxymanager/snippets:/snippets
+      - ./nginx/404.html:/data/nginx/default_www/index.html:ro
 
   ddclient:
     extends:
