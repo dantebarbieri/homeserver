@@ -8,6 +8,12 @@ services:
       service: common-service
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http=require('http');const r=http.get({socketPath:'/var/run/docker.sock',path:'/containers/json?limit=1'},s=>{process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(3000,()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       HOMEPAGE_ALLOWED_HOSTS: ${HOMEPAGE_ALLOWED_HOSTS}
       HOMEPAGE_VAR_PLEX_TOKEN: ${HOMEPAGE_VAR_PLEX_TOKEN}

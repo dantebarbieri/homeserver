@@ -480,6 +480,7 @@ in
       docker compose pull --ignore-buildable && \
       docker compose build --pull && \
       docker compose up -d --remove-orphans && \
+      docker compose up -d --force-recreate homepage && \
       docker image prune -f && \
       docker network prune -f
     '';
