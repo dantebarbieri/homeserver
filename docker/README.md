@@ -13,7 +13,6 @@ Docker Compose configuration for my home server, organized into logical service 
 ├── compose.downloads.yml   # VPN/torrent stack, SABnzbd, Flaresolverr, qbit-manage
 ├── compose.gaming.yml      # Game servers (Minecraft, Hytale, Satisfactory)
 ├── compose.immich.yml      # Immich photo management stack
-├── compose.interview.yml   # YipitData interview portal (temporary)
 ├── compose.matrix.yml      # Matrix communication stack (Synapse, Element, Coturn, LiveKit)
 ├── compose.media.yml       # Media consumption (Plex, Jellyfin, ARM, Komga, Suwayomi)
 ├── compose.nextcloud.yml   # Nextcloud cloud storage stack
@@ -55,7 +54,6 @@ docker compose -f compose.gaming.yml up -d
 | **Downloads** | vpn-netns, gluetun, qbittorrent, qbit-port-sync, qbit-manage, sabnzbd, flaresolverr |
 | **Gaming** | hytale-server, minecraft-server, rlcraft-minecraft-server, satisfactory-server |
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
-| **Interview** | yipitdata-db, yipitdata-backend, yipitdata-frontend |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
 | **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres |
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |

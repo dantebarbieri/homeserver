@@ -47,7 +47,6 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 
 Some Docker Compose services build from repos outside this monorepo. Their paths are configured via environment variables in `.env` (see `docker/sample.env`):
 - `${TRAVEL_PLANNER_PATH}` — SvelteKit travel planning app (`compose.websites.yml`)
-- `${INTERVIEW_WORKSPACE_PATH}` — YipitData interview portal (`compose.interview.yml`)
 
 ## Docker Compose (`docker/`)
 
@@ -106,7 +105,6 @@ The default rule is: **use the container/service name as the subdomain** (e.g., 
 | `travel` | travel-planner | Shortened |
 | `uptime` | uptime-kuma | The concept matters, not the tool |
 | `wireguard` | wg-easy | WireGuard is the protocol, wg-easy is the UI |
-| `yipitdata` | yipitdata-frontend | Simplified |
 
 The guiding principle: prefer the **concept, protocol, or canonical project name** over the specific container/implementation name when they differ meaningfully. If someone swaps the underlying app (e.g., Forgejo → Gitea → GitLab), the subdomain should still make sense.
 

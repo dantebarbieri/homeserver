@@ -64,7 +64,6 @@ A prioritized roadmap of improvements, new services, hardening, and refinements 
 | `compose_pgdata` (Authelia + Synapse + Suwayomi) | 346 MB | ~0.1 MB |
 | `compose_nextcloud-pgdata` | 71 MB | ~0.6 MB |
 | Immich Postgres | (in compose_pgdata or own volume) | ~28 MB |
-| `compose_yipitdata-pgdata` (temporary) | 64 MB | — |
 | **Total compressed dumps** | | **~29 MB** |
 
 With 7 daily + 4 weekly retention = ~320 MB for database dump history.

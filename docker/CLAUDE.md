@@ -47,7 +47,7 @@ All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 ## Conventions
 
 - Volume mounts: config at `${DATA}/<service>/config:/config`, bulk data under `${RAID}/shared/...`
-- External project paths use env vars (`${TRAVEL_PLANNER_PATH}`, `${INTERVIEW_WORKSPACE_PATH}`), not relative paths
+- External project paths use env vars (`${TRAVEL_PLANNER_PATH}`), not relative paths
 - Secrets: Authelia uses Docker secrets (files in `${DATA}/authelia/secrets/`). Everything else uses `.env` variables.
 - Use `docker compose` (not `docker-compose`)
 
