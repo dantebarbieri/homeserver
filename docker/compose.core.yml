@@ -20,6 +20,7 @@ services:
       - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
       - ${DATA}/nginxproxymanager/snippets:/snippets
       - ./nginx/default-ssl.conf:/data/nginx/custom/http.conf
+      - ./nginx/404.html:/data/nginx/default_www/404.html
 
   ddclient:
     extends:
