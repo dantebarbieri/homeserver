@@ -319,6 +319,13 @@
         siteMonitor: https://stirling-image.danteb.com
         server: my-docker
         container: stirling-image
+    - Stirling PDF:
+        icon: stirling-pdf.svg
+        href: https://stirling-pdf.danteb.com
+        description: PDF Tools & OCR
+        siteMonitor: https://stirling-pdf.danteb.com
+        server: my-docker
+        container: stirling-pdf
     - Code Server:
         icon: vscode.webp
         href: https://code.danteb.com

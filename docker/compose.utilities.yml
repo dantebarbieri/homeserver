@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image
+# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image, stirling-pdf
 
 services:
   vaultwarden:
@@ -147,6 +147,22 @@ services:
     volumes:
       - ${DATA}/stirling-image/data:/data
       - ${DATA}/stirling-image/workspace:/tmp/workspace
+    networks:
+      - proxy
+
+  stirling-pdf:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: stirlingtools/stirling-pdf:latest-fat
+    container_name: stirling-pdf
+    environment:
+      LANGS: "en_US"
+    volumes:
+      - ${DATA}/stirling-pdf/tessdata:/usr/share/tessdata
+      - ${DATA}/stirling-pdf/configs:/configs
+      - ${DATA}/stirling-pdf/logs:/logs
+      - ${DATA}/stirling-pdf/pipeline:/pipeline
     networks:
       - proxy
 
