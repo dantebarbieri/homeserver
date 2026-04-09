@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx
+# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image
 
 services:
   vaultwarden:
@@ -134,6 +134,19 @@ services:
       ACCOUNT_REGISTRATION: "false"
     volumes:
       - ${DATA}/convertx/data:/app/data
+    networks:
+      - proxy
+
+  stirling-image:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    image: stirlingimage/stirling-image:cuda
+    container_name: stirling-image
+    restart: unless-stopped
+    volumes:
+      - ${DATA}/stirling-image/data:/data
+      - ${DATA}/stirling-image/workspace:/tmp/workspace
     networks:
       - proxy
 
