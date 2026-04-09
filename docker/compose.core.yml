@@ -21,7 +21,7 @@ services:
       - ${DATA}/nginxproxymanager/snippets:/snippets
       - ./nginx/default-ssl.conf:/data/nginx/custom/http.conf
       - ./nginx/404.html:/data/nginx/default_www/404.html
-      - ./nginx/server_proxy.conf:/data/nginx/custom/server_proxy.conf:ro
+      - ./nginx/server_proxy.conf:/data/nginx/custom/server_proxy.conf
       - ./nginx/502.html:/data/nginx/default_www/502.html
 
   ddclient:
