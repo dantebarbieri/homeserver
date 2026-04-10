@@ -52,7 +52,7 @@ These are set as Docker environment variables in `docker/compose.dashboards.yml`
 
 ## Icon Systems
 
-- **SVG icons**: Service-specific (e.g., `plex.svg`, `radarr.svg`) — [Dashboard Icons](https://github.com/walkxcode/dashboard-icons)
+- **SVG icons**: Service-specific (e.g., `plex.svg`, `radarr.svg`) — from [Dashboard Icons](https://dashboardicons.com/icons). **Search the icon catalog at https://dashboardicons.com/icons** to find the exact filename (including light/dark variants like `matrix-light.svg`, `openclaw-dark.svg`). This is much more efficient than browsing the GitHub repo directly. Note that filenames sometimes contain typos (e.g., `litlellm.svg` for LiteLLM) — use whatever the catalog shows.
 - **Material Design Icons**: For group headers and fallbacks (e.g., `mdi-multimedia`)
 - **Simple Icons**: For bookmarks (e.g., `si-github`)
 

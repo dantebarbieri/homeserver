@@ -194,14 +194,14 @@
         server: my-docker
         container: element
     - Synapse:
-        icon: matrix-light.svg
+        icon: matrix-synapse-light.svg
         href: https://matrix.danteb.com
         description: Matrix Homeserver
         siteMonitor: https://matrix.danteb.com
         server: my-docker
         container: synapse
     - LiveKit:
-        icon: mdi-video
+        icon: matrix-light.svg
         href: https://livekit.danteb.com
         description: MatrixRTC Backend
         siteMonitor: https://livekit.danteb.com
@@ -357,19 +357,19 @@
         server: my-docker
         container: open-webui
     - LiteLLM:
-        icon: mdi-api
+        icon: litlellm.svg
         href: https://litellm.danteb.com
         description: LLM Proxy & Router
         siteMonitor: https://litellm.danteb.com
         server: my-docker
         container: litellm
     - OpenClaw:
-        icon: openclaw.svg
+        icon: openclaw-dark.svg
         href: https://openclaw.danteb.com
         description: AI Agent Admin Panel
         siteMonitor: https://openclaw.danteb.com
     - Whisper ASR:
-        icon: mdi-microphone
+        icon: openai-light.svg
         description: Speech Recognition
         server: my-docker
         container: whisperasr
