@@ -313,7 +313,7 @@
         server: my-docker
         container: convertx
     - Stirling Image:
-        icon: stirling-image.svg
+        icon: https://stirling-image.github.io/stirling-image/logo.svg
         href: https://stirling-image.danteb.com
         description: Image Processing & AI Tools
         siteMonitor: https://stirling-image.danteb.com
