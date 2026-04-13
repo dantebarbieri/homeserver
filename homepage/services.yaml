@@ -399,3 +399,10 @@
         description: danteb.com:7778
         server: my-docker
         container: satisfactory-server
+    - Skyjo:
+        icon: mdi-cards-playing
+        href: https://skyjo.danteb.com
+        description: Card Game
+        siteMonitor: https://skyjo.danteb.com
+        server: my-docker
+        container: skyjo

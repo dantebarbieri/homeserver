@@ -28,6 +28,22 @@ services:
         aliases:
           - travel-planner
 
+  skyjo:
+    build:
+      context: ${SKYJO_PATH:?Set SKYJO_PATH in .env}
+      dockerfile: Dockerfile
+    container_name: skyjo
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      proxy:
+        aliases:
+          - skyjo
+
   # admin.danteb.com:
   #   build:
   #     context: .

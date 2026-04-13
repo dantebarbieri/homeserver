@@ -47,6 +47,7 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 
 Some Docker Compose services build from repos outside this monorepo. Their paths are configured via environment variables in `.env` (see `docker/sample.env`):
 - `${TRAVEL_PLANNER_PATH}` — SvelteKit travel planning app (`compose.websites.yml`)
+- `${SKYJO_PATH}` — Rust WASM + React card game (`compose.websites.yml`)
 
 ## Docker Compose (`docker/`)
 
@@ -74,7 +75,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.searxng.yml` | searxng, redis (valkey) |
 | `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
 | `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image, stirling-pdf |
-| `compose.websites.yml` | travel-planner |
+| `compose.websites.yml` | travel-planner, skyjo |
 
 ### Networking Patterns
 
