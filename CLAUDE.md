@@ -75,7 +75,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.searxng.yml` | searxng, redis (valkey) |
 | `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
 | `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image, stirling-pdf |
-| `compose.websites.yml` | travel-planner, skyjo |
+| `compose.websites.yml` | travel-planner, skyjo, skyjo_server, skyjo_postgres |
 
 ### Networking Patterns
 

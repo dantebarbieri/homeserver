@@ -29,20 +29,61 @@ services:
           - travel-planner
 
   skyjo:
+    extends:
+      file: compose.common.yml
+      service: common-service
     build:
       context: ${SKYJO_PATH:?Set SKYJO_PATH in .env}
-      dockerfile: Dockerfile
+      dockerfile: docker/frontend.Dockerfile
     container_name: skyjo
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     networks:
       proxy:
         aliases:
           - skyjo
+      skyjo:
+
+  skyjo_server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    build:
+      context: ${SKYJO_PATH:?Set SKYJO_PATH in .env}
+      dockerfile: docker/backend.Dockerfile
+    container_name: skyjo_server
+    networks:
+      skyjo:
+        aliases:
+          - backend
+    environment:
+      DATABASE_URL: postgres://skyjo:${SKYJO_DB_PASSWORD}@skyjo_postgres:5432/skyjo
+      SKYJO_JWT_SECRET: ${SKYJO_JWT_SECRET}
+      SKYJO_DATA_DIR: /var/lib/skyjo
+    volumes:
+      - skyjo-data:/var/lib/skyjo
+    depends_on:
+      skyjo_postgres:
+        condition: service_healthy
+
+  skyjo_postgres:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: skyjo_postgres
+    image: postgres:17-alpine
+    networks:
+      - skyjo
+    volumes:
+      - skyjo-pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: skyjo
+      POSTGRES_PASSWORD: ${SKYJO_DB_PASSWORD}
+      POSTGRES_DB: skyjo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyjo -d skyjo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # admin.danteb.com:
   #   build:
@@ -76,3 +117,8 @@ services:
 
 networks:
   proxy:
+  skyjo:
+
+volumes:
+  skyjo-pgdata:
+  skyjo-data:
