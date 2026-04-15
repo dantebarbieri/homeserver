@@ -57,9 +57,9 @@ services:
         aliases:
           - backend
     environment:
-      - "DATABASE_URL=postgres://skyjo:${SKYJO_DB_PASSWORD:-skyjo}@db:5432/skyjo"
-      - "SKYJO_JWT_SECRET=${SKYJO_JWT_SECRET}"
-      - SKYJO_DATA_DIR=/var/lib/skyjo
+      DATABASE_URL: postgres://skyjo:${SKYJO_DB_PASSWORD:-skyjo}@db:5432/skyjo
+      SKYJO_JWT_SECRET: ${SKYJO_JWT_SECRET}
+      SKYJO_DATA_DIR: /var/lib/skyjo
     volumes:
       - skyjo-data:/var/lib/skyjo
     depends_on:

@@ -50,6 +50,8 @@ All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 - External project paths use env vars (`${TRAVEL_PLANNER_PATH}`), not relative paths
 - Secrets: Authelia uses Docker secrets (files in `${DATA}/authelia/secrets/`). Everything else uses `.env` variables.
 - Use `docker compose` (not `docker-compose`)
+- **Environment variables** — always use YAML dictionary format (`KEY: value`), not list-of-strings format (`- KEY=value`).
+- **`extends` + `build` requires explicit `image:`** — The templates in `compose.common.yml` use `image: alpine` as a placeholder. When a service has both `extends:` and `build:`, Docker Compose tags the built image with the inherited `image:` name. If multiple services extend the same template and build, they all get tagged `alpine` and the last build overwrites the others. **Always set an explicit `image:` name** (e.g., `image: skyjo-frontend`) on any service that uses both `extends:` and `build:`.
 
 ## IPv6
 
