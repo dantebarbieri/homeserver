@@ -55,7 +55,7 @@ services:
         aliases:
           - backend
     environment:
-      DATABASE_URL: postgres://skyjo:${SKYJO_DB_PASSWORD:-skyjo}@skyjo_postgres:5432/skyjo
+      DATABASE_URL: postgres://skyjo:${SKYJO_DB_PASSWORD:-skyjo}@db:5432/skyjo
       SKYJO_JWT_SECRET: ${SKYJO_JWT_SECRET}
       SKYJO_DATA_DIR: /var/lib/skyjo
     volumes:
@@ -71,7 +71,9 @@ services:
     container_name: skyjo_postgres
     image: postgres:17-alpine
     networks:
-      - skyjo
+      skyjo:
+        aliases:
+          - db
     volumes:
       - skyjo-pgdata:/var/lib/postgresql/data
     environment:
