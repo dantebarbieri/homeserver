@@ -32,6 +32,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
+    image: skyjo-frontend
     build:
       context: ${SKYJO_PATH:?Set SKYJO_PATH in .env}
       dockerfile: docker/frontend.Dockerfile
@@ -46,6 +47,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
+    image: skyjo-server
     build:
       context: ${SKYJO_PATH:?Set SKYJO_PATH in .env}
       dockerfile: docker/backend.Dockerfile
@@ -55,9 +57,9 @@ services:
         aliases:
           - backend
     environment:
-      DATABASE_URL: postgres://skyjo:${SKYJO_DB_PASSWORD:-skyjo}@db:5432/skyjo
-      SKYJO_JWT_SECRET: ${SKYJO_JWT_SECRET}
-      SKYJO_DATA_DIR: /var/lib/skyjo
+      - "DATABASE_URL=postgres://skyjo:${SKYJO_DB_PASSWORD:-skyjo}@db:5432/skyjo"
+      - "SKYJO_JWT_SECRET=${SKYJO_JWT_SECRET}"
+      - SKYJO_DATA_DIR=/var/lib/skyjo
     volumes:
       - skyjo-data:/var/lib/skyjo
     depends_on:
