@@ -55,7 +55,7 @@ services:
         aliases:
           - backend
     environment:
-      DATABASE_URL: postgres://skyjo:${SKYJO_DB_PASSWORD}@skyjo_postgres:5432/skyjo
+      DATABASE_URL: postgres://skyjo:${SKYJO_DB_PASSWORD:-skyjo}@skyjo_postgres:5432/skyjo
       SKYJO_JWT_SECRET: ${SKYJO_JWT_SECRET}
       SKYJO_DATA_DIR: /var/lib/skyjo
     volumes:
@@ -76,7 +76,7 @@ services:
       - skyjo-pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: skyjo
-      POSTGRES_PASSWORD: ${SKYJO_DB_PASSWORD}
+      POSTGRES_PASSWORD: ${SKYJO_DB_PASSWORD:-skyjo}
       POSTGRES_DB: skyjo
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U skyjo -d skyjo"]
