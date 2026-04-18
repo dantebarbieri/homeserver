@@ -136,7 +136,7 @@ def heuristic_tier(body: dict[str, Any]) -> str | None:
     return "local-thinking"
 
 
-async def haiku_tiebreaker(body: dict[str, Any]) -> str:
+async def haiku_tiebreaker(body: dict[str, Any]) -> tuple[str, str]:
     text = _messages_text(body.get("messages", []))[:4000]
     rate_prompt = (
         "Rate the complexity of this request on a 1-5 scale. "
@@ -157,13 +157,15 @@ async def haiku_tiebreaker(body: dict[str, Any]) -> str:
                 },
             )
         content = r.json()["choices"][0]["message"]["content"]
-        digit = next((ch for ch in content if ch.isdigit()), "3")
+        digit = next((ch for ch in content if ch.isdigit()), None)
+        if digit is None:
+            raise ValueError(f"no digit in Haiku response: {content!r}")
     except Exception as e:
         LOG.warning("tiebreaker failed, defaulting to sonnet: %s", e)
-        return "sonnet"
+        return "sonnet", "tiebreaker-failed-default"
     mapping = {"1": "local-thinking", "2": "local-thinking",
                "3": "sonnet", "4": "opus", "5": "opus"}
-    return mapping.get(digit, "sonnet")
+    return mapping.get(digit, "sonnet"), "haiku-tiebreaker"
 
 
 async def classify(body: dict[str, Any]) -> tuple[str, str]:
@@ -171,7 +173,7 @@ async def classify(body: dict[str, Any]) -> tuple[str, str]:
     if tier is not None:
         return tier, "heuristic"
     if CLASSIFIER_MODE in ("hybrid", "haiku"):
-        return await haiku_tiebreaker(body), "haiku-tiebreaker"
+        return await haiku_tiebreaker(body)
     return "local-thinking", "heuristic-default"
 
 
