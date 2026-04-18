@@ -65,7 +65,7 @@ services:
       - ai
     environment:
       LITELLM_BASE_URL: http://litellm:4000/v1
-      LITELLM_API_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_API_KEY: ${LITELLM_API_KEY_ROUTER}
       ROUTER_API_KEY: ${LLMROUTER_API_KEY}
       OLLAMA_URL: http://192.168.50.180:11434
       NTFY_URL: https://ntfy.danteb.com
@@ -94,7 +94,7 @@ services:
       - ai
     environment:
       OPENAI_API_BASE_URLS: http://llmrouter:8000/v1;http://litellm:4000/v1
-      OPENAI_API_KEYS: ${LLMROUTER_API_KEY};${LITELLM_MASTER_KEY}
+      OPENAI_API_KEYS: ${LLMROUTER_API_KEY};${LITELLM_API_KEY_OPENWEBUI}
       WEBUI_SECRET_KEY: ${OPENWEBUI_SECRET_KEY}
       ENABLE_OLLAMA_API: "false"
     volumes:
