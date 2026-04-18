@@ -363,6 +363,13 @@
         siteMonitor: https://litellm.danteb.com
         server: my-docker
         container: litellm
+    - LLM Router:
+        icon: mdi-router-wireless
+        href: https://llmrouter.danteb.com
+        description: Auto-routed LLM gateway
+        siteMonitor: https://llmrouter.danteb.com
+        server: my-docker
+        container: llmrouter
     - OpenClaw:
         icon: openclaw-dark.svg
         href: https://openclaw.danteb.com
