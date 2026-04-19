@@ -11,6 +11,9 @@ NTFY_TOPIC="${NTFY_TOPIC:-homeserver-alerts}"
 THEMES=("${OVERTURE_THEMES:-places,divisions}")
 STATE_FILE="${OPENCLAW_V3_BASE}/overture/.current-release"
 
+# Ensure state dir exists even if openclaw-v3-bootstrap.sh hasn't been run.
+mkdir -p "$(dirname "$STATE_FILE")"
+
 notify() {
   local priority="$1" title="$2" body="$3"
   curl -fsS -H "Title: $title" -H "Priority: $priority" -H "Tags: world_map" \
@@ -42,7 +45,7 @@ for theme in "${THEME_LIST[@]}"; do
   aws s3 sync \
     "s3://overturemaps-us-west-2/release/${LATEST}/theme=${theme}/" \
     "${dest}/" \
-    --no-sign-request --no-progress --only-show-errors
+    --delete --no-sign-request --no-progress --only-show-errors
 done
 
 printf '%s' "$LATEST" > "$STATE_FILE"

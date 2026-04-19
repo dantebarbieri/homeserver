@@ -5,9 +5,18 @@ state database.
 Usage:
     apply-migrations.py /var/lib/openclaw/state.db pi/sqlite-migrations/
 
-Refuses to apply migrations out of order. Each migration runs in a
-transaction; partial failures roll back. The applied filename is recorded
-in the _migrations table.
+Refuses to apply migrations out of order. Connection is opened in
+autocommit mode (isolation_level=None) so sqlite3.executescript() can run
+the migration file as-is — executescript issues its own COMMIT and is
+incompatible with explicit BEGIN/COMMIT. The applied filename is
+recorded in _migrations only after executescript returns successfully.
+
+Caveat: if executescript fails midway, SQLite has already partially
+applied any DDL that ran before the failing statement (DDL is not
+rolled back), and the migration is *not* recorded in _migrations. That
+file will be retried on the next run, which usually fails on the
+already-applied prefix. Manual reconciliation is required in that rare
+case — keep migrations short and idempotent where possible.
 """
 from __future__ import annotations
 
@@ -55,12 +64,6 @@ def main() -> int:
         return 0
 
     args.db.parent.mkdir(parents=True, exist_ok=True)
-    # Autocommit (isolation_level=None) — sqlite3.executescript() issues its
-    # own COMMIT, which conflicts with explicit BEGIN/COMMIT. Each migration
-    # is treated as a single atomic-ish unit: if executescript fails midway,
-    # SQLite has already partially applied DDL (which can't be rolled back
-    # in SQLite), and we abort before recording it in _migrations. Manual
-    # reconciliation may be needed in that rare case.
     conn = sqlite3.connect(args.db, isolation_level=None)
     conn.execute("PRAGMA foreign_keys = ON")
 

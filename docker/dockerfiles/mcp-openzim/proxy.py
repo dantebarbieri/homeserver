@@ -18,6 +18,10 @@ UPSTREAM = os.getenv("MCP_PROXY_UPSTREAM", "http://127.0.0.1:8081")
 with open(os.environ["AUTH_TOKEN_FILE"]) as _f:
     _TOKEN = _f.read().strip()
 
+# Module-scoped client for connection reuse and so a failure in send()
+# can't leak a per-request client.
+_CLIENT = httpx.AsyncClient(timeout=None)
+
 
 class StaticBearer(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -38,9 +42,8 @@ async def proxy(request):
         url = f"{url}?{request.url.query}"
     headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
     body = await request.body()
-    client = httpx.AsyncClient(timeout=None)
-    upstream_req = client.build_request(request.method, url, headers=headers, content=body)
-    upstream = await client.send(upstream_req, stream=True)
+    upstream_req = _CLIENT.build_request(request.method, url, headers=headers, content=body)
+    upstream = await _CLIENT.send(upstream_req, stream=True)
 
     async def aiter():
         try:
@@ -48,7 +51,6 @@ async def proxy(request):
                 yield chunk
         finally:
             await upstream.aclose()
-            await client.aclose()
 
     out_headers = {k: v for k, v in upstream.headers.items()
                    if k.lower() not in ("content-length", "transfer-encoding", "content-encoding")}

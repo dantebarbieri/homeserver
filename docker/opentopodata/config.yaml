@@ -1,5 +1,4 @@
 max_locations_per_request: 100
-access_control_allow_origin: "*"
 
 datasets:
   - name: cop30
