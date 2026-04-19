@@ -1,4 +1,2 @@
 fastmcp==2.14.7
 httpx==0.28.1
-starlette==0.41.3
-uvicorn[standard]==0.32.0
