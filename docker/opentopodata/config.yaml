@@ -1,0 +1,12 @@
+max_locations_per_request: 100
+access_control_allow_origin: "*"
+
+datasets:
+  - name: cop30
+    path: data/copernicus-glo30/
+    filename_epsg: 4326
+    filename_tile_size: 1
+  - name: srtm30m
+    path: data/srtm30m/
+    filename_epsg: 4326
+    filename_tile_size: 1

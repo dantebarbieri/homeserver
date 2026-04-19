@@ -15,9 +15,12 @@ include:
   - compose.dashboards.yml
   - compose.downloads.yml
   - compose.gaming.yml
+  - compose.geo.yml
   - compose.git.yml
   - compose.immich.yml
+  - compose.knowledge.yml
   - compose.matrix.yml
+  - compose.mcp.yml
   - compose.media.yml
   - compose.nextcloud.yml
   - compose.searxng.yml
@@ -43,3 +46,19 @@ secrets:
     file: '${DATA}/authelia/secrets/STORAGE_PASSWORD'
   STORAGE_ENCRYPTION_KEY:
     file: '${DATA}/authelia/secrets/STORAGE_ENCRYPTION_KEY'
+  MCP_TOKEN_OPENZIM:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_OPENZIM'
+  MCP_TOKEN_WIKIPEDIA:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_WIKIPEDIA'
+  MCP_TOKEN_WIKIDATA:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_WIKIDATA'
+  MCP_TOKEN_SEARXNG:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_SEARXNG'
+  MCP_TOKEN_NOMINATIM:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_NOMINATIM'
+  MCP_TOKEN_PHOTON:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_PHOTON'
+  MCP_TOKEN_VALHALLA:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_VALHALLA'
+  MCP_TOKEN_ELEV:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_ELEV'

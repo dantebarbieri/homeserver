@@ -166,8 +166,39 @@ services:
     networks:
       - proxy
 
+  changedetection-io:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/dgtlmoon/changedetection.io:latest
+    container_name: changedetection-io
+    hostname: changedetection-io
+    environment:
+      BASE_URL: "https://${CHANGEDETECTION_HOSTNAME:-cd.danteb.com}"
+      PLAYWRIGHT_DRIVER_URL: "ws://sockpuppetbrowser:3000/?stealth=1&--disable-web-security=true"
+      USE_X_SETTINGS: "1"
+    volumes:
+      - ${DATA}/changedetection/datastore:/datastore
+    networks:
+      - proxy
+      - changedetection
+    depends_on:
+      - sockpuppetbrowser
+
+  sockpuppetbrowser:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: dgtlmoon/sockpuppetbrowser:latest
+    container_name: sockpuppetbrowser
+    shm_size: 2gb
+    cap_add: [SYS_ADMIN]
+    networks:
+      - changedetection
+
 volumes:
   vw-data:
 
 networks:
   proxy:
+  changedetection:

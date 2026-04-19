@@ -1,5 +1,11 @@
 # SearXNG search engine stack
-# searxng, searxng_redis
+# Public instance: searxng + searxng_redis (HTML-only, public, hardened)
+# AI-private instance: searxng-ai + searxng-ai-valkey (HTML+JSON, internal,
+#   curated engines, hostnames-plugin tuned for travel research)
+#
+# The two instances share NOTHING at the cache layer (separate Valkey
+# containers, separate volumes) so a poisoned AI cache cannot affect the
+# public instance and vice versa.
 
 services:
   searxng_redis:
@@ -30,9 +36,41 @@ services:
     cap_drop: [ALL]
     cap_add: [CHOWN, SETGID, SETUID]
 
+  searxng-ai-valkey:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: searxng-ai-valkey
+    image: valkey/valkey:9.0.3-alpine
+    command: --save 30 1 --loglevel warning
+    networks: [searxng-ai]
+    volumes: [valkey-data-ai:/data]
+
+  searxng-ai:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: searxng-ai
+    image: docker.io/searxng/searxng:latest
+    networks:
+      - proxy
+      - searxng-ai
+    volumes:
+      - ./searxng-ai:/etc/searxng:ro
+    environment:
+      SEARXNG_BASE_URL: "https://${SEARXNG_AI_HOSTNAME:-ai-search.danteb.com}/"
+      SEARXNG_SECRET: ${SEARXNG_AI_SECRET_KEY}
+      SEARXNG_REDIS_URL: redis://searxng-ai-valkey:6379/0
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+    depends_on:
+      - searxng-ai-valkey
+
 networks:
   proxy:
   searxng:
+  searxng-ai:
 
 volumes:
   valkey-data:
+  valkey-data-ai:
