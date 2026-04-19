@@ -72,7 +72,11 @@ services:
       NTFY_TOPIC: llmrouter
       CLASSIFIER_MODE: hybrid
       CLASSIFIER_TIEBREAKER_MODEL: claude-haiku
+      LLMROUTER_DB_PATH: /data/llmrouter.db
+      LOG_REQUESTS: "1"
       LOG_LEVEL: info
+    volumes:
+      - ${DATA}/llmrouter:/data
     depends_on:
       litellm:
         condition: service_healthy
