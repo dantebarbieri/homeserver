@@ -20,7 +20,7 @@ services:
       - proxy
       - knowledge
     volumes:
-      - ${OPENCLAW_V3_BASE}/zim:/data:ro
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/zim:/data:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/ROOT/ || exit 1"]
       interval: 60s

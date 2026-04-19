@@ -3,7 +3,7 @@
 #
 # All four expose HTTP APIs on the internal `geo` network and are reverse-
 # proxied via NPM on the `proxy` network. Bulk data lives at
-# ${OPENCLAW_V3_BASE} (RAID6 XFS) — Nominatim's PostgreSQL is the most
+# ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env} (RAID6 XFS) — Nominatim's PostgreSQL is the most
 # I/O-sensitive workload on this stack; expect slower geocode latency than
 # an NVMe deployment.
 
@@ -20,11 +20,11 @@ services:
       - geo
     environment:
       PBF_URL: https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
-      REPLICATION_URL: ${NOMINATIM_REPLICATION_URL}
+      REPLICATION_URL: ${NOMINATIM_REPLICATION_URL:-https://planet.openstreetmap.org/replication/day/}
       IMPORT_STYLE: address
       UPDATE_MODE: continuous
       THREADS: 8
-      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:?set NOMINATIM_PASSWORD in .env (openssl rand -hex 32)}
       POSTGRES_SHARED_BUFFERS: 8GB
       POSTGRES_MAINTENANCE_WORK_MEM: 8GB
       POSTGRES_AUTOVACUUM_WORK_MEM: 2GB
@@ -36,8 +36,8 @@ services:
       POSTGRES_CHECKPOINT_COMPLETION_TARGET: "0.9"
       POSTGRES_MAX_CONNECTIONS: 200
     volumes:
-      - ${OPENCLAW_V3_BASE}/nominatim/pg:/var/lib/postgresql/16/main
-      - ${OPENCLAW_V3_BASE}/nominatim/flatnode:/nominatim/flatnode
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/nominatim/pg:/var/lib/postgresql/16/main
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/nominatim/flatnode:/nominatim/flatnode
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/status?format=json || exit 1"]
       interval: 60s
@@ -65,9 +65,9 @@ services:
       force_rebuild_elevation: "False"
       server_threads: 4
     volumes:
-      - ${OPENCLAW_V3_BASE}/valhalla/tiles:/custom_files
-      - ${OPENCLAW_V3_BASE}/valhalla/gtfs_feeds:/gtfs_feeds
-      - ${OPENCLAW_V3_BASE}/elev:/custom_files/elevation_data
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/valhalla/tiles:/custom_files
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/valhalla/gtfs_feeds:/gtfs_feeds
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/elev:/custom_files/elevation_data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS 'http://localhost:8002/status' || exit 1"]
       interval: 60s
@@ -85,10 +85,10 @@ services:
       - proxy
       - geo
     environment:
-      PHOTON_DOWNLOAD_URL: ${PHOTON_DOWNLOAD_URL}
+      PHOTON_DOWNLOAD_URL: ${PHOTON_DOWNLOAD_URL:-https://download1.graphhopper.com/public/photon-db-planet-1.0-latest.tar.bz2}
       JAVA_OPTS: -Xms16g -Xmx16g
     volumes:
-      - ${OPENCLAW_V3_BASE}/photon:/photon/photon_data
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/photon:/photon/photon_data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS 'http://localhost:2322/api?q=test&limit=1' || exit 1"]
       interval: 60s
@@ -109,7 +109,7 @@ services:
       - geo
     volumes:
       - ./opentopodata/config.yaml:/app/config.yaml:ro
-      - ${OPENCLAW_V3_BASE}/elev:/app/data:ro
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/elev:/app/data:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
       interval: 60s

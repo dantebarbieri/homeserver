@@ -29,7 +29,7 @@ services:
     environment:
       AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_OPENZIM
     volumes:
-      - ${OPENCLAW_V3_BASE}/zim:/zim:ro
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/zim:/zim:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
       interval: 60s
@@ -52,7 +52,7 @@ services:
       - MCP_TOKEN_WIKIPEDIA
     environment:
       AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_WIKIPEDIA
-      WIKIPEDIA_USER_AGENT: ${WIKIMEDIA_USER_AGENT}
+      WIKIPEDIA_USER_AGENT: ${WIKIMEDIA_USER_AGENT:-OpenClawTravelAgent/3.0 (+https://danteb.com)}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
       interval: 60s

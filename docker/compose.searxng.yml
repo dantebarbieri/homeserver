@@ -59,7 +59,7 @@ services:
       - ./searxng-ai:/etc/searxng:ro
     environment:
       SEARXNG_BASE_URL: "https://${SEARXNG_AI_HOSTNAME:-ai-search.danteb.com}/"
-      SEARXNG_SECRET: ${SEARXNG_AI_SECRET_KEY}
+      SEARXNG_SECRET: ${SEARXNG_AI_SECRET_KEY:?set SEARXNG_AI_SECRET_KEY in .env (openssl rand -hex 32)}
       SEARXNG_REDIS_URL: redis://searxng-ai-valkey:6379/0
     cap_drop: [ALL]
     cap_add: [CHOWN, SETGID, SETUID]
