@@ -47,6 +47,7 @@ services:
     volumes:
       - ${DATA}/qbittorrent/config:/config
       - ${RAID}/shared/torrents:/data/torrents
+      - ${OPENCLAW_V3_BASE:-/data/openclaw-v3}/zim:/data/openclaw-zim
       - ${DATA}/qbittorrent/VueTorrent:/vuetorrent
       - ${DATA}/qbittorrent/iQbit/release:/iqbit
     depends_on:
