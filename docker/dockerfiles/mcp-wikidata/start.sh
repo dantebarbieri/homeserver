@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/bin/bash
+# Bash required for `wait -n` (waits for ANY child); /bin/sh on Debian
+# slim is dash, which doesn't support -n.
 # Local-fallback Wikidata MCP server (zzaebok/mcp-wikidata, stdio).
 # Primary route from the Pi is wd-mcp.wmcloud.org via mcp-remote — this
 # container exists for resilience when wmcloud is unreachable.

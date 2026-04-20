@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/bin/bash
+# Bash required for `wait -n` (waits for ANY child); /bin/sh on Debian
+# slim is dash, which doesn't support -n.
 # Bridges openzim-mcp (stdio, advanced mode → 18 tools) to Streamable HTTP via
 # mcp-proxy on localhost:8081, then fronts it with proxy.py (bearer auth +
 # /health) on 0.0.0.0:8080.
