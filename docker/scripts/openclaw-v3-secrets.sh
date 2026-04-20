@@ -10,8 +10,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env"
 [ -f "$ENV_FILE" ] || { echo "missing $ENV_FILE" >&2; exit 1; }
-# shellcheck disable=SC1090
-set -a; . "$ENV_FILE"; set +a
+# Source .env, skipping bash-readonly vars (UID, EUID, etc.) that would
+# error under `set -e`. Docker compose parses .env directly so it sees them.
+# Using eval instead of `. <(grep ...)` because process substitution
+# doesn't propagate `set -a` through the FIFO.
+set -a
+eval "$(grep -vE '^(UID|EUID|PPID|SHELLOPTS|BASHOPTS|BASHPID)=' "$ENV_FILE")"
+set +a
 
 : "${DATA:?set DATA in .env}"
 SECRETS_DIR="${DATA}/mcp/secrets"
