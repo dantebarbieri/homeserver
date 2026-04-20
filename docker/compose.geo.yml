@@ -1,0 +1,122 @@
+# Geo + routing services for the OpenClaw v3 travel agent
+# nominatim, valhalla, photon, opentopodata
+#
+# All four expose HTTP APIs on the internal `geo` network and are reverse-
+# proxied via NPM on the `proxy` network. Bulk data lives at
+# ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env} (RAID6 XFS) — Nominatim's PostgreSQL is the most
+# I/O-sensitive workload on this stack; expect slower geocode latency than
+# an NVMe deployment.
+
+services:
+  nominatim:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mediagis/nominatim:5.3
+    container_name: nominatim
+    shm_size: 16gb
+    networks:
+      - proxy
+      - geo
+    environment:
+      PBF_URL: https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
+      REPLICATION_URL: ${NOMINATIM_REPLICATION_URL:-https://planet.openstreetmap.org/replication/day/}
+      IMPORT_STYLE: address
+      UPDATE_MODE: continuous
+      THREADS: 8
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:?set NOMINATIM_PASSWORD in .env (openssl rand -hex 32)}
+      POSTGRES_SHARED_BUFFERS: 8GB
+      POSTGRES_MAINTENANCE_WORK_MEM: 8GB
+      POSTGRES_AUTOVACUUM_WORK_MEM: 2GB
+      POSTGRES_WORK_MEM: 64MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 24GB
+      POSTGRES_SYNCHRONOUS_COMMIT: "off"
+      POSTGRES_MAX_WAL_SIZE: 4GB
+      POSTGRES_CHECKPOINT_TIMEOUT: 30min
+      POSTGRES_CHECKPOINT_COMPLETION_TARGET: "0.9"
+      POSTGRES_MAX_CONNECTIONS: 200
+    volumes:
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/nominatim/pg:/var/lib/postgresql/16/main
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/nominatim/flatnode:/nominatim/flatnode
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/status?format=json || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+
+  valhalla:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    container_name: valhalla
+    networks:
+      - proxy
+      - geo
+    environment:
+      tile_urls: https://download.geofabrik.de/europe-latest.osm.pbf https://download.geofabrik.de/north-america-latest.osm.pbf https://download.geofabrik.de/asia-latest.osm.pbf
+      use_tiles_ignore_pbf: "True"
+      build_admins: "True"
+      build_time_zones: "True"
+      build_elevation: "True"
+      build_transit: "False"
+      force_rebuild: "False"
+      force_rebuild_elevation: "False"
+      server_threads: 4
+    volumes:
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/valhalla/tiles:/custom_files
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/valhalla/gtfs_feeds:/gtfs_feeds
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/elev:/custom_files/elevation_data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:8002/status' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+
+  photon:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: rtuszik/photon-docker:latest
+    container_name: photon
+    networks:
+      - proxy
+      - geo
+    environment:
+      PHOTON_DOWNLOAD_URL: ${PHOTON_DOWNLOAD_URL:-https://download1.graphhopper.com/public/photon-db-planet-1.0-latest.tar.bz2}
+      JAVA_OPTS: -Xms16g -Xmx16g
+    volumes:
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/photon:/photon/photon_data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:2322/api?q=test&limit=1' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+
+  opentopodata:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: opentopodata
+    build:
+      context: dockerfiles/opentopodata
+    container_name: opentopodata
+    networks:
+      - proxy
+      - geo
+    volumes:
+      - ./opentopodata/config.yaml:/app/config.yaml:ro
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/elev:/app/data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  proxy:
+  geo:

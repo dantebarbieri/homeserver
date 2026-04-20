@@ -1,0 +1,228 @@
+# MCP servers for the OpenClaw v3 travel agent
+# mcp-openzim, mcp-wikipedia, mcp-wikidata, mcp-searxng,
+# mcp-nominatim, mcp-photon, mcp-valhalla, mcp-elev
+#
+# All eight servers expose Streamable HTTP at port 8080 internally and are
+# reverse-proxied at https://mcp.danteb.com/<name>/. Each container reads
+# its bearer token from a Docker secret mounted at /run/secrets/MCP_TOKEN_<NAME>
+# and validates it on every request — NPM does not enforce auth for these.
+#
+# stdio-only upstreams (openzim, wikidata-fallback) are bridged to HTTP via
+# mcp-proxy. The five Python wrappers (searxng, nominatim, photon, valhalla,
+# elev) speak Streamable HTTP natively via FastMCP.
+
+services:
+  mcp-openzim:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-openzim
+    build:
+      context: dockerfiles/mcp-openzim
+    container_name: mcp-openzim
+    networks:
+      - proxy
+      - mcp
+      - knowledge
+    secrets:
+      - MCP_TOKEN_OPENZIM
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_OPENZIM
+    volumes:
+      - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/zim:/zim:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp-wikipedia:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-wikipedia
+    build:
+      context: dockerfiles/mcp-wikipedia
+    container_name: mcp-wikipedia
+    networks:
+      - proxy
+      - mcp
+    secrets:
+      - MCP_TOKEN_WIKIPEDIA
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_WIKIPEDIA
+      WIKIPEDIA_USER_AGENT: ${WIKIMEDIA_USER_AGENT:-OpenClawTravelAgent/3.0 (+https://danteb.com)}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp-wikidata:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-wikidata
+    build:
+      context: dockerfiles/mcp-wikidata
+    container_name: mcp-wikidata
+    networks:
+      - proxy
+      - mcp
+    secrets:
+      - MCP_TOKEN_WIKIDATA
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_WIKIDATA
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp-searxng:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-searxng
+    build:
+      context: dockerfiles/mcp-searxng
+    container_name: mcp-searxng
+    networks:
+      - proxy
+      - mcp
+      - searxng-ai
+    secrets:
+      - MCP_TOKEN_SEARXNG
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_SEARXNG
+      SEARXNG_URL: http://searxng-ai:8080
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp-nominatim:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-nominatim
+    build:
+      context: dockerfiles/mcp-nominatim
+    container_name: mcp-nominatim
+    networks:
+      - proxy
+      - mcp
+      - geo
+    secrets:
+      - MCP_TOKEN_NOMINATIM
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_NOMINATIM
+      NOMINATIM_URL: http://nominatim:8080
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp-photon:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-photon
+    build:
+      context: dockerfiles/mcp-photon
+    container_name: mcp-photon
+    networks:
+      - proxy
+      - mcp
+      - geo
+    secrets:
+      - MCP_TOKEN_PHOTON
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_PHOTON
+      PHOTON_URL: http://photon:2322
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp-valhalla:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-valhalla
+    build:
+      context: dockerfiles/mcp-valhalla
+    container_name: mcp-valhalla
+    networks:
+      - proxy
+      - mcp
+      - geo
+    secrets:
+      - MCP_TOKEN_VALHALLA
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_VALHALLA
+      VALHALLA_URL: http://valhalla:8002
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  mcp-elev:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-elev
+    build:
+      context: dockerfiles/mcp-elev
+    container_name: mcp-elev
+    networks:
+      - proxy
+      - mcp
+      - geo
+    secrets:
+      - MCP_TOKEN_ELEV
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_ELEV
+      OPENTOPODATA_URL: http://opentopodata:5000
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  proxy:
+  mcp:
+  geo:
+  knowledge:
+  searxng-ai:
+
+secrets:
+  MCP_TOKEN_OPENZIM:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_OPENZIM'
+  MCP_TOKEN_WIKIPEDIA:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_WIKIPEDIA'
+  MCP_TOKEN_WIKIDATA:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_WIKIDATA'
+  MCP_TOKEN_SEARXNG:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_SEARXNG'
+  MCP_TOKEN_NOMINATIM:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_NOMINATIM'
+  MCP_TOKEN_PHOTON:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_PHOTON'
+  MCP_TOKEN_VALHALLA:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_VALHALLA'
+  MCP_TOKEN_ELEV:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_ELEV'

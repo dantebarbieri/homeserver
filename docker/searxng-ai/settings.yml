@@ -1,0 +1,151 @@
+# SearXNG settings for the AI-private instance (ai-search.danteb.com).
+# Internal-only. JSON enabled, limiter off, curated factual whitelist,
+# hostnames plugin tuned to bias travel/factual research and demote SEO spam.
+
+use_default_settings:
+  engines:
+    keep_only:
+      - duckduckgo
+      - brave
+      - mojeek
+      - qwant
+      - startpage
+      - google
+      - bing
+      - marginalia
+      - wikipedia
+      - wikidata
+      - openstreetmap
+      - reddit
+      - reuters
+      - arxiv
+      - pubmed
+      - currency
+
+general:
+  instance_name: "OpenClaw Travel — Private SearXNG"
+  contact_url: false
+  enable_metrics: false
+  donation_url: false
+
+brand:
+  new_issue_url: ""
+  docs_url: ""
+  public_instances: ""
+  wiki_url: ""
+  issue_url: ""
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  ban_time_on_fail: 0
+  max_ban_time_on_fail: 0
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  base_url: false
+  limiter: false
+  public_instance: false
+  image_proxy: false
+  http_protocol_version: "1.1"
+  method: "GET"
+  default_http_headers:
+    X-Content-Type-Options: nosniff
+    X-Download-Options: noopen
+    X-Robots-Tag: noindex, nofollow
+    Referrer-Policy: no-referrer
+
+ui:
+  static_use_hash: true
+  default_theme: simple
+  query_in_title: true
+  infinite_scroll: false
+  center_alignment: true
+  results_on_new_tab: false
+  search_on_category_select: true
+  hotkeys: default
+
+valkey:
+  url: redis://searxng-ai-valkey:6379/0
+
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 15.0
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true
+  useragent_suffix: "OpenClawTravelAgent/3.0 (https://danteb.com; dante@danteb.com)"
+
+engines:
+  - name: reddit
+    disabled: false
+    weight: 1.0
+  - name: wikipedia
+    weight: 3.0
+  - name: marginalia
+    weight: 1.5
+  - name: wikivoyage
+    engine: wikipedia
+    base_url: 'https://{language}.wikivoyage.org/'
+    shortcut: wv
+    categories: [general]
+    disabled: false
+    weight: 2.5
+
+plugins:
+  searx.plugins.calculator.SXNGPlugin:
+    active: true
+  searx.plugins.hash_plugin.SXNGPlugin:
+    active: false
+  searx.plugins.self_info.SXNGPlugin:
+    active: false
+  searx.plugins.tracker_url_remover.SXNGPlugin:
+    active: true
+  searx.plugins.unit_converter.SXNGPlugin:
+    active: true
+  searx.plugins.hostnames.SXNGPlugin:
+    active: true
+    hostnames:
+      high_priority:
+        - '(.*\.)?wikipedia\.org$'
+        - '(.*\.)?wikivoyage\.org$'
+        - '(.*\.)?wikidata\.org$'
+        - '(.*\.)?openstreetmap\.org$'
+        - '(.*\.)?marginalia\.nu$'
+        - 'reddit\.com/r/(travel|solotravel|onebag|backpacking|digitalnomad|expats)'
+        - '(.*\.)?reuters\.com$'
+        - '(.*\.)?bbc\.co\.uk$'
+        - '(.*\.)?apnews\.com$'
+        - '(.*\.)?cdc\.gov$'
+        - '(.*\.)?who\.int$'
+        - '(.*\.)?state\.gov$'
+        - '(.*\.)?gov\.uk$'
+      low_priority:
+        - '(.*\.)?tripadvisor\.[a-z.]+$'
+        - '(.*\.)?booking\.com$'
+        - '(.*\.)?expedia\.com$'
+      remove:
+        - '(.*\.)?quora\.com$'
+        - '(.*\.)?answers\.com$'
+        - '(.*\.)?brainly\..*$'
+        - '(.*\.)?w3schools\.com$'
+        - '(.*\.)?geeksforgeeks\.org$'
+        - '(.*\.)?tutorialspoint\.com$'
+        - '(.*\.)?javatpoint\.com$'
+        - '(.*\.)?codegrepper\.com$'
+        - '(.*\.)?programmersought\.com$'
+        - '(.*\.)?gitmemory\.com$'
+        - '(.*\.)?stackoverrun\.com$'
+        - '(.*\.)?stackanswers\.net$'
+        - '(.*\.)?thetopsites\.net$'
+        - '(.*\.)?askinglot\.com$'
+        - '(.*\.)?flipboard\.com$'
+        - '(.*\.)?pinterest\.[a-z.]+$'
+        - '(.*\.)?ehow\.com$'
+        - '(.*\.)?wikihow\.com$'
+        - '(.*\.)?hubpages\.com$'

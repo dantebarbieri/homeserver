@@ -1,0 +1,18 @@
+# Limiter for the AI-private SearXNG (ai-search.danteb.com).
+# All callers are internal LAN/WG, so the limiter itself is disabled in
+# settings.yml (server.limiter = false). This file mostly exists to keep
+# the SearXNG container from logging "limiter: missing" warnings and to
+# document the IP allowlist if the limiter is ever turned back on.
+
+[real_ip]
+x_for = 1
+ipv4_prefix = 32
+ipv6_prefix = 56
+
+[botdetection.ip_lists]
+pass_searxng_org = false
+pass_ip = [
+  "172.16.0.0/12",
+  "10.8.0.0/24",
+  "192.168.50.0/24",
+]

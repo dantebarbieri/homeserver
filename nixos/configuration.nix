@@ -852,6 +852,38 @@ in
     };
   };
 
+  # Overture Maps monthly refresh — public retention is 60 days, so a
+  # pinned release will silently break in two months without an updater.
+  # The script discovers the latest tag via the STAC catalog and syncs
+  # the places + divisions themes.
+  systemd.services.overture-refresh = {
+    description = "Sync the latest Overture Maps places + divisions release";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = with pkgs; [ curl python3 awscli2 coreutils ];
+    environment = {
+      OPENCLAW_V3_BASE = "/data/openclaw-v3";
+      OVERTURE_THEMES = "places,divisions";
+      NTFY_URL = ntfyUrl;
+      NTFY_TOPIC = ntfyTopic;
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "/srv/homeserver/docker/scripts/overture-refresh.sh";
+      User = "root";
+      TimeoutStartSec = "8h";
+    };
+  };
+
+  systemd.timers.overture-refresh = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "monthly";
+      Persistent = true;
+      RandomizedDelaySec = "30m";
+    };
+  };
+
   # NVIDIA (RTX 2070 SUPER — production driver, headless with persistenced)
   services.xserver.videoDrivers = [ "nvidia" ];  # driver registration only, does not enable X11
   hardware = {

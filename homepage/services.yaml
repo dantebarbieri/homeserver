@@ -172,6 +172,13 @@
         siteMonitor: https://searxng.danteb.com
         server: my-docker
         container: searxng
+    - SearXNG (AI):
+        icon: searxng.svg
+        href: https://ai-search.danteb.com
+        description: AI-private metasearch (LAN only)
+        siteMonitor: https://ai-search.danteb.com
+        server: my-docker
+        container: searxng-ai
 
 - Network & Communication:
     - Nginx Proxy Manager:
@@ -333,6 +340,20 @@
         siteMonitor: https://code.danteb.com
         server: my-docker
         container: code-server
+    - Changedetection:
+        icon: mdi-magnify-scan
+        href: https://cd.danteb.com
+        description: URL Change Watcher
+        siteMonitor: https://cd.danteb.com
+        server: my-docker
+        container: changedetection-io
+    - Kiwix:
+        icon: kiwix.svg
+        href: https://kiwix.danteb.com
+        description: Offline Wiki / ZIM Library
+        siteMonitor: https://kiwix.danteb.com
+        server: my-docker
+        container: kiwix-serve
     - Travel Planner:
         icon: mdi-airplane
         href: https://travel.danteb.com
@@ -380,6 +401,43 @@
         description: Speech Recognition
         server: my-docker
         container: whisperasr
+
+- Travel Stack:
+    - Nominatim:
+        icon: openstreetmap.svg
+        href: https://nominatim.danteb.com
+        description: Forward/Reverse Geocoding
+        siteMonitor: https://nominatim.danteb.com
+        server: my-docker
+        container: nominatim
+    - Photon:
+        icon: openstreetmap.svg
+        href: https://photon.danteb.com
+        description: Fuzzy Geocoder
+        siteMonitor: https://photon.danteb.com
+        server: my-docker
+        container: photon
+    - Valhalla:
+        icon: openstreetmap.svg
+        href: https://valhalla.danteb.com
+        description: Routing Engine
+        siteMonitor: https://valhalla.danteb.com
+        server: my-docker
+        container: valhalla
+    - Elevation:
+        icon: mdi-elevation-rise
+        href: https://elev.danteb.com
+        description: Copernicus DEM API
+        siteMonitor: https://elev.danteb.com
+        server: my-docker
+        container: opentopodata
+    - MCP Hub:
+        icon: mdi-server-network
+        href: https://mcp.danteb.com
+        description: 8 MCP servers (knowledge / geo / search)
+        siteMonitor: https://mcp.danteb.com/wikipedia/health
+        server: my-docker
+        container: mcp-wikipedia
 
 - Game Servers:
     - Hardcore Minecraft:
