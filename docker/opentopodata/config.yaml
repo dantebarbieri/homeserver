@@ -1,5 +1,10 @@
 max_locations_per_request: 100
 
+# Disable memcached — upstream's own Dockerfile bundles memcached + supervisord,
+# but our slim image doesn't. For our single-user low-volume usage, in-process
+# cache is fine. Setting host to null makes Flask-Caching fall back to simple.
+memcached_host: null
+
 datasets:
   - name: cop30
     path: data/copernicus-glo30/
