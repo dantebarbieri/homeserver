@@ -1,0 +1,44 @@
+version: 2
+updates:
+  # Python requirements in the custom MCP server images
+  # (docker/dockerfiles/mcp-*/requirements.txt)
+  - package-ecosystem: "pip"
+    directories:
+      - "/docker/dockerfiles/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      mcp-python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Base images in our custom Dockerfiles
+  - package-ecosystem: "docker"
+    directories:
+      - "/docker/dockerfiles"
+      - "/docker/dockerfiles/**"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      dockerfile-bases:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Image tags in the compose files
+  - package-ecosystem: "docker-compose"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      compose-images:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions workflow pins
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
