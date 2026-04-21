@@ -152,6 +152,29 @@ services:
       vpn-netns:
         condition: service_started
 
+  vpn-netns-watcher:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: vpn-netns-watcher
+    build:
+      context: dockerfiles/vpn-netns-watcher
+    container_name: vpn-netns-watcher
+    environment:
+      NETNS_CONTAINER: vpn-netns
+      NETNS_SERVICE: vpn-netns
+      SIBLING_SERVICES: gluetun qbittorrent qbit-port-sync qbit-manage
+      COMPOSE_DIR: /compose
+      DEBOUNCE: "30"
+      SETTLE: "3"
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${REPO_PATH}/docker:/compose:ro
+    depends_on:
+      vpn-netns:
+        condition: service_started
+
 volumes:
   gluetun-tmp:
 
