@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>llmrouter — request log</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1f2630;
+    --border: #2a313c;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --err: #f85149;
+    --local: #8b949e;
+    --local-thinking: #58a6ff;
+    --haiku: #3fb950;
+    --sonnet: #a371f7;
+    --opus: #f0883e;
+    --none: #6e7681;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 14px;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0.2px; }
+  header h1 .muted { color: var(--muted); font-weight: 400; }
+  .search {
+    flex: 1 1 320px;
+    min-width: 260px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  input, select, button {
+    background: var(--panel-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  input[type=search] { flex: 1; }
+  input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  button { cursor: pointer; }
+  button:hover { background: #263040; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #0d1117;
+    white-space: nowrap;
+  }
+  .chip.tier-local          { background: var(--local); }
+  .chip.tier-local-thinking { background: var(--local-thinking); }
+  .chip.tier-haiku          { background: var(--haiku); }
+  .chip.tier-sonnet         { background: var(--sonnet); color: #fff; }
+  .chip.tier-opus           { background: var(--opus); }
+  .chip.tier-none           { background: var(--none); color: #fff; }
+  .chip.muted {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 0; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .list { border-right: 1px solid var(--border); min-height: calc(100vh - 54px); }
+  .summary {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .summary .tier-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+  .row {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 64px 100px 1fr auto;
+    gap: 12px;
+    align-items: start;
+  }
+  .row:hover { background: var(--panel); }
+  .row.selected { background: var(--panel-2); }
+  .row .time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .row .snippet { color: var(--fg); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .row .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .row.secret .snippet { color: var(--muted); font-style: italic; }
+  aside {
+    padding: 16px 20px;
+    overflow-y: auto;
+    min-height: calc(100vh - 54px);
+    position: sticky;
+    top: 54px;
+    max-height: calc(100vh - 54px);
+  }
+  aside h2 { font-size: 14px; margin: 0 0 10px 0; }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; margin: 8px 0; }
+  .kv .k { color: var(--muted); font-size: 12px; }
+  .kv .v { font-size: 13px; word-break: break-word; }
+  .section {
+    margin: 14px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+  }
+  .section h3 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  pre {
+    margin: 0;
+    padding: 10px;
+    background: #0a0d12;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    max-height: 320px;
+    overflow: auto;
+  }
+  .empty { padding: 60px 20px; color: var(--muted); text-align: center; }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+  }
+  .overlay .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    width: 360px;
+    max-width: 90vw;
+  }
+  .overlay h2 { margin: 0 0 10px 0; font-size: 16px; }
+  .overlay p  { margin: 0 0 14px 0; color: var(--muted); font-size: 13px; }
+  .row-flex { display: flex; gap: 8px; }
+  .hide { display: none !important; }
+  .err { color: var(--err); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>llmrouter <span class="muted">— request log</span></h1>
+  <div class="search">
+    <input id="q" type="search" placeholder="search keywords / messages (e.g. python sonnet refactor)" autocomplete="off" />
+    <select id="tier">
+      <option value="">all tiers</option>
+      <option>local</option>
+      <option>local-thinking</option>
+      <option>haiku</option>
+      <option>sonnet</option>
+      <option>opus</option>
+    </select>
+    <select id="since">
+      <option value="">all time</option>
+      <option value="3600">1h</option>
+      <option value="86400">24h</option>
+      <option value="604800">7d</option>
+      <option value="2592000">30d</option>
+    </select>
+    <button id="refresh" title="refresh" aria-label="refresh">↻</button>
+    <button id="logout" title="clear stored API key" aria-label="clear stored API key">⎋</button>
+  </div>
+</header>
+
+<main>
+  <section class="list">
+    <div class="summary">
+      <div id="result-summary">—</div>
+      <div id="tier-stats" class="tier-stats"></div>
+    </div>
+    <div id="rows"></div>
+  </section>
+  <aside id="detail">
+    <div class="empty">Select a request to see classification details.</div>
+  </aside>
+</main>
+
+<div id="login" class="overlay hide">
+  <div class="card">
+    <h2>Unlock</h2>
+    <p>Enter your router API key to view the request log. It is stored in your browser only.</p>
+    <div class="row-flex">
+      <input id="login-key" type="password" placeholder="ROUTER_API_KEY" style="flex:1;" />
+      <button id="login-go">Unlock</button>
+    </div>
+    <p id="login-err" class="err hide" style="margin-top:10px;">Invalid key.</p>
+  </div>
+</div>
+
+<script>
+const KEY_STORAGE = "llmrouter.apikey";
+let apiKey = localStorage.getItem(KEY_STORAGE) || "";
+let selectedId = null;
+let debounceTimer = null;
+
+function fmtTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleString();
+}
+function relTime(ts) {
+  const secs = Math.max(0, Date.now() / 1000 - ts);
+  if (secs < 60)     return Math.floor(secs) + "s";
+  if (secs < 3600)   return Math.floor(secs / 60) + "m";
+  if (secs < 86400)  return Math.floor(secs / 3600) + "h";
+  return Math.floor(secs / 86400) + "d";
+}
+function tierChip(t) {
+  const cls = "tier-" + (t || "none");
+  return `<span class="chip ${cls}">${t || "—"}</span>`;
+}
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s)
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#39;");
+}
+
+async function api(path) {
+  const r = await fetch(path, { headers: { Authorization: "Bearer " + apiKey } });
+  if (r.status === 401) {
+    showLogin(true);
+    throw new Error("unauthorized");
+  }
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+function showLogin(isError) {
+  document.getElementById("login").classList.remove("hide");
+  document.getElementById("login-err").classList.toggle("hide", !isError);
+  document.getElementById("login-key").focus();
+}
+function hideLogin() {
+  document.getElementById("login").classList.add("hide");
+}
+
+async function tryUnlock() {
+  const v = document.getElementById("login-key").value.trim();
+  if (!v) return;
+  apiKey = v;
+  try {
+    await api("/ui/api/stats");
+    localStorage.setItem(KEY_STORAGE, apiKey);
+    hideLogin();
+    refresh();
+  } catch (_) {
+    document.getElementById("login-err").classList.remove("hide");
+  }
+}
+
+function logout() {
+  localStorage.removeItem(KEY_STORAGE);
+  apiKey = "";
+  showLogin(false);
+}
+
+async function loadStats() {
+  try {
+    const s = await api("/ui/api/stats");
+    const el = document.getElementById("tier-stats");
+    el.innerHTML = s.by_tier.map(
+      t => `<span class="chip ${"tier-" + (t.tier || "none")}">${t.tier || "—"}: ${t.count}</span>`
+    ).join("");
+  } catch (_) { /* ignored */ }
+}
+
+async function loadList() {
+  const q     = document.getElementById("q").value.trim();
+  const tier  = document.getElementById("tier").value;
+  const since = document.getElementById("since").value;
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (tier) params.set("tier", tier);
+  if (since) params.set("since", (Date.now() / 1000 - parseInt(since)).toFixed(0));
+  try {
+    const res = await api("/ui/api/requests?" + params.toString());
+    renderList(res);
+  } catch (e) {
+    document.getElementById("rows").innerHTML = `<div class="empty err">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderList(res) {
+  const s = document.getElementById("result-summary");
+  s.textContent = res.total === 0
+    ? "no requests"
+    : `${res.total} request${res.total === 1 ? "" : "s"}` + (res.items.length < res.total ? ` (showing ${res.items.length})` : "");
+  const rows = document.getElementById("rows");
+  if (!res.items.length) {
+    rows.innerHTML = `<div class="empty">Nothing matched.</div>`;
+    return;
+  }
+  rows.innerHTML = res.items.map(r => {
+    const secret = r.secret_keyword ? "secret" : "";
+    const snippet = r.secret_keyword
+      ? "[message preview withheld — secret keyword matched]"
+      : (r.snippet || "(empty prompt)");
+    const meta = [
+      r.approx_tokens != null ? r.approx_tokens + " tok" : null,
+      r.duration_ms   != null ? r.duration_ms + " ms" : null,
+      r.is_stream     ? "stream" : null,
+      r.fallback_applied ? "fallback" : null,
+      r.tiebreaker_digit ? "haiku=" + r.tiebreaker_digit : null,
+    ].filter(Boolean).join(" · ");
+    return `
+      <div class="row ${secret} ${r.id === selectedId ? "selected" : ""}" data-id="${r.id}">
+        <div class="time" title="${escapeHtml(fmtTime(r.ts))}">${relTime(r.ts)} ago</div>
+        <div>${tierChip(r.tier)}<div class="meta">${escapeHtml(r.reason || "")}</div></div>
+        <div>
+          <div class="snippet">${escapeHtml(snippet)}</div>
+          <div class="meta">${escapeHtml(meta)}</div>
+        </div>
+        <div class="meta">#${r.id}</div>
+      </div>`;
+  }).join("");
+  rows.querySelectorAll(".row").forEach(el => {
+    el.onclick = () => selectRow(parseInt(el.dataset.id));
+  });
+}
+
+async function selectRow(id) {
+  selectedId = id;
+  document.querySelectorAll(".row").forEach(el => {
+    el.classList.toggle("selected", parseInt(el.dataset.id) === id);
+  });
+  try {
+    const r = await api("/ui/api/requests/" + id);
+    renderDetail(r);
+  } catch (e) {
+    document.getElementById("detail").innerHTML =
+      `<div class="empty err">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function flag(label, value, hintWhenTrue) {
+  const on = !!value;
+  return `<span class="chip ${on ? "tier-haiku" : "muted"}" title="${escapeHtml(hintWhenTrue || "")}">${label}: ${on ? (value === true || value === 1 ? "yes" : value) : "no"}</span>`;
+}
+
+function renderDetail(r) {
+  const kv = (k, v) => `<div class="k">${k}</div><div class="v">${v}</div>`;
+  const preview = r.secret_keyword
+    ? "<em>withheld (secret keyword matched in the prompt)</em>"
+    : escapeHtml(r.messages_preview || "(empty prompt)");
+
+  const tiebreakerSection = r.tiebreaker_prompt ? `
+    <div class="section">
+      <h3>Haiku tiebreaker</h3>
+      <div class="kv">
+        ${kv("digit", `<b>${escapeHtml(r.tiebreaker_digit || "—")}</b>`)}
+        ${kv("raw response", `<code>${escapeHtml(r.tiebreaker_response || "—")}</code>`)}
+        ${r.tiebreaker_error ? kv("error", `<span class="err">${escapeHtml(r.tiebreaker_error)}</span>`) : ""}
+      </div>
+      <details><summary style="cursor:pointer;color:var(--muted);font-size:12px;">show prompt sent to Haiku</summary>
+        <pre>${escapeHtml(r.tiebreaker_prompt)}</pre>
+      </details>
+    </div>
+  ` : "";
+
+  const kwList = (r.keywords || "").split(/\s+/).filter(Boolean);
+  const kwChips = kwList.length
+    ? kwList.map(k => `<span class="chip muted" style="cursor:pointer" data-kw="${escapeHtml(k)}">${escapeHtml(k)}</span>`).join(" ")
+    : `<span class="muted">none</span>`;
+
+  document.getElementById("detail").innerHTML = `
+    <h2>Request #${r.id} ${tierChip(r.tier)}</h2>
+    <div class="kv">
+      ${kv("timestamp", escapeHtml(fmtTime(r.ts)))}
+      ${kv("requested", `<code>${escapeHtml(r.requested_model || "—")}</code>`)}
+      ${kv("target", `<code>${escapeHtml(r.target_model || "—")}</code>`)}
+      ${kv("reason", `<code>${escapeHtml(r.reason || "—")}</code>`)}
+      ${kv("duration", (r.duration_ms == null ? "—" : r.duration_ms + " ms"))}
+      ${kv("upstream", r.upstream_status || "—")}
+      ${kv("stream", r.is_stream ? "yes" : "no")}
+      ${kv("fallback", r.fallback_applied ? '<span class="err">yes (ollama unreachable)</span>' : "no")}
+    </div>
+
+    <div class="section">
+      <h3>Classification signals</h3>
+      <div class="chips">
+        <span class="chip muted">tokens: ${r.approx_tokens ?? "?"}</span>
+        ${flag("tools", r.has_tools)}
+        ${flag("code fence", r.has_code)}
+        <span class="chip ${r.step_keyword ? "tier-local-thinking" : "muted"}" title="step-planning keyword matched">step: ${escapeHtml(r.step_keyword || "no")}</span>
+        <span class="chip ${r.secret_keyword ? "tier-opus" : "muted"}" title="secret-like keyword matched">secret: ${escapeHtml(r.secret_keyword || "no")}</span>
+      </div>
+    </div>
+
+    ${tiebreakerSection}
+
+    <div class="section">
+      <h3>Keywords</h3>
+      <div class="chips">${kwChips}</div>
+    </div>
+
+    <div class="section">
+      <h3>Messages preview</h3>
+      <pre>${preview}</pre>
+    </div>
+  `;
+
+  document.querySelectorAll("#detail .chip[data-kw]").forEach(el => {
+    el.onclick = () => {
+      const input = document.getElementById("q");
+      input.value = el.dataset.kw;
+      refresh();
+    };
+  });
+}
+
+function refresh() {
+  loadStats();
+  loadList();
+}
+
+function debounced() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(refresh, 250);
+}
+
+document.getElementById("q").addEventListener("input", debounced);
+document.getElementById("tier").addEventListener("change", refresh);
+document.getElementById("since").addEventListener("change", refresh);
+document.getElementById("refresh").addEventListener("click", refresh);
+document.getElementById("logout").addEventListener("click", logout);
+document.getElementById("login-go").addEventListener("click", tryUnlock);
+document.getElementById("login-key").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
+
+if (!apiKey) showLogin(false);
+else refresh();
+</script>
+
+</body>
+</html>
