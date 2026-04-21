@@ -40,6 +40,11 @@ updates:
       # Postgres major bumps require pg_upgrade on on-disk data — handle manually.
       - dependency-name: "postgres"
         update-types: ["version-update:semver-major"]
+      # Immich's postgres image is version-coupled to Immich itself (vector
+      # extension compatibility window). Bump only alongside Immich upgrades.
+      # Same applies to pgvecto.rs — a past auto-bump to 0.4 took Immich down.
+      - dependency-name: "ghcr.io/immich-app/postgres"
+      - dependency-name: "tensorchord/pgvecto-rs"
 
   # GitHub Actions workflow pins
   - package-ecosystem: "github-actions"

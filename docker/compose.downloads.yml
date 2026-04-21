@@ -20,6 +20,17 @@ services:
     network_mode: "container:vpn-netns"
     cap_add: [NET_ADMIN]
     devices: [/dev/net/tun]
+    # Shell wrapper flushes stale WireGuard ip rules left in the pause container's
+    # netns from prior gluetun runs. Without this, gluetun restarts loop on
+    # "adding ip rule 101: ... file exists" with exponential backoff up to 32m.
+    # https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/kubernetes.md
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        ip rule del table 51820 2>/dev/null || true
+        ip -6 rule del table 51820 2>/dev/null || true
+        exec /gluetun-entrypoint
     environment:
       VPN_SERVICE_PROVIDER: protonvpn
       VPN_TYPE: wireguard
