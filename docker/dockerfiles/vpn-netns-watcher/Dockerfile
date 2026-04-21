@@ -1,4 +1,4 @@
-FROM docker:28-cli
+FROM docker:29-cli
 
 # docker:28-cli ships compose v2.40.3, which rejects our docker-compose.yml
 # include: pattern with "networks.proxy conflicts with imported resource".
