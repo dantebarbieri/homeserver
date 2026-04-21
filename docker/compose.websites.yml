@@ -42,6 +42,15 @@ services:
         aliases:
           - skyjo
       skyjo:
+    # The image's baked HEALTHCHECK hits http://localhost/, which busybox wget
+    # resolves to ::1 first — but nginx inside the container only binds IPv4,
+    # so the check fails with "Connection refused". Force IPv4.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   skyjo_server:
     extends:
