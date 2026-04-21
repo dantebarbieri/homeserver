@@ -21,13 +21,14 @@ import json
 import logging
 import os
 import re
+import secrets
 import sqlite3
 import time
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 logging.basicConfig(
@@ -702,23 +703,41 @@ def extract_keywords(text: str, max_n: int = 30) -> list[str]:
     return [w for w, _ in ranked[:max_n]]
 
 
-def log_request(row: dict[str, Any]) -> None:
+def log_request(row: dict[str, Any]) -> int | None:
+    """Insert a request row and return its new id, or None if logging is off
+    or the insert failed. The id is used to publish live updates over the
+    `/ui/ws` hub so the UI can render new rows without polling."""
     if not LOG_REQUESTS:
-        return
+        return None
     try:
         _init_db()
         conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=5.0)
         try:
             keys = list(row.keys())
-            conn.execute(
+            cur = conn.execute(
                 f"INSERT INTO requests ({','.join(keys)}) VALUES ({','.join('?' * len(keys))})",
                 [row[k] for k in keys],
             )
             conn.commit()
+            return int(cur.lastrowid) if cur.lastrowid is not None else None
         finally:
             conn.close()
     except Exception as e:
         LOG.warning("failed to log request: %s", e)
+        return None
+
+
+def delete_request(req_id: int) -> bool:
+    """Delete a single request by id. Returns True if a row was removed.
+    The FTS mirror is cleaned up by the `requests_ad` trigger."""
+    _init_db()
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=5.0)
+    try:
+        cur = conn.execute("DELETE FROM requests WHERE id = ?", (req_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
 
 
 _FTS_TOKEN_RE = re.compile(r"[A-Za-z0-9_\-]+")
@@ -732,8 +751,16 @@ def _fts_match(q: str) -> str:
 
 def search_requests(
     q: str = "",
-    tier: str | None = None,
+    tier: list[str] | str | None = None,
+    reason: list[str] | str | None = None,
+    classifier_source: list[str] | str | None = None,
+    fallback: int | None = None,
+    has_secret: int | None = None,
+    is_stream: int | None = None,
+    min_duration_ms: int | None = None,
     since: float | None = None,
+    until: float | None = None,
+    since_id: int | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -750,12 +777,41 @@ def search_requests(
             joins = " JOIN requests_fts ON requests_fts.rowid = requests.id "
             where.append("requests_fts MATCH ?")
             params.append(match)
-        if tier:
-            where.append("requests.tier = ?")
-            params.append(tier)
+
+        def _in_clause(column: str, values: list[str] | str | None) -> None:
+            if values is None:
+                return
+            vs = [values] if isinstance(values, str) else [v for v in values if v]
+            if not vs:
+                return
+            where.append(f"requests.{column} IN ({','.join('?' * len(vs))})")
+            params.extend(vs)
+
+        _in_clause("tier", tier)
+        _in_clause("reason", reason)
+        _in_clause("classifier_source", classifier_source)
+        if fallback in (0, 1):
+            where.append("requests.fallback_applied = ?")
+            params.append(fallback)
+        if has_secret == 1:
+            where.append("requests.secret_keyword IS NOT NULL")
+        elif has_secret == 0:
+            where.append("requests.secret_keyword IS NULL")
+        if is_stream in (0, 1):
+            where.append("requests.is_stream = ?")
+            params.append(is_stream)
+        if min_duration_ms is not None:
+            where.append("requests.duration_ms >= ?")
+            params.append(min_duration_ms)
         if since is not None:
             where.append("requests.ts >= ?")
             params.append(since)
+        if until is not None:
+            where.append("requests.ts <= ?")
+            params.append(until)
+        if since_id is not None:
+            where.append("requests.id > ?")
+            params.append(since_id)
         where_sql = f" WHERE {' AND '.join(where)}" if where else ""
 
         total = int(conn.execute(
@@ -820,6 +876,58 @@ def stats() -> dict[str, Any]:
         return {"total": total, "by_tier": by_tier, "by_reason": by_reason}
     finally:
         conn.close()
+
+
+# --- live event hub ---
+#
+# Tiny in-process pub/sub for pushing row inserts/deletes to connected /ui/ws
+# clients. Each subscriber owns a bounded asyncio.Queue; publishes are
+# non-blocking — if a client is too slow to drain, we drop the event rather
+# than stall the request path. The UI recovers dropped events on reconnect
+# via a `since_id=<last_seen>` backfill fetch.
+
+_HUB_QUEUE_MAX = 100
+_hub_clients: set[asyncio.Queue] = set()
+
+
+async def _hub_publish(event: dict[str, Any]) -> None:
+    for q in list(_hub_clients):
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            LOG.debug("hub: dropping event for slow client (queue full)")
+
+
+def _project_list_item(row_id: int, row: dict[str, Any]) -> dict[str, Any]:
+    """Shape a freshly-logged row like a `/ui/api/requests` list item.
+
+    Must match the projection in `search_requests` so the UI can render a
+    streamed insert and a REST-fetched item with the same code path.
+    """
+    preview = row.get("messages_preview") or ""
+    return {
+        "id": row_id,
+        "ts": row.get("ts"),
+        "duration_ms": row.get("duration_ms"),
+        "requested_model": row.get("requested_model"),
+        "tier": row.get("tier"),
+        "reason": row.get("reason"),
+        "target_model": row.get("target_model"),
+        "fallback_applied": row.get("fallback_applied"),
+        "is_stream": row.get("is_stream"),
+        "upstream_status": row.get("upstream_status"),
+        "approx_tokens": row.get("approx_tokens"),
+        "has_tools": row.get("has_tools"),
+        "has_code": row.get("has_code"),
+        "step_keyword": row.get("step_keyword"),
+        "secret_keyword": row.get("secret_keyword"),
+        "tiebreaker_digit": row.get("tiebreaker_digit"),
+        "classifier_source": row.get("classifier_source"),
+        "local_complexity": row.get("local_complexity"),
+        "local_secret": row.get("local_secret"),
+        "keywords": row.get("keywords"),
+        "snippet": preview[:240] if preview else "",
+    }
 
 
 # --- app ---
@@ -1021,7 +1129,13 @@ async def chat_completions(
         data = await upstream.aread()
         await client.aclose()
         base_row["duration_ms"] = int((time.time() - t0) * 1000)
-        await asyncio.to_thread(log_request, base_row)
+        inserted_id = await asyncio.to_thread(log_request, base_row)
+        if inserted_id is not None:
+            await _hub_publish({
+                "type": "insert",
+                "id": inserted_id,
+                "item": _project_list_item(inserted_id, base_row),
+            })
         try:
             content = json.loads(data) if data else {}
         except json.JSONDecodeError:
@@ -1040,7 +1154,13 @@ async def chat_completions(
             await upstream.aclose()
             await client.aclose()
             base_row["duration_ms"] = int((time.time() - t0) * 1000)
-            await asyncio.to_thread(log_request, base_row)
+            inserted_id = await asyncio.to_thread(log_request, base_row)
+            if inserted_id is not None:
+                await _hub_publish({
+                    "type": "insert",
+                    "id": inserted_id,
+                    "item": _project_list_item(inserted_id, base_row),
+                })
 
     return StreamingResponse(
         iter_chunks(),
@@ -1073,14 +1193,36 @@ async def ui_stats(authorization: str | None = Header(default=None)) -> dict[str
 @app.get("/ui/api/requests")
 async def ui_list_requests(
     q: str = Query(default=""),
-    tier: str | None = Query(default=None),
+    tier: list[str] | None = Query(default=None),
+    reason: list[str] | None = Query(default=None),
+    classifier_source: list[str] | None = Query(default=None),
+    fallback: int | None = Query(default=None, ge=0, le=1),
+    has_secret: int | None = Query(default=None, ge=0, le=1),
+    is_stream: int | None = Query(default=None, ge=0, le=1),
+    min_duration_ms: int | None = Query(default=None, ge=0),
     since: float | None = Query(default=None),
+    until: float | None = Query(default=None),
+    since_id: int | None = Query(default=None, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _check_auth(authorization)
-    return search_requests(q=q, tier=tier, since=since, limit=limit, offset=offset)
+    return search_requests(
+        q=q,
+        tier=tier,
+        reason=reason,
+        classifier_source=classifier_source,
+        fallback=fallback,
+        has_secret=has_secret,
+        is_stream=is_stream,
+        min_duration_ms=min_duration_ms,
+        since=since,
+        until=until,
+        since_id=since_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.get("/ui/api/requests/{req_id}")
@@ -1093,3 +1235,78 @@ async def ui_get_request(
     if not row:
         raise HTTPException(404, "not found")
     return row
+
+
+@app.delete("/ui/api/requests/{req_id}", status_code=204)
+async def ui_delete_request(
+    req_id: int,
+    authorization: str | None = Header(default=None),
+) -> Response:
+    _check_auth(authorization)
+    deleted = await asyncio.to_thread(delete_request, req_id)
+    if not deleted:
+        raise HTTPException(404, "not found")
+    await _hub_publish({"type": "delete", "id": req_id})
+    return Response(status_code=204)
+
+
+@app.websocket("/ui/ws")
+async def ui_ws(ws: WebSocket, token: str = Query(default="")) -> None:
+    # Browser WebSocket can't set Authorization headers, so auth is via
+    # query param. Constant-time compare; on mismatch, close with a 4401
+    # (application-level unauthorized) so the client can distinguish
+    # "bad token" from a routine disconnect.
+    if not secrets.compare_digest(token, ROUTER_API_KEY):
+        await ws.close(code=4401)
+        return
+    await ws.accept()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=_HUB_QUEUE_MAX)
+    _hub_clients.add(queue)
+    disconnect = asyncio.Event()
+
+    async def reader() -> None:
+        # Receive loop serves two purposes: (1) detect client disconnects
+        # promptly via WebSocketDisconnect, (2) respond to client pings
+        # with a pong routed back through the queue so all sends stay on
+        # a single task.
+        try:
+            while True:
+                msg = await ws.receive_json()
+                if isinstance(msg, dict) and msg.get("type") == "ping":
+                    try:
+                        queue.put_nowait({"type": "pong"})
+                    except asyncio.QueueFull:
+                        pass
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            LOG.debug("ws reader error: %s", e)
+        finally:
+            disconnect.set()
+
+    reader_task = asyncio.create_task(reader())
+    try:
+        # Announce ourselves so the client can set its status pill and
+        # record the latest server-known id for the backfill query.
+        await ws.send_json({"type": "hello"})
+        while not disconnect.is_set():
+            get_task = asyncio.create_task(queue.get())
+            dc_task = asyncio.create_task(disconnect.wait())
+            done, pending = await asyncio.wait(
+                {get_task, dc_task}, return_when=asyncio.FIRST_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
+            if disconnect.is_set():
+                break
+            event = get_task.result()
+            await ws.send_json(event)
+    except Exception as e:
+        LOG.debug("ws sender error: %s", e)
+    finally:
+        reader_task.cancel()
+        _hub_clients.discard(queue)
+        try:
+            await ws.close()
+        except Exception:
+            pass
