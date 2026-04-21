@@ -343,6 +343,7 @@ function renderList(res) {
       r.duration_ms   != null ? r.duration_ms + " ms" : null,
       r.is_stream     ? "stream" : null,
       r.fallback_applied ? "fallback" : null,
+      r.local_complexity != null ? "local=" + r.local_complexity : null,
       r.tiebreaker_digit ? "haiku=" + r.tiebreaker_digit : null,
     ].filter(Boolean).join(" · ");
     return `
@@ -383,12 +384,26 @@ function flag(label, value, hintWhenTrue) {
 function renderDetail(r) {
   const kv = (k, v) => `<div class="k">${k}</div><div class="v">${v}</div>`;
   const preview = r.secret_keyword
-    ? "<em>withheld (secret keyword matched in the prompt)</em>"
+    ? `<em>withheld (secret detected: ${escapeHtml(r.secret_keyword)})</em>`
     : escapeHtml(r.messages_preview || "(empty prompt)");
+
+  const localClassifierSection = (r.local_classifier_prompt || r.local_classifier_error) ? `
+    <div class="section">
+      <h3>Local classifier (${escapeHtml(r.classifier_model || "—")})</h3>
+      <div class="kv">
+        ${kv("source", `<code>${escapeHtml(r.classifier_source || "—")}</code>`)}
+        ${kv("complexity", `<b>${r.local_complexity ?? "—"}</b>`)}
+        ${kv("model-secret", r.local_secret ? '<span class="err">yes</span>' : "no")}
+        ${r.local_classifier_error ? kv("error", `<span class="err">${escapeHtml(r.local_classifier_error)}</span>`) : ""}
+      </div>
+      ${r.local_classifier_response ? `<details><summary style="cursor:pointer;color:var(--muted);font-size:12px;">show raw JSON response</summary><pre>${escapeHtml(r.local_classifier_response)}</pre></details>` : ""}
+      ${r.local_classifier_prompt   ? `<details><summary style="cursor:pointer;color:var(--muted);font-size:12px;">show prompt sent to local model</summary><pre>${escapeHtml(r.local_classifier_prompt)}</pre></details>` : ""}
+    </div>
+  ` : "";
 
   const tiebreakerSection = r.tiebreaker_prompt ? `
     <div class="section">
-      <h3>Haiku tiebreaker</h3>
+      <h3>Haiku tiebreaker (fallback)</h3>
       <div class="kv">
         ${kv("digit", `<b>${escapeHtml(r.tiebreaker_digit || "—")}</b>`)}
         ${kv("raw response", `<code>${escapeHtml(r.tiebreaker_response || "—")}</code>`)}
@@ -429,6 +444,7 @@ function renderDetail(r) {
       </div>
     </div>
 
+    ${localClassifierSection}
     ${tiebreakerSection}
 
     <div class="section">

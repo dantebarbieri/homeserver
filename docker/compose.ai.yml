@@ -70,8 +70,13 @@ services:
       OLLAMA_URL: http://192.168.50.180:11434
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: llmrouter
+      # Flip to `local` once the `qwen-local-classifier` LiteLLM entry is
+      # live to have Qwen classify both secrets and complexity in one call.
+      # The heuristic + Haiku tiebreaker remains available as a fallback.
       CLASSIFIER_MODE: hybrid
       CLASSIFIER_TIEBREAKER_MODEL: claude-haiku
+      LOCAL_CLASSIFIER_MODEL: qwen-local-classifier
+      LOCAL_CLASSIFIER_TIMEOUT_S: "5"
       LLMROUTER_DB_PATH: /data/llmrouter.db
       LOG_REQUESTS: "1"
       LOG_LEVEL: info

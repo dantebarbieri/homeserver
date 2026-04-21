@@ -1,14 +1,20 @@
 """OpenAI-compatible router in front of LiteLLM + request log UI.
 
-Classifies each /v1/chat/completions request (heuristic → Haiku tiebreaker),
-picks a tier (local / local-thinking / haiku / sonnet / opus), and forwards to
-LiteLLM with the model field rewritten. On local-tier selection with an
-unreachable Ollama, transparently promotes to a cloud tier and fires an NTFY
-alert on health transitions.
+Classifies each /v1/chat/completions request and picks a tier
+(local / local-thinking / haiku / sonnet / opus), then forwards to LiteLLM
+with the model field rewritten. Two classification modes:
 
-Every routed request is also logged to a local SQLite DB (with an FTS5 index
-over keywords + a message preview), exposed via a minimal `/ui/` web UI at the
-same port.
+- CLASSIFIER_MODE=local: one call to a local model (via LiteLLM) returns
+  {has_secret, complexity} as JSON. Regex SECRET_PATTERNS is still run as a
+  safety-net union. Fallback to heuristic + Haiku tiebreaker on any error.
+- CLASSIFIER_MODE=hybrid|haiku: legacy pipeline — regex+heuristic first,
+  Haiku tiebreaker when ambiguous.
+
+On local-tier selection with an unreachable Ollama, transparently promotes
+to a cloud tier and fires an NTFY alert on health transitions. Every routed
+request is logged to a local SQLite DB (FTS5-indexed on keywords + a message
+preview, redacted when a secret was detected), exposed via a minimal `/ui/`
+web UI at the same port.
 """
 import asyncio
 import json
@@ -39,6 +45,8 @@ NTFY_TOPIC = os.getenv("NTFY_TOPIC", "llmrouter")
 NTFY_TOKEN = os.getenv("NTFY_TOKEN", "")
 CLASSIFIER_MODE = os.getenv("CLASSIFIER_MODE", "hybrid")
 CLASSIFIER_TIEBREAKER_MODEL = os.getenv("CLASSIFIER_TIEBREAKER_MODEL", "claude-haiku")
+LOCAL_CLASSIFIER_MODEL = os.getenv("LOCAL_CLASSIFIER_MODEL", "qwen-local-classifier")
+LOCAL_CLASSIFIER_TIMEOUT_S = float(os.getenv("LOCAL_CLASSIFIER_TIMEOUT_S", "5"))
 
 DB_PATH = os.getenv("LLMROUTER_DB_PATH", "/data/llmrouter.db")
 LOG_REQUESTS = os.getenv("LOG_REQUESTS", "1") not in ("0", "false", "False", "")
@@ -159,6 +167,12 @@ def _latest_user_text(messages: list[dict[str, Any]]) -> str:
     return ""
 
 
+def regex_secret_hit(body: dict[str, Any]) -> str | None:
+    """Run SECRET_PATTERNS against the latest user message. Returns pattern name or None."""
+    latest_user = _latest_user_text(body.get("messages", []))
+    return next((name for name, pat in SECRET_PATTERNS if pat.search(latest_user)), None)
+
+
 def heuristic_tier(body: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
     """First-match-wins rules. Returns (tier_or_None, signals)."""
     messages = body.get("messages", [])
@@ -167,7 +181,7 @@ def heuristic_tier(body: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
     latest_lower = latest_user.lower()
     tokens = _approx_tokens(text)
     has_tools = bool(body.get("tools") or body.get("functions") or body.get("tool_choice"))
-    hit_secret = next((name for name, pat in SECRET_PATTERNS if pat.search(latest_user)), None)
+    hit_secret = regex_secret_hit(body)
     hit_step = next((k for k in STEP_KEYWORDS if k in latest_lower), None)
     has_code = "```" in text
     signals: dict[str, Any] = {
@@ -226,6 +240,129 @@ async def haiku_tiebreaker(body: dict[str, Any]) -> tuple[str, str, dict[str, An
     return mapping.get(digit, "sonnet"), "haiku-tiebreaker", details
 
 
+_CLASSIFIER_PROMPT_TEMPLATE = (
+    "You are a request classifier. Classify the user request below and return\n"
+    "ONLY a JSON object. No prose, no markdown fences, no thinking tags.\n"
+    "\n"
+    "Fields:\n"
+    "- has_secret (bool): true iff the request literally contains a credential,\n"
+    "  API key, password, bearer token, private key, or .env content. Discussion\n"
+    "  OF secrets is NOT a secret. When in doubt, return false — a regex catches\n"
+    "  obvious cases too.\n"
+    "- complexity (int 1-5):\n"
+    "    1=trivial factual, 2=simple generation, 3=moderate reasoning,\n"
+    "    4=complex multi-step, 5=deep architectural / novel.\n"
+    "- reason (string, <=80 chars): short phrase justifying the complexity pick.\n"
+    "\n"
+    "Respond exactly with: {{\"has_secret\": <bool>, \"complexity\": <int>, "
+    "\"reason\": \"<str>\"}}\n"
+    "\n"
+    "---\n{text}\n---"
+)
+
+
+_FENCE_RE = re.compile(r"```(?:json)?\s*|\s*```", re.IGNORECASE)
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_JSON_BLOB_RE = re.compile(r"\{[^{}]*\}", re.DOTALL)
+
+_TRUTHY = {True, 1, "1", "true", "True", "TRUE", "yes", "Yes", "YES"}
+_FALSY = {False, 0, "0", "false", "False", "FALSE", "no", "No", "NO"}
+
+
+def _parse_classifier_json(content: str) -> dict[str, Any]:
+    """Parse the classifier's response into {has_secret: bool, complexity: int, reason: str}.
+
+    Defensive: strips <think> tags and markdown fences; falls back to regex-extracting
+    the first JSON object if the raw content doesn't parse. Coerces has_secret to bool
+    and clamps complexity to [1, 5]. Raises ValueError if unsalvageable.
+    """
+    if not content:
+        raise ValueError("empty classifier response")
+    stripped = _THINK_RE.sub("", content).strip()
+    stripped = _FENCE_RE.sub("", stripped).strip()
+    parsed: Any = None
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        m = _JSON_BLOB_RE.search(stripped)
+        if m is None:
+            raise ValueError(f"no JSON object in classifier response: {content!r}")
+        parsed = json.loads(m.group(0))
+    if not isinstance(parsed, dict):
+        raise ValueError(f"classifier JSON is not an object: {parsed!r}")
+    if "has_secret" not in parsed or "complexity" not in parsed:
+        raise ValueError(f"classifier JSON missing required fields: {parsed!r}")
+
+    raw_secret = parsed["has_secret"]
+    if raw_secret in _TRUTHY:
+        has_secret = True
+    elif raw_secret in _FALSY:
+        has_secret = False
+    else:
+        raise ValueError(f"cannot coerce has_secret={raw_secret!r}")
+
+    try:
+        complexity = int(parsed["complexity"])
+    except (TypeError, ValueError):
+        raise ValueError(f"cannot coerce complexity={parsed['complexity']!r}")
+    complexity = max(1, min(5, complexity))
+
+    reason = str(parsed.get("reason", ""))[:120]
+    return {"has_secret": has_secret, "complexity": complexity, "reason": reason}
+
+
+def _map_tier(has_secret: bool, complexity: int) -> str:
+    """Map classifier output to a tier. Secrets always go to local Qwen."""
+    if has_secret:
+        return "local"
+    return {
+        1: "local",
+        2: "local",
+        3: "local-thinking",
+        4: "opus",
+        5: "opus",
+    }.get(complexity, "sonnet")
+
+
+async def local_classify(body: dict[str, Any]) -> tuple[bool, int, dict[str, Any]]:
+    """Ask the local model to classify the request. Returns (has_secret, complexity, details).
+
+    details: {"prompt": str, "response": str | None, "error": str | None}.
+    Raises on network / parse error (caller catches and falls back).
+    """
+    text = _latest_user_text(body.get("messages", []))[:4000]
+    prompt = _CLASSIFIER_PROMPT_TEMPLATE.format(text=text)
+    details: dict[str, Any] = {"prompt": prompt, "response": None, "error": None}
+    try:
+        async with httpx.AsyncClient(timeout=LOCAL_CLASSIFIER_TIMEOUT_S) as c:
+            r = await c.post(
+                f"{LITELLM_BASE_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {LITELLM_API_KEY}"},
+                json={
+                    "model": LOCAL_CLASSIFIER_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 120,
+                    "temperature": 0,
+                    "stream": False,
+                },
+            )
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"]
+        details["response"] = content
+        parsed = _parse_classifier_json(content)
+        return parsed["has_secret"], parsed["complexity"], details
+    except Exception as e:
+        details["error"] = str(e)
+        raise
+
+
+def _redact_for_log(full_text: str, has_secret: bool) -> tuple[str | None, list[str]]:
+    """Return (messages_preview, keywords_list) for logging, redacting if secret."""
+    if has_secret:
+        return None, []
+    return full_text[:MESSAGES_PREVIEW_CHARS], extract_keywords(full_text)
+
+
 # --- storage ---
 
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_\-]{3,}")
@@ -242,6 +379,13 @@ _REQUESTS_ADDED_COLUMNS: list[tuple[str, str]] = [
     ("tiebreaker_response", "TEXT"),
     ("tiebreaker_digit", "TEXT"),
     ("tiebreaker_error", "TEXT"),
+    ("classifier_source", "TEXT"),
+    ("classifier_model", "TEXT"),
+    ("local_classifier_prompt", "TEXT"),
+    ("local_classifier_response", "TEXT"),
+    ("local_classifier_error", "TEXT"),
+    ("local_complexity", "INTEGER"),
+    ("local_secret", "INTEGER"),
 ]
 
 
@@ -283,6 +427,13 @@ def _init_db() -> None:
                 tiebreaker_response TEXT,
                 tiebreaker_digit TEXT,
                 tiebreaker_error TEXT,
+                classifier_source TEXT,
+                classifier_model TEXT,
+                local_classifier_prompt TEXT,
+                local_classifier_response TEXT,
+                local_classifier_error TEXT,
+                local_complexity INTEGER,
+                local_secret INTEGER,
                 keywords TEXT,
                 messages_preview TEXT
             );
@@ -390,7 +541,9 @@ def search_requests(
                        requests.is_stream, requests.upstream_status,
                        requests.approx_tokens, requests.has_tools, requests.has_code,
                        requests.step_keyword, requests.secret_keyword,
-                       requests.tiebreaker_digit, requests.keywords,
+                       requests.tiebreaker_digit, requests.classifier_source,
+                       requests.local_complexity, requests.local_secret,
+                       requests.keywords,
                        substr(coalesce(requests.messages_preview, ''), 1, 240) AS snippet
                 FROM requests {joins}{where_sql}
                 ORDER BY requests.ts DESC
@@ -492,19 +645,62 @@ async def chat_completions(
     t0 = time.time()
 
     tiebreaker: dict[str, Any] | None = None
+    local_details: dict[str, Any] | None = None
+    classifier_source: str | None = None
+    classifier_model: str | None = None
+    local_complexity: int | None = None
+    local_secret: int | None = None
+
+    # Always compute heuristic signals (tokens, has_tools, has_code, keywords)
+    # even when the local classifier is used — they populate log columns and
+    # the regex safety net still needs them for secret_keyword.
     heuristic, signals = heuristic_tier(body)
 
     if requested == "auto":
-        if heuristic is not None:
-            tier, reason = heuristic, "heuristic"
-        elif CLASSIFIER_MODE in ("hybrid", "haiku"):
-            tier, reason, tiebreaker = await haiku_tiebreaker(body)
-        else:
-            tier, reason = "local-thinking", "heuristic-default"
+        used_local = False
+        if CLASSIFIER_MODE == "local" and await ollama_healthy():
+            try:
+                l_secret, l_complex, local_details = await asyncio.wait_for(
+                    local_classify(body),
+                    timeout=LOCAL_CLASSIFIER_TIMEOUT_S + 0.5,
+                )
+                local_secret = 1 if l_secret else 0
+                local_complexity = int(l_complex)
+                regex_hit = signals.get("secret_keyword")
+                union_secret = bool(l_secret) or bool(regex_hit)
+                # Populate secret_keyword so the redaction path fires even when
+                # only the LLM detected the secret.
+                if union_secret and not regex_hit:
+                    signals["secret_keyword"] = "llm_classifier"
+                tier = _map_tier(union_secret, local_complexity)
+                reason = "local-classifier"
+                classifier_source = "local_model"
+                classifier_model = LOCAL_CLASSIFIER_MODEL
+                used_local = True
+            except Exception as e:
+                LOG.warning("local classifier failed, falling back: %s", e)
+                if local_details is None:
+                    local_details = {"prompt": None, "response": None, "error": str(e)}
+                else:
+                    local_details["error"] = str(e)
+                classifier_source = "fallback"
+
+        if not used_local:
+            if heuristic is not None:
+                tier, reason = heuristic, "heuristic"
+                classifier_source = classifier_source or "heuristic"
+            elif CLASSIFIER_MODE in ("hybrid", "haiku", "local"):
+                tier, reason, tiebreaker = await haiku_tiebreaker(body)
+                classifier_source = classifier_source or "haiku_tiebreaker"
+            else:
+                tier, reason = "local-thinking", "heuristic-default"
+                classifier_source = classifier_source or "heuristic"
     elif requested in TIER_TO_MODEL:
         tier, reason = requested, "explicit"
+        classifier_source = "explicit"
     else:
         tier, reason = None, "passthrough"
+        classifier_source = "passthrough"
 
     fallback_applied = False
     if tier in LOCAL_TIERS and not await ollama_healthy():
@@ -530,8 +726,7 @@ async def chat_completions(
 
     full_text = _messages_text(body.get("messages", []))
     has_secret = bool(signals.get("secret_keyword"))
-    messages_preview = None if has_secret else full_text[:MESSAGES_PREVIEW_CHARS]
-    keywords_list = [] if has_secret else extract_keywords(full_text)
+    messages_preview, keywords_list = _redact_for_log(full_text, has_secret)
 
     client = httpx.AsyncClient(timeout=None)
     upstream_req = client.build_request(
@@ -564,6 +759,13 @@ async def chat_completions(
         "tiebreaker_response": (tiebreaker or {}).get("response"),
         "tiebreaker_digit": (tiebreaker or {}).get("digit"),
         "tiebreaker_error": (tiebreaker or {}).get("error"),
+        "classifier_source": classifier_source,
+        "classifier_model": classifier_model,
+        "local_classifier_prompt": (local_details or {}).get("prompt"),
+        "local_classifier_response": (local_details or {}).get("response"),
+        "local_classifier_error": (local_details or {}).get("error"),
+        "local_complexity": local_complexity,
+        "local_secret": local_secret,
         "keywords": " ".join(keywords_list) if keywords_list else None,
         "messages_preview": messages_preview,
     }
