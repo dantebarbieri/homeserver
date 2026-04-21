@@ -86,24 +86,91 @@ def test_parse_non_object_raises():
     (False, 1, "local"),
     (False, 2, "local"),
     (False, 3, "local-thinking"),
-    (False, 4, "opus"),
+    (False, 4, "sonnet"),
     (False, 5, "opus"),
     (True,  1, "local"),
     (True,  2, "local"),
     (True,  3, "local"),
-    (True,  4, "opus"),
-    (True,  5, "opus"),
+    (True,  4, "local"),
+    (True,  5, "local"),
 ])
 def test_map_tier(has_secret, complexity, expected):
-    if has_secret:
-        assert app._map_tier(has_secret, complexity) == "local"
-    else:
-        assert app._map_tier(has_secret, complexity) == expected
+    assert app._map_tier(has_secret, complexity) == expected
 
 
 def test_secret_never_routes_to_cloud():
     for c in range(1, 6):
         assert app._map_tier(True, c) == "local"
+
+
+# --- hysteresis -------------------------------------------------------------
+
+def _reset_hysteresis():
+    app._LAST_TIER_BY_CHAT.clear()
+
+
+def test_hysteresis_promotes_local_to_thinking_after_thinking_session():
+    _reset_hysteresis()
+    now = 1000.0
+    app._record_tier("room:!abc", "local-thinking", now)
+    assert app._apply_hysteresis("local", "room:!abc", now + 5) == "local-thinking"
+
+
+def test_hysteresis_passes_through_when_previous_was_local():
+    _reset_hysteresis()
+    now = 1000.0
+    app._record_tier("room:!abc", "local", now)
+    # Prior local shouldn't promote — no reason to stick on Instruct
+    assert app._apply_hysteresis("local", "room:!abc", now + 5) == "local"
+
+
+def test_hysteresis_expires_after_ttl():
+    _reset_hysteresis()
+    now = 1000.0
+    app._record_tier("room:!abc", "local-thinking", now)
+    # Past the TTL → no promotion
+    assert app._apply_hysteresis("local", "room:!abc", now + app._HYSTERESIS_TTL_S + 1) == "local"
+
+
+def test_hysteresis_no_chat_id_noop():
+    _reset_hysteresis()
+    now = 1000.0
+    app._record_tier(None, "local-thinking", now)
+    assert app._apply_hysteresis("local", None, now + 5) == "local"
+
+
+def test_hysteresis_doesnt_demote_cloud():
+    _reset_hysteresis()
+    now = 1000.0
+    app._record_tier("room:!abc", "local-thinking", now)
+    # Classifier routed to sonnet — hysteresis should not touch cloud decisions
+    assert app._apply_hysteresis("sonnet", "room:!abc", now + 5) == "sonnet"
+    assert app._apply_hysteresis("opus", "room:!abc", now + 5) == "opus"
+
+
+def test_hysteresis_only_records_local_tiers():
+    _reset_hysteresis()
+    app._record_tier("room:!abc", "sonnet", 1000.0)
+    app._record_tier("room:!abc", "opus", 1000.0)
+    assert "room:!abc" not in app._LAST_TIER_BY_CHAT
+
+
+def test_extract_chat_id_from_metadata_block():
+    body = {
+        "messages": [
+            {"role": "user", "content": (
+                'Conversation info:\n```json\n'
+                '{"chat_id": "room:!IKHsmcvoWUABvnvcmj:danteb.com"}\n'
+                '```\nHello'
+            )},
+        ],
+    }
+    assert app._extract_chat_id(body) == "room:!IKHsmcvoWUABvnvcmj:danteb.com"
+
+
+def test_extract_chat_id_missing_is_none():
+    body = {"messages": [{"role": "user", "content": "just a plain message"}]}
+    assert app._extract_chat_id(body) is None
 
 
 # --- regex_secret_hit ---

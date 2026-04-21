@@ -314,6 +314,13 @@ _CLASSIFIER_PROMPT_TEMPLATE = (
     "- complexity (int 1-5):\n"
     "    1=trivial factual, 2=simple generation, 3=moderate reasoning,\n"
     "    4=complex multi-step, 5=deep architectural / novel.\n"
+    "  Calibration: simple tool-use requests (\"use tool X to look up Y\",\n"
+    "  \"search for Z\", \"geocode this address\") are complexity 2 even when\n"
+    "  they sound technical — the tool does the heavy lifting. Reserve 3+ for\n"
+    "  requests that require planning across multiple tool calls, recovering\n"
+    "  from tool failures, or reasoning about tool output. Reserve 4 for\n"
+    "  genuinely hard multi-step reasoning, and 5 for novel architectural or\n"
+    "  research-level work.\n"
     "- reason (string, <=80 chars): short phrase justifying the complexity pick.\n"
     "  Do NOT echo the secret value in the reason field.\n"
     "\n"
@@ -389,16 +396,81 @@ def _parse_classifier_json(content: str) -> dict[str, Any]:
 
 
 def _map_tier(has_secret: bool, complexity: int) -> str:
-    """Map classifier output to a tier. Secrets always go to local Qwen."""
+    """Map classifier output to a tier. Secrets always go to local Qwen.
+
+    Tier policy (with Qwen3-30B-A3B-Thinking-2507 loadable as `qwen-local-thinking`):
+      1, 2 → local           (Qwen Instruct — beats Haiku on simple/tool-use)
+      3    → local-thinking  (Qwen Thinking — ~Sonnet quality on moderate reasoning, free)
+      4    → sonnet          (where Qwen-Thinking starts falling short)
+      5    → opus            (rare: genuine architectural / novel reasoning)
+    No Haiku in the main path — Qwen-Instruct covers that niche for free.
+    """
     if has_secret:
         return "local"
     return {
         1: "local",
         2: "local",
         3: "local-thinking",
-        4: "opus",
+        4: "sonnet",
         5: "opus",
     }.get(complexity, "sonnet")
+
+
+# --- tier hysteresis ---------------------------------------------------------
+#
+# Rationale: the local `qwen-local` and `qwen-local-thinking` models are too
+# big to both sit resident on the 24 GB RTX 4090 at the same time, so Ollama
+# hot-swaps them — ~15-25 s of latency per transition. When the classifier
+# wobbles between complexity 2 (→local) and 3 (→local-thinking) inside a
+# single conversation, we'd pay that swap cost each turn.
+#
+# Mitigation: remember the last tier we routed each chat to, and if the
+# previous tier was the Thinking model, *keep* a complexity-2 request on
+# Thinking rather than swapping back to Instruct. Only demote to Instruct
+# when complexity is 1 (truly trivial). Demotion to cloud is never sticky —
+# cloud tiers have no swap cost, so there's no reason to trap traffic there.
+#
+# State is in-memory, TTL'd, best-effort. A container restart resets it,
+# which is fine — worst case one extra swap.
+
+_HYSTERESIS_TTL_S = 600.0
+_LAST_TIER_BY_CHAT: dict[str, tuple[str, float]] = {}
+_CHAT_ID_RE = re.compile(r'"chat_id"\s*:\s*"([^"]+)"')
+
+
+def _extract_chat_id(body: dict[str, Any]) -> str | None:
+    """Pull a stable session id from the latest user message's metadata block.
+
+    OpenClaw/Matrix messages embed `"chat_id": "<room>"` in a fenced JSON
+    block. Frameworks that don't use that shape just won't get hysteresis.
+    """
+    latest = _latest_user_text(body.get("messages", []))
+    m = _CHAT_ID_RE.search(latest)
+    return m.group(1) if m else None
+
+
+def _apply_hysteresis(tier: str, chat_id: str | None, now: float) -> str:
+    """Promote a `local` decision to `local-thinking` if this chat's previous
+    routed tier was `local-thinking` and the entry hasn't expired."""
+    if not chat_id or tier != "local":
+        return tier
+    # Opportunistic prune so the dict doesn't grow unbounded.
+    stale = [k for k, (_, t) in _LAST_TIER_BY_CHAT.items() if now - t > _HYSTERESIS_TTL_S * 2]
+    for k in stale:
+        _LAST_TIER_BY_CHAT.pop(k, None)
+    prev = _LAST_TIER_BY_CHAT.get(chat_id)
+    if prev is None:
+        return tier
+    prev_tier, prev_ts = prev
+    if now - prev_ts > _HYSTERESIS_TTL_S:
+        return tier
+    return "local-thinking" if prev_tier == "local-thinking" else tier
+
+
+def _record_tier(chat_id: str | None, tier: str, now: float) -> None:
+    """Remember the tier a chat was routed to, for later hysteresis lookups."""
+    if chat_id and tier in ("local", "local-thinking"):
+        _LAST_TIER_BY_CHAT[chat_id] = (tier, now)
 
 
 async def local_classify(body: dict[str, Any]) -> tuple[bool, int, dict[str, Any]]:
@@ -828,8 +900,9 @@ async def chat_completions(
                 # only the LLM detected the secret.
                 if union_secret and not regex_hit:
                     signals["secret_keyword"] = "llm_classifier"
-                tier = _map_tier(union_secret, local_complexity)
-                reason = "local-classifier"
+                raw_tier = _map_tier(union_secret, local_complexity)
+                tier = _apply_hysteresis(raw_tier, _extract_chat_id(body), time.time())
+                reason = "local-classifier+hysteresis" if tier != raw_tier else "local-classifier"
                 classifier_source = "local_model"
                 classifier_model = LOCAL_CLASSIFIER_MODEL
                 used_local = True
@@ -857,6 +930,12 @@ async def chat_completions(
     else:
         tier, reason = None, "passthrough"
         classifier_source = "passthrough"
+
+    # Remember the *intended* tier for hysteresis, before any health-based
+    # fallback — a flaky Ollama shouldn't change what we consider the
+    # conversation's steady-state tier.
+    if classifier_source == "local_model":
+        _record_tier(_extract_chat_id(body), tier, time.time())
 
     fallback_applied = False
     if tier in LOCAL_TIERS and not await ollama_healthy():
