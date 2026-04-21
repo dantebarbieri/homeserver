@@ -1015,11 +1015,14 @@ async def chat_completions(
                 classifier_model = LOCAL_CLASSIFIER_MODEL
                 used_local = True
             except Exception as e:
-                LOG.warning("local classifier failed, falling back: %s", e)
+                # asyncio.TimeoutError + a few others have empty str() — fall
+                # back to the class name so the log/DB column is never blank.
+                err_str = str(e) or type(e).__name__
+                LOG.warning("local classifier failed, falling back: %s", err_str)
                 if local_details is None:
-                    local_details = {"prompt": None, "response": None, "error": str(e)}
+                    local_details = {"prompt": None, "response": None, "error": err_str}
                 else:
-                    local_details["error"] = str(e)
+                    local_details["error"] = err_str
                 classifier_source = "fallback"
 
         if not used_local:
