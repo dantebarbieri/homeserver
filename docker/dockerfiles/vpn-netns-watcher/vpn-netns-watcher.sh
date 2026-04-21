@@ -1,9 +1,11 @@
 #!/bin/sh
 # Watches docker events for the VPN namespace container and force-recreates
 # every sibling that shares its network namespace (network_mode:container:...)
-# whenever the sandbox drifts. Fixes the zombie-netns problem where a pause
-# image bump recreates vpn-netns but leaves gluetun/qbittorrent attached to
-# the destroyed old sandbox.
+# whenever the target container ID drifts. Fixes the zombie-netns problem
+# where a pause image bump recreates vpn-netns but leaves gluetun/qbittorrent
+# attached to the destroyed old container ID. Drift is detected by comparing
+# each sibling's HostConfig.NetworkMode ("container:<id>") against the current
+# vpn-netns container ID.
 set -eu
 
 : "$NETNS_CONTAINER"
@@ -16,24 +18,36 @@ set -eu
 cd "$COMPOSE_DIR"
 
 log() { printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+short() { printf '%s' "$1" | cut -c1-12; }
 
-sandbox_of_service() {
-  id=$(docker compose ps -q "$1" 2>/dev/null | head -n1)
+container_id() {
+  docker compose ps -q "$1" 2>/dev/null | head -n1
+}
+
+# Returns the container ID that a service's HostConfig.NetworkMode
+# points at — i.e. the "<id>" in "container:<id>". Empty for services
+# not using network_mode:container:* or not running.
+sibling_netns_target() {
+  id=$(container_id "$1")
   [ -z "$id" ] && return 0
-  docker inspect -f '{{.NetworkSettings.SandboxKey}}' "$id" 2>/dev/null || true
+  mode=$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$id" 2>/dev/null || true)
+  case "$mode" in
+    container:*) printf '%s' "${mode#container:}" ;;
+    *) ;;
+  esac
 }
 
 siblings_drifted() {
-  netns=$(sandbox_of_service "$NETNS_SERVICE")
-  if [ -z "$netns" ]; then
-    log "  $NETNS_SERVICE has no sandbox yet; nothing to reconcile"
+  netns_id=$(container_id "$NETNS_SERVICE")
+  if [ -z "$netns_id" ]; then
+    log "  $NETNS_SERVICE not running; nothing to reconcile"
     return 1
   fi
   for svc in $SIBLING_SERVICES; do
-    sb=$(sandbox_of_service "$svc")
-    [ -z "$sb" ] && continue
-    if [ "$sb" != "$netns" ]; then
-      log "  drift: $svc sandbox=$sb expected=$netns"
+    target=$(sibling_netns_target "$svc")
+    [ -z "$target" ] && continue
+    if [ "$target" != "$netns_id" ]; then
+      log "  drift: $svc -> $(short "$target") (current $NETNS_SERVICE is $(short "$netns_id"))"
       return 0
     fi
   done
