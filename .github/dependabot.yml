@@ -36,6 +36,10 @@ updates:
       compose-images:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # Postgres major bumps require pg_upgrade on on-disk data — handle manually.
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions workflow pins
   - package-ecosystem: "github-actions"
