@@ -748,9 +748,13 @@ async def chat_completions(
     if fallback_applied:
         response_headers["x-llmrouter-fallback"] = "ollama-unreachable"
 
-    # Exclude system prompts from the log preview: they're usually boilerplate
-    # (tool listings, personas) that drown out the actual user/assistant turns.
-    log_text = _messages_text(body.get("messages", []), include_system=False)
+    # Log preview is the latest user message only — the classifier sees the
+    # same thing. Multi-turn history, tool results, and runtime-injected
+    # boilerplate (personas, startup context, memory-search dumps) all come
+    # through as user-role content in some frameworks, so role-filtering
+    # alone isn't enough; taking only the latest user turn keeps the log
+    # focused on the request actually being routed.
+    log_text = _latest_user_text(body.get("messages", []))
     messages_preview, keywords_list = _redact_for_log(log_text, signals.get("secret_keyword"))
 
     client = httpx.AsyncClient(timeout=None)
