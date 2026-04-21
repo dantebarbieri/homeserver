@@ -147,9 +147,11 @@ def _approx_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def _messages_text(messages: list[dict[str, Any]]) -> str:
+def _messages_text(messages: list[dict[str, Any]], include_system: bool = True) -> str:
     parts: list[str] = []
     for m in messages:
+        if not include_system and m.get("role") == "system":
+            continue
         c = m.get("content", "")
         if isinstance(c, str):
             parts.append(c)
@@ -158,6 +160,17 @@ def _messages_text(messages: list[dict[str, Any]]) -> str:
                 if isinstance(p, dict) and p.get("type") == "text":
                     parts.append(p.get("text", ""))
     return "\n".join(parts)
+
+
+def _scrub_secrets(text: str) -> str:
+    """Replace each SECRET_PATTERNS match with a [REDACTED:<name>] marker.
+
+    Leaves the surrounding text intact so the log entry is still useful for
+    debugging routing decisions.
+    """
+    for name, pat in SECRET_PATTERNS:
+        text = pat.sub(f"[REDACTED:{name}]", text)
+    return text
 
 
 def _latest_user_text(messages: list[dict[str, Any]]) -> str:
@@ -356,11 +369,22 @@ async def local_classify(body: dict[str, Any]) -> tuple[bool, int, dict[str, Any
         raise
 
 
-def _redact_for_log(full_text: str, has_secret: bool) -> tuple[str | None, list[str]]:
-    """Return (messages_preview, keywords_list) for logging, redacting if secret."""
-    if has_secret:
+def _redact_for_log(full_text: str, secret_keyword: str | None) -> tuple[str | None, list[str]]:
+    """Return (messages_preview, keywords_list) for logging.
+
+    secret_keyword:
+      - None → no secret, log as-is.
+      - "llm_classifier" → the LLM flagged this but the regex couldn't match a
+        specific pattern, so we don't know *where* the secret is → null preview.
+      - <pattern name> → regex matched at least one known pattern → scrub each
+        matched value and keep the surrounding context.
+    """
+    if secret_keyword is None:
+        return full_text[:MESSAGES_PREVIEW_CHARS], extract_keywords(full_text)
+    if secret_keyword == "llm_classifier":
         return None, []
-    return full_text[:MESSAGES_PREVIEW_CHARS], extract_keywords(full_text)
+    scrubbed = _scrub_secrets(full_text)
+    return scrubbed[:MESSAGES_PREVIEW_CHARS], extract_keywords(scrubbed)
 
 
 # --- storage ---
@@ -724,9 +748,10 @@ async def chat_completions(
     if fallback_applied:
         response_headers["x-llmrouter-fallback"] = "ollama-unreachable"
 
-    full_text = _messages_text(body.get("messages", []))
-    has_secret = bool(signals.get("secret_keyword"))
-    messages_preview, keywords_list = _redact_for_log(full_text, has_secret)
+    # Exclude system prompts from the log preview: they're usually boilerplate
+    # (tool listings, personas) that drown out the actual user/assistant turns.
+    log_text = _messages_text(body.get("messages", []), include_system=False)
+    messages_preview, keywords_list = _redact_for_log(log_text, signals.get("secret_keyword"))
 
     client = httpx.AsyncClient(timeout=None)
     upstream_req = client.build_request(

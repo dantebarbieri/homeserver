@@ -166,19 +166,72 @@ def test_secret_union(regex_hit, llm_secret, expected_union):
 
 # --- _redact_for_log ---
 
-def test_redact_when_secret():
-    preview, kws = app._redact_for_log("here is my api key=xyz", True)
-    assert preview is None
-    assert kws == []
-
-
 def test_no_redact_when_clean():
-    preview, kws = app._redact_for_log("hello world foo bar baz qux", False)
+    preview, kws = app._redact_for_log("hello world foo bar baz qux", None)
     assert preview == "hello world foo bar baz qux"
-    assert "hello" in kws or "world" in kws  # extract_keywords lowercase strips stopwords
+    assert "hello" in kws or "world" in kws
 
 
 def test_redact_preview_truncated():
     text = "x" * 10_000
-    preview, _ = app._redact_for_log(text, False)
+    preview, _ = app._redact_for_log(text, None)
     assert len(preview) == app.MESSAGES_PREVIEW_CHARS
+
+
+def test_redact_llm_only_nulls_preview():
+    preview, kws = app._redact_for_log("some sensitive content", "llm_classifier")
+    assert preview is None
+    assert kws == []
+
+
+def test_redact_regex_hit_scrubs_and_keeps_context():
+    preview, kws = app._redact_for_log(
+        "here is my password=hunter2hunter and other context",
+        "credential_assignment",
+    )
+    assert preview is not None
+    assert "hunter2hunter" not in preview
+    assert "[REDACTED:credential_assignment]" in preview
+    assert "other context" in preview
+
+
+def test_redact_regex_hit_scrubs_multiple_patterns():
+    text = "Bearer abcdefghijklmnop1234 and password=topsecret123"
+    preview, _ = app._redact_for_log(text, "bearer_token")
+    assert "abcdefghijklmnop1234" not in preview
+    assert "topsecret123" not in preview
+    assert "[REDACTED:bearer_token]" in preview
+    assert "[REDACTED:credential_assignment]" in preview
+
+
+# --- _scrub_secrets ---
+
+def test_scrub_credential_assignment():
+    assert app._scrub_secrets("password=hunter2hunter trailing") == \
+        "[REDACTED:credential_assignment] trailing"
+
+
+def test_scrub_no_matches_returns_unchanged():
+    text = "nothing sensitive here"
+    assert app._scrub_secrets(text) == text
+
+
+# --- _messages_text include_system ---
+
+def test_messages_text_excludes_system():
+    messages = [
+        {"role": "system", "content": "you are a tool-using assistant with these tools..."},
+        {"role": "user",   "content": "hello"},
+    ]
+    assert "tools" not in app._messages_text(messages, include_system=False)
+    assert "hello" in app._messages_text(messages, include_system=False)
+
+
+def test_messages_text_includes_system_by_default():
+    messages = [
+        {"role": "system", "content": "system boilerplate"},
+        {"role": "user",   "content": "hello"},
+    ]
+    out = app._messages_text(messages)
+    assert "system boilerplate" in out
+    assert "hello" in out

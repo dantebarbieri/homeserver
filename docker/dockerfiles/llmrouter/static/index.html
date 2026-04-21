@@ -335,9 +335,11 @@ function renderList(res) {
   }
   rows.innerHTML = res.items.map(r => {
     const secret = r.secret_keyword ? "secret" : "";
-    const snippet = r.secret_keyword
-      ? "[message preview withheld — secret keyword matched]"
-      : (r.snippet || "(empty prompt)");
+    const snippet = r.snippet
+      ? r.snippet
+      : r.secret_keyword
+        ? "[message preview withheld — secret location unknown]"
+        : "(empty prompt)";
     const meta = [
       r.approx_tokens != null ? r.approx_tokens + " tok" : null,
       r.duration_ms   != null ? r.duration_ms + " ms" : null,
@@ -383,9 +385,13 @@ function flag(label, value, hintWhenTrue) {
 
 function renderDetail(r) {
   const kv = (k, v) => `<div class="k">${k}</div><div class="v">${v}</div>`;
-  const preview = r.secret_keyword
-    ? `<em>withheld (secret detected: ${escapeHtml(r.secret_keyword)})</em>`
-    : escapeHtml(r.messages_preview || "(empty prompt)");
+  // messages_preview may be scrubbed (regex-detected secrets replaced inline)
+  // or null (LLM-only detection, location unknown). Show what we have.
+  const preview = r.messages_preview
+    ? escapeHtml(r.messages_preview)
+    : r.secret_keyword
+      ? `<em>withheld (secret detected: ${escapeHtml(r.secret_keyword)}, location unknown)</em>`
+      : "(empty prompt)";
 
   const localClassifierSection = (r.local_classifier_prompt || r.local_classifier_error) ? `
     <div class="section">
