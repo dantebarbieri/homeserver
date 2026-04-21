@@ -6,11 +6,13 @@ max_locations_per_request: 100
 # in-process _SIMPLE_CACHE dict is fine for our single-user volume.
 
 datasets:
+  # Paths point at the flat symlink farm built by the entrypoint, not the raw
+  # nested Copernicus layout mounted at /app/data.
   - name: cop30
-    path: data/copernicus-glo30/
+    path: data-flat/cop30/
     filename_epsg: 4326
     filename_tile_size: 1
   - name: srtm30m
-    path: data/srtm30m/
+    path: data-flat/srtm30m/
     filename_epsg: 4326
     filename_tile_size: 1
