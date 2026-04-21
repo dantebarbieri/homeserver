@@ -216,6 +216,43 @@ def test_scrub_no_matches_returns_unchanged():
     assert app._scrub_secrets(text) == text
 
 
+# --- _serialize_full_messages ---
+
+def test_serialize_full_preserves_structure():
+    import json as _json
+    messages = [
+        {"role": "system", "content": "you are a helpful assistant"},
+        {"role": "user",   "content": "hi"},
+    ]
+    out = app._serialize_full_messages(messages, None)
+    parsed = _json.loads(out)
+    assert parsed[0]["role"] == "system"
+    assert parsed[1]["content"] == "hi"
+
+
+def test_serialize_full_nulls_on_llm_classifier():
+    messages = [{"role": "user", "content": "sensitive stuff"}]
+    assert app._serialize_full_messages(messages, "llm_classifier") is None
+
+
+def test_serialize_full_scrubs_on_regex_hit():
+    import json as _json
+    messages = [{"role": "user", "content": "password=hunter2hunter please debug"}]
+    out = app._serialize_full_messages(messages, "credential_assignment")
+    parsed = _json.loads(out)
+    assert "hunter2hunter" not in parsed[0]["content"]
+    assert "[REDACTED:credential_assignment]" in parsed[0]["content"]
+    assert "please debug" in parsed[0]["content"]
+
+
+def test_serialize_full_caps_giant_payload():
+    huge = "x" * 1_000_000
+    messages = [{"role": "user", "content": huge}]
+    out = app._serialize_full_messages(messages, None)
+    assert len(out) <= app.MESSAGES_FULL_MAX_CHARS + 20  # truncation marker slack
+    assert out.endswith("…[truncated]")
+
+
 # --- _messages_text include_system ---
 
 def test_messages_text_excludes_system():

@@ -393,6 +393,26 @@ function renderDetail(r) {
       ? `<em>withheld (secret detected: ${escapeHtml(r.secret_keyword)}, location unknown)</em>`
       : "(empty prompt)";
 
+  // Full body (system prompt, all turns, tool results) lives behind a toggle
+  // since it's noisy and usually not needed for routing debug.
+  let fullMessagesBody = "";
+  if (r.messages_full) {
+    let pretty = r.messages_full;
+    try { pretty = JSON.stringify(JSON.parse(r.messages_full), null, 2); } catch (_) { /* truncated or malformed — show raw */ }
+    fullMessagesBody = `<pre>${escapeHtml(pretty)}</pre>`;
+  } else if (r.secret_keyword === "llm_classifier") {
+    fullMessagesBody = "<em>withheld (LLM flagged a secret but the location is unknown — the full body wasn't stored)</em>";
+  } else {
+    fullMessagesBody = "<em>not stored</em>";
+  }
+  const fullMessagesSection = `
+    <div class="section">
+      <details>
+        <summary style="cursor:pointer;color:var(--muted);font-size:13px;">Full body (system prompt + all turns + tool results)</summary>
+        ${fullMessagesBody}
+      </details>
+    </div>`;
+
   const localClassifierSection = (r.local_classifier_prompt || r.local_classifier_error) ? `
     <div class="section">
       <h3>Local classifier (${escapeHtml(r.classifier_model || "—")})</h3>
@@ -459,9 +479,11 @@ function renderDetail(r) {
     </div>
 
     <div class="section">
-      <h3>Messages preview</h3>
+      <h3>Latest user message</h3>
       <pre>${preview}</pre>
     </div>
+
+    ${fullMessagesSection}
   `;
 
   document.querySelectorAll("#detail .chip[data-kw]").forEach(el => {

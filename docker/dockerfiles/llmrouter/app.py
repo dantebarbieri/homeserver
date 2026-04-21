@@ -51,6 +51,7 @@ LOCAL_CLASSIFIER_TIMEOUT_S = float(os.getenv("LOCAL_CLASSIFIER_TIMEOUT_S", "5"))
 DB_PATH = os.getenv("LLMROUTER_DB_PATH", "/data/llmrouter.db")
 LOG_REQUESTS = os.getenv("LOG_REQUESTS", "1") not in ("0", "false", "False", "")
 MESSAGES_PREVIEW_CHARS = 4000
+MESSAGES_FULL_MAX_CHARS = 200_000  # cap for the stored JSON dump of all messages
 
 TIER_TO_MODEL: dict[str, str] = {
     "local":          "qwen-local",
@@ -369,6 +370,41 @@ async def local_classify(body: dict[str, Any]) -> tuple[bool, int, dict[str, Any
         raise
 
 
+def _serialize_full_messages(
+    messages: list[dict[str, Any]],
+    secret_keyword: str | None,
+) -> str | None:
+    """Serialize the full message array for the log, preserving roles and
+    multi-turn structure so the UI can render it on demand.
+
+    If the regex detected a secret, scrub each text field. If only the LLM
+    flagged a secret ("llm_classifier"), we don't know where the value lives
+    → store nothing.
+    """
+    if secret_keyword == "llm_classifier":
+        return None
+    scrub = secret_keyword is not None
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, str):
+            new_content: Any = _scrub_secrets(content) if scrub else content
+        elif isinstance(content, list):
+            new_content = []
+            for p in content:
+                if isinstance(p, dict) and "text" in p and scrub:
+                    new_content.append({**p, "text": _scrub_secrets(p["text"])})
+                else:
+                    new_content.append(p)
+        else:
+            new_content = content
+        out.append({"role": m.get("role"), "content": new_content})
+    text = json.dumps(out, ensure_ascii=False)
+    if len(text) > MESSAGES_FULL_MAX_CHARS:
+        text = text[:MESSAGES_FULL_MAX_CHARS] + "…[truncated]"
+    return text
+
+
 def _redact_for_log(full_text: str, secret_keyword: str | None) -> tuple[str | None, list[str]]:
     """Return (messages_preview, keywords_list) for logging.
 
@@ -410,6 +446,7 @@ _REQUESTS_ADDED_COLUMNS: list[tuple[str, str]] = [
     ("local_classifier_error", "TEXT"),
     ("local_complexity", "INTEGER"),
     ("local_secret", "INTEGER"),
+    ("messages_full", "TEXT"),
 ]
 
 
@@ -459,7 +496,8 @@ def _init_db() -> None:
                 local_complexity INTEGER,
                 local_secret INTEGER,
                 keywords TEXT,
-                messages_preview TEXT
+                messages_preview TEXT,
+                messages_full TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_requests_ts   ON requests(ts DESC);
@@ -756,6 +794,9 @@ async def chat_completions(
     # focused on the request actually being routed.
     log_text = _latest_user_text(body.get("messages", []))
     messages_preview, keywords_list = _redact_for_log(log_text, signals.get("secret_keyword"))
+    # Stored for on-demand display — hidden behind a UI toggle. Scrubbed if
+    # the regex flagged a secret; nulled if only the LLM did (can't locate).
+    messages_full = _serialize_full_messages(body.get("messages", []), signals.get("secret_keyword"))
 
     client = httpx.AsyncClient(timeout=None)
     upstream_req = client.build_request(
@@ -797,6 +838,7 @@ async def chat_completions(
         "local_secret": local_secret,
         "keywords": " ".join(keywords_list) if keywords_list else None,
         "messages_preview": messages_preview,
+        "messages_full": messages_full,
     }
 
     if not is_stream:
