@@ -216,6 +216,52 @@ def test_scrub_no_matches_returns_unchanged():
     assert app._scrub_secrets(text) == text
 
 
+# --- _clean_user_text ---
+
+def test_clean_user_text_strips_metadata_blocks():
+    raw = (
+        "Conversation info (untrusted metadata):\n"
+        "```json\n"
+        '{"chat_id": "room:!foo", "sender": "Dante"}\n'
+        "```\n\n"
+        "Sender (untrusted metadata):\n"
+        "```json\n"
+        '{"id": "@danteb:danteb.com"}\n'
+        "```\n\n"
+        "Can you check again?"
+    )
+    cleaned = app._clean_user_text(raw)
+    assert "untrusted metadata" not in cleaned
+    assert "chat_id" not in cleaned
+    assert "@danteb" not in cleaned
+    assert cleaned.endswith("Can you check again?")
+
+
+def test_clean_user_text_passthrough_no_metadata():
+    raw = "what is the capital of France?"
+    assert app._clean_user_text(raw) == "what is the capital of France?"
+
+
+def test_clean_user_text_preserves_user_code_blocks():
+    raw = "Can you debug this?\n```python\nprint('hi')\n```"
+    out = app._clean_user_text(raw)
+    assert "print('hi')" in out
+    assert "```python" in out
+
+
+def test_clean_user_text_strips_only_labelled_blocks():
+    raw = (
+        "Here's my config (untrusted metadata):\n"
+        "```json\n"
+        '{"foo": 1}\n'
+        "```\n"
+        "And my question: what does foo mean?"
+    )
+    out = app._clean_user_text(raw)
+    assert "foo" not in out.split("what does foo mean?")[0]
+    assert "what does foo mean?" in out
+
+
 # --- _serialize_full_messages ---
 
 def test_serialize_full_preserves_structure():

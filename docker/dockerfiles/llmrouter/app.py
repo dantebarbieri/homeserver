@@ -181,6 +181,30 @@ def _latest_user_text(messages: list[dict[str, Any]]) -> str:
     return ""
 
 
+# Framework-injected metadata blocks we recognize and can safely strip.
+# Pattern: a header line like "Label (untrusted metadata):" followed by a
+# fenced JSON block. OpenClaw on Matrix uses this shape for chat/sender
+# context; other frameworks can be added here if they follow a similar
+# "labelled fenced block" convention.
+_METADATA_BLOCK_RE = re.compile(
+    # Anchored to start-of-line (multiline). Don't consume the trailing
+    # newline greedily — a blank separator between two metadata blocks
+    # must survive so the next block's own anchor matches.
+    r"^[^\n]{1,120}\(untrusted metadata\):\s*\n```(?:json)?\s*\n.*?\n```[ \t]*\n?",
+    re.DOTALL | re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _clean_user_text(text: str) -> str:
+    """Return the latest user message with known framework boilerplate stripped.
+
+    Targets specific, labelled metadata blocks only — never attempts to
+    heuristically strip code blocks or headings that might be real user
+    content. If the pattern doesn't match, the original text is returned.
+    """
+    return _METADATA_BLOCK_RE.sub("\n", text).strip()
+
+
 def regex_secret_hit(body: dict[str, Any]) -> str | None:
     """Run SECRET_PATTERNS against the latest user message. Returns pattern name or None."""
     latest_user = _latest_user_text(body.get("messages", []))
@@ -344,7 +368,9 @@ async def local_classify(body: dict[str, Any]) -> tuple[bool, int, dict[str, Any
     details: {"prompt": str, "response": str | None, "error": str | None}.
     Raises on network / parse error (caller catches and falls back).
     """
-    text = _latest_user_text(body.get("messages", []))[:4000]
+    # Strip framework metadata so the classifier rates actual user intent,
+    # not labels like "Conversation info (untrusted metadata):".
+    text = _clean_user_text(_latest_user_text(body.get("messages", [])))[:4000]
     prompt = _CLASSIFIER_PROMPT_TEMPLATE.format(text=text)
     details: dict[str, Any] = {"prompt": prompt, "response": None, "error": None}
     try:
@@ -786,13 +812,10 @@ async def chat_completions(
     if fallback_applied:
         response_headers["x-llmrouter-fallback"] = "ollama-unreachable"
 
-    # Log preview is the latest user message only — the classifier sees the
-    # same thing. Multi-turn history, tool results, and runtime-injected
-    # boilerplate (personas, startup context, memory-search dumps) all come
-    # through as user-role content in some frameworks, so role-filtering
-    # alone isn't enough; taking only the latest user turn keeps the log
-    # focused on the request actually being routed.
-    log_text = _latest_user_text(body.get("messages", []))
+    # Log preview is the cleaned latest user message — framework metadata
+    # blocks stripped, multi-turn history and system prompt excluded.
+    # The raw body is still available in messages_full when we need context.
+    log_text = _clean_user_text(_latest_user_text(body.get("messages", [])))
     messages_preview, keywords_list = _redact_for_log(log_text, signals.get("secret_keyword"))
     # Stored for on-demand display — hidden behind a UI toggle. Scrubbed if
     # the regex flagged a secret; nulled if only the LLM did (can't locate).
