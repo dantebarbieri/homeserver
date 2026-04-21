@@ -28,11 +28,13 @@ sudo install -d -o openclaw -g openclaw /var/lib/openclaw
 # 2. Apply migrations
 python3 apply-migrations.py /var/lib/openclaw/state.db sqlite-migrations/
 
-# 3. Configure MCP endpoints — fetches tokens from server, writes
-#    /etc/openclaw/mcp-clients.json with the right perms.
-./install-mcp-config.sh
+# 3. Configure MCP endpoints — run from the DEV MACHINE (which has ssh
+#    access to both server and pi). The Pi is firewalled off from the
+#    server by design, so the dev machine acts as a trusted middleman.
+#    Args: pi-ssh-host (defaults to "pi").
+./install-mcp-config.sh pi
 
-# Then restart OpenClaw so it picks up the new config.
+# Then restart OpenClaw on the Pi so it picks up the new config.
 ```
 
 Re-running `apply-migrations.py` is safe — it only applies new files and
