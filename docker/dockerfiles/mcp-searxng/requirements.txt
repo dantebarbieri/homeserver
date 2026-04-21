@@ -1,2 +1,2 @@
-fastmcp==2.14.7
+fastmcp==3.2.4
 httpx==0.28.1
