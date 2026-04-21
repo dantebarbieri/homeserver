@@ -71,7 +71,7 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: skyjo_postgres
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     networks:
       skyjo:
         aliases:
