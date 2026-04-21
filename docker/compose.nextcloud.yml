@@ -84,7 +84,7 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: nextcloud_redis
-    image: redis:7-alpine
+    image: redis:8-alpine
     networks:
       - nextcloud
     healthcheck:
