@@ -85,7 +85,7 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: lk-jwt-service
-    image: ghcr.io/element-hq/lk-jwt-service:0.4.1
+    image: ghcr.io/element-hq/lk-jwt-service:0.4.4
     networks:
       - matrix
       - proxy
