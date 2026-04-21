@@ -28,10 +28,11 @@ sudo install -d -o openclaw -g openclaw /var/lib/openclaw
 # 2. Apply migrations
 python3 apply-migrations.py /var/lib/openclaw/state.db sqlite-migrations/
 
-# 3. Configure MCP endpoints
-cp mcp-clients.json.sample /etc/openclaw/mcp-clients.json
-# Paste the eight bearer tokens printed by the homeserver's
-#   docker/scripts/openclaw-v3-secrets.sh
+# 3. Configure MCP endpoints — fetches tokens from server, writes
+#    /etc/openclaw/mcp-clients.json with the right perms.
+./install-mcp-config.sh
+
+# Then restart OpenClaw so it picks up the new config.
 ```
 
 Re-running `apply-migrations.py` is safe — it only applies new files and
