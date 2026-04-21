@@ -24,7 +24,7 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: synapse_postgres
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     networks:
       - matrix
     volumes:

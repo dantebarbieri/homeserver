@@ -63,7 +63,7 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: nextcloud_postgres
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     networks:
       - nextcloud
     volumes:
