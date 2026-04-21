@@ -1,9 +1,9 @@
 max_locations_per_request: 100
 
-# Disable memcached — upstream's own Dockerfile bundles memcached + supervisord,
-# but our slim image doesn't. For our single-user low-volume usage, in-process
-# cache is fine. Setting host to null makes Flask-Caching fall back to simple.
-memcached_host: null
+# Memcache is disabled via the DISABLE_MEMCACHE=1 env var in compose.geo.yml —
+# api.py hardcodes a Unix-socket MemcachedCache that our slim image has no
+# memcached process to back, so without that env var /health hangs. The
+# in-process _SIMPLE_CACHE dict is fine for our single-user volume.
 
 datasets:
   - name: cop30

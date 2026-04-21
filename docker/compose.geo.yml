@@ -107,6 +107,12 @@ services:
     networks:
       - proxy
       - geo
+    # api.py unconditionally wires MemcachedCache to /tmp/memcached.sock unless
+    # DISABLE_MEMCACHE is set — the `memcached_host: null` config key it reads
+    # does not disable the cache. /health calls _load_config/_load_datasets,
+    # which go through that cache, so without this the endpoint hangs.
+    environment:
+      DISABLE_MEMCACHE: "1"
     volumes:
       - ./opentopodata/config.yaml:/app/config.yaml:ro
       - ${OPENCLAW_V3_BASE:?set OPENCLAW_V3_BASE in .env}/elev:/app/data:ro
