@@ -174,6 +174,23 @@ def _scrub_secrets(text: str) -> str:
     return text
 
 
+def _scrub_with_values(text: str, values: list[str], marker: str = "llm_classifier") -> str:
+    """Substring-replace each given value with [REDACTED:<marker>].
+
+    Used to scrub secrets that the LLM classifier identified by content but
+    that don't match any of our regex patterns (e.g. natural-language phrases
+    like "my password is V31m4JINKIES!!!!"). Skips values shorter than 3
+    chars to avoid accidentally redacting common substrings.
+    """
+    if not text or not values:
+        return text
+    # Deduplicate + longest-first so a substring of another value doesn't
+    # consume its parent.
+    for v in sorted({v for v in values if v and len(v) >= 3}, key=len, reverse=True):
+        text = text.replace(v, f"[REDACTED:{marker}]")
+    return text
+
+
 def _latest_user_text(messages: list[dict[str, Any]]) -> str:
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -287,13 +304,21 @@ _CLASSIFIER_PROMPT_TEMPLATE = (
     "  API key, password, bearer token, private key, or .env content. Discussion\n"
     "  OF secrets is NOT a secret. When in doubt, return false — a regex catches\n"
     "  obvious cases too.\n"
+    "- secret_values (array of strings): when has_secret=true, the literal\n"
+    "  exact substring(s) from the request containing the credential value(s),\n"
+    "  verbatim — preserving case, punctuation, and surrounding quotes/braces\n"
+    "  ONLY if they're part of the secret. The caller will find-and-replace\n"
+    "  these strings, so they must match exactly. Include just the value, not\n"
+    "  the surrounding label (e.g. for `password: hunter2`, return [\"hunter2\"]).\n"
+    "  Empty array when has_secret=false.\n"
     "- complexity (int 1-5):\n"
     "    1=trivial factual, 2=simple generation, 3=moderate reasoning,\n"
     "    4=complex multi-step, 5=deep architectural / novel.\n"
     "- reason (string, <=80 chars): short phrase justifying the complexity pick.\n"
+    "  Do NOT echo the secret value in the reason field.\n"
     "\n"
-    "Respond exactly with: {{\"has_secret\": <bool>, \"complexity\": <int>, "
-    "\"reason\": \"<str>\"}}\n"
+    "Respond exactly with: {{\"has_secret\": <bool>, \"secret_values\": [...], "
+    "\"complexity\": <int>, \"reason\": \"<str>\"}}\n"
     "\n"
     "---\n{text}\n---"
 )
@@ -346,7 +371,21 @@ def _parse_classifier_json(content: str) -> dict[str, Any]:
     complexity = max(1, min(5, complexity))
 
     reason = str(parsed.get("reason", ""))[:120]
-    return {"has_secret": has_secret, "complexity": complexity, "reason": reason}
+
+    raw_values = parsed.get("secret_values", [])
+    if not isinstance(raw_values, list):
+        raw_values = []
+    secret_values = [
+        str(v) for v in raw_values
+        if isinstance(v, (str, int, float)) and len(str(v)) >= 3
+    ]
+
+    return {
+        "has_secret": has_secret,
+        "secret_values": secret_values,
+        "complexity": complexity,
+        "reason": reason,
+    }
 
 
 def _map_tier(has_secret: bool, complexity: int) -> str:
@@ -388,8 +427,16 @@ async def local_classify(body: dict[str, Any]) -> tuple[bool, int, dict[str, Any
             )
         r.raise_for_status()
         content = r.json()["choices"][0]["message"]["content"]
-        details["response"] = content
         parsed = _parse_classifier_json(content)
+        secret_values = parsed.get("secret_values", [])
+        # Scrub the stored prompt + response so the secret doesn't survive in
+        # the log via the classifier_prompt / classifier_response columns.
+        if parsed["has_secret"] and secret_values:
+            details["prompt"] = _scrub_with_values(prompt, secret_values)
+            details["response"] = _scrub_with_values(content, secret_values)
+        else:
+            details["response"] = content
+        details["secret_values"] = secret_values
         return parsed["has_secret"], parsed["complexity"], details
     except Exception as e:
         details["error"] = str(e)
@@ -399,27 +446,38 @@ async def local_classify(body: dict[str, Any]) -> tuple[bool, int, dict[str, Any
 def _serialize_full_messages(
     messages: list[dict[str, Any]],
     secret_keyword: str | None,
+    llm_secret_values: list[str] | None = None,
 ) -> str | None:
     """Serialize the full message array for the log, preserving roles and
     multi-turn structure so the UI can render it on demand.
 
-    If the regex detected a secret, scrub each text field. If only the LLM
-    flagged a secret ("llm_classifier"), we don't know where the value lives
-    → store nothing.
+    Scrubbing logic mirrors _redact_for_log: regex-matched patterns get
+    pattern-based scrubbing; LLM-identified literal values get substring
+    scrubbing. Returns None only when the LLM flagged a secret AND didn't
+    give us anything to find-and-replace.
     """
-    if secret_keyword == "llm_classifier":
+    regex_scrub = secret_keyword is not None and secret_keyword != "llm_classifier"
+    has_values = bool(llm_secret_values)
+    if secret_keyword == "llm_classifier" and not has_values:
         return None
-    scrub = secret_keyword is not None
+
+    def scrub(s: str) -> str:
+        if regex_scrub:
+            s = _scrub_secrets(s)
+        if has_values:
+            s = _scrub_with_values(s, llm_secret_values or [])
+        return s
+
     out: list[dict[str, Any]] = []
     for m in messages:
         content = m.get("content")
         if isinstance(content, str):
-            new_content: Any = _scrub_secrets(content) if scrub else content
+            new_content: Any = scrub(content) if (regex_scrub or has_values) else content
         elif isinstance(content, list):
             new_content = []
             for p in content:
-                if isinstance(p, dict) and "text" in p and scrub:
-                    new_content.append({**p, "text": _scrub_secrets(p["text"])})
+                if isinstance(p, dict) and "text" in p and (regex_scrub or has_values):
+                    new_content.append({**p, "text": scrub(p["text"])})
                 else:
                     new_content.append(p)
         else:
@@ -431,21 +489,31 @@ def _serialize_full_messages(
     return text
 
 
-def _redact_for_log(full_text: str, secret_keyword: str | None) -> tuple[str | None, list[str]]:
+def _redact_for_log(
+    full_text: str,
+    secret_keyword: str | None,
+    llm_secret_values: list[str] | None = None,
+) -> tuple[str | None, list[str]]:
     """Return (messages_preview, keywords_list) for logging.
 
     secret_keyword:
       - None → no secret, log as-is.
-      - "llm_classifier" → the LLM flagged this but the regex couldn't match a
-        specific pattern, so we don't know *where* the secret is → null preview.
+      - "llm_classifier" → LLM flagged a secret. If it also returned the
+        literal value(s) in llm_secret_values, scrub those and keep context.
+        Otherwise we don't know where it is → null preview.
       - <pattern name> → regex matched at least one known pattern → scrub each
-        matched value and keep the surrounding context.
+        matched value (and any LLM-identified values too) and keep context.
     """
     if secret_keyword is None:
         return full_text[:MESSAGES_PREVIEW_CHARS], extract_keywords(full_text)
     if secret_keyword == "llm_classifier":
+        if llm_secret_values:
+            scrubbed = _scrub_with_values(full_text, llm_secret_values)
+            return scrubbed[:MESSAGES_PREVIEW_CHARS], extract_keywords(scrubbed)
         return None, []
     scrubbed = _scrub_secrets(full_text)
+    if llm_secret_values:
+        scrubbed = _scrub_with_values(scrubbed, llm_secret_values)
     return scrubbed[:MESSAGES_PREVIEW_CHARS], extract_keywords(scrubbed)
 
 
@@ -815,11 +883,17 @@ async def chat_completions(
     # Log preview is the cleaned latest user message — framework metadata
     # blocks stripped, multi-turn history and system prompt excluded.
     # The raw body is still available in messages_full when we need context.
+    llm_secret_values = (local_details or {}).get("secret_values") or None
     log_text = _clean_user_text(_latest_user_text(body.get("messages", [])))
-    messages_preview, keywords_list = _redact_for_log(log_text, signals.get("secret_keyword"))
-    # Stored for on-demand display — hidden behind a UI toggle. Scrubbed if
-    # the regex flagged a secret; nulled if only the LLM did (can't locate).
-    messages_full = _serialize_full_messages(body.get("messages", []), signals.get("secret_keyword"))
+    messages_preview, keywords_list = _redact_for_log(
+        log_text, signals.get("secret_keyword"), llm_secret_values,
+    )
+    # Stored for on-demand display — hidden behind a UI toggle. Scrubbed when
+    # we have any signal of where a secret lives (regex pattern or literal
+    # values from the LLM); nulled only when we have no way to locate it.
+    messages_full = _serialize_full_messages(
+        body.get("messages", []), signals.get("secret_keyword"), llm_secret_values,
+    )
 
     client = httpx.AsyncClient(timeout=None)
     upstream_req = client.build_request(

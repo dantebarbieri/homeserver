@@ -13,7 +13,7 @@ def test_parse_valid_json():
     out = app._parse_classifier_json(
         '{"has_secret": false, "complexity": 3, "reason": "moderate reasoning"}'
     )
-    assert out == {"has_secret": False, "complexity": 3, "reason": "moderate reasoning"}
+    assert out == {"has_secret": False, "complexity": 3, "reason": "moderate reasoning", "secret_values": []}
 
 
 def test_parse_with_markdown_fence():
@@ -178,10 +178,36 @@ def test_redact_preview_truncated():
     assert len(preview) == app.MESSAGES_PREVIEW_CHARS
 
 
-def test_redact_llm_only_nulls_preview():
+def test_redact_llm_only_nulls_preview_when_no_values():
     preview, kws = app._redact_for_log("some sensitive content", "llm_classifier")
     assert preview is None
     assert kws == []
+
+
+def test_redact_llm_only_scrubs_when_values_given():
+    preview, kws = app._redact_for_log(
+        "My password is V31m4JINKIES!!!! and I use it for the test machine.",
+        "llm_classifier",
+        ["V31m4JINKIES!!!!"],
+    )
+    assert preview is not None
+    assert "V31m4JINKIES" not in preview
+    assert "[REDACTED:llm_classifier]" in preview
+    assert "test machine" in preview
+
+
+def test_redact_llm_values_with_regex_hit_scrubs_both():
+    # Regex catches `password=foo` style; LLM identifies a separate prose
+    # secret. Both should be scrubbed.
+    preview, _ = app._redact_for_log(
+        "earlier: password=hunter2hunter; also my pin is 999111 thanks",
+        "credential_assignment",
+        ["999111"],
+    )
+    assert "hunter2hunter" not in preview
+    assert "999111" not in preview
+    assert "[REDACTED:credential_assignment]" in preview
+    assert "[REDACTED:llm_classifier]" in preview
 
 
 def test_redact_regex_hit_scrubs_and_keeps_context():
@@ -214,6 +240,55 @@ def test_scrub_credential_assignment():
 def test_scrub_no_matches_returns_unchanged():
     text = "nothing sensitive here"
     assert app._scrub_secrets(text) == text
+
+
+# --- _scrub_with_values ---
+
+def test_scrub_with_values_basic():
+    out = app._scrub_with_values("hello WORLD goodbye", ["WORLD"])
+    assert out == "hello [REDACTED:llm_classifier] goodbye"
+
+
+def test_scrub_with_values_skips_short():
+    out = app._scrub_with_values("ab xy abc def", ["ab"])  # len < 3
+    assert out == "ab xy abc def"
+
+
+def test_scrub_with_values_longest_first():
+    # Make sure 'foo' inside 'foobar' doesn't strip first and break 'foobar'.
+    out = app._scrub_with_values("here is foobar and foo separately", ["foo", "foobar"])
+    assert "foobar" not in out
+    assert out.count("[REDACTED:llm_classifier]") == 2
+
+
+def test_scrub_with_values_empty_input_safe():
+    assert app._scrub_with_values("", ["x"]) == ""
+    assert app._scrub_with_values("hi", []) == "hi"
+    assert app._scrub_with_values("hi", None) == "hi"  # type: ignore[arg-type]
+
+
+# --- parser secret_values extraction ---
+
+def test_parse_secret_values_extracted():
+    out = app._parse_classifier_json(
+        '{"has_secret": true, "secret_values": ["abc12345"], "complexity": 2, "reason": "x"}'
+    )
+    assert out["secret_values"] == ["abc12345"]
+
+
+def test_parse_secret_values_default_empty():
+    out = app._parse_classifier_json(
+        '{"has_secret": false, "complexity": 3, "reason": "x"}'
+    )
+    assert out["secret_values"] == []
+
+
+def test_parse_secret_values_filters_short_and_nonstrings():
+    out = app._parse_classifier_json(
+        '{"has_secret": true, "secret_values": ["ab", "abc", null, 12345], "complexity": 1, "reason": "x"}'
+    )
+    # "ab" filtered (len<3), null filtered, 12345 coerced to "12345"
+    assert out["secret_values"] == ["abc", "12345"]
 
 
 # --- _clean_user_text ---
@@ -276,9 +351,20 @@ def test_serialize_full_preserves_structure():
     assert parsed[1]["content"] == "hi"
 
 
-def test_serialize_full_nulls_on_llm_classifier():
+def test_serialize_full_nulls_on_llm_classifier_without_values():
     messages = [{"role": "user", "content": "sensitive stuff"}]
     assert app._serialize_full_messages(messages, "llm_classifier") is None
+
+
+def test_serialize_full_scrubs_on_llm_classifier_with_values():
+    import json as _json
+    messages = [{"role": "user", "content": "My password is V31m4JINKIES!!!! please review"}]
+    out = app._serialize_full_messages(messages, "llm_classifier", ["V31m4JINKIES!!!!"])
+    assert out is not None
+    parsed = _json.loads(out)
+    assert "V31m4JINKIES" not in parsed[0]["content"]
+    assert "[REDACTED:llm_classifier]" in parsed[0]["content"]
+    assert "please review" in parsed[0]["content"]
 
 
 def test_serialize_full_scrubs_on_regex_hit():
