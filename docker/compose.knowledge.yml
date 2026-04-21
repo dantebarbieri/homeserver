@@ -14,7 +14,11 @@ services:
       service: common-service
     image: ghcr.io/kiwix/kiwix-serve:latest
     container_name: kiwix-serve
-    command: ["--port=8080", "--blockexternal", "*.zim"]
+    # Wrap in sh -c so the *.zim glob is expanded by the shell. Without
+    # this, Docker passes the literal string "*.zim" to kiwix-serve,
+    # which prints usage and exits.
+    entrypoint: ["sh", "-c"]
+    command: ["exec kiwix-serve --port=8080 --blockexternal /data/*.zim"]
     working_dir: /data
     networks:
       - proxy
