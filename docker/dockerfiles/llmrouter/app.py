@@ -213,6 +213,26 @@ _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_\-]{3,}")
 _db_ready = False
 
 
+# Columns added to `requests` after its initial schema. CREATE TABLE IF NOT
+# EXISTS does not add columns to a pre-existing table, so each entry here
+# gets an idempotent ALTER TABLE ADD COLUMN at startup.
+_REQUESTS_ADDED_COLUMNS: list[tuple[str, str]] = [
+    ("step_keyword", "TEXT"),
+    ("secret_keyword", "TEXT"),
+    ("tiebreaker_prompt", "TEXT"),
+    ("tiebreaker_response", "TEXT"),
+    ("tiebreaker_digit", "TEXT"),
+    ("tiebreaker_error", "TEXT"),
+]
+
+
+def _migrate_requests_schema(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(requests)").fetchall()}
+    for name, sql_type in _REQUESTS_ADDED_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE requests ADD COLUMN {name} {sql_type}")
+
+
 def _init_db() -> None:
     global _db_ready
     if _db_ready:
@@ -267,6 +287,7 @@ def _init_db() -> None:
                 VALUES ('delete', old.id, coalesce(old.keywords, ''), coalesce(old.messages_preview, ''));
             END;
         """)
+        _migrate_requests_schema(conn)
         conn.commit()
     finally:
         conn.close()
