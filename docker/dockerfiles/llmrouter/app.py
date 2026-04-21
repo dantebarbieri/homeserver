@@ -54,9 +54,20 @@ TIER_TO_MODEL: dict[str, str] = {
 LOCAL_TIERS = {"local", "local-thinking"}
 CLOUD_FALLBACK_TIER = "sonnet"
 
-SECRET_KEYWORDS = (
-    "password", "passwd", "api_key", "apikey", ".env", "ssh-rsa",
-    "private key", "private_key", "secret", "credential", "bearer ",
+SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "credential_assignment",
+        re.compile(
+            r"\b(?:password|passwd|secret|api[_-]?key|apikey|"
+            r"access[_-]?token|auth[_-]?token|credential|private[_-]?key)s?"
+            r"\s*[:=]\s*\S{4,}",
+            re.IGNORECASE,
+        ),
+    ),
+    ("bearer_token", re.compile(r"\bbearer\s+[A-Za-z0-9._\-]{16,}", re.IGNORECASE)),
+    ("ssh_public_key", re.compile(r"\bssh-(?:rsa|ed25519|dss)\s+[A-Za-z0-9+/=]{40,}")),
+    ("pem_private_key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
+    ("dotenv_reference", re.compile(r"(?:^|\s)\.env(?:$|[\s:=])")),
 )
 STEP_KEYWORDS = (
     "plan ", "design ", "architect", "refactor", "debug",
@@ -141,15 +152,23 @@ def _messages_text(messages: list[dict[str, Any]]) -> str:
     return "\n".join(parts)
 
 
+def _latest_user_text(messages: list[dict[str, Any]]) -> str:
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            return _messages_text([m])
+    return ""
+
+
 def heuristic_tier(body: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
     """First-match-wins rules. Returns (tier_or_None, signals)."""
     messages = body.get("messages", [])
     text = _messages_text(messages)
-    lowered = text.lower()
+    latest_user = _latest_user_text(messages)
+    latest_lower = latest_user.lower()
     tokens = _approx_tokens(text)
     has_tools = bool(body.get("tools") or body.get("functions") or body.get("tool_choice"))
-    hit_secret = next((k for k in SECRET_KEYWORDS if k in lowered), None)
-    hit_step = next((k for k in STEP_KEYWORDS if k in lowered), None)
+    hit_secret = next((name for name, pat in SECRET_PATTERNS if pat.search(latest_user)), None)
+    hit_step = next((k for k in STEP_KEYWORDS if k in latest_lower), None)
     has_code = "```" in text
     signals: dict[str, Any] = {
         "tokens": tokens,
