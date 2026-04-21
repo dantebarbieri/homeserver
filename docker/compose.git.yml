@@ -7,7 +7,7 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: forgejo
-    image: codeberg.org/forgejo/forgejo:14
+    image: codeberg.org/forgejo/forgejo:15
     environment:
       USER_UID: ${UID}
       USER_GID: ${GID}
