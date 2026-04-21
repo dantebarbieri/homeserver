@@ -155,8 +155,8 @@ def heuristic_tier(body: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
         "tokens": tokens,
         "has_tools": has_tools,
         "has_code": has_code,
-        "has_step_word": hit_step,
-        "has_secret_word": hit_secret,
+        "step_keyword": hit_step,
+        "secret_keyword": hit_secret,
     }
     if hit_secret:
         return "local-thinking", signals
@@ -207,16 +207,6 @@ async def haiku_tiebreaker(body: dict[str, Any]) -> tuple[str, str, dict[str, An
     return mapping.get(digit, "sonnet"), "haiku-tiebreaker", details
 
 
-async def classify(body: dict[str, Any]) -> tuple[str, str, dict[str, Any], dict[str, Any] | None]:
-    tier, signals = heuristic_tier(body)
-    if tier is not None:
-        return tier, "heuristic", signals, None
-    if CLASSIFIER_MODE in ("hybrid", "haiku"):
-        t, reason, details = await haiku_tiebreaker(body)
-        return t, reason, signals, details
-    return "local-thinking", "heuristic-default", signals, None
-
-
 # --- storage ---
 
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_\-]{3,}")
@@ -248,8 +238,8 @@ def _init_db() -> None:
                 approx_tokens INTEGER,
                 has_tools INTEGER DEFAULT 0,
                 has_code INTEGER DEFAULT 0,
-                has_step_word TEXT,
-                has_secret_word TEXT,
+                step_keyword TEXT,
+                secret_keyword TEXT,
                 tiebreaker_prompt TEXT,
                 tiebreaker_response TEXT,
                 tiebreaker_digit TEXT,
@@ -359,7 +349,7 @@ def search_requests(
                        requests.target_model, requests.fallback_applied,
                        requests.is_stream, requests.upstream_status,
                        requests.approx_tokens, requests.has_tools, requests.has_code,
-                       requests.has_step_word, requests.has_secret_word,
+                       requests.step_keyword, requests.secret_keyword,
                        requests.tiebreaker_digit, requests.keywords,
                        substr(coalesce(requests.messages_preview, ''), 1, 240) AS snippet
                 FROM requests {joins}{where_sql}
@@ -461,11 +451,16 @@ async def chat_completions(
     requested = body.get("model", "auto")
     t0 = time.time()
 
-    signals: dict[str, Any] = {}
     tiebreaker: dict[str, Any] | None = None
+    heuristic, signals = heuristic_tier(body)
 
     if requested == "auto":
-        tier, reason, signals, tiebreaker = await classify(body)
+        if heuristic is not None:
+            tier, reason = heuristic, "heuristic"
+        elif CLASSIFIER_MODE in ("hybrid", "haiku"):
+            tier, reason, tiebreaker = await haiku_tiebreaker(body)
+        else:
+            tier, reason = "local-thinking", "heuristic-default"
     elif requested in TIER_TO_MODEL:
         tier, reason = requested, "explicit"
     else:
@@ -494,7 +489,7 @@ async def chat_completions(
         response_headers["x-llmrouter-fallback"] = "ollama-unreachable"
 
     full_text = _messages_text(body.get("messages", []))
-    has_secret = bool(signals.get("has_secret_word"))
+    has_secret = bool(signals.get("secret_keyword"))
     messages_preview = None if has_secret else full_text[:MESSAGES_PREVIEW_CHARS]
     keywords_list = [] if has_secret else extract_keywords(full_text)
 
@@ -523,8 +518,8 @@ async def chat_completions(
         "approx_tokens": signals.get("tokens"),
         "has_tools": 1 if signals.get("has_tools") else 0,
         "has_code": 1 if signals.get("has_code") else 0,
-        "has_step_word": signals.get("has_step_word"),
-        "has_secret_word": signals.get("has_secret_word"),
+        "step_keyword": signals.get("step_keyword"),
+        "secret_keyword": signals.get("secret_keyword"),
         "tiebreaker_prompt": (tiebreaker or {}).get("prompt"),
         "tiebreaker_response": (tiebreaker or {}).get("response"),
         "tiebreaker_digit": (tiebreaker or {}).get("digit"),
@@ -537,7 +532,7 @@ async def chat_completions(
         data = await upstream.aread()
         await client.aclose()
         base_row["duration_ms"] = int((time.time() - t0) * 1000)
-        log_request(base_row)
+        await asyncio.to_thread(log_request, base_row)
         try:
             content = json.loads(data) if data else {}
         except json.JSONDecodeError:
@@ -556,7 +551,7 @@ async def chat_completions(
             await upstream.aclose()
             await client.aclose()
             base_row["duration_ms"] = int((time.time() - t0) * 1000)
-            log_request(base_row)
+            await asyncio.to_thread(log_request, base_row)
 
     return StreamingResponse(
         iter_chunks(),

@@ -200,8 +200,8 @@
       <option value="604800">7d</option>
       <option value="2592000">30d</option>
     </select>
-    <button id="refresh" title="refresh">↻</button>
-    <button id="logout" title="clear stored API key">⎋</button>
+    <button id="refresh" title="refresh" aria-label="refresh">↻</button>
+    <button id="logout" title="clear stored API key" aria-label="clear stored API key">⎋</button>
   </div>
 </header>
 
@@ -334,8 +334,8 @@ function renderList(res) {
     return;
   }
   rows.innerHTML = res.items.map(r => {
-    const secret = r.has_secret_word ? "secret" : "";
-    const snippet = r.has_secret_word
+    const secret = r.secret_keyword ? "secret" : "";
+    const snippet = r.secret_keyword
       ? "[message preview withheld — secret keyword matched]"
       : (r.snippet || "(empty prompt)");
     const meta = [
@@ -382,7 +382,7 @@ function flag(label, value, hintWhenTrue) {
 
 function renderDetail(r) {
   const kv = (k, v) => `<div class="k">${k}</div><div class="v">${v}</div>`;
-  const preview = r.has_secret_word
+  const preview = r.secret_keyword
     ? "<em>withheld (secret keyword matched in the prompt)</em>"
     : escapeHtml(r.messages_preview || "(empty prompt)");
 
@@ -424,8 +424,8 @@ function renderDetail(r) {
         <span class="chip muted">tokens: ${r.approx_tokens ?? "?"}</span>
         ${flag("tools", r.has_tools)}
         ${flag("code fence", r.has_code)}
-        <span class="chip ${r.has_step_word ? "tier-local-thinking" : "muted"}" title="step-planning keyword matched">step: ${escapeHtml(r.has_step_word || "no")}</span>
-        <span class="chip ${r.has_secret_word ? "tier-opus" : "muted"}" title="secret-like keyword matched">secret: ${escapeHtml(r.has_secret_word || "no")}</span>
+        <span class="chip ${r.step_keyword ? "tier-local-thinking" : "muted"}" title="step-planning keyword matched">step: ${escapeHtml(r.step_keyword || "no")}</span>
+        <span class="chip ${r.secret_keyword ? "tier-opus" : "muted"}" title="secret-like keyword matched">secret: ${escapeHtml(r.secret_keyword || "no")}</span>
       </div>
     </div>
 
