@@ -14,14 +14,9 @@ SAMPLE="$HERE/mcp-clients.json.sample"
 
 [ -f "$SAMPLE" ] || { echo "missing sample at $SAMPLE" >&2; exit 1; }
 
-NAMES=(OPENZIM WIKIPEDIA WIKIDATA SEARXNG NOMINATIM PHOTON VALHALLA ELEV)
-declare -A SERVER_KEY=(
-  [OPENZIM]=openzim [WIKIPEDIA]=wikipedia [WIKIDATA]=wikidata-local
-  [SEARXNG]=searxng [NOMINATIM]=nominatim [PHOTON]=photon
-  [VALHALLA]=valhalla [ELEV]=elev
-)
-
-# Fetch all 8 tokens in one ssh round-trip.
+# Fetch all 8 tokens in one ssh round-trip. (The sample → server-key mapping
+# lives in the Python block below, so we don't need an assoc array here —
+# and avoiding `declare -A` keeps us compatible with macOS's stock bash 3.2.)
 echo "[1/3] fetching tokens from server…" >&2
 TOKENS_TSV=$(ssh server 'for f in /srv/docker/data/mcp/secrets/MCP_TOKEN_*; do
   name=$(basename "$f" | sed "s/MCP_TOKEN_//")
