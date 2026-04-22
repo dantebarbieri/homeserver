@@ -126,11 +126,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    # TEMPORARY: building from dantebarbieri/ConvertX fork to smoke-test the
-    # assimp fix (fix/assimp-explicit-output-format). Revert to
-    # ghcr.io/c4illin/convertx:latest once the upstream PR merges.
-    image: convertx-fork-smoketest
-    build: https://github.com/dantebarbieri/ConvertX.git#fix/assimp-explicit-output-format
+    image: ghcr.io/c4illin/convertx:latest
     container_name: convertx
     environment:
       JWT_SECRET: ${CONVERTX_JWT_SECRET}
