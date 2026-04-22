@@ -59,7 +59,7 @@ sudo -u openclaw python3 apply-migrations.py /var/lib/openclaw/state.db sqlite-m
 ### Travel agent workspace + cron jobs — run from the DEV MACHINE
 
 ```sh
-# Preconditions: commits pulled on the Pi's /home/openclaw/HomeServer clone.
+# Preconditions: commits pulled on the Pi's /home/openclaw/repos/homeserver clone.
 # The installer verifies this and refuses if the repo is behind.
 ./install-openclaw-skills.sh pi
 
