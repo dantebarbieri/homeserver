@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 # zzaebok/mcp-wikidata has no tags; pin to a known-good master SHA.
 ARG MCP_WIKIDATA_REF=af04e601f8f8800d455fd280ac4e877165b7c2f8
 RUN apt-get update && apt-get install -y --no-install-recommends git \
