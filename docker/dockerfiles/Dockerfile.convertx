@@ -1,0 +1,9 @@
+FROM ghcr.io/c4illin/convertx:latest
+
+# Upstream's assimp converter omits `-f<format>`, so assimp has to guess the
+# output format from the file extension. That breaks every target whose assimp
+# format id isn't a real filename extension: glb2, gltf2, objnomtl, stlb, plyb,
+# fbxa, assbin, assxml, pbrt, assjson. Pass `-f<convertTo>` explicitly.
+# See: https://github.com/C4illin/ConvertX/blob/main/src/converters/assimp.ts
+RUN sed -i 's|execFile("assimp", \["export", filePath, targetPath\],|execFile("assimp", ["export", filePath, targetPath, `-f${convertTo}`],|' /app/dist/src/converters/assimp.js \
+    && grep -q 'targetPath, `-f${convertTo}`' /app/dist/src/converters/assimp.js
