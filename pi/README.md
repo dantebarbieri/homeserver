@@ -3,42 +3,74 @@
 Content in this directory is intended to be deployed to the Raspberry Pi 5
 that hosts OpenClaw, not to the homeserver. The OpenClaw application code
 itself lives in a separate repo; this directory only holds the SQLite
-schema, migration runner, and MCP client config sample.
+schema, migration runner, MCP client config sample, and the travel-agent
+workspace / skill / cron-job definitions.
 
 ## Layout
 
 ```
 pi/
-├── apply-migrations.py        # SQLite migration runner (stdlib only)
-├── mcp-clients.json.sample    # MCP endpoint registry (copy + fill in bearers)
-└── sqlite-migrations/
-    ├── 0001_init.sql          # destinations, baselines, price history, knowledge
-    ├── 0002_caches.sql        # ephemeral query/page caches
-    └── 0003_blackouts.sql     # date-range constraints (Feb 2027, etc.)
+├── apply-migrations.py            # SQLite migration runner (stdlib only)
+├── mcp-clients.json.sample        # MCP endpoint registry (copy + fill in bearers)
+├── install-mcp-config.sh          # Ship mcp-clients.json from server → pi
+├── install-openclaw-skills.sh     # Deploy travel-agent workspace + scripts + jobs
+├── sqlite-migrations/
+│   ├── 0001_init.sql              # destinations, baselines, price history, knowledge
+│   ├── 0002_caches.sql            # ephemeral query/page caches
+│   ├── 0003_blackouts.sql         # date-range constraints
+│   ├── 0004_blackout_widen.sql    # widen Feb 2027 to Jan 15–Mar 31 2027
+│   └── 0005_us_holidays.sql       # us_holidays with pto_efficiency annotation
+├── openclaw-workspace/
+│   ├── TRAVEL.md                  # travel-agent system preamble
+│   └── skills/
+│       ├── travel-dispatch/       # Matrix DM intent classifier + dispatcher
+│       ├── travel-deep-plan/      # Job 2 — full trip-plan template
+│       ├── travel-alter-plan/     # "skip Osaka, find something else" revisions
+│       ├── travel-seasonality-synth/  # SearXNG-first seasonality pipeline
+│       ├── travel-watch/          # Job 1 — watchlist health monitor
+│       ├── travel-fx/             # Job 4 — ECB FX fetch
+│       └── travel-holidays/       # Job 5 — US federal holidays refresh
+├── openclaw-scripts/
+│   ├── travel-fx.py               # Called by travel-fx skill (pure data fetch)
+│   └── travel-holidays.py         # Called by travel-holidays skill
+└── openclaw-jobs/
+    ├── travel-jobs.json           # 5 cron-job definitions (upserted by name)
+    └── upsert-jobs.py             # Merge script — idempotent, backs up first
 ```
 
 ## Deployment
 
-On the Pi:
+### Initial bootstrap (already done)
 
 ```sh
-# 1. Pull this repo (or just rsync the pi/ directory)
+# On the Pi, once:
 sudo install -d -o openclaw -g openclaw /var/lib/openclaw
-
-# 2. Apply migrations
-python3 apply-migrations.py /var/lib/openclaw/state.db sqlite-migrations/
-
-# 3. Configure MCP endpoints — run from the DEV MACHINE (which has ssh
-#    access to both server and pi). The Pi is firewalled off from the
-#    server by design, so the dev machine acts as a trusted middleman.
-#    Args: pi-ssh-host (defaults to "pi").
-./install-mcp-config.sh pi
-
-# Then restart OpenClaw on the Pi so it picks up the new config.
+sudo -u openclaw python3 apply-migrations.py /var/lib/openclaw/state.db sqlite-migrations/
 ```
 
-Re-running `apply-migrations.py` is safe — it only applies new files and
-refuses out-of-order migrations.
+### MCP endpoints — run from the DEV MACHINE
+
+```sh
+# The Pi is firewalled off from the server by design, so the dev machine
+# acts as a trusted middleman for token delivery. Args: pi-ssh-host (default "pi").
+./install-mcp-config.sh pi
+```
+
+### Travel agent workspace + cron jobs — run from the DEV MACHINE
+
+```sh
+# Preconditions: commits pulled on the Pi's /home/openclaw/HomeServer clone.
+# The installer verifies this and refuses if the repo is behind.
+./install-openclaw-skills.sh pi
+
+# After install, restart the gateway so the new skills/TRAVEL.md are re-read:
+ssh pi 'XDG_RUNTIME_DIR=/run/user/$(id -u openclaw) \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u openclaw)/bus \
+  sudo -u openclaw systemctl --user restart openclaw-gateway.service'
+```
+
+Re-running `apply-migrations.py` or `install-openclaw-skills.sh` is safe —
+they only apply new migrations / upsert skill + job files in place.
 
 ## Schema rationale
 

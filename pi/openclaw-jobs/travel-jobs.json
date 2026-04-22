@@ -1,0 +1,120 @@
+{
+  "_comment": "Travel-agent cron jobs. The upsert-jobs.py script merges these into /home/openclaw/.openclaw/cron/jobs.json keyed by 'name', generating UUID / createdAtMs / anchorMs on insert and refreshing updatedAtMs on update. Pi's TZ is America/Chicago — cron expressions are interpreted in that TZ.",
+  "jobs": [
+    {
+      "name": "travel-watch",
+      "description": "Watchlist health monitor: news sweep (SearXNG) + seasons/baseline staleness checks. Enqueues travel-deep-plan for stale destinations. Announces safety-relevant news to Matrix. Runs every 6 hours. v1 scope-cut — no live flight/hotel pricing until Amadeus+LiteAPI MCPs land.",
+      "enabled": true,
+      "agentId": "main",
+      "deleteAfterRun": false,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 21600000
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Load workspace/TRAVEL.md, then run the travel-watch skill. Budget: ≤20 SearXNG calls, ≤5 min thinking, ≤45s per destination. Per-destination news sweep + staleness enqueue. No price_history writes (v1 scope-cut).",
+        "timeoutSeconds": 600
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "last",
+        "bestEffort": true
+      }
+    },
+    {
+      "name": "travel-seasonality-refresh",
+      "description": "Annual refresh of the seasons table. For every active destination with seasons.refreshed_at older than 365 days (or missing / low-confidence), re-synthesize via travel-seasonality-synth. Announces a summary + list of low-confidence (<0.4) destinations that need manual review. Runs Jan 2 at 03:00 America/Chicago.",
+      "enabled": true,
+      "agentId": "main",
+      "deleteAfterRun": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 3 2 1 *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Load workspace/TRAVEL.md. For every active destination where seasons.refreshed_at is NULL or julianday('now')-julianday(seasons.refreshed_at) > seasons.ttl_days, invoke travel-seasonality-synth. Also populate wikivoyage_excerpts (section='climate') via openzim for any destination missing it. At end-of-run, post a Matrix summary: refreshed N / low-confidence {list of display_names}.",
+        "timeoutSeconds": 3600
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "last",
+        "bestEffort": true
+      }
+    },
+    {
+      "name": "travel-seasonality-refresh-midyear",
+      "description": "Mid-year refresh for climate-volatile zones only (Mediterranean, South Asia monsoon, SE Asia monsoon, Caribbean hurricane belt). Runs Jul 2 at 03:00 America/Chicago.",
+      "enabled": true,
+      "agentId": "main",
+      "deleteAfterRun": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 3 2 7 *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Load workspace/TRAVEL.md. For active destinations whose country_code falls in a volatile zone (Mediterranean: ES IT GR HR PT TR MT CY; South Asia monsoon: IN PK BD NP LK; SE Asia monsoon: TH VN KH LA MY ID PH; Caribbean hurricane belt: DO CU JM PR BB TT BS HT), check seasons.refreshed_at with a 180-day TTL. Invoke travel-seasonality-synth for stale rows. Summary to Matrix.",
+        "timeoutSeconds": 1800
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "last",
+        "bestEffort": true
+      }
+    },
+    {
+      "name": "travel-ecb-fx",
+      "description": "Daily ECB reference-rate pull into fx_rates. Pure deterministic fetch — no LLM reasoning; the agent just exec's the Python script. Runs weekdays at 12:00 America/Chicago (covers both CET and CEST publication times with margin).",
+      "enabled": true,
+      "agentId": "main",
+      "deleteAfterRun": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 12 * * 1-5"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run: python3 /home/openclaw/.openclaw/scripts/travel-fx.py. Report stdout in the session log. If the script exits non-zero OR stdout does not start with 'fx_rates: upserted', post a Matrix alert with the tail of stderr and the exit code. Otherwise, do not post.",
+        "timeoutSeconds": 120
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "last",
+        "bestEffort": true
+      }
+    },
+    {
+      "name": "travel-annual-holidays",
+      "description": "Annual US federal holidays refresh (current + next 2 years) with pto_efficiency annotation. Deterministic; no LLM. Runs Jan 1 at 03:00 America/Chicago.",
+      "enabled": true,
+      "agentId": "main",
+      "deleteAfterRun": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 3 1 1 *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run: python3 /home/openclaw/.openclaw/scripts/travel-holidays.py. If it exits non-zero, post a Matrix alert with the tail of stderr. Otherwise, do not post.",
+        "timeoutSeconds": 60
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "last",
+        "bestEffort": true
+      }
+    }
+  ]
+}
