@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image, stirling-pdf
+# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, ashim, stirling-pdf
 
 services:
   vaultwarden:
@@ -137,16 +137,15 @@ services:
     networks:
       - proxy
 
-  stirling-image:
+  ashim:
     extends:
       file: compose.common.yml
       service: gpu-service
-    image: stirlingimage/stirling-image:cuda
-    container_name: stirling-image
+    image: ghcr.io/ashim-hq/ashim:latest
+    container_name: ashim
     restart: unless-stopped
     volumes:
-      - ${DATA}/stirling-image/data:/data
-      - ${DATA}/stirling-image/workspace:/tmp/workspace
+      - ${DATA}/ashim/data:/data
     networks:
       - proxy
 
