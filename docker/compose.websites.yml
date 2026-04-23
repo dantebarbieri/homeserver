@@ -115,6 +115,10 @@ services:
       proxy:
         aliases:
           - sorry
+          # NPM proxy host for sorry.danteb.com targets the `sorry-game`
+          # upstream, matching the repo name. Keep the alias so the
+          # reverse proxy config doesn't need to change.
+          - sorry-game
       sorry:
     # Baked HEALTHCHECK in frontend.Dockerfile hits 127.0.0.1/ — explicit
     # here as well so an image rebuild without the HEALTHCHECK line still
