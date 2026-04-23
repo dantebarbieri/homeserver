@@ -98,6 +98,57 @@ services:
       retries: 5
       start_period: 30s
 
+  # sorry.danteb.com — online Sorry! game + simulator
+  # Two containers sharing an internal `sorry` network:
+  #   sorry (nginx) serves the SvelteKit static build and proxies /api/* +
+  #   /api/rooms/<code>/ws → sorry_server:8080. Only `sorry` joins `proxy`.
+  sorry:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: sorry-frontend
+    build:
+      context: ${SORRY_PATH:?Set SORRY_PATH in .env}
+      dockerfile: docker/frontend.Dockerfile
+    container_name: sorry
+    networks:
+      proxy:
+        aliases:
+          - sorry
+      sorry:
+    # Baked HEALTHCHECK in frontend.Dockerfile hits 127.0.0.1/ — explicit
+    # here as well so an image rebuild without the HEALTHCHECK line still
+    # gets a working check.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      sorry_server:
+        condition: service_started
+
+  sorry_server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: sorry-server
+    build:
+      context: ${SORRY_PATH:?Set SORRY_PATH in .env}
+      dockerfile: docker/backend.Dockerfile
+    container_name: sorry_server
+    networks:
+      sorry:
+        aliases:
+          - backend
+    environment:
+      SORRY_PORT: 8080
+      # Same-origin deploy — nginx in `sorry` proxies /api/* under the same
+      # hostname, so the server never needs to emit CORS headers.
+      SORRY_CORS_ORIGIN: ""
+      RUST_LOG: sorry_server=info,tower_http=info
+
   # admin.danteb.com:
   #   build:
   #     context: .
@@ -131,6 +182,7 @@ services:
 networks:
   proxy:
   skyjo:
+  sorry:
 
 volumes:
   skyjo-pgdata:
