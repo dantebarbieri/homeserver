@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image, stirling-pdf
+# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, snapotter, stirling-pdf
 
 services:
   vaultwarden:
@@ -137,16 +137,18 @@ services:
     networks:
       - proxy
 
-  stirling-image:
+  snapotter:
     extends:
       file: compose.common.yml
       service: gpu-service
-    image: stirlingimage/stirling-image:cuda
-    container_name: stirling-image
+    # Upstream renamed Stirling Image → ashim → SnapOtter. The new
+    # ghcr.io/snapotter-hq/snapotter registry isn't published yet, so we
+    # pull from the still-active ashim-hq namespace. Switch once it exists.
+    image: ghcr.io/ashim-hq/ashim:latest
+    container_name: snapotter
     restart: unless-stopped
     volumes:
-      - ${DATA}/stirling-image/data:/data
-      - ${DATA}/stirling-image/workspace:/tmp/workspace
+      - ${DATA}/snapotter/data:/data
     networks:
       - proxy
 
