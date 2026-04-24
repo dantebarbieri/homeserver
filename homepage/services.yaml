@@ -320,7 +320,7 @@
         server: my-docker
         container: convertx
     - SnapOtter:
-        icon: https://github.com/snapotter-hq.png
+        icon: snapotter.webp
         href: https://snapotter.danteb.com
         description: Image Processing & AI Tools
         siteMonitor: https://snapotter.danteb.com
