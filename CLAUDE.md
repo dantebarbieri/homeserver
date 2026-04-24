@@ -74,7 +74,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.searxng.yml` | searxng, redis (valkey) |
 | `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
-| `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, stirling-image, stirling-pdf |
+| `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, snapotter, stirling-pdf |
 | `compose.websites.yml` | travel-planner, skyjo, skyjo_server, skyjo_postgres |
 
 ### Networking Patterns
@@ -134,10 +134,6 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 6. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
 7. **NPM proxy host** — create the proxy host in NPM. Use the container/service name as the subdomain by default; use a shorter/canonical name if it fits the exceptions in [Subdomain Naming Convention](#subdomain-naming-convention). Add **redirection hosts** (301) for common alternative names (e.g., `chat.danteb.com` → `openwebui.danteb.com`, `vpn.danteb.com` → `wireguard.danteb.com`). Enable **WebSockets** for services that stream (chat UIs, real-time dashboards). Enable **Block Common Exploits** for standard web apps but skip it for API proxies where it may interfere with large POST bodies.
 8. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env` **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly passed through — `.env` alone is not enough), and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
-
-### Pending Renames
-
-- **Stirling Image → Shim (Self Hosted Image Manipulator)**: The upstream project ([discussion](https://github.com/stirling-image/stirling-image/discussions/30)) is renaming — it is not affiliated with Stirling PDF. When the new image is published, update: Docker image/service in `compose.utilities.yml`, container name, `${DATA}/stirling-image` volume paths, Homepage entry in `homepage/services.yaml`, and the NPM proxy host subdomain (`stirling-image.danteb.com` → `shim.danteb.com`). Add an NPM redirection from `stirling-image.danteb.com` → `shim.danteb.com`.
 
 ### Commands
 

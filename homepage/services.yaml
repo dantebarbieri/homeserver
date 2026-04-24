@@ -319,13 +319,13 @@
         siteMonitor: https://convertx.danteb.com
         server: my-docker
         container: convertx
-    - Stirling Image:
-        icon: https://stirling-image.github.io/stirling-image/logo.svg
-        href: https://stirling-image.danteb.com
+    - SnapOtter:
+        icon: https://github.com/snapotter-hq.png
+        href: https://snapotter.danteb.com
         description: Image Processing & AI Tools
-        siteMonitor: https://stirling-image.danteb.com
+        siteMonitor: https://snapotter.danteb.com
         server: my-docker
-        container: stirling-image
+        container: snapotter
     - Stirling PDF:
         icon: stirling-pdf.svg
         href: https://stirling-pdf.danteb.com
