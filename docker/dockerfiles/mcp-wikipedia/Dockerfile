@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 WORKDIR /app
 RUN pip install --no-cache-dir wikipedia-mcp==2.0.0
 COPY start.sh /usr/local/bin/start.sh
