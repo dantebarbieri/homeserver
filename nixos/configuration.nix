@@ -646,6 +646,26 @@ in
     };
   };
 
+  # ── Generic ntfy failure handler ──────────────────────────────────────────
+  # Wired via `unitConfig.OnFailure = "ntfy-failure@%n.service"` on units
+  # whose normal failure path (an in-script curl) won't fire — e.g. when the
+  # service is SIGTERM'd by TimeoutStartSec= or OOM-killed. Without this,
+  # a timeout looks identical to a clean run from ntfy's perspective.
+  systemd.services."ntfy-failure@" = {
+    description = "ntfy alert for failed unit %i";
+    scriptArgs = "%i";
+    serviceConfig.Type = "oneshot";
+    script = ''
+      UNIT="$1"
+      ${pkgs.curl}/bin/curl -s \
+        -H "Title: $UNIT FAILED on ${config.networking.hostName}" \
+        -H "Priority: high" \
+        -H "Tags: warning,floppy_disk" \
+        -d "systemd unit $UNIT exited abnormally (timeout, OOM, or non-zero exit). Inspect: journalctl -u $UNIT" \
+        "${ntfyUrl}/${ntfyTopic}"
+    '';
+  };
+
   # ── Backup automation (Postgres dumps + Vaultwarden + rclone offsite) ─────
 
   systemd.services.postgres-backup = {
@@ -757,6 +777,7 @@ in
     description = "Daily rclone sync of backups, configs, and active data to Google Drive";
     after = [ "postgres-backup.service" "network-online.target" ];
     wants = [ "network-online.target" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
@@ -801,14 +822,9 @@ in
 
       FAILED=$(echo "$FAILED" | xargs)
 
-      if [ -z "$FAILED" ]; then
-        curl -s \
-          -H "Title: Daily offsite sync OK on ${config.networking.hostName}" \
-          -H "Priority: low" \
-          -H "Tags: white_check_mark,cloud" \
-          -d "All daily rclone syncs completed successfully." \
-          "${ntfyUrl}/${ntfyTopic}"
-      else
+      # Silent on success — only alert on rclone-level failures. Timeouts /
+      # SIGTERM / OOM kills are caught separately by unitConfig.OnFailure.
+      if [ -n "$FAILED" ]; then
         curl -s \
           -H "Title: Daily offsite sync FAILED on ${config.networking.hostName}" \
           -H "Priority: high" \
@@ -832,6 +848,7 @@ in
     description = "Weekly rclone sync of large static media to Google Drive";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
@@ -866,14 +883,9 @@ in
 
       FAILED=$(echo "$FAILED" | xargs)
 
-      if [ -z "$FAILED" ]; then
-        curl -s \
-          -H "Title: Weekly offsite sync OK on ${config.networking.hostName}" \
-          -H "Priority: low" \
-          -H "Tags: white_check_mark,cloud" \
-          -d "All weekly rclone syncs completed successfully (media)." \
-          "${ntfyUrl}/${ntfyTopic}"
-      else
+      # Silent on success — only alert on rclone-level failures. Timeouts /
+      # SIGTERM / OOM kills are caught separately by unitConfig.OnFailure.
+      if [ -n "$FAILED" ]; then
         curl -s \
           -H "Title: Weekly offsite sync FAILED on ${config.networking.hostName}" \
           -H "Priority: high" \
