@@ -48,6 +48,12 @@ let
         TAGS="rotating_light,computer"
         ;;
       Rebuild*|RebuildFinished)
+        # Scheduled mdadm-scrub holds /run/mdadm-scrub for its full duration
+        # (RuntimeDirectory=), so check/repair events are reliably suppressed.
+        if [ -d /run/mdadm-scrub ]; then
+          exit 0
+        fi
+        # Backup filter for manual `echo check/repair` outside the service.
         MD_NAME="''${MD_DEVICE##*/}"
         SYNC_ACTION=$(cat "/sys/block/$MD_NAME/md/sync_action" 2>/dev/null || echo "unknown")
         if [ "$SYNC_ACTION" = "check" ] || [ "$SYNC_ACTION" = "repair" ]; then
@@ -577,23 +583,57 @@ in
     };
   };
 
-  # Weekly RAID scrub — verifies data parity consistency
+  # Weekly RAID scrub — verifies data parity consistency.
+  # The service blocks until the kernel finishes the check; RuntimeDirectory=
+  # creates /run/mdadm-scrub for that duration, which mdadmAlert uses as a
+  # sentinel to suppress the otherwise-noisy Rebuild{Started,Finished} events.
   systemd.services.mdadm-scrub = {
     description = "RAID array data scrub (parity consistency check)";
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
       IOSchedulingClass = "idle";
+      RuntimeDirectory = "mdadm-scrub";
+      TimeoutStartSec = "infinity";
     };
     path = with pkgs; [ curl coreutils ];
     script = ''
-      echo check > /sys/block/md0/md/sync_action
-      curl -s \
-        -H "Title: RAID Scrub Started on ${config.networking.hostName}" \
-        -H "Priority: low" \
-        -H "Tags: broom,computer" \
-        -d "Weekly parity check initiated for /dev/md0" \
-        "${ntfyUrl}/${ntfyTopic}"
+      MD=md0
+      SYNC=/sys/block/$MD/md/sync_action
+      MISMATCH=/sys/block/$MD/md/mismatch_cnt
+
+      echo check > "$SYNC"
+
+      # Wait for the kernel to actually start the operation.
+      for _ in $(seq 1 30); do
+        [ "$(cat "$SYNC")" != "idle" ] && break
+        sleep 1
+      done
+
+      # Block until the scrub finishes — can take >24h on the full array.
+      while [ "$(cat "$SYNC")" != "idle" ]; do
+        sleep 60
+      done
+
+      # Hold the sentinel a bit longer so RebuildFinished is suppressed.
+      sleep 30
+
+      COUNT=$(cat "$MISMATCH" 2>/dev/null || echo "?")
+      if [ "$COUNT" = "0" ]; then
+        curl -s \
+          -H "Title: RAID Scrub Clean on ${config.networking.hostName}" \
+          -H "Priority: low" \
+          -H "Tags: white_check_mark,computer" \
+          -d "Weekly parity check complete on /dev/$MD — mismatch_cnt=0" \
+          "${ntfyUrl}/${ntfyTopic}"
+      else
+        curl -s \
+          -H "Title: RAID Scrub Found Mismatches on ${config.networking.hostName}" \
+          -H "Priority: high" \
+          -H "Tags: warning,computer" \
+          -d "Parity check on /dev/$MD finished with mismatch_cnt=$COUNT — investigate" \
+          "${ntfyUrl}/${ntfyTopic}"
+      fi
     '';
   };
 
