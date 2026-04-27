@@ -673,6 +673,7 @@ in
     after = [ "docker.service" "network-online.target" ];
     requires = [ "docker.service" ];
     wants = [ "network-online.target" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
     path = with pkgs; [ docker coreutils gzip curl gnutar findutils ];
     serviceConfig = {
       Type = "oneshot";
@@ -746,14 +747,9 @@ in
       SUCCEEDED=$(echo "$SUCCEEDED" | xargs)
       FAILED=$(echo "$FAILED $VW_FAILED" | xargs)
 
-      if [ -z "$FAILED" ]; then
-        curl -s \
-          -H "Title: Backup OK on ${config.networking.hostName}" \
-          -H "Priority: low" \
-          -H "Tags: white_check_mark,floppy_disk" \
-          -d "All databases dumped successfully: $SUCCEEDED. Vaultwarden: $VW_STATUS" \
-          "${ntfyUrl}/${ntfyTopic}"
-      else
+      # Silent on success — only alert on per-database / Vaultwarden failures.
+      # Timeouts / SIGTERM / OOM kills are caught separately by unitConfig.OnFailure.
+      if [ -n "$FAILED" ]; then
         curl -s \
           -H "Title: Backup FAILED on ${config.networking.hostName}" \
           -H "Priority: high" \
