@@ -347,6 +347,7 @@ in
   programs.gnupg.agent.enable = true;
   programs.ssh.startAgent = true;
   programs.nix-index.enable = true;   # nix-locate — find which package provides a binary
+  programs.command-not-found.enable = false;  # mutually exclusive with nix-index shell integrations
 
   services.openssh = {
     enable = true;
