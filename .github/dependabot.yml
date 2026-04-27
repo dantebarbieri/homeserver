@@ -25,6 +25,14 @@ updates:
       dockerfile-bases:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # opentopodata v1.9.0 pins pylibmc==1.6.3 (no cp312+ wheels) and
+      # numpy/pyproj/rasterio versions whose newest wheels are cp311. Hold
+      # the base image at 3.11 until we bump opentopodata itself. The
+      # grouped minor/patch policy treats 3.x → 3.y on the `python` tag as
+      # "minor", so we need this explicit hold.
+      - dependency-name: "python"
+        directories: ["/docker/dockerfiles/opentopodata"]
 
   # Image tags in the compose files
   - package-ecosystem: "docker-compose"

@@ -2,7 +2,7 @@
 # (in opentopodata's requirements.txt) imports pkg_resources from setup.py,
 # which breaks in pip's isolated build env on newer setuptools releases
 # that come with later python:3.11-slim point releases.
-FROM python:3.14.0-slim-bookworm
+FROM python:3.11-slim-bookworm
 ARG OPENTOPODATA_REF=v1.9.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git build-essential libgdal-dev gdal-bin \
