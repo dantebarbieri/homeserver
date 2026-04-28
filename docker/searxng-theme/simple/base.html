@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html class="no-js theme-{{ preferences.get_value('simple_style') or 'auto' }} center-alignment-{{ preferences.get_value('center_alignment') and 'yes' or 'no' }}" lang="{{ locale_rfc5646 }}" {% if rtl %} dir="rtl"{% endif %}>
+<head>
+  <meta charset="UTF-8">
+  <meta name="endpoint" content="{{ endpoint }}">
+  <meta name="description" content="SearXNG — a privacy-respecting, open metasearch engine">
+  <meta name="keywords" content="SearXNG, search, search engine, metasearch, meta search">
+  <meta name="generator" content="searxng/{{ searxng_version }}">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noarchive">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %}{{ instance_name }}</title>
+  <script type="module" src="{{ url_for('static', filename='sxng-core.min.js') }}" client_settings="{{ client_settings }}"></script>
+  {% block meta %}{% endblock %}
+  {% if rtl %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='sxng-rtl.min.css') }}" type="text/css" media="screen">
+  {% else %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='sxng-ltr.min.css') }}" type="text/css" media="screen">
+  {% endif %}
+  {% if get_setting('server.limiter') or get_setting('server.public_instance') %}
+  <link rel="stylesheet" href="{{ url_for('client_token', token=link_token) }}" type="text/css">
+  {% endif %}
+  {% block head %}
+  <link title="{{ instance_name }}" type="application/opensearchdescription+xml" rel="search" href="{{ opensearch_url }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=Spectral:wght@400;600&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       Carta — a dark editorial theme for SearXNG
+       Palette: charcoal bg · warm off-white text · amber accent
+       Typography: Fraunces (logo) · Spectral (titles) ·
+                   Instrument Sans (UI) · JetBrains Mono (URLs)
+    ============================================================ */
+
+    /* --- CSS variable overrides (dark theme) --- */
+    html.theme-dark,
+    html.theme-black {
+      --color-base-background: #0c0d0f;
+      --color-base-font: #ddd8cf;
+      --color-header-background: #0f1012;
+      --color-header-border: #1c1f26;
+      --color-search-background: #13161b;
+      --color-search-font: #ddd8cf;
+      --color-search-border: #282d36;
+      --color-search-shadow: 0 4px 28px rgba(0, 0, 0, .65);
+      --color-result-background: #0c0d0f;
+      --color-result-border: #1c1f26;
+      --color-result-link-font: #c8a87a;
+      --color-result-link-visited-font: #8f7d63;
+      --color-result-url-font: #6d95b5;
+      --color-result-description-font: #b0aba4;
+      --color-result-description-highlight-font: #e8a84d;
+      --color-result-engines-font: #515869;
+      --color-categories-item-font: #828896;
+      --color-categories-item-selected-font: #d4913f;
+      --color-categories-item-border-selected: #d4913f;
+      --color-btn-background: #d4913f;
+      --color-btn-font: #0a0b0d;
+      --color-sidebar-background: #0f1012;
+      --color-sidebar-border: #1c1f26;
+      --color-sidebar-font: #b0aba4;
+      --color-autocomplete-background: #13161b;
+      --color-autocomplete-border: #282d36;
+      --color-autocomplete-font: #ddd8cf;
+      --color-autocomplete-hover: #1e222b;
+      --color-footer-background: #0c0d0f;
+      --color-footer-border: #1c1f26;
+      --color-footer-font: #515869;
+    }
+
+    /* Also apply in auto mode when system is dark */
+    @media (prefers-color-scheme: dark) {
+      html.theme-auto {
+        --color-base-background: #0c0d0f;
+        --color-base-font: #ddd8cf;
+        --color-header-background: #0f1012;
+        --color-header-border: #1c1f26;
+        --color-search-background: #13161b;
+        --color-search-font: #ddd8cf;
+        --color-search-border: #282d36;
+        --color-search-shadow: 0 4px 28px rgba(0, 0, 0, .65);
+        --color-result-background: #0c0d0f;
+        --color-result-border: #1c1f26;
+        --color-result-link-font: #c8a87a;
+        --color-result-link-visited-font: #8f7d63;
+        --color-result-url-font: #6d95b5;
+        --color-result-description-font: #b0aba4;
+        --color-result-description-highlight-font: #e8a84d;
+        --color-result-engines-font: #515869;
+        --color-categories-item-font: #828896;
+        --color-categories-item-selected-font: #d4913f;
+        --color-categories-item-border-selected: #d4913f;
+        --color-btn-background: #d4913f;
+        --color-btn-font: #0a0b0d;
+        --color-sidebar-background: #0f1012;
+        --color-sidebar-border: #1c1f26;
+        --color-sidebar-font: #b0aba4;
+        --color-autocomplete-background: #13161b;
+        --color-autocomplete-border: #282d36;
+        --color-autocomplete-font: #ddd8cf;
+        --color-autocomplete-hover: #1e222b;
+        --color-footer-background: #0c0d0f;
+        --color-footer-border: #1c1f26;
+        --color-footer-font: #515869;
+      }
+    }
+
+    /* --- Base typography --- */
+    body {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+    }
+
+    /* --- Logo / wordmark --- */
+    #search_logo a,
+    #main_search_logo a,
+    .logo a {
+      font-family: 'Fraunces', Georgia, serif;
+      font-optical-sizing: auto;
+      font-weight: 500;
+      font-size: 1.45rem;
+      letter-spacing: -0.025em;
+      text-decoration: none;
+    }
+
+    /* --- Search input --- */
+    #q {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: 1.05rem;
+      letter-spacing: 0.01em;
+    }
+    #q:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px #d4913f44, 0 6px 32px rgba(0, 0, 0, .75);
+    }
+    .search_box {
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    #send_search {
+      transition: background-color 0.15s ease;
+    }
+
+    /* --- Result cards --- */
+    article.result {
+      padding: 1.35rem 1rem;
+      margin: .2rem 0;
+      border-radius: 0 8px 8px 0;
+      transition: background-color 0.13s ease, border-left-color 0.13s ease;
+    }
+    html.theme-dark article.result:hover,
+    html.theme-black article.result:hover {
+      background-color: #111318;
+      border-left-color: #d4913f66;
+    }
+    @media (prefers-color-scheme: dark) {
+      html.theme-auto article.result:hover {
+        background-color: #111318;
+        border-left-color: #d4913f66;
+      }
+    }
+
+    /* --- Result titles --- */
+    article.result h3 {
+      font-family: 'Spectral', Georgia, serif;
+      font-weight: 600;
+      font-size: 1.17rem;
+      margin: .25rem 0 .4rem;
+      line-height: 1.35;
+    }
+    article.result h3 a {
+      text-decoration: none;
+    }
+    article.result h3 a:hover {
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    /* --- Result URLs --- */
+    .url_wrapper,
+    .url_o1, .url_o2, .url_o3,
+    .url_i1, .url_i2, .url_i3 {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: .75rem;
+      letter-spacing: -0.01em;
+    }
+
+    /* --- Result snippets --- */
+    article.result .content {
+      font-size: .915rem;
+      line-height: 1.62;
+      margin-top: .45rem;
+      max-width: 60em;
+    }
+    article.result .content b {
+      font-weight: 600;
+    }
+
+    /* --- Engine source badges --- */
+    .engines span {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: .7rem;
+      letter-spacing: 0.025em;
+      text-transform: uppercase;
+      opacity: .55;
+    }
+
+    /* --- Category navigation tabs --- */
+    .category_button {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: .84rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      transition: color 0.13s ease;
+    }
+
+    /* --- Pagination --- */
+    .page_number,
+    .page_number_current {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: .88rem;
+    }
+    .page_number_current {
+      font-weight: 600;
+    }
+
+    /* --- Result count / search stats --- */
+    #results_stats,
+    .result_count {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: .8rem;
+      letter-spacing: 0.01em;
+    }
+
+    /* --- Autocomplete dropdown --- */
+    .autocomplete {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: .95rem;
+    }
+
+    /* --- Infobox / knowledge panel --- */
+    .infobox {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      border-radius: 10px;
+    }
+    .infobox h2 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 500;
+      font-size: 1.15rem;
+      letter-spacing: -0.015em;
+    }
+
+    /* --- Footer --- */
+    footer {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: .78rem;
+      letter-spacing: 0.01em;
+    }
+    footer a {
+      opacity: .6;
+      transition: opacity 0.13s ease;
+      text-decoration: none;
+    }
+    footer a:hover {
+      opacity: 1;
+    }
+
+    /* --- Preferences / settings pages --- */
+    .preferences_text,
+    #preferences h2,
+    #preferences h3 {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+    }
+    #preferences h2 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+
+    /* --- Navigation links (About / Preferences icons) --- */
+    #links_on_top a span {
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-size: .82rem;
+      font-weight: 500;
+    }
+  </style>
+  {% endblock %}
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}" sizes="any">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/favicon.png') }}">
+  <link rel="manifest" href="{{ url_for('manifest') }}" />
+</head>
+<body class="{{ endpoint }}_endpoint" >
+  <main id="main_{{  self._TemplateReference__context.name|replace("simple/", "")|replace(".html", "") }}" class="{{body_class}}">
+    {% if errors %}
+        <div class="dialog-error" role="alert">
+            <a href="#" class="close" aria-label="close" title="close">×</a>
+            <ul>
+            {% for message in errors %}
+                <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <nav id="links_on_top">
+      {%- from 'simple/icons.html' import icon_big -%}
+      {%- block linkto_about -%}
+        <a href="{{ url_for('info', pagename='about') }}" class="link_on_top_about">{{ icon_big('information-circle') }}<span>{{ _('About') }}</span></a>
+      {%- endblock -%}
+      {%- block linkto_donate -%}
+        {%- if donation_url -%}
+        <a href="{{ donation_url }}" class="link_on_top_donate">{{ icon_big('heart') }}<span>{{ _('Donate') }}</span></a>
+        {%- endif -%}
+      {%- endblock -%}
+      {%- block linkto_preferences -%}
+        {%- if request.args.get('preferences') -%}
+          <a href="{{ url_for('preferences') }}?preferences={{ request.args.get('preferences') }}&preferences_preview_only=true" class="link_on_top_preferences">{{ icon_big('settings') }}<span>{{ _('Preferences') }}</span></a>
+        {%- else -%}
+          <a href="{{ url_for('preferences') }}" class="link_on_top_preferences">{{ icon_big('settings') }}<span>{{ _('Preferences') }}</span></a>
+        {%- endif -%}
+      {%- endblock -%}
+    </nav>
+    {% block header %}
+    {% endblock %}
+    {% block content %}
+    {% endblock %}
+  </main>
+  <footer>
+    <p>
+    {{ _('Powered by') }} <a href="{{ url_for('info', pagename='about') }}">SearXNG</a> - {{ searxng_version }} — {{ _('a privacy-respecting, open metasearch engine') }}<br>
+        <a href="{{ searxng_git_url }}">{{ _('Source code') }}</a>
+        | <a href="{{ get_setting('brand.issue_url') }}">{{ _('Issue tracker') }}</a>
+        {% if enable_metrics %}| <a href="{{ url_for('stats') }}">{{ _('Engine stats') }}</a>{% endif %}
+        {% if get_setting('brand.public_instances') %}
+        | <a href="{{ get_setting('brand.public_instances') }}">{{ _('Public instances') }}</a>
+        {% endif %}
+        {% if get_setting('general.privacypolicy_url') %}
+        | <a href="{{ get_setting('general.privacypolicy_url') }}">{{ _('Privacy policy') }}</a>
+        {% endif %}
+        {% if get_setting('general.contact_url') %}
+        | <a href="{{ get_setting('general.contact_url') }}">{{ _('Contact instance maintainer') }}</a>
+        {% endif %}
+        {% for title, link in get_setting('brand.custom.links').items() %}
+        | <a href="{{ link }}">{{ _(title) }}</a>
+        {% endfor %}
+    </p>
+  </footer>
+</body>
+</html>

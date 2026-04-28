@@ -1,0 +1,2 @@
+FROM docker.io/searxng/searxng:latest
+COPY searxng-theme/simple/base.html /usr/local/searxng/searx/templates/simple/base.html

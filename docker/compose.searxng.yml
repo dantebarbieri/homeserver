@@ -25,7 +25,10 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: searxng
-    image: docker.io/searxng/searxng:latest
+    image: searxng-carta
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile.searxng
     networks:
       - proxy
       - searxng
