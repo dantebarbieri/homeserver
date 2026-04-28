@@ -33,8 +33,11 @@ services:
       - ${DATA}/searxng/config:/etc/searxng:rw
     environment:
       SEARXNG_BASE_URL: "https://${SEARXNG_HOSTNAME:-localhost}/"
+      SEARXNG_VALKEY_URL: valkey://searxng_redis:6379/0
     cap_drop: [ALL]
     cap_add: [CHOWN, SETGID, SETUID]
+    depends_on:
+      - searxng_redis
 
   searxng-ai-valkey:
     extends:
