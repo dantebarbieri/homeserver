@@ -15,7 +15,7 @@ max_age = 5184000  # 60 days
 
 [favicons.cache]
 
-db_url = "/var/cache/searxng/faviconcache.db"
+# db_url defaults to /tmp/faviconcache.db — writable without extra setup
 HOLD_TIME = 5184000  # 60 days
 LIMIT_TOTAL_BYTES = 2147483648  # 2 GB
 BLOB_MAX_BYTES = 40960  # 40 KB
