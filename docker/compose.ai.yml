@@ -60,7 +60,7 @@ services:
     # Tier definitions, classifier policy, secret patterns, etc. now live in
     # ${DATA}/llmrouter/config.yaml (mounted below). See the project's
     # config.example.yaml for the full schema.
-    image: ghcr.io/dantebarbieri/llmrouter:latest
+    image: ghcr.io/dantebarbieri/llmrouter:pr-3
     container_name: llmrouter
     networks:
       - proxy
