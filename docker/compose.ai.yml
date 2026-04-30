@@ -56,9 +56,11 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: llmrouter
-    build:
-      context: dockerfiles/llmrouter
+    # Built and published from https://github.com/dantebarbieri/llmrouter
+    # Tier definitions, classifier policy, secret patterns, etc. now live in
+    # ${DATA}/llmrouter/config.yaml (mounted below). See the project's
+    # config.example.yaml for the full schema.
+    image: ghcr.io/dantebarbieri/llmrouter:0.1.0
     container_name: llmrouter
     networks:
       - proxy
@@ -70,18 +72,13 @@ services:
       OLLAMA_URL: http://192.168.50.180:11434
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: llmrouter
-      # Qwen classifies secrets + complexity in one call. The heuristic +
-      # Haiku tiebreaker remain available as a fallback when Ollama is
-      # unreachable or the classifier errors.
-      CLASSIFIER_MODE: local
-      CLASSIFIER_TIEBREAKER_MODEL: claude-haiku
-      LOCAL_CLASSIFIER_MODEL: qwen-local-classifier
-      LOCAL_CLASSIFIER_TIMEOUT_S: "5"
+      LLMROUTER_CONFIG: /etc/llmrouter/config.yaml
       LLMROUTER_DB_PATH: /data/llmrouter.db
       LOG_REQUESTS: "1"
       LOG_LEVEL: info
     volumes:
       - ${DATA}/llmrouter:/data
+      - ${DATA}/llmrouter/config.yaml:/etc/llmrouter/config.yaml:ro
     depends_on:
       litellm:
         condition: service_healthy
