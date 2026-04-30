@@ -1,6 +1,6 @@
 # SearXNG settings for the AI-private instance (ai-search.danteb.com).
 # Internal-only. JSON enabled, limiter off, curated factual whitelist,
-# hostnames plugin tuned to bias travel/factual research and demote SEO spam.
+# hostnames plugin tuned to bias factual/tech/news research and demote SEO spam.
 
 use_default_settings:
   engines:
@@ -23,7 +23,7 @@ use_default_settings:
       - currency
 
 general:
-  instance_name: "OpenClaw Travel — Private SearXNG"
+  instance_name: "Private SearXNG"
   contact_url: false
   enable_metrics: false
   donation_url: false
@@ -116,12 +116,19 @@ plugins:
 # kwargs nested under the plugin entry.
 hostnames:
   high_priority:
+    # Reference / encyclopedic
     - '(.*\.)?wikipedia\.org$'
     - '(.*\.)?wikivoyage\.org$'
     - '(.*\.)?wikidata\.org$'
     - '(.*\.)?openstreetmap\.org$'
     - '(.*\.)?marginalia\.nu$'
-    - 'reddit\.com/r/(travel|solotravel|onebag|backpacking|digitalnomad|expats)'
+    # Tech / code
+    - '(.*\.)?github\.com$'
+    - '(.*\.)?stackoverflow\.com$'
+    - '(.*\.)?news\.ycombinator\.com$'
+    - '(.*\.)?arstechnica\.com$'
+    - '(.*\.)?theregister\.com$'
+    # News / authoritative
     - '(.*\.)?reuters\.com$'
     - '(.*\.)?bbc\.co\.uk$'
     - '(.*\.)?apnews\.com$'
@@ -129,16 +136,19 @@ hostnames:
     - '(.*\.)?who\.int$'
     - '(.*\.)?state\.gov$'
     - '(.*\.)?gov\.uk$'
+    # Reddit — travel + tech/homelab subs
+    - 'reddit\.com/r/(travel|solotravel|onebag|backpacking|digitalnomad|expats|programming|python|rust|javascript|typescript|webdev|linux|homelab|selfhosted|devops|sysadmin|netsec|learnprogramming)'
   low_priority:
     - '(.*\.)?tripadvisor\.[a-z.]+$'
     - '(.*\.)?booking\.com$'
     - '(.*\.)?expedia\.com$'
+    # Low quality but sometimes the only canonical result for specific API/syntax questions
+    - '(.*\.)?w3schools\.com$'
+    - '(.*\.)?geeksforgeeks\.org$'
   remove:
     - '(.*\.)?quora\.com$'
     - '(.*\.)?answers\.com$'
     - '(.*\.)?brainly\..*$'
-    - '(.*\.)?w3schools\.com$'
-    - '(.*\.)?geeksforgeeks\.org$'
     - '(.*\.)?tutorialspoint\.com$'
     - '(.*\.)?javatpoint\.com$'
     - '(.*\.)?codegrepper\.com$'
