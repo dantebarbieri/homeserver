@@ -14,7 +14,6 @@ use_default_settings:
       - bing
       - marginalia
       - wikipedia
-      - wikidata
       - openstreetmap
       - reddit
       - reuters
@@ -119,7 +118,6 @@ hostnames:
     # Reference / encyclopedic
     - '(.*\.)?wikipedia\.org$'
     - '(.*\.)?wikivoyage\.org$'
-    - '(.*\.)?wikidata\.org$'
     - '(.*\.)?openstreetmap\.org$'
     - '(.*\.)?marginalia\.nu$'
     # Tech / code

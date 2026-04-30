@@ -4,8 +4,8 @@
 # the SearXNG container from logging "limiter: missing" warnings and to
 # document the IP allowlist if the limiter is ever turned back on.
 
-[real_ip]
-x_for = 1
+[botdetection]
+trusted_proxies = 1
 ipv4_prefix = 32
 ipv6_prefix = 56
 
