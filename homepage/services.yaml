@@ -76,6 +76,11 @@
         siteMonitor: https://calibre.danteb.com
         server: my-docker
         container: calibre-web
+        widget:
+            type: calibreweb
+            url: http://calibre-web:8083
+            username: "{{HOMEPAGE_VAR_CALIBRE_USER}}"
+            password: "{{HOMEPAGE_VAR_CALIBRE_PASS}}"
 
 - Media Management:
     - Radarr:
@@ -165,6 +170,11 @@
         siteMonitor: https://suwayomi.danteb.com
         server: my-docker
         container: suwayomi
+        widget:
+            type: suwayomi
+            url: http://suwayomi:4567
+            username: "{{HOMEPAGE_VAR_SUWAYOMI_USER}}"
+            password: "{{HOMEPAGE_VAR_SUWAYOMI_PASS}}"
     - SearXNG:
         icon: searxng.svg
         href: https://searxng.danteb.com
@@ -277,13 +287,6 @@
           type: uptimekuma
           url: http://uptime-kuma:3001
           slug: "{{HOMEPAGE_VAR_KUMA_SLUG}}"
-    - Vaultwarden:
-        icon: vaultwarden.svg
-        href: https://vaultwarden.danteb.com
-        description: Password Manager
-        siteMonitor: https://vaultwarden.danteb.com
-        server: my-docker
-        container: vaultwarden
     - Syncthing:
         icon: syncthing.svg
         href: https://syncthing.danteb.com
@@ -291,6 +294,16 @@
         siteMonitor: https://syncthing.danteb.com
         server: my-docker
         container: syncthing
+        widget:
+            type: strelaysrv
+            url: http://syncthing:8384
+    - Vaultwarden:
+        icon: vaultwarden.svg
+        href: https://vaultwarden.danteb.com
+        description: Password Manager
+        siteMonitor: https://vaultwarden.danteb.com
+        server: my-docker
+        container: vaultwarden
     - ntfy:
         icon: ntfy.svg
         href: https://ntfy.danteb.com
@@ -347,6 +360,10 @@
         siteMonitor: https://cd.danteb.com
         server: my-docker
         container: changedetection-io
+        widget:
+            type: changedetectionio
+            url: http://changedetection-io:5000
+            key: "{{HOMEPAGE_VAR_CHANGEDETECTION_KEY}}"
     - Kiwix:
         icon: kiwix.svg
         href: https://kiwix.danteb.com
@@ -446,12 +463,18 @@
         description: mc.danteb.com
         server: my-docker
         container: minecraft-server
+        widget:
+            type: minecraft
+            url: udp://{{HOMEPAGE_VAR_HARDCORE_MC_IP_OR_DOMAIN}}:{{HOMEPAGE_VAR_HARDCORE_MC_PORT}}
     - RL Craft Minecraft:
         icon: minecraft.svg
         href: https://mcsrvstat.us/server/rlcraft.danteb.com
         description: rlcraft.danteb.com
         server: my-docker
         container: rlcraft-minecraft-server
+        widget:
+            type: minecraft
+            url: udp://{{HOMEPAGE_VAR_RLCRAFT_MC_IP_OR_DOMAIN}}:{{HOMEPAGE_VAR_RLCRAFT_MC_PORT}}
     - Hytale:
         icon: hytale.webp
         href: https://hytale-servers.com/server/dante-s-hytale-server
