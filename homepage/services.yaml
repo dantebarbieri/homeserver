@@ -294,9 +294,6 @@
         siteMonitor: https://syncthing.danteb.com
         server: my-docker
         container: syncthing
-        widget:
-            type: strelaysrv
-            url: http://syncthing:8384
     - Changedetection:
         icon: mdi-magnify-scan
         href: https://cd.danteb.com
@@ -465,4 +462,4 @@
             description: Board Game
             siteMonitor: https://sorry.danteb.com
             server: my-docker
-            container: sorry-game
+            container: sorry
