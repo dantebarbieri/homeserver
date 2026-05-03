@@ -371,13 +371,6 @@
         siteMonitor: https://kiwix.danteb.com
         server: my-docker
         container: kiwix-serve
-    - Travel Planner:
-        icon: mdi-airplane
-        href: https://travel.danteb.com
-        description: Trip Planning
-        siteMonitor: https://travel.danteb.com
-        server: my-docker
-        container: travel-planner
     - Forgejo:
         icon: forgejo.svg
         href: https://git.danteb.com
@@ -450,10 +443,26 @@
         description: danteb.com:7778
         server: my-docker
         container: satisfactory-server
-    - Skyjo:
-        icon: mdi-cards-playing
-        href: https://skyjo.danteb.com
-        description: Card Game
-        siteMonitor: https://skyjo.danteb.com
-        server: my-docker
-        container: skyjo
+
+    - Custom Services:
+        - Travel Planner:
+            icon: mdi-airplane
+            href: https://travel.danteb.com
+            description: Trip Planning
+            siteMonitor: https://travel.danteb.com
+            server: my-docker
+            container: travel-planner
+        - Skyjo:
+            icon: mdi-cards-playing
+            href: https://skyjo.danteb.com
+            description: Card Game
+            siteMonitor: https://skyjo.danteb.com
+            server: my-docker
+            container: skyjo
+        - Sorry:
+            icon: mdi-checkerboard
+            href: https://sorry.danteb.com
+            description: Board Game
+            siteMonitor: https://sorry.danteb.com
+            server: my-docker
+            container: sorry-game
