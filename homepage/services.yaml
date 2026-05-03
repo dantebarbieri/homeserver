@@ -297,6 +297,17 @@
         widget:
             type: strelaysrv
             url: http://syncthing:8384
+    - Changedetection:
+        icon: mdi-magnify-scan
+        href: https://cd.danteb.com
+        description: URL Change Watcher
+        siteMonitor: https://cd.danteb.com
+        server: my-docker
+        container: changedetection-io
+        widget:
+            type: changedetectionio
+            url: http://changedetection-io:5000
+            key: "{{HOMEPAGE_VAR_CHANGEDETECTION_KEY}}"
     - Vaultwarden:
         icon: vaultwarden.svg
         href: https://vaultwarden.danteb.com
@@ -353,17 +364,6 @@
         siteMonitor: https://code.danteb.com
         server: my-docker
         container: code-server
-    - Changedetection:
-        icon: mdi-magnify-scan
-        href: https://cd.danteb.com
-        description: URL Change Watcher
-        siteMonitor: https://cd.danteb.com
-        server: my-docker
-        container: changedetection-io
-        widget:
-            type: changedetectionio
-            url: http://changedetection-io:5000
-            key: "{{HOMEPAGE_VAR_CHANGEDETECTION_KEY}}"
     - Kiwix:
         icon: kiwix.svg
         href: https://kiwix.danteb.com
