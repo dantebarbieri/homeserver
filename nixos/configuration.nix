@@ -954,6 +954,28 @@ in
   systemd.services.nvidia-persistenced.restartIfChanged = false;
   systemd.services.nvidia-container-toolkit-cdi-generator.restartIfChanged = false;
 
+  # vg_redundant spans /dev/md0 (RAID6) + /dev/nvme1n1p1 (lvmcache PV).
+  # NVMe enumerates before SATA, so the udev-triggered activation fires
+  # while md0 is still assembling — VG incomplete, vgchange exits
+  # NOTINSTALLED, lv_data never activates → emergency mode. Ordering
+  # after dev-md0.device ensures RAID assembly completes first.
+  systemd.services."lvm-activate-vg_redundant" = {
+    after   = [ "dev-md0.device" ];
+    wants   = [ "dev-md0.device" ];
+    path    = with pkgs; [ lvm2.bin gnugrep coreutils ];
+    preStart = ''
+      for _ in $(seq 1 30); do
+        if pvs --noheadings -o vg_name /dev/md0 2>/dev/null \
+            | grep -q vg_redundant; then
+          exit 0
+        fi
+        sleep 1
+      done
+      echo "ERROR: /dev/md0 not recognized as PV in vg_redundant after 30s" >&2
+      exit 1
+    '';
+  };
+
   # sudo-rs — memory-safe Rust sudo with credential caching + asterisk feedback
   security = {
     sudo-rs = {
