@@ -360,9 +360,11 @@ def main() -> int:
 
     # Stats to stderr for cron log
     rejected = [r for r in results if r["rejected_reason"]]
+    rej_summary = ", ".join(
+        "{}:{}".format(r["rejected_reason"], r["zillow_id"]) for r in rejected[:5]
+    )
     print(
-        f"home_scout_score: {len(live)} live, {len(rejected)} rejected "
-        f"({', '.join(f\"{r['rejected_reason']}:{r['zillow_id']}\" for r in rejected[:5])})",
+        f"home_scout_score: {len(live)} live, {len(rejected)} rejected ({rej_summary})",
         file=sys.stderr,
     )
     return 0
