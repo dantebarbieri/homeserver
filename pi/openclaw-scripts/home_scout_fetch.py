@@ -190,13 +190,16 @@ def parse_body(body: str) -> list[dict]:
 
         # Address: scan lines backward from the zpid — the address line is the
         # first "house-number + street" line we encounter going toward the zpid.
+        # Exclude: lines with $ (prices), zillow domain, % (URL fragments),
+        # and bed/bath facts lines (e.g. "4 bd | 3 ba | 2,743 sqft").
         address: str | None = None
         for ln in reversed(context.split("\n")):
             ln = ln.strip()
             if (re.match(r"\d{1,6}\s+[A-Za-z]", ln)
                     and "$" not in ln
                     and "zillow" not in ln.lower()
-                    and "%" not in ln):  # skip URL-encoded fragments
+                    and "%" not in ln
+                    and not re.search(r"\b(?:bd|ba|sqft)\b", ln, re.I)):
                 address = ln
                 break
 
