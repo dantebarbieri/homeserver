@@ -34,10 +34,12 @@ MIGRATION_SQL = os.path.expanduser(
 )
 
 # --- Regex patterns for Zillow plain-text email bodies ---
-ZILLOW_URL_RE = re.compile(
-    r"https?://(?:www\.)?zillow\.com/homedetails/[^\s<>\"'\\)]+", re.I
-)
-ZID_FROM_URL_RE = re.compile(r"/(\d{6,12})_zpid/?")
+# Zillow emails use click.mail.zillow.com redirect URLs with the real URL
+# percent-encoded in the ?target= parameter.  The zpid digits and underscore
+# are never percent-encoded, so this pattern matches in both forms:
+#   direct:  /58300180_zpid/
+#   encoded: %2F58300180_zpid%2F
+ZID_RE = re.compile(r"(\d{6,12})_zpid")
 PRICE_RE = re.compile(r"\$([\d,]{3,})")
 FACTS_RE = re.compile(
     r"(\d+)\s*(?:bds?|beds?|bdrs?)"
@@ -126,39 +128,40 @@ def gog_get(thread_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def parse_body(body: str) -> list[dict]:
-    """Extract listing records from a Zillow digest email plain-text body.
+    """Extract listing records from a Zillow email body (plain-text or HTML).
 
-    Returns a list of dicts. Each dict contains all extractable fields;
-    fields that couldn't be parsed are None.
+    Handles both multi-listing digest emails and single-property alert emails
+    (price cuts, open houses, saved-home updates). Zillow wraps all links in
+    click.mail.zillow.com redirects; the zpid is percent-encoded inside the
+    ?target= query parameter. Since digits and underscores are never encoded,
+    ZID_RE matches regardless of encoding.
+
+    Returns a list of dicts with all extractable fields; unparsed fields are None.
     """
-    # Strip HTML if needed
     if re.search(r"<(?:html|div|table|td)\b", body, re.I):
         body = _strip_html(body)
 
     listings: list[dict] = []
     seen_zids: set[str] = set()
 
-    for url_match in ZILLOW_URL_RE.finditer(body):
-        url = url_match.group(0).rstrip(".,;)")
-        zid_match = ZID_FROM_URL_RE.search(url)
-        if not zid_match:
-            continue
+    for zid_match in ZID_RE.finditer(body):
         zid = zid_match.group(1)
         if zid in seen_zids:
             continue
         seen_zids.add(zid)
 
-        # Context window: up to 600 chars before the URL
-        url_start = url_match.start()
-        ctx_start = max(0, url_start - 600)
-        context = body[ctx_start:url_start]
+        # The zpid appears inside the redirect URL, so look backward ~700 chars
+        # to clear the URL prefix (~220 chars) and capture the full listing block.
+        ctx_start = max(0, zid_match.start() - 700)
+        context = body[ctx_start:zid_match.start()]
 
-        # Price
+        # Price — last $N,NNN before the zpid (avoids matching price-cut labels)
         price: int | None = None
-        pm = PRICE_RE.search(context)
-        if pm:
+        for pm in PRICE_RE.finditer(context):
             try:
-                price = int(pm.group(1).replace(",", ""))
+                candidate = int(pm.group(1).replace(",", ""))
+                if candidate >= 50_000:  # ignore small dollar amounts
+                    price = candidate
             except ValueError:
                 pass
 
@@ -185,31 +188,26 @@ def parse_body(body: str) -> list[dict]:
                 except ValueError:
                     pass
 
-        # Address: first line matching "\d+ <word>" pattern (house number + street)
+        # Address: scan lines backward from the zpid — the address line is the
+        # first "house-number + street" line we encounter going toward the zpid.
         address: str | None = None
-        for ln in context.split("\n"):
+        for ln in reversed(context.split("\n")):
             ln = ln.strip()
-            if re.match(r"\d{1,6}\s+[A-Za-z]", ln) and "$" not in ln and "zillow" not in ln.lower():
+            if (re.match(r"\d{1,6}\s+[A-Za-z]", ln)
+                    and "$" not in ln
+                    and "zillow" not in ln.lower()
+                    and "%" not in ln):  # skip URL-encoded fragments
                 address = ln
                 break
 
-        # Subdivision: non-empty line after the facts line, before the URL
-        subdivision: str | None = None
-        if fm:
-            after_facts = context[fm.end():]
-            for ln in after_facts.split("\n"):
-                ln = ln.strip()
-                if (ln and len(ln) < 60
-                        and not re.search(r"\$|zillow|\d{5}|bd|ba|sqft", ln, re.I)
-                        and re.search(r"[A-Za-z]{3}", ln)):
-                    subdivision = ln
-                    break
+        # Canonical URL (strip tracking params from the decoded target)
+        url = f"https://www.zillow.com/homedetails/{zid}_zpid/"
 
         listings.append({
             "zillow_id": zid,
-            "url": url.split("?")[0],  # strip tracking params
+            "url": url,
             "address": address or "(unknown)",
-            "subdivision": subdivision,
+            "subdivision": None,  # not present in alert emails; scorer uses unknown_tier
             "list_price": price,
             "beds": beds,
             "baths": baths,
