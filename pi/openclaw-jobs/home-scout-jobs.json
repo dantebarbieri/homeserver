@@ -1,0 +1,28 @@
+{
+  "_comment": "Home-scout cron jobs. The upsert-jobs.py script merges these into /home/openclaw/.openclaw/cron/jobs.json keyed by 'name'. Pi TZ is America/Chicago — cron expressions are interpreted there.",
+  "jobs": [
+    {
+      "name": "home-scout-daily",
+      "description": "Daily Zillow 78759 saved-search scan. Reads digest emails via gog, runs housing math, scores by neighborhood tier, sends ntfy push for Tier 1-2, posts Matrix digest. Runs at 08:00 America/Chicago — ~30 min after Zillow's typical morning email.",
+      "enabled": true,
+      "agentId": "main",
+      "deleteAfterRun": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 8 * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Load workspace/HOME.md, then execute workspace/skills/home-scout/SKILL.md exactly as written. Budget: 5 turns, 90s wall. No synthesis beyond the digest format the skill prescribes.",
+        "timeoutSeconds": 180
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "last",
+        "bestEffort": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+# config.yaml — buyer-side housing math defaults for the home-scout agent.
+# These match the Property Inputs sheet of Housing Math.xlsx.
+# Update rate_apr as rates move; update neighborhood_median_psf quarterly.
+# All percentage values are decimals (0.05 = 5%).
+
+# Loan
+down_pct: 0.05
+rate_apr: 0.064
+term_years: 30
+pmi_annual_rate: 0.004
+closing_costs_pct: 0.025
+origination_fee: 0
+
+# Property tax (Tax Rates sheet, Austin/Travis County 2025-26)
+# tax_rate_non_school = Travis County + Central Health + ACC + City of Austin
+# tax_rate_school     = Round Rock ISD (revisit for AISD addresses in Phase 2)
+tax_rate_non_school: 0.01111231
+tax_rate_school: 0.008931
+homestead_flag: 1
+school_homestead_exemption: 140000
+
+# Insurance estimate (Austin, 78759, ~$700K home)
+insurance_annual: 5400
+
+# Ongoing monthly costs
+maint_reserve_pct: 0.012
+lawn_monthly: 80
+pest_monthly: 40
+
+# Income / affordability targets (from Housing Math.xlsx Income sheet)
+gross_monthly: 28248
+net_monthly: 17777
+target_piti_ratio: 0.28
+target_total_housing_ratio: 0.35
+
+# 78759 median price/sqft for score calibration. Update quarterly.
+neighborhood_median_psf: 340
+
+# One-time purchase costs (used in cash-to-close estimate)
+inspections: 1500
+appraisal: 650
+moving: 1500
+initial_repairs: 20000
+furniture: 5000

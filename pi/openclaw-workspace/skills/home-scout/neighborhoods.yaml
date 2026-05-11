@@ -1,0 +1,75 @@
+# neighborhoods.yaml — 78759 subdivision tier prior for the home-scout agent.
+#
+# Lookup is case-insensitive substring match: if any alias below appears
+# anywhere in the listing's subdivision/community name, that tier wins.
+# First match wins; tiers are checked in order A → B → C → D → X.
+#
+# CRITICAL: this table is a PRIOR, not a verdict. Neighborhood name does NOT
+# determine school district in 78759 — different streets in the same
+# subdivision can be zoned to different schools. Per-address RRISD/AISD
+# lookup (Phase 2) will overlay before final tier.
+#
+# unknown_tier: tier assigned when no alias matches. C is a safe neutral.
+
+unknown_tier: C
+
+A:
+  # Alert immediately, even at top of budget. Mainly RRISD-zoned portions.
+  - spicewood
+  - barrington oaks
+  - barrington-oaks
+  - balcones woods
+  - northwest hills ranch
+  - nw hills ranch
+
+B:
+  # Alert, mid-priority.
+  - great hills
+  - northwest estates
+  - nw estates
+  - westover hills
+  - point west of westover hills
+  - point west
+  - arbor at great hills
+  - the arbor at great hills
+  - balcones oaks
+  - northview hills
+  - high vista
+
+C:
+  # Alert only if price/condition is exceptional.
+  - highland oaks
+  - highlands at oak forest
+  - the highlands at oak forest
+  - oak forest villas
+  - oak forest
+  - oak knoll estates
+  - oakledge
+  - mesa park
+  - westhill estates
+  - hunter oaks
+  - raintree estates
+  - austin hills
+  - sierra arbor estates
+  - cherry hill park
+
+D:
+  # Skip unless price is screaming.
+  - shadow oaks
+  - sonesta west
+  - champions forest
+  - claytons crossing
+  - clayton's crossing
+  - walnut crossing
+  - treetops
+  - prominent point
+  - vista north
+
+X:
+  # Never alert — non-residential. Hard block (score = 0.0, tier = 5).
+  - riata corporate park
+  - north loop business park
+  - stonelake office park
+  - stonelake
+  - quarry
+  - yucca mountain
