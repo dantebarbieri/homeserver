@@ -151,7 +151,7 @@ change needed.
 ## 4. HomeServer compose env vars
 
 Already set in `docker/compose.mcp.yml` for the `mcp-tcad` service when
-running v0.2.0+:
+running v0.3.0+:
 
 ```yaml
 environment:
@@ -162,8 +162,18 @@ environment:
   OAUTH_REQUIRED_SCOPE: mcp:tcad
 ```
 
-The bearer path (`AUTH_TOKEN_FILE`) keeps working unchanged. Setting
-`OAUTH_ISSUER` enables the OAuth path in parallel.
+Both auth modes are auto-enabled because both their config keys are set.
+v0.3.0+ adds explicit toggles you can set if you want to deviate from
+that default:
+
+| To do this | Add to compose env |
+|---|---|
+| Disable bearer (require OAuth for everyone — once OpenClaw migrates) | `BEARER_AUTH_ENABLED: 'false'` |
+| Disable OAuth (revert to bearer-only) | `OAUTH_AUTH_ENABLED: 'false'` |
+| Require both (force fail-fast at startup if either is misconfigured) | `BEARER_AUTH_ENABLED: 'true'` and `OAUTH_AUTH_ENABLED: 'true'` |
+
+Leaving them unset (the current state) means each mode auto-detects from
+its config presence — exact same behavior as v0.2.0.
 
 To upgrade in place:
 
@@ -257,6 +267,103 @@ If any step fails, check Claude's error message and the Authelia logs
 
 ---
 
+## 6. OpenClaw on the Pi — wire it to Authelia for `mcp-tcad`
+
+The Pi-hosted OpenClaw agent uses the OAuth `client_credentials` grant
+against the same Authelia instance, with the static `openclaw-mcp`
+client from §2.2. Three pieces:
+
+### 6.1 Generate + store the OpenClaw OIDC client_secret on the server
+
+Generate the secret pair (cleartext for the Pi, hashed for Authelia):
+
+```sh
+ssh server '
+  set -e
+  cleartext=$(openssl rand -hex 32)
+  hashed=$(docker exec authelia authelia crypto hash generate pbkdf2 \
+    --variant sha512 --password "$cleartext" | grep -oE "\$pbkdf2-sha512\$.*$")
+  install -d -m 700 -o root -g root /srv/docker/data/authelia/secrets
+  printf "%s" "$cleartext" | sudo install -m 600 -o root -g root /dev/stdin \
+    /srv/docker/data/authelia/secrets/openclaw_oidc_secret
+  echo "Cleartext stored at /srv/docker/data/authelia/secrets/openclaw_oidc_secret"
+  echo "Paste this hashed value into the openclaw-mcp client in §2.2:"
+  echo "$hashed"
+'
+```
+
+Drop the `$pbkdf2-sha512$…` value into `client_secret:` for the
+`openclaw-mcp` block in `${DATA}/authelia/config/configuration.yml`,
+then `dcr authelia`.
+
+### 6.2 Ship the cleartext to the Pi
+
+Run the installer **from your dev machine** (the Pi is firewalled off
+from the server by design — the dev machine is the trusted middleman):
+
+```sh
+cd /path/to/homeserver/pi
+./install-mcp-config.sh pi
+```
+
+The installer reads:
+- `${DATA}/mcp/secrets/MCP_TOKEN_*` — bearer tokens for the eight legacy
+  MCP servers (openzim, wikipedia, etc.).
+- `${DATA}/authelia/secrets/openclaw_oidc_secret` — the OpenClaw OIDC
+  client_secret you just created.
+
+…and writes `/etc/openclaw/mcp-clients.json` on the Pi with the OAuth
+shape for `tcad` (and bearer shape for the other 8). The script runs
+schema validation locally before shipping, so a typo in the sample is
+caught before the file lands on the Pi.
+
+If `openclaw_oidc_secret` doesn't exist yet, the installer prints a
+warning and leaves the placeholder in place — the bearer-only servers
+still install cleanly. Re-run after §6.1 lands.
+
+### 6.3 OpenClaw application contract
+
+What the OpenClaw app code on the Pi has to do for `auth.type ==
+"oauth_client_credentials"` is documented in
+[`pi/README.md`](../../pi/README.md#mcp-client-schema-what-the-openclaw-application-must-support).
+Briefly: POST `grant_type=client_credentials` to the `token_url`, cache
+the resulting access token until `now + expires_in - 60s`, send it as
+`Authorization: Bearer …` on every MCP call, refresh on `401`. The
+contract is filed for implementation in the OpenClaw repo — this
+homeserver repo only ships the client config, not the app code.
+
+### 6.4 Restart OpenClaw
+
+Once §6.1–6.3 are in place:
+
+```sh
+ssh pi 'XDG_RUNTIME_DIR=/run/user/$(id -u openclaw) \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u openclaw)/bus \
+  sudo -u openclaw systemctl --user restart openclaw-gateway.service'
+```
+
+Then exercise the tcad MCP from a chat with the OpenClaw agent and
+confirm via `docker logs mcp-tcad | tail -5` on the server that the
+JWT-validated request landed.
+
+### 6.5 Migration: bearer → OAuth-only on `mcp-tcad`
+
+Once OpenClaw is reliably using the OAuth path, you can disable the
+static-bearer fallback (no other consumer needs it). In
+`docker/compose.mcp.yml`, add to the `mcp-tcad` env block:
+
+```yaml
+BEARER_AUTH_ENABLED: 'false'
+```
+
+Then `dcu` to recreate the container. Open WebUI's tcad integration (if
+configured) breaks at this point — Open WebUI doesn't speak OAuth yet —
+so don't disable the bearer until you're ready to drop or rework that
+integration too. The static `MCP_TOKEN_TCAD` secret can also be deleted
+once `BEARER_AUTH_ENABLED=false` is in effect.
+
+---
+
 ## Porting to another IdP
 
 The `tcad-mcp` container is OIDC-compliant — it doesn't care which IdP
@@ -281,7 +388,9 @@ allowlist as defense-in-depth against alg-confusion attacks.
 
 ## See also
 
-- [tcad-mcp README — Authentication section](https://github.com/dantebarbieri/tcad-mcp#authentication)
+- [tcad-mcp README — Authentication section](https://github.com/dantebarbieri/tcad-mcp#authentication) — three-mode framing (bearer / OAuth-manual / Automatic-discovery), env var reference.
+- [tcad-mcp `docs/CLIENTS.md`](https://github.com/dantebarbieri/tcad-mcp/blob/main/docs/CLIENTS.md) — copy-paste setup for Claude.ai, Claude Desktop, ChatGPT, Cursor, Continue.dev, Open WebUI, Cody, Cline, Zed, plus `curl` / Python / TypeScript SDKs.
+- [`pi/README.md`](../../pi/README.md) — OpenClaw client schema and the application contract for `auth.type == "oauth_client_credentials"`.
 - [MCP authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization)
 - [RFC 9728 — OAuth 2.0 Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728)
 - [draft-ietf-oauth-resource-metadata](https://datatracker.ietf.org/doc/draft-ietf-oauth-resource-metadata/)
