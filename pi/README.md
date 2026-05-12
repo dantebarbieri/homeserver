@@ -56,6 +56,72 @@ sudo -u openclaw python3 apply-migrations.py /var/lib/openclaw/state.db sqlite-m
 ./install-mcp-config.sh pi
 ```
 
+The installer ships **two kinds of secrets** to the Pi:
+
+1. **Static bearer tokens** for the eight legacy MCP servers (openzim,
+   wikipedia, wikidata-local, searxng, nominatim, photon, valhalla, elev),
+   read from `/srv/docker/data/mcp/secrets/MCP_TOKEN_<NAME>`.
+2. The **OpenClaw OIDC client_secret** for the `tcad` entry's OAuth
+   `client_credentials` grant, read from
+   `/srv/docker/data/authelia/secrets/openclaw_oidc_secret`. If that file
+   doesn't exist yet (Authelia OIDC not configured per
+   [`docker/docs/MCP-OAUTH.md`](../docker/docs/MCP-OAUTH.md)), the
+   installer leaves the placeholder in place and prints a warning — the
+   bearer-only servers still install cleanly.
+
+The installer also runs schema validation on every server entry, so a
+typo in the sample is caught before the file is shipped.
+
+### MCP client schema (what the OpenClaw application must support)
+
+`/etc/openclaw/mcp-clients.json` has one entry per server. Each entry has
+**either** a legacy `bearer` field (string or null) **or** a new `auth`
+object. OpenClaw's MCP client must check `auth` first and fall back to
+`bearer` if absent:
+
+```json
+{
+  "servers": {
+    "wikipedia": {
+      "url": "https://mcp.danteb.com/wikipedia/mcp",
+      "transport": "streamable-http",
+      "bearer": "<64-char hex>"
+    },
+    "tcad": {
+      "url": "https://mcp-tcad.danteb.com/mcp",
+      "transport": "streamable-http",
+      "auth": {
+        "type": "oauth_client_credentials",
+        "token_url": "https://authelia.danteb.com/api/oidc/token",
+        "client_id": "openclaw-mcp",
+        "client_secret": "<from-authelia>",
+        "scope": "mcp:tcad",
+        "audience": "https://mcp-tcad.danteb.com"
+      }
+    }
+  }
+}
+```
+
+For `auth.type == "oauth_client_credentials"`, the client must:
+
+1. `POST` to `token_url` with form body
+   `grant_type=client_credentials&client_id=...&client_secret=...&scope=...&audience=...`
+   and `Content-Type: application/x-www-form-urlencoded`.
+2. Parse the response: `{"access_token": "...", "token_type": "Bearer",
+   "expires_in": <seconds>, ...}`.
+3. Cache the token in memory until `now + expires_in - 60` (60s safety
+   margin), then refetch.
+4. Send `Authorization: Bearer <access_token>` on every MCP request.
+5. On `401 invalid_token` from the MCP server, drop the cache and refetch
+   once — if that also fails, surface the error to the agent.
+
+The MCP server also accepts the static bearer for `tcad` via the legacy
+shape, so during rollout you can temporarily pin to `bearer:
+"<MCP_TOKEN_TCAD>"` if OAuth bring-up is incomplete. Switching back to
+`auth: {...}` once Authelia is configured is a one-line edit + rerun of
+`install-mcp-config.sh`.
+
 ### Travel agent workspace + cron jobs — run from the DEV MACHINE
 
 ```sh
