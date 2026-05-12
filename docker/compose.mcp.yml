@@ -1,15 +1,16 @@
-# MCP servers for the OpenClaw v3 travel agent
-# mcp-openzim, mcp-wikipedia, mcp-wikidata, mcp-searxng,
-# mcp-nominatim, mcp-photon, mcp-valhalla, mcp-elev
+# MCP servers for the OpenClaw v3 travel agent (mcp-openzim, mcp-wikipedia,
+# mcp-wikidata, mcp-searxng, mcp-nominatim, mcp-photon, mcp-valhalla, mcp-elev)
+# plus the home-scout TCAD wrapper (mcp-tcad).
 #
-# All eight servers expose Streamable HTTP at port 8080 internally and are
-# reverse-proxied at https://mcp.danteb.com/<name>/. Each container reads
-# its bearer token from a Docker secret mounted at /run/secrets/MCP_TOKEN_<NAME>
+# All servers expose Streamable HTTP at port 8080 internally and are
+# reverse-proxied via NPM (mcp.danteb.com/<name>/ for the OpenClaw set,
+# mcp-tcad.danteb.com for the home-scout one). Each container reads its
+# bearer token from a Docker secret mounted at /run/secrets/MCP_TOKEN_<NAME>
 # and validates it on every request — NPM does not enforce auth for these.
 #
 # stdio-only upstreams (openzim, wikidata-fallback) are bridged to HTTP via
-# mcp-proxy. The five Python wrappers (searxng, nominatim, photon, valhalla,
-# elev) speak Streamable HTTP natively via FastMCP.
+# mcp-proxy. The Python wrappers (searxng, nominatim, photon, valhalla, elev,
+# tcad) speak Streamable HTTP natively via FastMCP.
 
 services:
   mcp-openzim:
@@ -202,6 +203,32 @@ services:
       retries: 3
       start_period: 20s
 
+  # mcp-tcad — Travis Central Appraisal District (TCAD) public data wrapper.
+  # Backend is the public TrueProdigy SaaS endpoint, so this service only
+  # needs the `proxy` network for inbound MCP traffic; outbound HTTPS goes
+  # straight to the internet via Docker's default routing.
+  mcp-tcad:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-tcad
+    build:
+      context: dockerfiles/mcp-tcad
+    container_name: mcp-tcad
+    networks:
+      - proxy
+      - mcp
+    secrets:
+      - MCP_TOKEN_TCAD
+    environment:
+      AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_TCAD
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
 networks:
   proxy:
   mcp:
@@ -226,3 +253,5 @@ secrets:
     file: '${DATA}/mcp/secrets/MCP_TOKEN_VALHALLA'
   MCP_TOKEN_ELEV:
     file: '${DATA}/mcp/secrets/MCP_TOKEN_ELEV'
+  MCP_TOKEN_TCAD:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_TCAD'

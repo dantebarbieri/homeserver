@@ -62,3 +62,5 @@ secrets:
     file: '${DATA}/mcp/secrets/MCP_TOKEN_VALHALLA'
   MCP_TOKEN_ELEV:
     file: '${DATA}/mcp/secrets/MCP_TOKEN_ELEV'
+  MCP_TOKEN_TCAD:
+    file: '${DATA}/mcp/secrets/MCP_TOKEN_TCAD'
