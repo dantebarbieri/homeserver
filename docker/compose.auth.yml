@@ -53,6 +53,54 @@ services:
     networks:
       - authelia
 
+  # mcp-idp — tiny single-user OIDC IdP with Dynamic Client Registration.
+  # Built specifically so Claude.ai's "Custom Integrations" feature can
+  # auto-register against the homeserver. None of the lightweight self-hosted
+  # IdPs we considered (Authelia, Dex, Logto, Authentik) ship DCR, so we
+  # built this one. See docker/dockerfiles/mcp-idp/README.md for the design
+  # + deployment runbook.
+  #
+  # User authentication is delegated to Authelia via NPM ForwardAuth on the
+  # /authorize path only (other paths — well-known, jwks, register, token,
+  # revoke — are reachable without ForwardAuth so Claude.ai's servers can
+  # call them). The IDP_PROXY_SECRET secret is checked at /authorize to
+  # ensure traffic actually came through NPM (defense-in-depth in case the
+  # container is reachable on any other path).
+  mcp-idp:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mcp-idp
+    build:
+      context: dockerfiles/mcp-idp
+    container_name: mcp-idp
+    networks:
+      - proxy
+    secrets:
+      - IDP_PEPPER
+      - IDP_PROXY_SECRET
+    environment:
+      IDP_ISSUER: https://mcp-idp.danteb.com
+      IDP_DB_PATH: /data/db.sqlite
+      IDP_KEYS_PATH: /data/keys.json
+      IDP_PEPPER_FILE: /run/secrets/IDP_PEPPER
+      IDP_PROXY_SECRET_FILE: /run/secrets/IDP_PROXY_SECRET
+      # Allowlist of MCP server URLs that can be specified as the OAuth
+      # `resource` parameter. Add an entry per MCP server you want
+      # mcp-idp-issued JWTs to be valid for.
+      IDP_RESOURCES: https://mcp-tcad.danteb.com
+      IDP_PROXY_HEADER_USER: Remote-User
+      IDP_PROXY_HEADER_NAME: Remote-Name
+      IDP_CORS_ORIGINS: https://claude.ai,https://claude.com
+    volumes:
+      - ${DATA}/mcp-idp:/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
 networks:
   proxy:
   authelia:

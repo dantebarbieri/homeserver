@@ -64,3 +64,7 @@ secrets:
     file: '${DATA}/mcp/secrets/MCP_TOKEN_ELEV'
   MCP_TOKEN_TCAD:
     file: '${DATA}/mcp/secrets/MCP_TOKEN_TCAD'
+  IDP_PEPPER:
+    file: '${DATA}/mcp-idp/secrets/IDP_PEPPER'
+  IDP_PROXY_SECRET:
+    file: '${DATA}/mcp-idp/secrets/IDP_PROXY_SECRET'

@@ -232,11 +232,15 @@ services:
     environment:
       AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_TCAD
       # OAuth path — generic OIDC, only the *value* of OAUTH_ISSUER names
-      # the IdP (the tcad-mcp image itself has no Authelia-specific code).
-      OAUTH_ISSUER: https://authelia.danteb.com
+      # the IdP (the tcad-mcp image itself has no Authelia/mcp-idp specific
+      # code). Points at our homeserver mcp-idp service which provides DCR
+      # so Claude.ai's auto-discovery flow Just Works.
+      OAUTH_ISSUER: https://mcp-idp.danteb.com
       OAUTH_AUDIENCE: https://mcp-tcad.danteb.com
       RESOURCE_URL: https://mcp-tcad.danteb.com
-      OAUTH_REQUIRED_SCOPE: mcp:tcad
+      # No OAUTH_REQUIRED_SCOPE — mcp-idp's tokens don't carry an
+      # mcp:tcad scope today (it would need to be added to the consent
+      # flow). Audience binding is the primary protection.
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
       interval: 60s

@@ -1,0 +1,24 @@
+# Python build artifacts (the parent monorepo .gitignore doesn't cover these)
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Test/lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+
+# Local data
+data/
+*.db
+*.db-shm
+*.db-wal
+keys.json

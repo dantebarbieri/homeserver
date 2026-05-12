@@ -1,5 +1,14 @@
 # MCP OAuth 2.1 setup (`mcp-tcad`)
 
+> **Update (2026-05-12):** Sections 2.3 + the Claude.ai smoke test in this
+> runbook describe the static-`claude-mcp` workaround for Authelia's
+> missing DCR support. Since then we've built [`mcp-idp`](../dockerfiles/mcp-idp/README.md),
+> a tiny single-user OIDC IdP with proper DCR. **For the Claude.ai
+> integration use the `mcp-idp` setup runbook** at
+> [`docker/dockerfiles/mcp-idp/README.md`](../dockerfiles/mcp-idp/README.md#homeserver-integration)
+> instead. The Authelia-only sections below remain accurate for the
+> OpenClaw / `client_credentials` use case (§2.2 + §6).
+
 This runbook covers the on-server steps to put **`mcp-tcad`** behind OAuth
 2.1 / OIDC so Claude.ai's remote-MCP integration can use it. The static
 bearer path stays available as a fallback for OpenClaw, Open WebUI, and
