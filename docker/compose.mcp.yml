@@ -212,11 +212,17 @@ services:
   # repo so it can be republished for any TCAD office on TrueProdigy). Build
   # is GitHub Actions on tag push; image is published to GHCR. To bump,
   # change the tag below.
+  #
+  # Auth: bearer fallback (MCP_TOKEN_TCAD secret) AND OAuth 2.1 / OIDC
+  # against Authelia. Both auth paths work in parallel — OpenClaw and
+  # Open WebUI stay on bearer; Claude.ai uses OAuth via the well-known
+  # discovery flow. See docker/docs/MCP-OAUTH.md for the Authelia config
+  # runbook (gitignored on the server).
   mcp-tcad:
     extends:
       file: compose.common.yml
       service: common-service
-    image: ghcr.io/dantebarbieri/tcad-mcp:0.1.0
+    image: ghcr.io/dantebarbieri/tcad-mcp:0.2.0
     container_name: mcp-tcad
     networks:
       - proxy
@@ -225,6 +231,12 @@ services:
       - MCP_TOKEN_TCAD
     environment:
       AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_TCAD
+      # OAuth path — generic OIDC, only the *value* of OAUTH_ISSUER names
+      # the IdP (the tcad-mcp image itself has no Authelia-specific code).
+      OAUTH_ISSUER: https://authelia.danteb.com
+      OAUTH_AUDIENCE: https://mcp-tcad.danteb.com
+      RESOURCE_URL: https://mcp-tcad.danteb.com
+      OAUTH_REQUIRED_SCOPE: mcp:tcad
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
       interval: 60s
