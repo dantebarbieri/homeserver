@@ -84,104 +84,20 @@ This service is built and deployed from the homeserver monorepo
 `mcp-idp` service and reaches the public internet via NPM at
 `mcp-idp.danteb.com`.
 
-### One-time bootstrap (on the server)
+**End-to-end setup runbook:** [`docker/docs/MCP-IDP-SETUP.md`](../../docs/MCP-IDP-SETUP.md)
+walks through the ~20-minute deployment from a clean homeserver to a
+working Claude.ai integration: secret bootstrap, NPM proxy host with
+per-path Authelia ForwardAuth, `mcp-tcad` re-pointing, Claude.ai setup,
+plus smoke tests, troubleshooting, and maintenance procedures.
 
-```sh
-# 1. Create the data + secrets dirs.
-sudo install -d -o root -g root -m 700 /srv/docker/data/mcp-idp/secrets
-sudo install -d -o $UID:$GID -m 700 /srv/docker/data/mcp-idp
+The runbook references two NPM snippet files that are already on the
+production server (per `production-configs/README.md`):
 
-# 2. Generate the long-lived secrets.
-openssl rand -hex 32 | sudo tee /srv/docker/data/mcp-idp/secrets/IDP_PEPPER >/dev/null
-openssl rand -hex 32 | sudo tee /srv/docker/data/mcp-idp/secrets/IDP_PROXY_SECRET >/dev/null
-sudo chmod 600 /srv/docker/data/mcp-idp/secrets/IDP_*
+- `/snippets/authelia-authrequest.conf` — internal location handler
+- `/snippets/authelia-location.conf` — drop-in include for protected paths
 
-# 3. Build + start the container.
-cd /srv/homeserver/docker
-docker compose pull mcp-idp || docker compose build mcp-idp
-docker compose up -d mcp-idp
-docker logs mcp-idp | tail -10
-```
-
-The first start auto-generates the RSA signing keypair at `/data/keys.json`
-(persisted in the `${DATA}/mcp-idp/` volume). Back this up — losing it
-invalidates every issued token.
-
-### NPM proxy host (`mcp-idp.danteb.com`)
-
-The wiring matters because user authentication is delegated to Authelia
-via NPM ForwardAuth, but only on `/authorize`. Other paths must be
-reachable without ForwardAuth so Claude.ai's servers can call them.
-
-In NPM:
-
-1. Create a new **Proxy Host** with **Hostname** `mcp-idp.danteb.com`,
-   **Forward Hostname** `mcp-idp`, **Forward Port** `8080`. Enable
-   WebSockets, **leave Block Common Exploits OFF** (JWTs trip BCE).
-2. Add a new **Custom Location** for path `/authorize`:
-   - Forward to the same `mcp-idp:8080`
-   - In the **Advanced** tab for this location:
-     ```nginx
-     include /snippets/authelia_forwardauth.conf;
-     proxy_set_header X-Internal-Auth-Proxy-Secret "<paste IDP_PROXY_SECRET cleartext here>";
-     ```
-3. Get the **DNS** record. `mcp-idp.danteb.com` resolves automatically via
-   the existing `*.danteb.com` wildcard CNAME — no Cloudflare changes needed.
-
-Optional belt-and-braces: in the proxy host's main **Advanced** tab,
-`deny all` for any path that isn't in your "discovery + DCR + token" list.
-The IdP's own validation already protects the surface but path-level
-NPM allowlisting is a free extra layer.
-
-### Add an MCP server to the IdP's resource allowlist
-
-`IDP_RESOURCES` in `compose.auth.yml` controls which RFC 8707 `resource`
-values the IdP will accept at `/authorize` and which `aud` claim it will
-mint. To add a new MCP server (say `mcp-foo.danteb.com`):
-
-```yaml
-# compose.auth.yml
-mcp-idp:
-  environment:
-    IDP_RESOURCES: https://mcp-tcad.danteb.com,https://mcp-foo.danteb.com
-```
-
-Then `dcr mcp-idp`. Existing tokens are unaffected.
-
-### Pointing an MCP server at this IdP
-
-Set the MCP server's OAuth env vars to point here:
-
-```yaml
-# in your MCP server's compose env
-OAUTH_ISSUER: https://mcp-idp.danteb.com
-OAUTH_AUDIENCE: https://your-mcp.danteb.com
-RESOURCE_URL: https://your-mcp.danteb.com
-```
-
-The MCP server discovers `/.well-known/openid-configuration`, fetches the
-JWKS, validates incoming JWTs against it. No changes to the MCP server
-code itself (provided it speaks generic OIDC; tcad-mcp v0.2.0+ does).
-
-### Adding the integration in Claude.ai
-
-1. Settings → Integrations → **Add custom integration**
-2. **Server URL:** `https://your-mcp.danteb.com` (the MCP server URL,
-   NOT mcp-idp's URL)
-3. Click **Connect**.
-4. Claude follows the discovery → DCR → consent chain automatically.
-   You'll be redirected to `mcp-idp.danteb.com/authorize` (which sends
-   you through Authelia's 2FA login first), then to the consent page,
-   then back to Claude with a token.
-
-### Troubleshooting
-
-| Symptom | Look at |
-|---|---|
-| `403` on `/authorize` | NPM Custom Location is missing `proxy_set_header X-Internal-Auth-Proxy-Secret` or the value doesn't match the secret file |
-| `401 Authentication required` on `/authorize` | NPM Custom Location is missing `include /snippets/authelia_forwardauth.conf` |
-| `Invalid resource` on `/authorize` | The MCP server's `RESOURCE_URL` isn't in `IDP_RESOURCES` |
-| Claude.ai integration setup hangs | Check CORS — `IDP_CORS_ORIGINS` must include `https://claude.ai` |
-| Tokens stop working after a restart | `${DATA}/mcp-idp/keys.json` was lost — back it up. Restart Claude integrations to re-auth. |
+If your deployment doesn't have these (or you're running this container
+elsewhere), see the [Authelia NPM integration docs](https://www.authelia.com/integration/proxies/nginx-proxy-manager/)
+for the canonical content.
 
 
