@@ -207,13 +207,16 @@ services:
   # Backend is the public TrueProdigy SaaS endpoint, so this service only
   # needs the `proxy` network for inbound MCP traffic; outbound HTTPS goes
   # straight to the internet via Docker's default routing.
+  #
+  # Source: https://github.com/dantebarbieri/tcad-mcp (carved out of this
+  # repo so it can be republished for any TCAD office on TrueProdigy). Build
+  # is GitHub Actions on tag push; image is published to GHCR. To bump,
+  # change the tag below.
   mcp-tcad:
     extends:
       file: compose.common.yml
       service: common-service
-    image: mcp-tcad
-    build:
-      context: dockerfiles/mcp-tcad
+    image: ghcr.io/dantebarbieri/tcad-mcp:0.1.0
     container_name: mcp-tcad
     networks:
       - proxy

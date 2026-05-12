@@ -358,20 +358,31 @@ The fallback ladder (see *Search body format and fallback ladder* above) operate
 
 ## Files
 
+The MCP server lives in its own repo so it can be republished for any TCAD
+office on TrueProdigy:
+
+- **Repo:** [github.com/dantebarbieri/tcad-mcp](https://github.com/dantebarbieri/tcad-mcp) (public, MIT)
+- **Image:** `ghcr.io/dantebarbieri/tcad-mcp:<semver>` (multi-arch amd64+arm64, built on tag push)
+- **Layout (in that repo):**
+  - `tcad_mcp/server.py` — FastMCP tools, `_UpstreamClient` (JWT cache, year cache, retry-on-401), `create_app()` factory
+  - `tcad_mcp/shapers.py` — pure shaping helpers (no I/O — what the tests cover)
+  - `tcad_mcp/config.py` — `AppConfig.from_env()`
+  - `tcad_mcp/__init__.py` — lazy `app` via PEP 562 (so tests can import sibling modules without `AUTH_TOKEN`)
+
+In this repo, only the consumption config remains:
+
 ```
-docker/dockerfiles/mcp-tcad/
-    Dockerfile        # same base as mcp-nominatim (python:3.14-slim, uvicorn on :8080)
-    app.py            # ~300 lines (was ~200 before fallback ladder, two caches, full-history tool, features parser)
-    requirements.txt  # fastmcp==3.2.4, httpx==0.28.1
-docker/compose.mcp.yml     # add mcp-tcad service + MCP_TOKEN_TCAD secret
+docker/compose.mcp.yml     # mcp-tcad service pinning ghcr.io/dantebarbieri/tcad-mcp:<tag> + MCP_TOKEN_TCAD secret
 ```
 
 Service config in `compose.mcp.yml` follows the exact pattern of `mcp-nominatim`:
-- Networks: `proxy` only (no geo network needed — TCAD is external HTTPS)
+- Networks: `proxy` + `mcp` (no geo network needed — TCAD is external HTTPS)
 - Secret: `MCP_TOKEN_TCAD` from `${DATA}/mcp/secrets/MCP_TOKEN_TCAD`
 - Environment: `AUTH_TOKEN_FILE: /run/secrets/MCP_TOKEN_TCAD`
 - Healthcheck: TCP connect to port 8080
 - NPM proxy host: `mcp-tcad.danteb.com`
+
+To upgrade: bump the tag in `compose.mcp.yml` and `docker compose pull && docker compose up -d mcp-tcad`.
 
 ---
 
