@@ -12,13 +12,28 @@ unchanged behind Keycloak, Auth0, Okta, Dex, Authentik, Zitadel, or any
 other OIDC-compliant authorization server. The contract any IdP must
 satisfy is documented at the bottom under [Porting to another IdP](#porting-to-another-idp).
 
+> **About Dynamic Client Registration (DCR).** The MCP spec describes an
+> "automatic" UX where a client like Claude.ai discovers the IdP and
+> registers itself via [RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591)
+> DCR. **Authelia does not support DCR** (confirmed against the [Authelia
+> OIDC clients reference](https://www.authelia.com/configuration/identity-providers/openid-connect/clients/)
+> and the still-open upstream discussion at
+> [authelia/authelia#7304](https://github.com/authelia/authelia/discussions/7304)).
+> Every OIDC client must be declared statically in `configuration.yml`.
+> For Claude.ai that means pre-registering Claude as a static client in
+> Authelia and entering the resulting `client_id` / `client_secret` in
+> Claude.ai's integration UI manually. If you want true auto-discovery
+> instead, switch IdPs — Keycloak, Authentik (≥ 2024.4), Auth0, Okta,
+> and Zitadel all support DCR.
+
 ---
 
 ## 1. Verify Authelia version
 
-**Prerequisite:** Authelia ≥ **4.39** for Dynamic Client Registration
-(DCR), which is what Claude.ai uses to register itself as an OAuth client
-on first use. Check on the server:
+**Prerequisite:** Authelia ≥ **4.39** for the current OIDC client schema
+this runbook uses. Older versions still ship a working OIDC provider but
+some client-config field names (e.g., `client_secret` plaintext vs. hashed,
+JWKS configuration) have shifted. Check on the server:
 
 ```sh
 ssh server 'docker inspect authelia --format "{{ .Config.Image }}"'
@@ -26,101 +41,164 @@ ssh server 'docker exec authelia authelia --version'
 ```
 
 If older, bump the image tag in `compose.auth.yml` and `dcr authelia`.
-DCR is enabled by default in 4.39+ if you also enable the OIDC provider.
 
 ---
 
 ## 2. Authelia OIDC provider config
 
 All edits live in `${DATA}/authelia/config/configuration.yml` (gitignored
-on the server). After editing: `dcr authelia` to apply.
+on the server). The file's structure is one giant document; the snippets
+below show only the **`identity_providers.oidc`** subtree — find that
+key in your existing config and merge the relevant pieces in. After
+editing: `dcr authelia` to apply, then `docker logs authelia | tail -20`
+to confirm clean startup (any schema error will be loud).
+
+> **YAML caveat.** Authelia's OIDC schema has shifted across the 4.3x
+> releases. The snippets below are written against 4.39+. Cross-check
+> against the canonical [Authelia OIDC provider docs](https://www.authelia.com/configuration/identity-providers/openid-connect/provider/)
+> and [Authelia OIDC client docs](https://www.authelia.com/configuration/identity-providers/openid-connect/clients/)
+> for your version — especially the JWKS block, which has changed
+> format more than once.
 
 ### 2.1 Enable OIDC + permit Claude.ai's CORS origin
+
+If Authelia isn't already running an OIDC provider, generate a signing
+keypair once:
+
+```sh
+ssh server '
+  install -d -m 700 -o root -g root /srv/docker/data/authelia/keys
+  docker exec authelia authelia crypto pair rsa generate \
+    --directory /config/keys --file.private-key oidc.pem --file.public-key oidc.pub.pem
+  echo "Generated /srv/docker/data/authelia/keys/oidc.pem (private) + oidc.pub.pem (public)"
+'
+```
+
+Then in `identity_providers.oidc`:
 
 ```yaml
 identity_providers:
   oidc:
-    # Generated once: `authelia crypto pair rsa generate --directory /config/keys`
+    # Path inside the Authelia container; mount /srv/docker/data/authelia/keys
+    # at /config/keys via compose.auth.yml.
     jwks:
-      - key: {{ secret "/config/secrets/oidc.private.pem" | mindent 10 "|" | msquote }}
-
-    # Authelia signs ID tokens / access tokens with this issuer URL. Must
-    # match what the MCP server sees in the JWT `iss` claim.
-    # (Defaults to https://authelia.danteb.com — set explicitly to be safe.)
+      - key_id: oidc-rsa-1
+        algorithm: RS256
+        use: sig
+        # Authelia 4.39+: either inline the PEM with a block scalar OR use a
+        # file reference. The file-reference form is preferred so the secret
+        # never lives in the YAML.
+        key: |
+          {{ fileContent "/config/keys/oidc.pem" | nindent 10 }}
 
     cors:
-      endpoints: [token, revocation, introspection, userinfo]
+      endpoints:
+        - authorization
+        - token
+        - revocation
+        - introspection
+        - userinfo
       allowed_origins:
         - https://claude.ai
+        - https://claude.com
 
-    # ↓ The two clients we add below.
+    # Two clients — see §2.2 (OpenClaw / CLI) and §2.3 (Claude.ai).
     clients:
       - client_id: openclaw-mcp
-        # ... see §2.2
-
-    # Dynamic Client Registration — Claude.ai self-registers via this.
-    authorization_policies:
-      mcp_users:
-        default_policy: two_factor
-        rules:
-          - subject: 'group:admins'
-            policy: one_factor
+        # ... see §2.2 below
+      - client_id: claude-mcp
+        # ... see §2.3 below
 ```
+
+`identity_providers.oidc.cors.allowed_origins` is required so Claude.ai's
+browser can call back to Authelia's token / userinfo endpoints during
+the consent flow. If your Authelia config has CORS configured elsewhere,
+merge the `https://claude.ai` / `https://claude.com` entries into the
+existing list.
 
 ### 2.2 Static client for OpenClaw + CLI (`client_credentials` grant)
 
 For machine-to-machine clients (OpenClaw on the Pi, ad-hoc `curl`,
-cron jobs). One client, all MCP audiences in its allowlist:
+cron jobs). One client, all MCP audiences in its allowlist. Lives
+inside `identity_providers.oidc.clients:`:
 
 ```yaml
 clients:
   - client_id: openclaw-mcp
     client_name: OpenClaw MCP fleet
-    # Generate with: `authelia crypto hash generate pbkdf2 --variant sha512 --random --random.length 64`
-    # Store the cleartext value in ${DATA}/authelia/secrets/openclaw_oidc_secret
-    # (mode 0600, owned by root) for `pi/install-mcp-config.sh` to ship to the Pi.
+    # Generate with:
+    #   docker exec authelia authelia crypto hash generate pbkdf2 \
+    #     --variant sha512 --password "<cleartext>"
+    # …and store the cleartext at ${DATA}/authelia/secrets/openclaw_oidc_secret
+    # (mode 0600, owned by root) for pi/install-mcp-config.sh to ship to the Pi.
+    # See §6.1 for the one-liner that does both.
     client_secret: '$pbkdf2-sha512$310000$...'
     public: false
-    authorization_policy: mcp_users
     grant_types:
       - client_credentials
+    # No redirect_uris — client_credentials doesn't redirect.
     scopes:
       - mcp:tcad
       # When other MCP servers grow OAuth, add more scopes here.
     audience:
       - https://mcp-tcad.danteb.com
     token_endpoint_auth_method: client_secret_post
+    # client_credentials has no end user, so an authorization_policy isn't
+    # meaningful here. Authelia treats the client itself as the principal.
 ```
 
-### 2.3 DCR template for Claude.ai (`authorization_code` grant)
+### 2.3 Static client for Claude.ai (`authorization_code` grant)
 
-Claude.ai's remote-MCP integration self-registers on first use via DCR.
-The template defines the policy applied to all dynamically-registered
-clients whose redirect URIs match the Claude.ai allowlist:
+**Authelia doesn't support DCR** (see the note at the top of this
+runbook), so Claude.ai can't auto-register. Instead, we pre-register
+Claude.ai as a static OIDC client here and paste the resulting
+`client_id` + `client_secret` into Claude.ai's integration-setup UI by
+hand.
 
 ```yaml
-client_registration:
-  enabled: true
-  default_policy: two_factor
-  allowed_redirect_uris:
-    # Verify this list against Claude.ai's current docs before relying on it.
-    - https://claude.ai/api/mcp/auth_callback
-    - https://claude.com/api/mcp/auth_callback
-  allowed_grant_types:
-    - authorization_code
-    - refresh_token
-  allowed_response_types:
-    - code
-  allowed_token_endpoint_auth_methods:
-    - client_secret_post
-    - client_secret_basic
-  allowed_scopes:
-    - mcp:tcad
-    - openid
-    - profile
-  default_audience:
-    - https://mcp-tcad.danteb.com
+clients:
+  - client_id: claude-mcp
+    client_name: Claude.ai (mcp-tcad)
+    # Generate the same way as the openclaw-mcp secret in §2.2, but a
+    # separate value so Claude can be rotated independently. Store the
+    # cleartext somewhere you can re-read it (a password manager) —
+    # you'll paste it into Claude.ai during §5 setup.
+    client_secret: '$pbkdf2-sha512$310000$...'
+    public: false
+    authorization_policy: two_factor
+    consent_mode: explicit
+    grant_types:
+      - authorization_code
+      - refresh_token
+    response_types:
+      - code
+    response_modes:
+      - query
+    redirect_uris:
+      # IMPORTANT: these are best-guess values. Anthropic doesn't publish a
+      # stable list, and Claude.ai shows the redirect URI it actually wants
+      # to use during the integration-setup flow (or in the error response
+      # if the URI is wrong). Capture it from there and put the EXACT
+      # value(s) here. Multiple are fine — list all the variants Claude
+      # might use.
+      - https://claude.ai/api/mcp/auth_callback
+      - https://claude.com/api/mcp/auth_callback
+    scopes:
+      - openid
+      - profile
+      - mcp:tcad
+    audience:
+      - https://mcp-tcad.danteb.com
+    token_endpoint_auth_method: client_secret_post
+    # PKCE is required by RFC 9700 and the MCP authorization spec.
+    require_pkce: true
+    pkce_challenge_method: S256
 ```
+
+If Claude.ai sends a redirect URI you haven't listed, Authelia logs
+something like `invalid redirect_uri: <URL>`. Add that URL to
+`redirect_uris:` and `dcr authelia` — that's the cleanest way to
+discover the actual value Anthropic is using right now.
 
 ### 2.4 Apply
 
@@ -128,6 +206,11 @@ client_registration:
 dcr authelia
 docker logs authelia | tail -20    # confirm OIDC startup is clean
 ```
+
+A clean start logs `Identity provider 'oidc' is enabled` and lists the
+two clients (`openclaw-mcp`, `claude-mcp`). A misconfigured schema
+prints a validation error and refuses to start the OIDC subsystem
+(other Authelia features keep working).
 
 ---
 
@@ -246,24 +329,44 @@ Expected: `200 OK`. If you get `401`, the Authelia client config is wrong
 
 ### Claude.ai integration
 
-In Claude.ai → Settings → Integrations → Add custom integration:
+Authelia doesn't support DCR (see top of this runbook), so Claude.ai
+gets manually-pasted credentials instead of self-registering.
 
-- **Server URL:** `https://mcp-tcad.danteb.com`
-- **Name:** `TCAD`
+1. Confirm the `claude-mcp` static client from §2.3 exists in
+   `${DATA}/authelia/config/configuration.yml` and Authelia restarted
+   cleanly after `dcr authelia`.
+2. In Claude.ai → Settings → Integrations → **Add custom integration**:
+   - **Server URL:** `https://mcp-tcad.danteb.com`
+   - **Name:** `TCAD`
+3. Claude calls `/.well-known/oauth-protected-resource` → reads
+   `authorization_servers: ["https://authelia.danteb.com"]` → calls
+   `https://authelia.danteb.com/.well-known/openid-configuration`.
+4. Because Authelia's discovery doc does NOT advertise a
+   `registration_endpoint`, Claude.ai's flow falls back to asking you
+   for credentials. The exact UX varies — most commonly Claude shows a
+   "Use existing client" form. Paste:
+   - **Client ID:** `claude-mcp`
+   - **Client Secret:** the cleartext you generated for the `claude-mcp`
+     client in §2.3 (NOT the `$pbkdf2-sha512$…` hashed form — that's
+     what Authelia stores, but Claude.ai needs the cleartext for the
+     `client_secret_post` token exchange).
+5. Claude opens a popup to Authelia's authorize URL → you log in (2FA per
+   the `two_factor` policy on `claude-mcp`) → consent → redirect back
+   to Claude with an `code=` → Claude exchanges it for a JWT → first
+   MCP call lands with `Authorization: Bearer <JWT>`.
 
-Claude will:
-1. Call `/.well-known/oauth-protected-resource` → discovers the issuer.
-2. Call `https://authelia.danteb.com/.well-known/openid-configuration` →
-   discovers the registration + token endpoints.
-3. POST to the registration endpoint (DCR) → receives a `client_id` /
-   `client_secret` it stores internally.
-4. Open a browser tab to Authelia's authorize URL → you log in (Authelia
-   2FA per the policy).
-5. Get redirected back to Claude with an auth code → exchanges it for
-   tokens → makes the first MCP call with `Authorization: Bearer <JWT>`.
+**Common failure modes and where to look:**
 
-If any step fails, check Claude's error message and the Authelia logs
-(`docker logs -f authelia`).
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Claude says "couldn't fetch the resource's authorization metadata" | `mcp-tcad.danteb.com/.well-known/oauth-protected-resource` returns 404 | OAuth is disabled — set `OAUTH_ISSUER` env var on `mcp-tcad` (§4). |
+| Claude says "this resource doesn't support dynamic client registration; please paste credentials" | Expected — Authelia behavior | Paste `claude-mcp` credentials per step 4. |
+| Authelia logs `invalid redirect_uri: <URL>` | Claude.ai's actual callback differs from what's in `claude-mcp.redirect_uris` | Capture the exact URL from the log and add it to §2.3, `dcr authelia`. |
+| Authelia logs `invalid client_id` or `unauthorized_client` | Wrong client ID / secret pasted, or the secret hash in YAML doesn't match the cleartext you pasted | Re-generate the secret per §2.3's comment and re-paste both sides. |
+| Token exchange succeeds but MCP returns 401 | `aud` mismatch | Check that `claude-mcp.audience` in §2.3 includes `https://mcp-tcad.danteb.com` exactly, and that `OAUTH_AUDIENCE` env var on `mcp-tcad` matches. |
+
+If you'd rather have automatic discovery (no manual paste), swap
+Authelia for an IdP that supports DCR — see [Porting to another IdP](#porting-to-another-idp).
 
 ---
 
