@@ -236,7 +236,14 @@ services:
       # code). Points at our homeserver mcp-idp service which provides DCR
       # so Claude.ai's auto-discovery flow Just Works.
       OAUTH_ISSUER: https://mcp-idp.danteb.com
-      OAUTH_AUDIENCE: https://mcp-tcad.danteb.com
+      # Note the trailing slash: Claude.ai (and several other MCP clients)
+      # send `resource=https://mcp-tcad.danteb.com/` (with slash) as the
+      # RFC 8707 resource indicator, so mcp-idp mints tokens with
+      # `aud=https://mcp-tcad.danteb.com/`. The pre-0.3.2 audience compare
+      # was strict-equality and rejected these. Newer tcad-mcp images
+      # normalize trailing-slash on both sides so this is just a
+      # belt-and-suspenders match against what Claude sends today.
+      OAUTH_AUDIENCE: https://mcp-tcad.danteb.com/
       RESOURCE_URL: https://mcp-tcad.danteb.com
       # No OAUTH_REQUIRED_SCOPE — mcp-idp's tokens don't carry an
       # mcp:tcad scope today (it would need to be added to the consent
