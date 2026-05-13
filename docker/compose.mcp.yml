@@ -222,7 +222,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: ghcr.io/dantebarbieri/tcad-mcp:0.3.0
+    image: ghcr.io/dantebarbieri/tcad-mcp:0.3.2
     container_name: mcp-tcad
     networks:
       - proxy
