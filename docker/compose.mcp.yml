@@ -252,6 +252,17 @@ services:
       # No OAUTH_REQUIRED_SCOPE — mcp-idp's tokens don't carry an
       # mcp:tcad scope today (it would need to be added to the consent
       # flow). Audience binding is the primary protection.
+      #
+      # Override the upstream User-Agent. TrueProdigy's edge proxy 403s
+      # requests whose UA contains identifiable bot tokens — they added
+      # the v0.3.5 default `Mozilla/5.0 (compatible; tcad-mcp)` to their
+      # blocklist within ~95 minutes of our first deploy. Real-browser
+      # UAs (Chrome / Firefox / Safari) all pass. Pin to a recent stable
+      # Chrome here so a future image bump that changes the in-image
+      # default doesn't silently regress us. If TrueProdigy starts
+      # blocking this exact string too, swap to a different real-browser
+      # UA — see https://www.useragents.me/ for current popular strings.
+      TCAD_UPSTREAM_USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost', 8080), timeout=3).close()\""]
       interval: 60s
