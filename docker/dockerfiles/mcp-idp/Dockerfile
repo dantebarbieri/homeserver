@@ -25,4 +25,4 @@ USER app
 HEALTHCHECK --interval=60s --timeout=10s --start-period=20s --retries=3 \
     CMD python -c "import socket; socket.create_connection(('localhost', 8080), timeout=3).close()"
 
-CMD ["uvicorn", "mcp_idp:app", "--host", "::", "--port", "8080", "--no-access-log"]
+CMD ["python", "-m", "mcp_idp"]
