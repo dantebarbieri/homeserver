@@ -70,7 +70,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: mcp-idp
+    image: mcp-idp:latest
     build:
       context: dockerfiles/mcp-idp
     container_name: mcp-idp
@@ -88,7 +88,7 @@ services:
       # Allowlist of MCP server URLs that can be specified as the OAuth
       # `resource` parameter. Add an entry per MCP server you want
       # mcp-idp-issued JWTs to be valid for.
-      IDP_RESOURCES: https://mcp-tcad.danteb.com
+      IDP_RESOURCES: https://mcp-tcad.danteb.com,https://mcp-tcad.danteb.com/
       IDP_PROXY_HEADER_USER: Remote-User
       IDP_PROXY_HEADER_NAME: Remote-Name
       IDP_CORS_ORIGINS: https://claude.ai,https://claude.com
