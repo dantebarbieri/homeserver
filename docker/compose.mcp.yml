@@ -210,8 +210,12 @@ services:
   #
   # Source: https://github.com/dantebarbieri/tcad-mcp (carved out of this
   # repo so it can be republished for any TCAD office on TrueProdigy). Build
-  # is GitHub Actions on tag push; image is published to GHCR. To bump,
-  # change the tag below.
+  # is GitHub Actions on every push to main; image is published to GHCR.
+  #
+  # We pin to ``:latest`` (not a semver tag) so the daily ``dcu`` (which
+  # runs ``docker compose pull && up -d``) auto-picks up upstream fixes
+  # without a compose edit. Roll back by pinning to a specific
+  # ``ghcr.io/dantebarbieri/tcad-mcp:0.X.Y`` tag if a bad image ships.
   #
   # Auth: bearer fallback (MCP_TOKEN_TCAD secret) AND OAuth 2.1 / OIDC
   # against Authelia. Both auth paths work in parallel — OpenClaw and
@@ -222,7 +226,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: ghcr.io/dantebarbieri/tcad-mcp:0.3.3
+    image: ghcr.io/dantebarbieri/tcad-mcp:latest
     container_name: mcp-tcad
     networks:
       - proxy

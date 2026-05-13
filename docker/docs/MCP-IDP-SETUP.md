@@ -321,7 +321,17 @@ In Claude.ai (web):
 2. Click **Add custom integration**.
 3. Fill in:
    - **Name:** `TCAD`
-   - **Server URL:** `https://mcp-tcad.danteb.com`
+   - **Server URL:** `https://mcp-tcad.danteb.com/mcp`
+
+   > **The `/mcp` suffix matters.** `tcad-mcp` mounts the MCP Streamable
+   > HTTP transport at `/mcp` — pasting just the bare host (`https://mcp-tcad.danteb.com`)
+   > makes the OAuth flow succeed but Claude then POSTs the actual MCP
+   > request to `/`, gets a 404, and shows *"McpEndpointNotFound: Your
+   > account was authorized but no MCP server was found at the provided
+   > URL"*. The auth middleware fronts the whole vhost (so root still
+   > 401s with `WWW-Authenticate`, which is why discovery looks healthy
+   > before the post-auth call fails). Always include `/mcp` for any
+   > MCP server in this stack.
 4. Click **Add**, then **Connect**.
 5. A popup opens to `mcp-idp.danteb.com/authorize` → which Authelia
    intercepts → log in with your usual Authelia credentials + 2FA.
@@ -423,6 +433,7 @@ If steps 1–6 all succeed, Claude.ai will Just Work.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| Claude shows *"McpEndpointNotFound: Your account was authorized but no MCP server was found at the provided URL"* immediately after Approve on the consent screen | Integration URL is missing the `/mcp` suffix — OAuth completes, but Claude POSTs the post-auth MCP call to `/` and the auth middleware returns 401 → 404 (no transport mounted at root) | Edit the integration in Claude and set Server URL to `https://mcp-<name>.danteb.com/mcp` (note the trailing `/mcp`). Re-Connect. |
 | `503` on `https://mcp-idp.danteb.com/healthz` | container not running or wrong Forward Hostname in NPM | `docker logs mcp-idp` + verify NPM Details tab points at `mcp-idp:8080` |
 | `200` on open endpoints, `401` on `/authorize` | The Authelia ForwardAuth snippet in §2.4 wasn't applied | Reopen the Custom Location, re-paste the snippet, hit Save |
 | `403 Forbidden` on `/authorize` even after Authelia login | Wrong / missing `IDP_PROXY_SECRET` value in the `proxy_set_header` line | Re-read `/srv/docker/data/mcp-idp/secrets/IDP_PROXY_SECRET` and paste the EXACT value (no quotes within quotes) |
