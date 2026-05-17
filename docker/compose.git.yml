@@ -16,6 +16,9 @@ services:
       FORGEJO__database__NAME: forgejo
       FORGEJO__database__USER: forgejo
       FORGEJO__database__PASSWD: ${FORGEJO_DB_PASSWORD}
+      FORGEJO__server__LFS_START_SERVER: "true"
+      FORGEJO__server__LFS_JWT_SECRET: ${LFS_JWT_SECRET}
+      FORGEJO__lfs__PATH: /data/git/lfs
     networks:
       - proxy
       - forgejo
