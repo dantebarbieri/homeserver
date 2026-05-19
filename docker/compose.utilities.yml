@@ -1,5 +1,7 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, snapotter, stirling-pdf
+# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server,
+# convertx, snapotter, stirling-pdf, changedetection-io, sockpuppetbrowser,
+# grocy, grocy-ntfy
 
 services:
   vaultwarden:
@@ -198,9 +200,51 @@ services:
     networks:
       - changedetection
 
+  # Grocy — household stock / medicine / pantry inventory with consumption
+  # tracking, barcode scanning (Open Food Facts), expiry tracking, recipes,
+  # and per-product min-stock thresholds. Built-in multi-user (so no Authelia).
+  # Internal port 80 (linuxserver image; 9283 is the suggested host port).
+  grocy:
+    extends:
+      file: compose.common.yml
+      service: linuxserver-service
+    image: lscr.io/linuxserver/grocy:latest
+    container_name: grocy
+    volumes:
+      - ${DATA}/grocy/config:/config
+    networks:
+      - proxy
+      - grocy
+
+  # Grocy doesn't have native low-stock push notifications. This sidecar polls
+  # GET /api/stock/volatile and forwards the `missing_products` list to ntfy
+  # whenever the set changes. State persists across restarts in ${DATA}.
+  grocy-ntfy:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: grocy-ntfy
+    build:
+      context: dockerfiles/grocy-ntfy
+    container_name: grocy-ntfy
+    depends_on:
+      grocy:
+        condition: service_started
+    environment:
+      GROCY_URL: "http://grocy"
+      GROCY_API_KEY: ${GROCY_API_KEY:-}
+      GROCY_NTFY_URL: ${GROCY_NTFY_URL:-https://ntfy.danteb.com}
+      GROCY_NTFY_TOPIC: ${GROCY_NTFY_TOPIC:-grocy-alerts}
+      GROCY_POLL_INTERVAL: ${GROCY_POLL_INTERVAL:-3600}
+    volumes:
+      - ${DATA}/grocy-ntfy:/state
+    networks:
+      - grocy
+
 volumes:
   vw-data:
 
 networks:
   proxy:
   changedetection:
+  grocy:
