@@ -30,6 +30,7 @@ All services should extend one of these:
 - `dockerfiles/port-sync/` — curlimages/curl + `port-sync.sh` qBittorrent VPN port sync script
 - `dockerfiles/vpn-netns-watcher/` — docker:cli + compose plugin + `vpn-netns-watcher.sh`; watches `vpn-netns` start events and force-recreates gluetun/qbittorrent/qbit-port-sync/qbit-manage when their network sandbox drifts from vpn-netns (e.g., after a `pause` image bump recreates vpn-netns and orphans the siblings on the destroyed netns)
 - `dockerfiles/grocy-ntfy/` — alpine + curl + jq + `check-stock.sh`; polls Grocy `GET /api/stock/volatile` on a configurable interval and forwards `missing_products` to a ntfy topic. Dedupes on a SHA-256 of the sorted item list persisted to `/state/last_digest` so restarts don't re-alert.
+- `dockerfiles/grocy-autoconsume/` — alpine + curl + jq + coreutils + tzdata + `autoconsume.sh`; wakes once daily at `$GROCY_AUTOCONSUME_TIME` (local `$TZ`), enumerates every product in product group `$GROCY_AUTOCONSUME_GROUP` (default `Auto-consume daily`), and POSTs `/api/stock/products/{id}/consume` for that product's `quick_consume_amount`. Date-deduped via `/state/last_run` so a same-day restart never double-consumes. Errors always page via ntfy; per-day success digest is opt-in (`GROCY_AUTOCONSUME_DIGEST=1`).
 
 ## Shell Scripts (`scripts/`)
 
