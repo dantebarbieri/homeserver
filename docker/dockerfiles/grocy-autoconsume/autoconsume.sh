@@ -92,7 +92,8 @@ run_consume_batch() {
   fi
 
   successes=""
-  failures=""
+  missed_doses=""
+  system_failures=""
 
   # Loop via here-doc so the variable assignments persist (a piped
   # `while read` runs in a subshell on POSIX sh and loses state).
@@ -106,28 +107,60 @@ run_consume_batch() {
       ''|null|0|0.0|0.00) amount=1 ;;
     esac
 
-    if ! resp="$(curl -fsS -m 15 -X POST \
+    # Drop -f so curl returns the body on 4xx; capture HTTP code via -w.
+    # Format: <body>\n<status_code>
+    raw="$(curl -sS -m 15 -X POST \
         -H "GROCY-API-KEY: $GROCY_API_KEY" \
         -H "Content-Type: application/json" \
+        -w '\n%{http_code}' \
         --data-binary "{\"amount\": $amount, \"transaction_type\": \"consume\", \"spoiled\": false}" \
-        "${GROCY_URL}/api/stock/products/${pid}/consume" 2>&1)"; then
-      log "ERROR: consume failed for '$pname' (id=$pid, amt=$amount): $resp"
-      failures="${failures}- ${pname} (need ${amount}, error: $(printf '%s' "$resp" | head -c 120))
+        "${GROCY_URL}/api/stock/products/${pid}/consume" 2>&1)" || {
+      # Network failure or curl error itself (not an HTTP error)
+      log "ERROR: curl failed for '$pname' (id=$pid, amt=$amount): $raw"
+      system_failures="${system_failures}- ${pname} (network: $(printf '%s' "$raw" | head -c 120))
 "
       continue
-    fi
+    }
 
-    log "consumed ${amount} of '${pname}' (id=${pid})"
-    successes="${successes}- ${pname}: ${amount}
+    status="$(printf '%s' "$raw" | tail -n1)"
+    body="$(printf '%s' "$raw" | sed '$d')"
+
+    case "$status" in
+      200|204)
+        log "consumed ${amount} of '${pname}' (id=${pid})"
+        successes="${successes}- ${pname}: ${amount}
 "
+        ;;
+      400)
+        # Grocy returns 400 for "amount cannot be lower than 0", i.e. not
+        # enough stock to satisfy the requested consume. That's a missed
+        # dose, not a system error.
+        msg="$(printf '%s' "$body" | jq -r '.error_message // .message // .' 2>/dev/null | head -c 200)"
+        log "MISSED DOSE: '$pname' (id=$pid, needed=$amount): $msg"
+        missed_doses="${missed_doses}- ${pname} (needed ${amount}; ${msg})
+"
+        ;;
+      *)
+        log "ERROR: consume failed for '$pname' (id=$pid, amt=$amount, status=$status): $body"
+        system_failures="${system_failures}- ${pname} (HTTP ${status}: $(printf '%s' "$body" | head -c 120))
+"
+        ;;
+    esac
   done <<EOF
 $matches
 EOF
 
-  if [ -n "$failures" ]; then
-    body="$(printf 'Some daily medications could NOT be auto-consumed at %s:\n\n%s\nCheck stock manually.' \
-      "$(date '+%Y-%m-%d %H:%M %Z')" "$failures")"
-    ntfy_push high "Grocy autoconsume errors" "warning,pill" "$body"
+  if [ -n "$system_failures" ]; then
+    body="$(printf 'Grocy autoconsume failed for these meds at %s (NOT an out-of-stock issue — Grocy itself returned an error). Investigate immediately:\n\n%s' \
+      "$(date '+%Y-%m-%d %H:%M %Z')" "$system_failures")"
+    ntfy_push high "Grocy autoconsume system failure" "rotating_light,pill" "$body"
+  fi
+
+  if [ -n "$missed_doses" ]; then
+    count="$(printf '%s' "$missed_doses" | grep -c '^-')"
+    body="$(printf '%s daily med(s) were not consumed today because stock is insufficient:\n\n%sRefill or adjust dose. (Auto-consume will retry tomorrow at %s.)' \
+      "$count" "$missed_doses" "$GROCY_AUTOCONSUME_TIME")"
+    ntfy_push default "Daily med(s) missed: out of stock" "pill" "$body"
   fi
 
   if [ -n "$successes" ] && [ "$GROCY_AUTOCONSUME_DIGEST" = "1" ]; then
