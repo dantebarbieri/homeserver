@@ -1,0 +1,5 @@
+# Force LF for shell scripts and Dockerfiles so Windows checkouts don't break
+# alpine/busybox `exec`, which fails on CRLF shebang lines.
+*.sh         text eol=lf
+Dockerfile   text eol=lf
+Dockerfile.* text eol=lf
