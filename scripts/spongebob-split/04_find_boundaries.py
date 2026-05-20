@@ -179,21 +179,27 @@ def keyframes_in_range(
     ]
 
 
-def snap_to_keyframe_le(
+def snap_to_keyframe_ge(
     path: Path, t: float, duration: float
 ) -> float:
-    """Return the largest keyframe time <= t. Falls back to t if none found
-    (which is unusual but safe for stream-copy because ffmpeg will internally
-    snap)."""
-    # Search a generous window before t; SpongeBob WEBDL GOPs are usually
+    """Return the smallest keyframe time >= t. Falls back to t if none found.
+
+    Snapping FORWARD (rather than backward) avoids capturing a few seconds
+    of the previous episode at the start: the prior keyframe could be up
+    to GOP-length (~2-4s) earlier than the true boundary. By landing on
+    the first keyframe at-or-after the boundary, we lose at most ~GOP-1
+    frames of new-episode content (typically pre-title-card fade-in,
+    which is harmless) and avoid bleeding the previous episode's tail.
+    """
+    # Search a generous window after t; SpongeBob WEBDL GOPs are usually
     # <= ~10s, but we widen to 20s to be safe.
-    t_lo = max(0.0, t - 20.0)
-    t_hi = min(duration, t + 0.5)
+    t_lo = max(0.0, t - 0.5)
+    t_hi = min(duration, t + 20.0)
     kfs = keyframes_in_range(path, t_lo, t_hi)
-    kfs = [k for k in kfs if k <= t + 0.01]
+    kfs = [k for k in kfs if k >= t - 0.01]
     if not kfs:
         return t
-    return max(kfs)
+    return min(kfs)
 
 
 @dataclass
@@ -298,7 +304,7 @@ def process_file(
         if s <= 0.001:
             seg_starts_cut.append(0.0)
         else:
-            seg_starts_cut.append(snap_to_keyframe_le(full_path, s, dur))
+            seg_starts_cut.append(snap_to_keyframe_ge(full_path, s, dur))
         seg_ends_cut.append(e)
 
     out: list[Segment] = []
