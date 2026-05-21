@@ -40,11 +40,8 @@ _06 = import_module("06_process_season")
 # title card appeared at t = 2*(N-1) seconds into the output, which is
 # how many seconds we need to shift the cut LATER.
 OVERRIDES: dict[tuple[int, int], float | str] = {
-    # Round 5 final touch-ups.
-    (5, 39): +7.0,                  # title at frames 4 & 5
-    (5, 2): +6.0,                   # title at frame 4
-    (5, 30): "ABS:0:11:44.500",     # user-provided, replacing the 17:37 guess
-    (4, 4): -3.0,                   # frame late, try -3
+    (5, 39): -3.0,                  # overcorrected +7 last round; back off
+    (5, 30): +6.0,                  # title at frame 4
 }
 
 TOO_LATE_SHIFT = -8.0
