@@ -532,6 +532,27 @@ in
     ];
   };
 
+  # The nixpkgs module sets DynamicUser=true on the runner service. systemd
+  # then mounts /var/lib/private as a noexec tmpfs and bind-mounts the real
+  # StateDirectory through it. act-runner resolves canonical paths to
+  # /var/lib/private/gitea-runner/... and dlopen() of any manylinux .so on
+  # that mount fails with "failed to map segment from shared object" because
+  # mmap(PROT_EXEC) returns EACCES on a noexec mount. Disable DynamicUser
+  # and use a real system user so StateDirectory lives directly on the root
+  # filesystem (rw, exec) with no noexec bind-mount in the resolution chain.
+  users.groups.gitea-runner = { };
+  users.users.gitea-runner = {
+    isSystemUser = true;
+    group = "gitea-runner";
+    home = "/var/lib/gitea-runner";
+    createHome = false;  # systemd's StateDirectory handles creation
+  };
+  systemd.services.gitea-runner-worldforge.serviceConfig = {
+    DynamicUser = lib.mkForce false;
+    User = lib.mkForce "gitea-runner";
+    Group = lib.mkForce "gitea-runner";
+  };
+
   # Docker
   virtualisation.docker = {
     enable = true;
