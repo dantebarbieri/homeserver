@@ -351,6 +351,48 @@ in
   programs.nix-index.enable = true;   # nix-locate — find which package provides a binary
   programs.command-not-found.enable = false;  # mutually exclusive with nix-index shell integrations
 
+  # nix-ld: provide a real /lib64/ld-linux-x86-64.so.2 so manylinux Python
+  # wheels (pygplates, landlab, pyfastnoiselite, …) can dlopen on NixOS.
+  # Without this, /lib64/ld-linux-x86-64.so.2 is the NixOS stub-ld and any
+  # mmap of a manylinux .so segment fails with "failed to map segment from
+  # shared object". Required by the WorldForge Forgejo Actions runner.
+  programs.nix-ld.enable = true;
+  programs.nix-ld.libraries = with pkgs; [
+    stdenv.cc.cc.lib  # libstdc++, libgcc_s
+    zlib
+    glib
+    libGL
+    libGLU
+    glew
+    freetype
+    fontconfig
+    expat
+    openssl
+    libxml2
+    sqlite
+    xorg.libX11
+    xorg.libXext
+    xorg.libSM
+    xorg.libICE
+    xorg.libXrender
+    xorg.libxcb
+    xorg.libXi
+    xorg.libXrandr
+    xorg.libXcursor
+    xorg.libXfixes
+    xorg.libXdamage
+    xorg.libXcomposite
+    xorg.libXtst
+    qt5.qtbase
+    boost
+    gdal
+    proj
+    geos
+    libtiff
+    libjpeg
+    libpng
+  ];
+
   services.openssh = {
     enable = true;
     ports = [ 28 ];
