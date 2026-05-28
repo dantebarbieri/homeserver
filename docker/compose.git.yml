@@ -1,5 +1,5 @@
 # Git hosting
-# forgejo, forgejo_postgres
+# forgejo, forgejo_postgres, forgejo_runner, forgejo_runner_dind
 
 services:
   forgejo:
@@ -54,9 +54,64 @@ services:
       retries: 5
       start_period: 30s
 
+  # Forgejo Actions runner — executes workflows from .forgejo/workflows/
+  # and .github/workflows/ in repos hosted on the forgejo container.
+  #
+  # Registration is idempotent via the shared-secret flow:
+  #   1. Generate a 40-hex secret:  openssl rand -hex 20
+  #   2. Store it in .env as FORGEJO_RUNNER_SECRET (gitignored).
+  #   3. Register once:
+  #        docker exec forgejo forgejo forgejo-cli actions register \
+  #            --name homeserver-runner --secret "$FORGEJO_RUNNER_SECRET"
+  #      The command prints a UUID; copy it (along with the secret) into
+  #      ${DATA}/forgejo_runner/runner-config.yml under server.connections.
+  #   4. dcu — the runner picks up the config on start.
+  #
+  # Topology: jobs run as containers spawned by a sibling docker:dind
+  # daemon (forgejo_runner_dind below) over TCP. This isolates the host
+  # docker socket from the runner — recommended by Forgejo upstream.
+  forgejo_runner:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: forgejo_runner
+    image: data.forgejo.org/forgejo/runner:12
+    user: "1001:1001"
+    depends_on:
+      forgejo_runner_dind:
+        condition: service_started
+      forgejo:
+        condition: service_started
+    environment:
+      DOCKER_HOST: tcp://forgejo_runner_dind:2375
+    networks:
+      - forgejo
+      - forgejo_runner_internal
+    volumes:
+      - ${DATA}/forgejo_runner:/data
+    command: forgejo-runner daemon --config /data/runner-config.yml
+
+  # Sibling docker daemon used by forgejo_runner to spawn job containers.
+  # Privileged is required for dockerd-in-dockerd; isolated to its own
+  # network so only the runner can reach it (no TLS on the TCP socket).
+  forgejo_runner_dind:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: forgejo_runner_dind
+    image: docker:28-dind
+    privileged: true
+    command: ["dockerd", "-H", "tcp://0.0.0.0:2375", "--tls=false"]
+    networks:
+      - forgejo_runner_internal
+    volumes:
+      - forgejo-runner-dind-data:/var/lib/docker
+
 networks:
   proxy:
   forgejo:
+  forgejo_runner_internal:
 
 volumes:
   forgejo-pgdata:
+  forgejo-runner-dind-data:
