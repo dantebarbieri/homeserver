@@ -19,6 +19,13 @@ services:
       FORGEJO__server__LFS_START_SERVER: "true"
       FORGEJO__server__LFS_JWT_SECRET: ${LFS_JWT_SECRET}
       FORGEJO__lfs__PATH: /data/git/lfs
+      # Resolve `uses: <owner>/<repo>@<ref>` against github.com instead of
+      # Forgejo's default curated mirror (https://data.forgejo.org), which
+      # only hosts a small set of first-party actions. Setting this to
+      # `github` makes workflows portable between Forgejo and GitHub
+      # without per-action URL rewrites. The runner still fetches actions
+      # over HTTPS — no GitHub auth needed for public repos.
+      FORGEJO__actions__DEFAULT_ACTIONS_URL: github
     networks:
       - proxy
       - forgejo
