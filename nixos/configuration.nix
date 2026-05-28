@@ -440,6 +440,48 @@ in
     };
   };
 
+  # Forgejo Actions host-mode runner (for WorldForge Snakemake pipeline).
+  # Runs alongside the dockerized runner in docker/compose.git.yml — that
+  # one handles `ubuntu-*:docker://catthehacker/...` jobs, this one handles
+  # the `worldforge-host` label for jobs that need `nix develop`.
+  #
+  # Bootstrap (one-time):
+  #   1. Get a registration token from Forgejo:
+  #        docker exec forgejo forgejo forgejo-cli actions register \
+  #          --name homeserver-worldforge --labels worldforge-host:host
+  #   2. Write the token in env-file format (the module passes tokenFile
+  #      to systemd as EnvironmentFile, so the file must contain TOKEN=...):
+  #        sudo install -m 0600 -o root -g root /dev/stdin \
+  #          /var/lib/forgejo-runner-worldforge.token <<<'TOKEN=<paste>'
+  #   3. nixos-rebuild switch
+  services.gitea-actions-runner.instances.worldforge = {
+    enable = true;
+    name = "homeserver-worldforge";
+    url = "https://git.danteb.com";
+    tokenFile = "/var/lib/forgejo-runner-worldforge.token";
+    labels = [ "worldforge-host:host" ];
+    hostPackages = with pkgs; [
+      bash
+      coreutils
+      curl
+      wget
+      gnused
+      gawk
+      git
+      git-lfs
+      nodejs
+      openssh
+      rsync
+      gnutar
+      gzip
+      jq
+      nix
+      just
+      uv
+      cacert
+    ];
+  };
+
   # Docker
   virtualisation.docker = {
     enable = true;
