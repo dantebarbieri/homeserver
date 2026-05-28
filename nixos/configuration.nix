@@ -370,19 +370,19 @@ in
     openssl
     libxml2
     sqlite
-    xorg.libX11
-    xorg.libXext
-    xorg.libSM
-    xorg.libICE
-    xorg.libXrender
-    xorg.libxcb
-    xorg.libXi
-    xorg.libXrandr
-    xorg.libXcursor
-    xorg.libXfixes
-    xorg.libXdamage
-    xorg.libXcomposite
-    xorg.libXtst
+    libx11
+    libxext
+    libsm
+    libice
+    libxrender
+    libxcb
+    libxi
+    libxrandr
+    libxcursor
+    libxfixes
+    libxdamage
+    libxcomposite
+    libxtst
     qt5.qtbase
     boost
     gdal
