@@ -454,6 +454,14 @@ in
   #        sudo install -m 0600 -o root -g root /dev/stdin \
   #          /var/lib/forgejo-runner-worldforge.token <<<'TOKEN=<paste>'
   #   3. nixos-rebuild switch
+  # nixpkgs's services.gitea-actions-runner module defaults to the
+  # upstream `gitea-actions-runner` (aliased to `forgejo-runner` since
+  # 2025-10-27). Pin the package explicitly so the runner protocol
+  # version tracks the Forgejo server's version (v12.x) — the older
+  # gitea-actions-runner v1.0.3 silently fails to fetch tasks against
+  # a modern Forgejo Actions server. `package` is a module-level
+  # option, not per-instance.
+  services.gitea-actions-runner.package = pkgs.forgejo-runner;
   services.gitea-actions-runner.instances.worldforge = {
     enable = true;
     name = "homeserver-worldforge";
