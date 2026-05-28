@@ -76,7 +76,11 @@ services:
       service: common-service
     container_name: forgejo_runner
     image: data.forgejo.org/forgejo/runner:12
-    user: "1001:1001"
+    # Run as the host owner of ${DATA} (uid:gid = ${UID}:${GID} = 1000:1000
+    # on HomeServer) so the bind-mounted /data is writable without sudo on
+    # the host. Upstream's example uses 1001:1001; we deviate to match the
+    # HomeServer-wide convention used by every other service.
+    user: "${UID}:${GID}"
     depends_on:
       forgejo_runner_dind:
         condition: service_started
