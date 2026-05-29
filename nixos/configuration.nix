@@ -553,6 +553,15 @@ in
     Group = lib.mkForce "gitea-runner";
   };
 
+  # envfs: FUSE-backed /bin and /usr/bin that dynamically resolve to the
+  # current system profile. NixOS normally ships only /bin/sh and
+  # /usr/bin/env; third-party software (e.g. ExoPlaSim's compile.sh with
+  # `#!/bin/bash`, conda hooks, manylinux helpers) routinely assumes a
+  # full FHS layout and fails with "bad interpreter" otherwise. envfs
+  # patches over the entire class of issue without per-package symlinks.
+  # See: https://github.com/Mic92/envfs
+  services.envfs.enable = true;
+
   # Docker
   virtualisation.docker = {
     enable = true;
