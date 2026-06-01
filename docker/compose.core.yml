@@ -19,9 +19,15 @@ services:
       - ${DATA}/nginxproxymanager/data:/data
       - ${DATA}/nginxproxymanager/letsencrypt:/etc/letsencrypt
       - ${DATA}/nginxproxymanager/snippets:/snippets
-      - ./nginx/default-ssl.conf:/data/nginx/custom/http.conf
+      # Custom nginx config is kept in-repo (git source of truth) and mounted
+      # read-only OUTSIDE /data/nginx. NPM's s6 prepare step (50-ipv6.sh) rewrites
+      # every *.conf under /data/nginx via `sed > tmp && mv tmp file`; `mv` over an
+      # individual bind-mounted file fails ("Device or resource busy") and, with
+      # `set -e`, aborts startup so nginx never comes up. Thin include stubs seeded
+      # into the data volume at /data/nginx/custom/{http.conf,server_proxy.conf}
+      # `include` the real files from here instead.
+      - ./nginx:/data/custom:ro
       - ./nginx/404.html:/data/nginx/default_www/404.html
-      - ./nginx/server_proxy.conf:/data/nginx/custom/server_proxy.conf
       - ./nginx/502.html:/data/nginx/default_www/502.html
 
   ddclient:
