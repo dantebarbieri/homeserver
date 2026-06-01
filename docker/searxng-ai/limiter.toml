@@ -3,11 +3,19 @@
 # settings.yml (server.limiter = false). This file mostly exists to keep
 # the SearXNG container from logging "limiter: missing" warnings and to
 # document the IP allowlist if the limiter is ever turned back on.
+#
+# NOTE: SearXNG validates this file against its schema on EVERY start, even
+# when server.limiter = false (searx/limiter.py get_cfg()). An invalid file is
+# therefore FATAL (crash loop), not just a warning. `trusted_proxies` is now a
+# LIST of CIDRs (it was an integer in older SearXNG releases).
 
 [botdetection]
-trusted_proxies = 1
-ipv4_prefix = 32
-ipv6_prefix = 56
+trusted_proxies = [
+  '127.0.0.0/8',
+  '::1',
+  '172.16.0.0/12',
+  'fd00::/8',
+]
 
 [botdetection.ip_lists]
 pass_searxng_org = false
