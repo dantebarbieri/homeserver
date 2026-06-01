@@ -39,7 +39,13 @@ services:
       SEARXNG_SECRET: ${SEARXNG_SECRET_KEY:?set SEARXNG_SECRET_KEY in .env (openssl rand -hex 32)}
       SEARXNG_VALKEY_URL: valkey://searxng_redis:6379/0
     cap_drop: [ALL]
-    cap_add: [CHOWN, SETGID, SETUID]
+    # DAC_OVERRIDE: the searxng image runs its granian worker as root but must
+    # write to paths owned by the searxng user (uid 977) — the bind-mounted
+    # /etc/searxng config and the internal /var/cache/searxng sqlite engine
+    # cache. Default Docker root relies on DAC_OVERRIDE for this; dropping it
+    # caused "settings.yml.new: Permission denied" and the engine-cache
+    # "no such table: properties" failures.
+    cap_add: [CHOWN, SETGID, SETUID, DAC_OVERRIDE]
     depends_on:
       - searxng_redis
 
@@ -69,7 +75,10 @@ services:
       SEARXNG_SECRET: ${SEARXNG_AI_SECRET_KEY:?set SEARXNG_AI_SECRET_KEY in .env (openssl rand -hex 32)}
       SEARXNG_REDIS_URL: redis://searxng-ai-valkey:6379/0
     cap_drop: [ALL]
-    cap_add: [CHOWN, SETGID, SETUID]
+    # DAC_OVERRIDE: needed so the root worker can write the internal
+    # /var/cache/searxng sqlite engine cache (uid 977). The /etc/searxng config
+    # mount is read-only by design, so this does not grant config writes.
+    cap_add: [CHOWN, SETGID, SETUID, DAC_OVERRIDE]
     depends_on:
       - searxng-ai-valkey
 
