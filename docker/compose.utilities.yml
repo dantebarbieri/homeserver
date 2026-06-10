@@ -1,7 +1,7 @@
 # Utility services
-# vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server,
-# convertx, snapotter, stirling-pdf, changedetection-io, sockpuppetbrowser,
-# grocy, grocy-ntfy, grocy-autoconsume
+# vaultwarden, syncthing, couchdb, ntfy, adguardhome, wg-easy, it-tools,
+# code-server, convertx, snapotter, stirling-pdf, changedetection-io,
+# sockpuppetbrowser, grocy, grocy-ntfy, grocy-autoconsume
 
 services:
   vaultwarden:
@@ -38,6 +38,35 @@ services:
       interval: 1m
       timeout: 10s
       retries: 3
+
+  # CouchDB backend for the Obsidian "Self-hosted LiveSync" community plugin —
+  # real-time, end-to-end-encrypted vault sync between desktop and iPhone (the
+  # vault is the docs/ folder of the external WorldForge repo). Settings in
+  # couchdb/local.ini follow the official obsidian-livesync setup; single_node =
+  # true auto-creates the _users / _replicator / _global_changes system DBs on
+  # first start. Admin credentials come from COUCHDB_USER / COUCHDB_PASSWORD.
+  # Exposed via NPM at https://couchdb.danteb.com (mobile Obsidian requires a
+  # valid TLS endpoint). See docs/OBSIDIAN-LIVESYNC.md.
+  couchdb:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: couchdb:3
+    container_name: couchdb
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+    volumes:
+      - couchdb-data:/opt/couchdb/data
+      - ./couchdb/local.ini:/opt/couchdb/etc/local.d/local.ini:ro
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5984/_up || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   ntfy:
     extends:
@@ -274,6 +303,7 @@ services:
 
 volumes:
   vw-data:
+  couchdb-data:
 
 networks:
   proxy:

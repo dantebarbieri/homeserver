@@ -294,6 +294,13 @@
         siteMonitor: https://syncthing.danteb.com
         server: my-docker
         container: syncthing
+    - CouchDB:
+        icon: couchdb.svg
+        href: https://couchdb.danteb.com/_utils/
+        description: Obsidian LiveSync Backend
+        siteMonitor: https://couchdb.danteb.com/_up
+        server: my-docker
+        container: couchdb
     - Changedetection:
         icon: mdi-magnify-scan
         href: https://cd.danteb.com
