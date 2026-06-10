@@ -53,6 +53,11 @@ services:
       service: common-service
     image: couchdb:3
     container_name: couchdb
+    # Run as the couchdb user (uid/gid 5984, owner of the image's data dir and
+    # the named volume). This makes the entrypoint skip its root-only recursive
+    # chown of /opt/couchdb, which otherwise fails on the read-only local.ini
+    # bind mount and crash-loops the container before CouchDB starts.
+    user: "5984:5984"
     environment:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
