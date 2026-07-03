@@ -1,3 +1,0 @@
-openzim-mcp==0.8.3
-mcp-proxy==0.11.0
-httpx==0.28.1

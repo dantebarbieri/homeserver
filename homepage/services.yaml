@@ -182,13 +182,6 @@
         siteMonitor: https://searxng.danteb.com
         server: my-docker
         container: searxng
-    - SearXNG (AI):
-        icon: searxng.svg
-        href: https://ai-search.danteb.com
-        description: AI-private metasearch (LAN only)
-        siteMonitor: https://ai-search.danteb.com
-        server: my-docker
-        container: searxng-ai
 
 - Network & Communication:
     - Nginx Proxy Manager:
@@ -368,13 +361,6 @@
         siteMonitor: https://code.danteb.com
         server: my-docker
         container: code-server
-    - Kiwix:
-        icon: kiwix.svg
-        href: https://kiwix.danteb.com
-        description: Offline Wiki / ZIM Library
-        siteMonitor: https://kiwix.danteb.com
-        server: my-docker
-        container: kiwix-serve
     - Forgejo:
         icon: forgejo.svg
         href: https://git.danteb.com
@@ -391,32 +377,6 @@
         container: grocy
 
 - AI:
-    - Open WebUI:
-        icon: open-webui.svg
-        href: https://openwebui.danteb.com
-        description: AI Chat Interface
-        siteMonitor: https://openwebui.danteb.com
-        server: my-docker
-        container: open-webui
-    - LiteLLM:
-        icon: litlellm.svg
-        href: https://litellm.danteb.com
-        description: LLM Proxy & Router
-        siteMonitor: https://litellm.danteb.com
-        server: my-docker
-        container: litellm
-    - LLM Router:
-        icon: mdi-router-wireless
-        href: https://llmrouter.danteb.com
-        description: Auto-routed LLM gateway
-        siteMonitor: https://llmrouter.danteb.com
-        server: my-docker
-        container: llmrouter
-    - OpenClaw:
-        icon: openclaw-dark.svg
-        href: https://openclaw.danteb.com
-        description: AI Agent Admin Panel
-        siteMonitor: https://openclaw.danteb.com
     - Whisper ASR:
         icon: openai-light.svg
         description: Speech Recognition

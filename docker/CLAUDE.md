@@ -26,7 +26,6 @@ All services should extend one of these:
 - `dockerfiles/Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
 - `dockerfiles/Dockerfile.sveltekit` — Multi-stage Node 18 alpine build, parameterized via `ARG APP_NAME`
 - `dockerfiles/bmc-monitor/` — Alpine with ipmitool, curl, jq + `bmc-ip-monitor.sh` polling script
-- `dockerfiles/pi-monitor/` — Alpine with nmap, curl, jq + `pi-ip-monitor.sh` ARP scan polling script
 - `dockerfiles/port-sync/` — curlimages/curl + `port-sync.sh` qBittorrent VPN port sync script
 - `dockerfiles/vpn-netns-watcher/` — docker:cli + compose plugin + `vpn-netns-watcher.sh`; watches `vpn-netns` start events and force-recreates gluetun/qbittorrent/qbit-port-sync/qbit-manage when their network sandbox drifts from vpn-netns (e.g., after a `pause` image bump recreates vpn-netns and orphans the siblings on the destroyed netns)
 - `dockerfiles/grocy-ntfy/` — alpine + curl + jq + `check-stock.sh`; polls Grocy `GET /api/stock/volatile` on a configurable interval and forwards `missing_products` to a ntfy topic. Dedupes on a SHA-256 of the sorted item list persisted to `/state/last_digest` so restarts don't re-alert.

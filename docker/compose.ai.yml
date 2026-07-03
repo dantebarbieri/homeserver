@@ -1,116 +1,7 @@
 # AI services stack
-# litellm, litellm_postgres, open-webui, whisperasr
+# whisperasr (speech-to-text; used by Bazarr for subtitle generation)
 
 services:
-  litellm:
-    extends:
-      file: compose.common.yml
-      service: common-service
-    image: ghcr.io/berriai/litellm:main-latest
-    container_name: litellm
-    command: --config /app/config.yaml --port 4000
-    networks:
-      - proxy
-      - ai
-    environment:
-      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD}@litellm_postgres:5432/litellm
-      STORE_MODEL_IN_DB: "True"
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    volumes:
-      - ${DATA}/litellm/config/config.yaml:/app/config.yaml:ro
-    depends_on:
-      litellm_postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  litellm_postgres:
-    extends:
-      file: compose.common.yml
-      service: common-service
-    image: postgres:16-alpine
-    container_name: litellm_postgres
-    shm_size: 128mb
-    networks:
-      - ai
-    volumes:
-      - litellm-pgdata:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD}
-      POSTGRES_DB: litellm
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  llmrouter:
-    extends:
-      file: compose.common.yml
-      service: common-service
-    # Built and published from https://github.com/dantebarbieri/llmrouter
-    # Tier definitions, classifier policy, secret patterns, etc. now live in
-    # ${DATA}/llmrouter/config.yaml (mounted below). See the project's
-    # config.example.yaml for the full schema.
-    image: ghcr.io/dantebarbieri/llmrouter:pr-3
-    container_name: llmrouter
-    networks:
-      - proxy
-      - ai
-    environment:
-      LITELLM_BASE_URL: http://litellm:4000/v1
-      LITELLM_API_KEY: ${LITELLM_API_KEY_ROUTER}
-      ROUTER_API_KEY: ${LLMROUTER_API_KEY}
-      OLLAMA_URL: http://192.168.50.180:11434
-      NTFY_URL: https://ntfy.danteb.com
-      NTFY_TOPIC: llmrouter
-      LLMROUTER_CONFIG: /etc/llmrouter/config.yaml
-      LLMROUTER_DB_PATH: /data/llmrouter.db
-      LOG_REQUESTS: "1"
-      LOG_LEVEL: info
-    volumes:
-      - ${DATA}/llmrouter:/data
-      - ${DATA}/llmrouter/config.yaml:/etc/llmrouter/config.yaml:ro
-    depends_on:
-      litellm:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
-  open-webui:
-    extends:
-      file: compose.common.yml
-      service: common-service
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
-    networks:
-      - proxy
-      - ai
-    environment:
-      OPENAI_API_BASE_URLS: http://llmrouter:8000/v1;http://litellm:4000/v1
-      OPENAI_API_KEYS: ${LLMROUTER_API_KEY};${LITELLM_API_KEY_OPENWEBUI}
-      WEBUI_SECRET_KEY: ${OPENWEBUI_SECRET_KEY}
-      ENABLE_OLLAMA_API: "false"
-    volumes:
-      - openwebui-data:/app/backend/data
-    depends_on:
-      litellm:
-        condition: service_healthy
-      llmrouter:
-        condition: service_healthy
-
   whisperasr:
     extends:
       file: compose.common.yml
@@ -123,14 +14,7 @@ services:
       ASR_DEVICE: cuda
       ASR_QUANTIZATION: float16
     networks:
-      - ai
       - starr
 
 networks:
-  proxy:
-  ai:
   starr:
-
-volumes:
-  litellm-pgdata:
-  openwebui-data:
