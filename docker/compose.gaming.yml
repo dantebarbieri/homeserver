@@ -6,7 +6,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: deinfreu/hytale-server:latest
+    image: hybrowse/hytale-server:latest
     container_name: hytale-server
     tty: true
     stdin_open: true
@@ -15,14 +15,14 @@ services:
     ports:
       - "5205:5520/udp"
     environment:
-      SERVER_IP: "0.0.0.0"
-      SERVER_PORT: 5520
-      PROD: TRUE
-      DEBUG: FALSE
+      HYTALE_AUTO_DOWNLOAD: "true"
+      HYTALE_AUTO_UPDATE: "true"
+      HYTALE_BIND: "0.0.0.0:5520"
+      HYTALE_AUTH_MODE: authenticated
+      HYTALE_DISABLE_SENTRY: "true"
       TZ: ${TZ}
     volumes:
-      - hytale-server:/home/container
-      - /etc/machine-id:/etc/machine-id:ro
+      - hytale-server:/data
 
   minecraft-server:
     extends:
