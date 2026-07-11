@@ -123,9 +123,14 @@ openssl rand -hex 32 # ROMM_DB_PASSWORD
 openssl rand -hex 32 # ROMM_AUTH_SECRET_KEY
 ```
 
-Hasheous metadata matching is enabled without an API key. The optional
-ScreenScraper, SteamGridDB, and RetroAchievements credentials are documented in
-the [RomM metadata provider guide](https://docs.romm.app/latest/getting-started/metadata-providers/).
+Hasheous metadata matching is enabled without an API key. For RomM's recommended
+provider combination, add free IGDB, SteamGridDB, and RetroAchievements
+credentials as `ROMM_IGDB_CLIENT_ID`, `ROMM_IGDB_CLIENT_SECRET`,
+`ROMM_STEAMGRIDDB_API_KEY`, and `ROMM_RETROACHIEVEMENTS_API_KEY`. Setup is
+documented in the
+[RomM metadata provider guide](https://docs.romm.app/latest/getting-started/metadata-providers/).
+ScreenScraper credentials remain available as an optional retro-focused
+alternative.
 
 Keep `ROMM_AUTH_SECRET_KEY` stable. Changing it invalidates active sessions,
 and invite links. Client API tokens are stored independently and must be
