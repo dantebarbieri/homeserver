@@ -81,6 +81,17 @@
             url: http://calibre-web:8083
             username: "{{HOMEPAGE_VAR_CALIBRE_USER}}"
             password: "{{HOMEPAGE_VAR_CALIBRE_PASS}}"
+    - RomM:
+        icon: romm.svg
+        href: https://romm.danteb.com
+        description: ROM Library
+        siteMonitor: https://romm.danteb.com
+        server: my-docker
+        container: romm
+        widget:
+          type: romm
+          url: http://romm:8080
+          fields: ["platforms", "totalRoms", "saves", "states"]
 
 - Media Management:
     - Radarr:

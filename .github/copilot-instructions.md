@@ -6,7 +6,7 @@ This is a monorepo for a NixOS-based homeserver running 50+ Docker containers. D
 
 ### Repository Layout
 
-- `docker/` — Docker Compose orchestration (17 category files, 50+ services)
+- `docker/` — Docker Compose orchestration (18 category files, 50+ services)
 - `nixos/` — NixOS system configuration (`configuration.nix`)
 - `homepage/` — Homepage dashboard YAML config
 - `mail-config/` — Portable email/contacts setup (aerc, khard, vdirsyncer)

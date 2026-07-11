@@ -1,0 +1,71 @@
+# ROM library management
+# romm, romm-db
+
+services:
+  romm:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: rommapp/romm:latest
+    container_name: romm
+    environment:
+      DB_HOST: romm-db
+      DB_NAME: romm
+      DB_USER: romm
+      DB_PASSWD: ${ROMM_DB_PASSWORD:?Set ROMM_DB_PASSWORD in .env (openssl rand -hex 32)}
+      ROMM_AUTH_SECRET_KEY: ${ROMM_AUTH_SECRET_KEY:?Set ROMM_AUTH_SECRET_KEY in .env (openssl rand -hex 32)}
+      ROMM_BASE_URL: https://romm.danteb.com
+      HASHEOUS_API_ENABLED: true
+      SCREENSCRAPER_USER: ${ROMM_SCREENSCRAPER_USER}
+      SCREENSCRAPER_PASSWORD: ${ROMM_SCREENSCRAPER_PASSWORD}
+      STEAMGRIDDB_API_KEY: ${ROMM_STEAMGRIDDB_API_KEY}
+      RETROACHIEVEMENTS_API_KEY: ${ROMM_RETROACHIEVEMENTS_API_KEY}
+      ENABLE_RESCAN_ON_FILESYSTEM_CHANGE: true
+      KIOSK_MODE: false
+      DISABLE_DOWNLOAD_ENDPOINT_AUTH: false
+      DISABLE_CSRF_PROTECTION: false
+      TZ: ${TZ}
+    depends_on:
+      romm-db:
+        condition: service_healthy
+        restart: true
+    networks:
+      - proxy
+      - romm
+    volumes:
+      - ${RAID}/shared/games/romm/library:/romm/library
+      - ${DATA}/romm/resources:/romm/resources
+      - ${DATA}/romm/redis-data:/redis-data
+      - ${DATA}/romm/assets:/romm/assets
+      - ${DATA}/romm/config:/romm/config
+
+  romm-db:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mariadb:latest
+    container_name: romm-db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${ROMM_DB_ROOT_PASSWORD:?Set ROMM_DB_ROOT_PASSWORD in .env (openssl rand -hex 32)}
+      MARIADB_DATABASE: romm
+      MARIADB_USER: romm
+      MARIADB_PASSWORD: ${ROMM_DB_PASSWORD:?Set ROMM_DB_PASSWORD in .env (openssl rand -hex 32)}
+      TZ: ${TZ}
+    networks:
+      - romm
+    volumes:
+      - romm-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 30s
+      start_interval: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  proxy:
+  romm:
+
+volumes:
+  romm-db:

@@ -16,7 +16,7 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 
 | Directory | Purpose |
 |-----------|---------|
-| `docker/` | Docker Compose orchestration — 17 category files, 50+ services |
+| `docker/` | Docker Compose orchestration — 18 category files, 50+ services |
 | `nixos/` | NixOS system configuration — single `configuration.nix` |
 | `homepage/` | Homepage dashboard YAML config |
 | `mail-config/` | Portable email/contacts setup (aerc, khard, vdirsyncer) — also used on macOS |
@@ -72,6 +72,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.matrix.yml` | synapse, element, coturn, livekit, lk-jwt-service, postgres |
 | `compose.media.yml` | plex, jellyfin, anime-relations, komga, komf, suwayomi, calibre-web, postgres |
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
+| `compose.romm.yml` | romm, mariadb |
 | `compose.searxng.yml` | searxng, redis (valkey) |
 | `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
 | `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, snapotter, stirling-pdf, changedetection-io, sockpuppetbrowser |

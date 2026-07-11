@@ -21,6 +21,7 @@ include:
   - compose.mcp.yml
   - compose.media.yml
   - compose.nextcloud.yml
+  - compose.romm.yml
   - compose.searxng.yml
   - compose.starr.yml
   - compose.monitoring.yml
