@@ -15,13 +15,13 @@ Monorepo for my NixOS-based home server infrastructure. 50+ Docker containers, N
 | **Auth** | Authelia + LDAP |
 | **Utilities** | Vaultwarden, Syncthing, ntfy, SearXNG |
 | **Networking** | Nginx Proxy Manager, ddclient, Endlessh |
-| **Gaming** | Minecraft, Satisfactory |
+| **Gaming** | RomM, Minecraft, Satisfactory |
 | **Dashboards** | Homepage, DashDot |
 
 ## Repository Layout
 
 ```
-docker/              Docker Compose orchestration (17 category files)
+docker/              Docker Compose orchestration (18 category files)
 nixos/               NixOS system configuration (configuration.nix)
 homepage/            Homepage dashboard YAML config
 mail-config/         Portable email/contacts (aerc, khard, vdirsyncer)

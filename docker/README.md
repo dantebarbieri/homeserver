@@ -16,6 +16,7 @@ Docker Compose configuration for my home server, organized into logical service 
 ├── compose.matrix.yml      # Matrix communication stack (Synapse, Element, Coturn, LiveKit)
 ├── compose.media.yml       # Media consumption (Plex, Jellyfin, ARM, Komga, Suwayomi)
 ├── compose.nextcloud.yml   # Nextcloud cloud storage stack
+├── compose.romm.yml        # RomM library and MariaDB
 ├── compose.searxng.yml     # SearXNG search engine stack
 ├── compose.starr.yml       # *arr apps + Seerr + Whisper ASR + Tdarr
 ├── compose.utilities.yml   # Utilities (Vaultwarden, Syncthing, ntfy)
@@ -57,6 +58,7 @@ docker compose -f compose.gaming.yml up -d
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
 | **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres |
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |
+| **RomM** | romm, romm-db |
 | **SearXNG** | searxng, searxng_redis |
 | **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
 | **Utilities** | vaultwarden, syncthing, ntfy |
@@ -94,6 +96,10 @@ See [NEXTCLOUD.md](docs/NEXTCLOUD.md) for the full Nextcloud cloud storage setup
 ## Tdarr Setup
 
 See [TDARR.md](docs/TDARR.md) for the full Tdarr configuration guide (HEVC compression, library setup, transcode flows, Sonarr/Radarr integration).
+
+## RomM Setup
+
+See [`../docs/ROMM.md`](../docs/ROMM.md) for ROM library storage, native authentication, reverse proxy, and Steam Deck setup.
 
 ## Service Catalogue
 

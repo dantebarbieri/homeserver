@@ -791,10 +791,10 @@ in
     '';
   };
 
-  # ── Backup automation (Postgres dumps + Vaultwarden + rclone offsite) ─────
+  # ── Backup automation (database dumps + Vaultwarden + rclone offsite) ─────
 
   systemd.services.postgres-backup = {
-    description = "Dump all Postgres databases and copy Vaultwarden data";
+    description = "Dump databases and copy Vaultwarden data";
     after = [ "docker.service" "network-online.target" ];
     requires = [ "docker.service" ];
     wants = [ "network-online.target" ];
@@ -810,11 +810,15 @@ in
 
       BACKUP_ROOT="/data/automated-backups"
       PG_DIR="$BACKUP_ROOT/postgres"
+      MYSQL_DIR="$BACKUP_ROOT/mariadb"
       VW_DIR="$BACKUP_ROOT/vaultwarden"
       DATE=$(date +%Y-%m-%d)
       DOW=$(date +%u)  # 1=Monday, 7=Sunday
 
-      mkdir -p "$PG_DIR/daily" "$PG_DIR/weekly" "$VW_DIR"
+      mkdir -p \
+        "$PG_DIR/daily" "$PG_DIR/weekly" \
+        "$MYSQL_DIR/daily" "$MYSQL_DIR/weekly" \
+        "$VW_DIR"
 
       FAILED=""
       SUCCEEDED=""
@@ -849,16 +853,37 @@ in
         fi
       done
 
+      # RomM MariaDB dump. Read credentials from the container environment so
+      # they never need to be duplicated in the NixOS configuration.
+      MYSQL_DUMP="$MYSQL_DIR/daily/romm-db-''${DATE}.sql.gz"
+      if docker exec romm-db sh -c \
+          'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump --single-transaction --quick --lock-tables=false -u root "$MARIADB_DATABASE"' \
+          2>/dev/null | gzip > "$MYSQL_DUMP"; then
+        if [ "$(stat -c%s "$MYSQL_DUMP" 2>/dev/null || echo 0)" -gt 100 ]; then
+          SUCCEEDED="$SUCCEEDED romm-db"
+        else
+          FAILED="$FAILED romm-db(empty)"
+          rm -f "$MYSQL_DUMP"
+        fi
+      else
+        FAILED="$FAILED romm-db"
+        rm -f "$MYSQL_DUMP"
+      fi
+
       # Weekly rotation: copy Sunday's dumps
       if [ "$DOW" = "7" ]; then
-        for f in "$PG_DIR/daily/"*-"$DATE".sql.gz; do
-          [ -f "$f" ] && cp "$f" "$PG_DIR/weekly/"
+        for dir in "$PG_DIR" "$MYSQL_DIR"; do
+          for f in "$dir/daily/"*-"$DATE".sql.gz; do
+            [ -f "$f" ] && cp "$f" "$dir/weekly/"
+          done
         done
       fi
 
       # Retention: 7 daily, 4 weekly
-      find "$PG_DIR/daily" -name "*.sql.gz" -mtime +7 -delete
-      find "$PG_DIR/weekly" -name "*.sql.gz" -mtime +28 -delete
+      for dir in "$PG_DIR" "$MYSQL_DIR"; do
+        find "$dir/daily" -name "*.sql.gz" -mtime +7 -delete
+        find "$dir/weekly" -name "*.sql.gz" -mtime +28 -delete
+      done
 
       # Vaultwarden backup (SQLite WAL-mode safe for file copy)
       VW_FAILED=""
@@ -1103,4 +1128,3 @@ in
   system.stateVersion = "25.11"; # Did you read the comment?
 
 }
-
