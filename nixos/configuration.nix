@@ -950,10 +950,11 @@ in
         FAILED="$FAILED nextcloud"
       fi
 
-      # Selective /srv/docker/data (service configs, ~4.5 GB)
+      # Selective /srv/docker/data (service configs and non-regenerable app data)
       if ! rclone sync /srv/docker/data/ "$REMOTE/docker-data/" \
           --exclude "plex/**" \
           --exclude "jellyfin/**" \
+          --exclude "romm/resources/**" \
           --exclude "satisfactory-server/**" \
           --exclude "syncthing/**" \
           --exclude "tdarr/logs/**" \
