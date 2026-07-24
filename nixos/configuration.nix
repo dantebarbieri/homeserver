@@ -1011,13 +1011,21 @@ in
       FAILED=""
 
       # Home videos (374 GB, rare changes). Rename tracking turns local moves
-      # (e.g. Segu/Tape * originals relocated to Segu-DV-originals/ after the
-      # 2026-07 DV->H.264 conversion) into server-side moves instead of
-      # re-uploads; crypt remotes have no hashes, so match on modtime+leaf.
+      # within this tree into server-side moves instead of re-uploads; crypt
+      # remotes have no hashes, so match on modtime+leaf.
       if ! rclone sync /data/shared/media/other/ "$REMOTE/media/home-videos/" \
           --track-renames --track-renames-strategy modtime,leaf \
           --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED home-videos"
+      fi
+
+      # DV tape originals (~180 GB, static). Kept outside the Plex/Jellyfin
+      # library roots so the DV MKVs (unplayable by Plex 1.43.x's broken
+      # dvvideo codec) don't get indexed; the converted H.264 versions live
+      # in .../other/Segu/Tape */. See docker/scripts/transcode-dv-tapes.sh.
+      if ! rclone sync /data/Segu-DV-originals/ "$REMOTE/media/segu-dv-originals/" \
+          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+        FAILED="$FAILED segu-dv-originals"
       fi
 
       # Videotape digitization (179 GB, static)
