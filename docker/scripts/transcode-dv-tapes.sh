@@ -54,6 +54,12 @@ while IFS= read -r -d '' src; do
 
     if [ -f "$SEGU_DIR/$out_rel" ]; then
         echo "SKIP (already converted): $rel"
+        if [ "$MOVE_ORIGINALS" -eq 1 ]; then
+            dest_dir="$ORIGINALS_DIR/$(dirname "$rel")"
+            mkdir -p "$dest_dir"
+            mv "$src" "$dest_dir/"
+            echo "  original moved to $dest_dir/"
+        fi
         skipped=$((skipped + 1))
         continue
     fi
