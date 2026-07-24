@@ -1010,8 +1010,12 @@ in
       REMOTE="gdrive-crypt:homeserver-backups"
       FAILED=""
 
-      # Home videos (374 GB, rare changes)
+      # Home videos (374 GB, rare changes). Rename tracking turns local moves
+      # (e.g. Segu/Tape * originals relocated to Segu-DV-originals/ after the
+      # 2026-07 DV->H.264 conversion) into server-side moves instead of
+      # re-uploads; crypt remotes have no hashes, so match on modtime+leaf.
       if ! rclone sync /data/shared/media/other/ "$REMOTE/media/home-videos/" \
+          --track-renames --track-renames-strategy modtime,leaf \
           --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED home-videos"
       fi
