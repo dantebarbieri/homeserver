@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # transcode-dv-tapes.sh
 # One-time conversion of the digitized MiniDV home videos (DV-in-MKV, Segu
 # "Tape NNN" folders) to H.264/AAC MP4.
