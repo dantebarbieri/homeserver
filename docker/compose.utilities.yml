@@ -177,10 +177,7 @@ services:
     extends:
       file: compose.common.yml
       service: gpu-service
-    # Upstream renamed Stirling Image → ashim → SnapOtter. The new
-    # ghcr.io/snapotter-hq/snapotter registry isn't published yet, so we
-    # pull from the still-active ashim-hq namespace. Switch once it exists.
-    image: ghcr.io/ashim-hq/ashim:latest
+    image: snapotter/snapotter:latest
     container_name: snapotter
     restart: unless-stopped
     volumes:
