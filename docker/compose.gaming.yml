@@ -68,8 +68,7 @@ services:
       LOG_IPS: true
 
     volumes:
-      - minecraft-server:/data
-      - ${DATA}/minecraft/assets:/data/assets
+      - matcha-minecraft-server:/data
 
   minecraft-server:
     extends:
@@ -169,5 +168,6 @@ services:
 
 volumes:
   hytale-server:
+  matcha-minecraft-server:
   minecraft-server:
   rlcraft-minecraft-server:
