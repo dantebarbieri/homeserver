@@ -352,7 +352,7 @@
         server: my-docker
         container: convertx
     - SnapOtter:
-        icon: snapotter.webp
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons/webp/snapotter.webp
         href: https://snapotter.danteb.com
         description: Image Processing & AI Tools
         siteMonitor: https://snapotter.danteb.com
