@@ -24,6 +24,53 @@ services:
     volumes:
       - hytale-server:/data
 
+  matcha-minecraft-server:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: itzg/minecraft-server:latest
+    container_name: matcha-minecraft-server
+    tty: true
+    stdin_open: true
+    stop_grace_period: 150s
+    ports:
+      - "36678:25565/tcp"
+      - "36678:25565/udp"
+    environment:
+      EULA: true
+      MODE: "survival"
+      MOTD: "§a§lMatcha Flavoured§r Minecraft Server §8w/§r Mods: §2§nEasy Shulker Boxes§r §8&§r §2§nBundle Upgrade§r\nRunning Minecraft Version: §c§o%VERSION%§r."
+      DIFFICULTY: "normal"
+      OPS: |
+        DanteVB
+      ICON: "https://cdn.modrinth.com/data/QI0EmgZ1/65af7ebdfd49e22a3a5f93a2b0c6ac24acb1d2e3_96.webp"
+      OVERRIDE_ICON: true
+      ENABLE_QUERY: true
+      ENABLE_COMMAND_BLOCK: true
+      VIEW_DISTANCE: 16
+      MEMORY: 12G
+      USE_AIKAR_FLAGS: true
+      TYPE: FABRIC
+      VERSION_FROM_MODRINTH_PROJECTS: true
+      MODRINTH_PROJECTS: |
+        datapack:matcha-flavoured
+        easy-shulker-boxes
+        bundle-upgrade
+      MODRINTH_DOWNLOAD_DEPENDENCIES: required
+      RESOURCE_PACK: "https://cdn.modrinth.com/data/QI0EmgZ1/versions/RVX0a6It/Matcha_Flavoured.zip"
+      RESOURCE_PACK_SHA1: "c3a927d6f178d7d13478d63fdfede08a688faca5"
+      RESOURCE_PACK_ENFORCE: "TRUE"
+      ALLOW_FLIGHT: true
+      STOP_SERVER_ANNOUNCE_DELAY: 60
+      STOP_DURATION: 60
+      MAX_TICK_TIME: -1
+      LOG_TIMESTAMP: true
+      LOG_IPS: true
+
+    volumes:
+      - minecraft-server:/data
+      - ${DATA}/minecraft/assets:/data/assets
+
   minecraft-server:
     extends:
       file: compose.common.yml
@@ -32,8 +79,10 @@ services:
     container_name: minecraft-server
     tty: true
     stdin_open: true
+    stop_grace_period: 150s
     ports:
-      - "36677:25565"
+      - "36677:25565/tcp"
+      - "36677:25565/udp"
     environment:
       EULA: true
       MODE: "survival"
@@ -48,7 +97,7 @@ services:
       ENABLE_QUERY: true
       ENABLE_COMMAND_BLOCK: true
       VIEW_DISTANCE: 16
-      MEMORY: 24G
+      MEMORY: 12G
       USE_AIKAR_FLAGS: true
       ALLOW_FLIGHT: true
       STOP_SERVER_ANNOUNCE_DELAY: 60
@@ -69,7 +118,8 @@ services:
     tty: true
     stdin_open: true
     ports:
-      - "36676:25565"
+      - "36676:25565/tcp"
+      - "36676:25565/udp"
     environment:
       EULA: true
       MODE: "survival"
