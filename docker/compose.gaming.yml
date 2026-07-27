@@ -39,7 +39,7 @@ services:
     environment:
       EULA: true
       MODE: "survival"
-      MOTD: "§a§lMatcha Flavoured§r Minecraft Server §8w/§r Mods: §2§nEasy Shulker Boxes§r §8&§r §2§nBundle Upgrade§r\nRunning Minecraft Version: §c§o%VERSION%§r."
+      MOTD: "§a§lMatcha Flavoured§r Minecraft Server Version: §c§o%VERSION%§r\nMods: §2§nEasy Shulker Boxes§r §8&§r §2§nBundle Upgrade§r"
       DIFFICULTY: "normal"
       OPS: |
         DanteVB
