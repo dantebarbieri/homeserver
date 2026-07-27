@@ -396,6 +396,15 @@
         widget:
             type: minecraft
             url: udp://{{HOMEPAGE_VAR_HARDCORE_MC_IP_OR_DOMAIN}}:{{HOMEPAGE_VAR_HARDCORE_MC_PORT}}
+    - Matcha Flavoured Minecraft:
+        icon: minecraft.svg
+        href: https://mcsrvstat.us/server/matcha.danteb.com
+        description: matcha.danteb.com
+        server: my-docker
+        container: matcha-minecraft-server
+        widget:
+            type: minecraft
+            url: udp://{{HOMEPAGE_VAR_MATCHA_MC_IP_OR_DOMAIN}}:{{HOMEPAGE_VAR_MATCHA_MC_PORT}}
     - RL Craft Minecraft:
         icon: minecraft.svg
         href: https://mcsrvstat.us/server/rlcraft.danteb.com
