@@ -41,7 +41,13 @@ services:
       PORT_FORWARD_ONLY: on
       VPN_PORT_FORWARDING: on
       TZ: ${TZ}
-      FIREWALL_OUTBOUND_SUBNETS: 192.168.1.0/24,172.18.0.0/16
+      # No FIREWALL_OUTBOUND_SUBNETS: every subnet listed there is a route that
+      # bypasses the tunnel, so the list stays empty and all torrent traffic exits
+      # via tun0 only. Nothing needs a bypass:
+      #   - gluetun auto-exempts its own Docker subnet ("local ipnet found" at
+      #     startup), so NPM reaches the web UI on the proxy network without help.
+      #     Hardcoding it also goes stale -- Compose does not pin the proxy subnet.
+      #   - vpn-netns publishes no host ports, so there is no LAN path to allow.
       FIREWALL_INPUT_PORTS: 8080
     volumes:
       - ${DATA}/gluetun:/gluetun
