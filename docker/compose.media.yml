@@ -24,7 +24,12 @@ services:
       TZ: ${TZ}
       PLEX_CLAIM: ${PLEX_CLAIM}
       ADVERTISE_IP: ${ADVERTISE_IP}
-      LAN_NETWORKS: 192.168.1.0/24,172.16.0.0/16
+      # LAN only. Clients on the LAN reach Plex directly on the published
+      # 32400, so their real 192.168.50.x source IP is what Plex matches here.
+      # Deliberately excludes the Docker proxy subnet: clients arriving via NPM
+      # all appear as NPM's IP, so listing it would mark every remote streamer
+      # as local and exempt them from remote-quality bandwidth limits.
+      LAN_NETWORKS: 192.168.50.0/24
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
     networks:
