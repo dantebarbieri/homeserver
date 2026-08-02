@@ -15,7 +15,14 @@ ntfy() {
 API_FAIL_COUNT=0
 MAX_API_FAILURES="${MAX_API_FAILURES:-3}"
 
-log "[port-sync] starting (host=${QHOST}, port_file=${PORT_FILE}, max_failures=${MAX_API_FAILURES})"
+# The port file is legitimately empty for a few seconds at startup while gluetun
+# negotiates NAT-PMP, so only alert once it has been missing continuously.
+# 60 polls * 5s = 5 minutes. PORT_ALERTED keeps it to one alert per outage.
+PORT_MISSING_COUNT=0
+MAX_PORT_MISSING="${MAX_PORT_MISSING:-60}"
+PORT_ALERTED=0
+
+log "[port-sync] starting (host=${QHOST}, port_file=${PORT_FILE}, max_failures=${MAX_API_FAILURES}, max_port_missing=${MAX_PORT_MISSING})"
 
 # Wait for qBittorrent API to be fully ready
 log "Waiting for qBittorrent API..."
@@ -34,6 +41,13 @@ while :; do
   PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
   if [ -n "$PORT" ]; then
     log "Forwarded port is $PORT. Updating qBittorrent…"
+
+    if [ "$PORT_ALERTED" -eq 1 ]; then
+      ntfy "qBit Port Sync: Port Restored" \
+        "gluetun is forwarding port ${PORT} again" "low" "white_check_mark"
+    fi
+    PORT_MISSING_COUNT=0
+    PORT_ALERTED=0
 
     # Login
     if ! curl -sf -c /tmp/c \
@@ -74,7 +88,13 @@ while :; do
 
     sleep "${CHECK_INTERVAL}"
   else
-    log "Port file not found/empty; will retry."
+    PORT_MISSING_COUNT=$((PORT_MISSING_COUNT + 1))
+    log "Port file not found/empty (${PORT_MISSING_COUNT}/${MAX_PORT_MISSING}); will retry."
+    if [ "$PORT_MISSING_COUNT" -ge "$MAX_PORT_MISSING" ] && [ "$PORT_ALERTED" -eq 0 ]; then
+      ntfy "qBit Port Sync: No Forwarded Port" \
+        "gluetun has supplied no forwarded port for $((PORT_MISSING_COUNT * 5))s. VPN port forwarding is down -- check gluetun logs (expired ProtonVPN credentials do this)."
+      PORT_ALERTED=1
+    fi
     sleep 5
   fi
 done
