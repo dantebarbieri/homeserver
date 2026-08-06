@@ -45,7 +45,10 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: mariadb:latest
+    # Pinned to the major already on disk (server reports 12.3.2-MariaDB).
+    # Major bumps want a controlled mariadb-upgrade run, so don't let one
+    # land unattended at 04:00. Minor/patch updates still arrive nightly.
+    image: mariadb:12
     container_name: romm-db
     environment:
       MARIADB_ROOT_PASSWORD: ${ROMM_DB_ROOT_PASSWORD:?Set ROMM_DB_ROOT_PASSWORD in .env (openssl rand -hex 32)}

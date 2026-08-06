@@ -31,7 +31,13 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: authelia_postgres
-    image: postgres
+    # Pinned to the major already on disk (PG_VERSION = 18). A major bump
+    # cannot self-apply — Postgres refuses to start on an older data dir —
+    # so an unattended pull across 18→19 would take down SSO for every
+    # Authelia-protected service. Minor/patch updates still arrive nightly.
+    # Debian variant, not -alpine: switching glibc→musl changes collation
+    # and corrupts existing index ordering.
+    image: postgres:18
     networks:
       - authelia
     volumes:
@@ -49,7 +55,7 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: authelia_redis
-    image: redis
+    image: redis:8
     networks:
       - authelia
 

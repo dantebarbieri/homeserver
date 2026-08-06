@@ -604,7 +604,7 @@ in
     after = [ "docker.service" "network-online.target" ];
     requires = [ "docker.service" ];
     wants = [ "network-online.target" ];
-    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils ];
+    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils pkgs.findutils ];
     environment = {
       GIT_SSH_COMMAND = "ssh -i /root/.ssh/docker-compose-deploy -o StrictHostKeyChecking=accept-new";
     };
@@ -612,7 +612,43 @@ in
       Type = "oneshot";
       WorkingDirectory = "/srv/homeserver";
     };
+    # Most images here intentionally float on :latest so security and feature
+    # updates land without manual intervention. The tradeoff is that a bad
+    # upstream release is invisible to git — no tracked file changed, so
+    # `git revert` cannot undo it. The pre-update snapshot below closes that
+    # gap: it records the exact image digest every container was running
+    # *before* the pull, so a rollback is a lookup instead of archaeology.
+    #
+    # To roll a service back:
+    #   grep <service> /srv/docker/image-snapshots/<date>.tsv
+    #   # set `image: <repo>@<sha256:...>` in the compose file, then `up -d`
+    # Note the local copy of the old image is usually gone by then — `pull`
+    # moves the tag and `image prune -f` reaps the now-dangling layer — so the
+    # digest is re-fetched from the registry. Containers listed as
+    # <locally-built> need no entry here: they rebuild from the repo, which
+    # git already versions.
     script = ''
+      SNAPSHOT_DIR=/srv/docker/image-snapshots
+      mkdir -p "$SNAPSHOT_DIR"
+      SNAPSHOT="$SNAPSHOT_DIR/$(date +%Y-%m-%d-%H%M%S).tsv"
+
+      {
+        printf 'container\timage_ref\trepo_digest\n'
+        for cid in $(docker ps -q); do
+          name=$(docker inspect --format '{{.Name}}' "$cid" | tr -d /)
+          img=$(docker inspect --format '{{.Config.Image}}' "$cid")
+          digest=$(docker image inspect --format \
+            '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}<locally-built>{{end}}' \
+            "$img" 2>/dev/null || echo '<unknown>')
+          printf '%s\t%s\t%s\n' "$name" "$img" "$digest"
+        done
+      } > "$SNAPSHOT"
+
+      echo "Pre-update image snapshot written to $SNAPSHOT"
+
+      # Keep two weeks of snapshots — enough to cover a vacation.
+      find "$SNAPSHOT_DIR" -name '*.tsv' -type f -mtime +14 -delete
+
       git -c safe.directory=/srv/homeserver pull && \
       chown -R danteb:docker .git && \
       cd docker && \
@@ -955,6 +991,16 @@ in
       if ! rclone sync /data/nextcloud/ "$REMOTE/nextcloud/" \
           --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED nextcloud"
+      fi
+
+      # Compose .env — the only copy of ~150 credentials, and it lives on the
+      # boot drive outside every other backup target below (/srv/homeserver is
+      # a git clone, and .env is gitignored by design). Losing the boot drive
+      # without this means rotating every secret by hand. The remote is a
+      # crypt remote, so it is encrypted before it leaves the host.
+      if ! rclone copy /srv/homeserver/docker/.env "$REMOTE/secrets/" \
+          --log-level NOTICE 2>&1; then
+        FAILED="$FAILED compose-env"
       fi
 
       # Selective /srv/docker/data (service configs and non-regenerable app data)
