@@ -636,11 +636,18 @@ in
         printf 'container\timage_ref\trepo_digest\n'
         for cid in $(docker ps -q); do
           name=$(docker inspect --format '{{.Name}}' "$cid" | tr -d /)
-          img=$(docker inspect --format '{{.Config.Image}}' "$cid")
+          # .Config.Image is the mutable tag the container was started from;
+          # it is only a label. Resolve the digest from .Image — the immutable
+          # image ID actually backing the container — because the tag may have
+          # already moved (a pull that landed but whose recreate failed). That
+          # is exactly the state a rollback is needed in, so reading the tag
+          # here would record the wrong version and defeat the whole snapshot.
+          img_ref=$(docker inspect --format '{{.Config.Image}}' "$cid")
+          img_id=$(docker inspect --format '{{.Image}}' "$cid")
           digest=$(docker image inspect --format \
             '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}<locally-built>{{end}}' \
-            "$img" 2>/dev/null || echo '<unknown>')
-          printf '%s\t%s\t%s\n' "$name" "$img" "$digest"
+            "$img_id" 2>/dev/null || echo '<unknown>')
+          printf '%s\t%s\t%s\n' "$name" "$img_ref" "$digest"
         done
       } > "$SNAPSHOT"
 

@@ -1,15 +1,22 @@
 #!/bin/bash
 # deploy-update.sh
 # Pulls the latest monorepo changes, rebuilds the specified Docker service,
-# and restarts it — using a blue-green swap where the service supports it,
-# otherwise a plain recreate with a health gate.
+# and recreates it behind a health gate.
 #
-# NOTE ON SCALING: the previous version of this script always used
-# `--scale <svc>=2`. That cannot work for any service declaring an explicit
-# `container_name:`, which is currently every service in this repo — Compose
-# refuses to create a second replica under a fixed name. The script now
-# detects that case instead of failing, and both paths wait for actual health
-# rather than sleeping blindly.
+# Usage:
+#   deploy-update.sh <service>              # pull, rebuild, deploy
+#   deploy-update.sh --no-pull <service>    # deploy the working tree as-is
+#
+# WHY THERE IS NO BLUE-GREEN PATH
+# An earlier version tried `--scale <svc>=2` for a zero-downtime swap. That
+# cannot work here: Compose refuses a second replica for any service with an
+# explicit `container_name:`, which is every service in this repo. Worse, the
+# scale-down step retires the *highest-numbered* replica — the new one that
+# just passed its health check — leaving the old container to be recreated
+# without any gate. A swap that silently keeps the unvalidated container is
+# more dangerous than a brief restart, so the path is gone rather than
+# half-fixed. Real zero-downtime would need the service to drop
+# `container_name:` and an NPM upstream swap; revisit then.
 
 set -euo pipefail
 
@@ -18,24 +25,42 @@ REPO_DIR="/srv/homeserver"
 HEALTH_TIMEOUT=90   # Max seconds to wait for the container to report healthy
 POLL_INTERVAL=3     # Seconds between health polls
 
-# ====== Input Validation ======
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <service-name>"
+# ====== Argument Parsing ======
+DO_PULL=true
+SERVICE=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --no-pull)
+            DO_PULL=false
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: $0 [--no-pull] <service-name>"
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            echo "Usage: $0 [--no-pull] <service-name>" >&2
+            exit 1
+            ;;
+        *)
+            if [ -n "$SERVICE" ]; then
+                echo "ERROR: only one service may be given (got '$SERVICE' and '$1')." >&2
+                exit 1
+            fi
+            SERVICE="$1"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$SERVICE" ]; then
+    echo "Usage: $0 [--no-pull] <service-name>" >&2
     exit 1
 fi
-
-SERVICE="$1"
 
 echo "----- Deployment Script Started at $(date) for service '$SERVICE' -----"
-
-cd "$REPO_DIR/docker"
-
-if ! docker compose config --services | grep -qx "$SERVICE"; then
-    echo "ERROR: '$SERVICE' is not a service in this compose project." >&2
-    echo "Available services:" >&2
-    docker compose config --services | sed 's/^/  /' >&2
-    exit 1
-fi
 
 # ====== Health helper ======
 # Waits for a container to be healthy. Containers without a healthcheck only
@@ -81,77 +106,72 @@ wait_for_health() {
 }
 
 # --- Step 1: Pull latest changes ---
-echo "[1/4] Pulling latest changes..."
+# The pull happens before the service is validated, because a service added by
+# the incoming commit does not exist in the working tree yet — validating first
+# would reject it as unknown.
 cd "$REPO_DIR"
 old_commit=$(git rev-parse HEAD)
 
-git pull
+if [ "$DO_PULL" = true ]; then
+    echo "[1/4] Pulling latest changes..."
+    git pull
+    new_commit=$(git rev-parse HEAD)
 
-new_commit=$(git rev-parse HEAD)
+    if [ "$old_commit" = "$new_commit" ]; then
+        echo "No updates found (still at commit $old_commit)."
+        echo "Nothing to deploy. Use --no-pull to force a redeploy of the current tree."
+        exit 0
+    fi
 
-if [ "$old_commit" = "$new_commit" ]; then
-    echo "No updates found (still at commit $old_commit). Exiting."
-    exit 0
+    echo "Updated from $old_commit to $new_commit."
+else
+    new_commit="$old_commit"
+    echo "[1/4] Skipping pull (--no-pull); deploying working tree at $new_commit."
 fi
 
-echo "Updated from $old_commit to $new_commit."
-
-# --- Step 2: Rebuild the Docker image ---
-echo "[2/4] Rebuilding Docker image for '$SERVICE'..."
+# --- Step 2: Validate the service exists in the (now current) config ---
+echo "[2/4] Validating service '$SERVICE'..."
 cd "$REPO_DIR/docker"
+
+if ! docker compose config --services | grep -qx "$SERVICE"; then
+    echo "ERROR: '$SERVICE' is not a service in this compose project." >&2
+    echo "Available services:" >&2
+    docker compose config --services | sed 's/^/  /' >&2
+    exit 1
+fi
+
+# --- Step 3: Rebuild the Docker image ---
+echo "[3/4] Rebuilding Docker image for '$SERVICE'..."
 docker compose build "$SERVICE"
 
-# --- Step 3: Decide on a deployment strategy ---
-# A service can only run two replicas if Compose is free to name them. When a
-# container_name is set, the running container is named exactly that; otherwise
-# Compose generates "<project>-<service>-<n>".
-echo "[3/4] Selecting deployment strategy..."
-running_name=$(docker compose ps --format '{{.Name}}' "$SERVICE" 2>/dev/null | head -1)
-project_name=$(docker compose config --format json 2>/dev/null | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | head -1)
-project_name="${project_name:-compose}"
+# --- Step 4: Recreate behind a health gate ---
+echo "[4/4] Recreating '$SERVICE'..."
+docker compose up -d --force-recreate "$SERVICE"
 
-if [ -n "$running_name" ] && [ "$running_name" != "${project_name}-${SERVICE}-1" ]; then
-    SCALABLE=false
-    echo "  '$SERVICE' uses a fixed container_name ($running_name) — using recreate."
-else
-    SCALABLE=true
-    echo "  '$SERVICE' has no fixed container_name — using blue-green swap."
+cid=$(docker compose ps -q "$SERVICE")
+if [ -z "$cid" ]; then
+    echo "ERROR: '$SERVICE' has no container after recreate." >&2
+    docker compose logs --tail 50 "$SERVICE" >&2
+    exit 1
 fi
 
-# --- Step 4: Deploy ---
-if [ "$SCALABLE" = true ]; then
-    echo "[4/4] Starting a second instance alongside the current one..."
-    docker compose up -d --no-recreate --scale "$SERVICE"=2 "$SERVICE"
+echo "Waiting for '$SERVICE' ($cid) to become healthy..."
 
-    new_cid=$(docker compose ps -q "$SERVICE" | tail -1)
-    echo "Waiting for the new container ($new_cid) to become healthy..."
-
-    if ! wait_for_health "$new_cid"; then
-        echo "New instance failed its health gate — rolling back to a single old instance." >&2
-        docker rm -f "$new_cid" >/dev/null 2>&1 || true
-        docker compose up -d --no-recreate --scale "$SERVICE"=1 "$SERVICE"
-        exit 1
-    fi
-
-    echo "Scaling back down to 1 instance to retire the old container..."
-    docker compose up -d --scale "$SERVICE"=1 "$SERVICE"
-else
-    echo "[4/4] Recreating '$SERVICE'..."
-    docker compose up -d --force-recreate "$SERVICE"
-
-    cid=$(docker compose ps -q "$SERVICE")
-    echo "Waiting for '$SERVICE' ($cid) to become healthy..."
-
-    if ! wait_for_health "$cid"; then
+if ! wait_for_health "$cid"; then
+    echo "" >&2
+    echo "DEPLOYMENT FAILED — '$SERVICE' did not come up cleanly." >&2
+    echo "Recent logs:" >&2
+    docker compose logs --tail 50 "$SERVICE" >&2
+    if [ "$DO_PULL" = true ]; then
         echo "" >&2
-        echo "DEPLOYMENT FAILED — '$SERVICE' did not come up cleanly." >&2
-        echo "Recent logs:" >&2
-        docker compose logs --tail 50 "$SERVICE" >&2
+        echo "To roll back and redeploy the previous commit:" >&2
+        echo "  git -C $REPO_DIR reset --hard $old_commit" >&2
+        echo "  $0 --no-pull $SERVICE" >&2
         echo "" >&2
-        echo "To roll back the repo:  git -C $REPO_DIR reset --hard $old_commit" >&2
-        echo "Then redeploy:          $0 $SERVICE" >&2
-        exit 1
+        echo "(--no-pull is required: without it the redeploy would pull the" >&2
+        echo " failed commit straight back in and undo the reset.)" >&2
     fi
+    exit 1
 fi
 
 echo "Deployment complete at $(date). '$SERVICE' is running at commit $new_commit."
