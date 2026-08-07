@@ -140,7 +140,9 @@ services:
       file: compose.common.yml
       service: common-service
     container_name: suwayomi_postgres
-    image: postgres
+    # Pinned to the major already on disk (PG_VERSION = 18) — see the note on
+    # authelia_postgres in compose.auth.yml. Debian variant, not -alpine.
+    image: postgres:18
     networks:
       - suwayomi
     volumes:
