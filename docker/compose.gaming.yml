@@ -57,8 +57,8 @@ services:
         easy-shulker-boxes
         bundle-upgrade
       MODRINTH_DOWNLOAD_DEPENDENCIES: required
-      RESOURCE_PACK: "https://cdn.modrinth.com/data/QI0EmgZ1/versions/RVX0a6It/Matcha_Flavoured.zip"
-      RESOURCE_PACK_SHA1: "c3a927d6f178d7d13478d63fdfede08a688faca5"
+      RESOURCE_PACK: "https://cdn.modrinth.com/data/QI0EmgZ1/versions/2OaIqKKy/Matcha_Flavoured_1_03.zip"
+      RESOURCE_PACK_SHA1: "4d40b820203b51a91473f74dd961c858889fcdb8"
       RESOURCE_PACK_ENFORCE: "TRUE"
       ALLOW_FLIGHT: true
       STOP_SERVER_ANNOUNCE_DELAY: 60
