@@ -49,7 +49,11 @@ services:
     container_name: endlessh
     ports:
       - "22:2222"
-    command: ["-logtostderr", "-v=1"]
+    # -healthcheck_enabled is required: the image's HEALTHCHECK runs
+    # `/endlessh -healthcheck`, which GETs 127.0.0.1:51000/health. That listener
+    # only starts when this flag is passed. Overriding command: drops it from the
+    # image's default CMD, so the container reports unhealthy forever.
+    command: ["-logtostderr", "-v=1", "-healthcheck_enabled"]
 
   bmc-ip-monitor:
     extends:
