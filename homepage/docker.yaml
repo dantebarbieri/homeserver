@@ -1,5 +1,16 @@
 # Docker socket integration for container status monitoring
 # https://gethomepage.dev/configs/docker/
+#
+# Talks to the read-only socket broker (docker-socket-proxy in
+# compose.core.yml) rather than mounting /var/run/docker.sock directly.
+# The broker permits only GET on /containers/json, /containers/{id}/stats,
+# and /containers/{id}/logs. Container inspect is denied, so a compromise
+# of Homepage can neither create/exec/delete containers nor read other
+# containers' environment variables.
+#
+# If Docker widgets ever go blank, check the broker logs first — a widget
+# needing an endpoint outside that allowlist will 403 rather than fail loudly.
 
 my-docker:
-  socket: /var/run/docker.sock
+  host: docker-socket-proxy
+  port: 2375

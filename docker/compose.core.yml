@@ -81,8 +81,72 @@ services:
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
 
+  # Read-only broker for the Docker API.
+  #
+  # Homepage and Alloy only need to list containers and read their stats and
+  # logs. Mounting the raw socket into them also grants container create,
+  # exec, and delete — root on the host — to two services that parse remote
+  # data. It additionally exposes every other container's environment via
+  # GET /containers/{id}/json, whose response includes each container's Env:
+  # one RCE in either service would leak every credential in .env in a single
+  # request.
+  #
+  # Closing that second hole is why this is wollomatic rather than the more
+  # common tecnativa proxy. tecnativa gates by path *prefix*, so its
+  # CONTAINERS=1 necessarily also permits inspect — verified against this
+  # daemon, it returns 200 with Env populated. wollomatic takes a full-match
+  # regex per method, so inspect can be denied while list/stats/logs pass.
+  #
+  # Verified against the live daemon with this exact regex:
+  #   GET /containers/json          200   (versioned and unversioned)
+  #   GET /containers/{id}/stats    200
+  #   GET /containers/{id}/logs     200
+  #   GET /containers/{id}/json     403   <- the Env leak, now closed
+  #   GET /images/json, /info       403
+  #   POST /containers/create       405
+  #
+  # A `:ro` mount on the socket does NOT restrict the API — it only stops the
+  # socket file itself being replaced. The regex is what limits access.
+  #
+  # This service holds the real socket, so it must never join the `proxy`
+  # network or be reverse-proxied.
+  docker-socket-proxy:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: wollomatic/socket-proxy:1
+    container_name: docker-socket-proxy
+    # Runs as a non-root user, so it needs the host's docker group to open
+    # the socket at all — without this it exits with "permission denied".
+    group_add:
+      - ${DOCKER_GID}
+    command:
+      - '-loglevel=info'
+      - '-listenip=0.0.0.0'
+      - '-proxyport=2375'
+      # Restricted to the dockerproxy network, whose subnet is pinned below
+      # so this cannot drift across recreates.
+      - '-allowfrom=192.168.48.0/20'
+      # Matching is FULL-match, not substring: an unanchored '/containers/json'
+      # returns 403 for '/v1.51/containers/json', so the optional version
+      # prefix below is load-bearing. Verified on this daemon.
+      # $$ escapes to a literal $ — Compose interpolates a single $. Either
+      # form works here, since Go treats repeated end-anchors as equivalent.
+      # Any method without an -allow flag is refused outright.
+      - '-allowGET=^(/v1\.[0-9]+)?/containers/(json|[a-zA-Z0-9]+/(stats|logs))$$'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - dockerproxy
+
 networks:
   ddns:
     enable_ipv6: true
+  dockerproxy:
+    # Pinned so -allowfrom above cannot drift. 192.168.48.0/20 was free —
+    # the other /20s are already taken by proxy, starr, authelia, etc.
+    ipam:
+      config:
+        - subnet: 192.168.48.0/20
   npm-internal:
   proxy:
