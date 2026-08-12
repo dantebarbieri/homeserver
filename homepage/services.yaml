@@ -435,6 +435,13 @@
             siteMonitor: https://travel.danteb.com
             server: my-docker
             container: travel-planner
+        - Recipe:
+            icon: mdi-silverware-fork-knife
+            href: https://recipe.danteb.com
+            description: Recipe Collection
+            siteMonitor: https://recipe.danteb.com
+            server: my-docker
+            container: recipe
         - Skyjo:
             icon: mdi-cards-playing
             href: https://skyjo.danteb.com
