@@ -24,6 +24,8 @@ docker compose up -d recipe-gpt-sol recipe-gemini recipe-claude recipe-grok
 
 The ownership helper uses the runtime UIDs from the pinned images. Recheck those IDs before changing a base image. On an empty volume, GPT-5.6 Sol, Claude Opus 5, and Grok 4.5 create their implementation-provided demo recipes; Gemini starts empty. Do not copy recipes between implementations when evaluating them.
 
+The pinned Grok image contains a CRLF-encoded `/entrypoint.sh`, which Linux cannot execute directly. Compose mounts `scripts/recipe-grok-entrypoint.sh`, an LF-normalized copy of the same seed-on-empty logic, until the pinned source commit changes.
+
 ## Validation
 
 Container health:
