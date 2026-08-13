@@ -28,6 +28,28 @@ services:
         aliases:
           - travel-planner
 
+  recipe:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: recipe-app
+    build:
+      context: ${RECIPE_APP_PATH:?Set RECIPE_APP_PATH in .env}
+      dockerfile: Dockerfile
+    container_name: recipe
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      ORIGIN: https://recipe.danteb.com
+      RECIPE_DATA_DIR: /app/data/recipes
+    volumes:
+      - ${DATA}/recipe/recipes:/app/data/recipes
+    networks:
+      proxy:
+        aliases:
+          - recipe
+
   skyjo:
     extends:
       file: compose.common.yml
