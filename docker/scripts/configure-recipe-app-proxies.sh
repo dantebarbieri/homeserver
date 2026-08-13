@@ -64,15 +64,11 @@ CERT_ID=$(api GET "/nginx/certificates" | jq -r \
 
 if [ -z "$CERT_ID" ]; then
   cert_payload=$(jq -cn \
-    --arg email "$NPM_EMAIL" \
     --argjson domains "$DOMAINS" \
     '{
       provider: "letsencrypt",
-      nice_name: "Model recipe applications",
       domain_names: $domains,
       meta: {
-        letsencrypt_email: $email,
-        letsencrypt_agree: true,
         dns_challenge: false
       }
     }')
@@ -119,16 +115,14 @@ configure_host() {
       ssl_forced: true,
       hsts_enabled: true,
       hsts_subdomains: false,
+      trust_forwarded_proto: false,
       http2_support: true,
       block_exploits: true,
       caching_enabled: false,
       allow_websocket_upgrade: false,
       access_list_id: 0,
       advanced_config: $advanced,
-      meta: {
-        letsencrypt_agree: false,
-        dns_challenge: false
-      },
+      meta: {},
       locations: []
     }')
 
