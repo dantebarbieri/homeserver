@@ -22,6 +22,7 @@ include:
   - compose.media.yml
   - compose.nextcloud.yml
   - compose.romm.yml
+  - compose.recipe-apps.yml
   - compose.searxng.yml
   - compose.starr.yml
   - compose.monitoring.yml
