@@ -51,5 +51,6 @@ prepare_dir() {
 # Runtime IDs come from the exact images pinned in compose.recipe-apps.yml.
 prepare_dir "$DATA_ROOT/recipe-gpt-sol" 1000 1000
 prepare_dir "$DATA_ROOT/recipe-gemini/recipes" 1001 65533
+prepare_dir "$DATA_ROOT/recipe-claude" 1000 1000
 prepare_dir "$DATA_ROOT/recipe-claude/recipes" 1000 1000
 prepare_dir "$DATA_ROOT/recipe-grok/recipes" 100 101
