@@ -442,6 +442,34 @@
             siteMonitor: https://recipe.danteb.com
             server: my-docker
             container: recipe
+        - GPT-5.6 Sol Recipe:
+            icon: mdi-robot
+            href: https://gpt-sol.recipe.danteb.com
+            description: GPT-5.6 Sol implementation
+            siteMonitor: https://gpt-sol.recipe.danteb.com
+            server: my-docker
+            container: recipe-gpt-sol
+        - Gemini 3.1 Pro Recipe:
+            icon: mdi-creation
+            href: https://gemini.recipe.danteb.com
+            description: Gemini 3.1 Pro implementation
+            siteMonitor: https://gemini.recipe.danteb.com
+            server: my-docker
+            container: recipe-gemini
+        - Claude Opus 5 Recipe:
+            icon: mdi-brain
+            href: https://claude.recipe.danteb.com
+            description: Claude Opus 5 implementation
+            siteMonitor: https://claude.recipe.danteb.com
+            server: my-docker
+            container: recipe-claude
+        - Grok 4.5 Recipe:
+            icon: mdi-rocket-launch
+            href: https://grok.recipe.danteb.com
+            description: Grok 4.5 implementation
+            siteMonitor: https://grok.recipe.danteb.com
+            server: my-docker
+            container: recipe-grok
         - Skyjo:
             icon: mdi-cards-playing
             href: https://skyjo.danteb.com

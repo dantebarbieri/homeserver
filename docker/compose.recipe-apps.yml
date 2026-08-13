@@ -1,0 +1,138 @@
+# Independent model-generated recipe applications.
+# Each build context is an immutable source commit; update the image tag,
+# context SHA, and revision label together.
+
+services:
+  recipe-gpt-sol:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: recipe-gpt-sol:470a0d7
+    build:
+      context: "https://github.com/dantebarbieri/recipe-app-ai.git#470a0d760133e32dd3ee4618d5681bc4bc51a6eb"
+      labels:
+        org.opencontainers.image.source: https://github.com/dantebarbieri/recipe-app-ai
+        org.opencontainers.image.revision: 470a0d760133e32dd3ee4618d5681bc4bc51a6eb
+    container_name: recipe-gpt-sol
+    environment:
+      NODE_ENV: production
+      PORT: 3011
+      DATABASE_PATH: /data/recipes.db
+      PUBLIC_ORIGIN: https://gpt-sol.recipe.danteb.com
+    expose:
+      - "3011"
+    volumes:
+      - ${DATA}/recipe-gpt-sol:/data
+    networks:
+      proxy:
+        aliases:
+          - recipe-gpt-sol
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3011/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  recipe-gemini:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: recipe-gemini:42b6eaf
+    build:
+      context: "https://github.com/dantebarbieri/recipe-app-ai.git#42b6eaffacba8a7b31d16c38994ebd6386b45207"
+      labels:
+        org.opencontainers.image.source: https://github.com/dantebarbieri/recipe-app-ai
+        org.opencontainers.image.revision: 42b6eaffacba8a7b31d16c38994ebd6386b45207
+    container_name: recipe-gemini
+    environment:
+      NODE_ENV: production
+      PORT: 3012
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: 1
+    expose:
+      - "3012"
+    volumes:
+      - ${DATA}/recipe-gemini/recipes:/app/data/recipes
+    networks:
+      proxy:
+        aliases:
+          - recipe-gemini
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3012/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  recipe-claude:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: recipe-claude:c9009e1
+    build:
+      context: "https://github.com/dantebarbieri/recipe-app-ai.git#c9009e1205011cc05b8854864809d4625b0a3146"
+      labels:
+        org.opencontainers.image.source: https://github.com/dantebarbieri/recipe-app-ai
+        org.opencontainers.image.revision: c9009e1205011cc05b8854864809d4625b0a3146
+    container_name: recipe-claude
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3013
+      RECIPES_DATA_DIR: /data/recipes
+      PUBLIC_BASE_URL: https://claude.recipe.danteb.com
+      CORS_ORIGIN: https://claude.recipe.danteb.com
+      TRUST_PROXY: 1
+      RATE_LIMIT_ENABLED: "true"
+      SEED_ON_EMPTY: "true"
+      LOG_LEVEL: info
+    expose:
+      - "3013"
+    volumes:
+      - ${DATA}/recipe-claude/recipes:/data/recipes
+    networks:
+      proxy:
+        aliases:
+          - recipe-claude
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3013/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  recipe-grok:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: recipe-grok:5eab051
+    build:
+      context: "https://github.com/dantebarbieri/recipe-app-ai.git#5eab0518fa271615f8b4b584de2e29f02b2c5017"
+      labels:
+        org.opencontainers.image.source: https://github.com/dantebarbieri/recipe-app-ai
+        org.opencontainers.image.revision: 5eab0518fa271615f8b4b584de2e29f02b2c5017
+    container_name: recipe-grok
+    environment:
+      NODE_ENV: production
+      PORT: 3014
+      HOSTNAME: 0.0.0.0
+      RECIPES_DATA_DIR: /data/recipes
+      NEXT_TELEMETRY_DISABLED: 1
+    expose:
+      - "3014"
+    volumes:
+      - ${DATA}/recipe-grok/recipes:/data/recipes
+    networks:
+      proxy:
+        aliases:
+          - recipe-grok
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3014/api/recipes').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  proxy:
