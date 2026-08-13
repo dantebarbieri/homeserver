@@ -90,7 +90,7 @@ services:
     expose:
       - "3013"
     volumes:
-      - ${DATA}/recipe-claude/recipes:/data/recipes
+      - ${DATA}/recipe-claude:/data
     networks:
       proxy:
         aliases:

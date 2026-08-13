@@ -6,7 +6,7 @@ Four independent implementations of `dantebarbieri/recipe-app-ai` run side by si
 |---|---|---|---:|---|---|
 | `recipe-gpt-sol` | `dantebarbieri-gpt-5-6-sol` | `470a0d760133e32dd3ee4618d5681bc4bc51a6eb` | 3011 | `${DATA}/recipe-gpt-sol` (SQLite) | `https://gpt-sol.recipe.danteb.com` |
 | `recipe-gemini` | `dantebarbieri-gemini-3-1-pro` | `42b6eaffacba8a7b31d16c38994ebd6386b45207` | 3012 | `${DATA}/recipe-gemini/recipes` (JSON documents) | `https://gemini.recipe.danteb.com` |
-| `recipe-claude` | `dantebarbieri-claude-opus-5` | `c9009e1205011cc05b8854864809d4625b0a3146` | 3013 | `${DATA}/recipe-claude/recipes` (JSON documents) | `https://claude.recipe.danteb.com` |
+| `recipe-claude` | `dantebarbieri-claude-opus-5` | `c9009e1205011cc05b8854864809d4625b0a3146` | 3013 | `${DATA}/recipe-claude` (JSON documents under `recipes/`) | `https://claude.recipe.danteb.com` |
 | `recipe-grok` | `dantebarbieri-grok-4-5` | `5eab0518fa271615f8b4b584de2e29f02b2c5017` | 3014 | `${DATA}/recipe-grok/recipes` (JSON documents) | `https://grok.recipe.danteb.com` |
 
 The applications publish no host ports. Nginx Proxy Manager reaches their unique ports over the shared `proxy` network. The proxy hosts use one exact-name SAN certificate and the standard Authelia forward-auth snippets because none of the applications has built-in authentication.
@@ -19,12 +19,13 @@ Run from `/srv/homeserver/docker`:
 ./scripts/prepare-recipe-app-storage.sh
 docker compose build recipe-gpt-sol recipe-gemini recipe-claude recipe-grok
 docker compose up -d recipe-gpt-sol recipe-gemini recipe-claude recipe-grok
+./scripts/configure-recipe-app-authelia.sh
 ./scripts/configure-recipe-app-proxies.sh
 ```
 
 The ownership helper uses the runtime UIDs from the pinned images. Recheck those IDs before changing a base image. On an empty volume, GPT-5.6 Sol, Claude Opus 5, and Grok 4.5 create their implementation-provided demo recipes; Gemini starts empty. Do not copy recipes between implementations when evaluating them.
 
-The pinned Grok image contains a CRLF-encoded `/entrypoint.sh`, which Linux cannot execute directly. Compose mounts `scripts/recipe-grok-entrypoint.sh`, an LF-normalized copy of the same seed-on-empty logic, until the pinned source commit changes.
+The Authelia helper adds the four exact domains to the existing `dev` group rule with a two-factor policy. The pinned Grok image contains a CRLF-encoded `/entrypoint.sh`, which Linux cannot execute directly. Compose mounts `scripts/recipe-grok-entrypoint.sh`, an LF-normalized copy of the same seed-on-empty logic, until the pinned source commit changes.
 
 ## Validation
 
