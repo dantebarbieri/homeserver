@@ -28,8 +28,6 @@ DOMAINS='[
   "claude.recipe.danteb.com",
   "grok.recipe.danteb.com"
 ]'
-AUTHELIA_CONFIG='include /snippets/authelia-location.conf;
-include /snippets/authelia-authrequest.conf;'
 
 TOKEN=$(curl -fsS -X POST "${NPM_API}/tokens" \
   -H "Content-Type: application/json" \
@@ -103,7 +101,6 @@ configure_host() {
   payload=$(jq -cn \
     --arg domain "$domain" \
     --arg upstream "$upstream" \
-    --arg advanced "$AUTHELIA_CONFIG" \
     --argjson port "$port" \
     --argjson certificate_id "$CERT_ID" \
     '{
@@ -121,7 +118,7 @@ configure_host() {
       caching_enabled: false,
       allow_websocket_upgrade: false,
       access_list_id: 0,
-      advanced_config: $advanced,
+      advanced_config: "",
       meta: {},
       locations: []
     }')
