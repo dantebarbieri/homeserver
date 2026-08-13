@@ -57,7 +57,7 @@ curl -i -X POST -H 'Content-Type: application/json' -d '{}' \
   http://recipe-grok:3014/api/recipes
 ```
 
-GPT-5.6 Sol returns 422; Claude Opus 5 and Grok 4.5 return 400. Gemini only exposes a Next.js Server Action, so validate it non-destructively by submitting an incomplete form in the browser and confirming the client validation prevents the save.
+GPT-5.6 Sol and Claude Opus 5 return 422; Grok 4.5 returns 400. Gemini only exposes a Next.js Server Action, so validate it non-destructively by submitting an incomplete form in the browser and confirming the client validation prevents the save.
 
 ## Backup and restore
 
