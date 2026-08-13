@@ -119,9 +119,15 @@ services:
       HOSTNAME: 0.0.0.0
       RECIPES_DATA_DIR: /data/recipes
       NEXT_TELEMETRY_DISABLED: 1
+    entrypoint:
+      - /usr/local/bin/recipe-grok-entrypoint
+    command:
+      - node
+      - server.js
     expose:
       - "3014"
     volumes:
+      - ./scripts/recipe-grok-entrypoint.sh:/usr/local/bin/recipe-grok-entrypoint:ro
       - ${DATA}/recipe-grok/recipes:/data/recipes
     networks:
       proxy:
