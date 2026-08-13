@@ -16,7 +16,7 @@ The applications publish no host ports. Nginx Proxy Manager reaches their unique
 Run from `/srv/homeserver/docker`:
 
 ```bash
-sudo ./scripts/prepare-recipe-app-storage.sh
+./scripts/prepare-recipe-app-storage.sh
 docker compose build recipe-gpt-sol recipe-gemini recipe-claude recipe-grok
 docker compose up -d recipe-gpt-sol recipe-gemini recipe-claude recipe-grok
 ./scripts/configure-recipe-app-proxies.sh
