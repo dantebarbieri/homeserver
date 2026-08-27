@@ -40,6 +40,9 @@ initialized without X11/Wayland. The `nvidia-container-toolkit` is enabled so
 Docker containers can access the GPU (used for hardware transcoding and ML
 workloads like Immich and Jellyfin).
 
+`plex-hwaccel-check.timer` exercises Plex's CUDA/NVENC path every six hours and
+alerts through ntfy if Plex silently falls back to software transcoding.
+
 `services.xserver.videoDrivers = [ "nvidia" ]` is set for driver registration
 only — it does **not** enable X11.
 

@@ -1144,6 +1144,30 @@ in
   systemd.services.nvidia-persistenced.restartIfChanged = false;
   systemd.services.nvidia-container-toolkit-cdi-generator.restartIfChanged = false;
 
+  # Plex can remain healthy while silently falling back to CPU transcoding.
+  # Exercise its actual CUDA/NVENC path and alert if a driver/image update
+  # breaks hardware acceleration.
+  systemd.services.plex-hwaccel-check = {
+    description = "Verify Plex hardware transcoding";
+    after = [ "docker.service" ];
+    requires = [ "docker.service" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
+    path = with pkgs; [ docker coreutils ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      ${pkgs.bash}/bin/bash /srv/homeserver/docker/scripts/check-plex-hwaccel.sh
+    '';
+  };
+
+  systemd.timers.plex-hwaccel-check = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "15m";
+      OnUnitActiveSec = "6h";
+      RandomizedDelaySec = "10m";
+    };
+  };
+
   # vg_redundant spans /dev/md0 (RAID6) + /dev/nvme1n1p1 (lvmcache PV), and
   # lv_data is a cached LV (cache_pool_data_cpool over lv_data_corig).
   #

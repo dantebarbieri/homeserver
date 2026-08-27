@@ -174,5 +174,13 @@ if ! wait_for_health "$cid"; then
     exit 1
 fi
 
+if [ "$SERVICE" = "plex" ]; then
+    echo "Verifying Plex hardware transcoding..."
+    if ! bash "$REPO_DIR/docker/scripts/check-plex-hwaccel.sh"; then
+        echo "DEPLOYMENT FAILED — Plex is healthy but CUDA/NVENC is unavailable." >&2
+        exit 1
+    fi
+fi
+
 echo "Deployment complete at $(date). '$SERVICE' is running at commit $new_commit."
 echo "----- Deployment Script Finished -----"
