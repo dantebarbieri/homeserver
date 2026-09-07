@@ -67,10 +67,10 @@ services:
       - "--storage.path=/var/lib/alloy/data"
     volumes:
       - ./monitoring/config.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${DATA}/alloy:/var/lib/alloy
     networks:
       - monitoring
+      - dockerproxy
     depends_on:
       - loki
 
@@ -114,3 +114,6 @@ services:
 networks:
   proxy:
   monitoring:
+  # Defined with the broker in compose.core.yml; redeclared here so this file
+  # still validates standalone.
+  dockerproxy:

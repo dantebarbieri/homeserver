@@ -9,7 +9,10 @@ services:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"const http=require('http');const r=http.get({socketPath:'/var/run/docker.sock',path:'/containers/json?limit=1'},s=>{process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(3000,()=>process.exit(1))\""]
+      # Probes the socket broker over TCP rather than the raw socket, which is
+      # no longer mounted here. This checks the exact path Homepage's Docker
+      # widgets use, so a broken ACL or a stopped broker surfaces as unhealthy.
+      test: ["CMD-SHELL", "node -e \"const http=require('http');const r=http.get({host:'docker-socket-proxy',port:2375,path:'/containers/json?limit=1'},s=>{process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(3000,()=>process.exit(1))\""]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -52,9 +55,9 @@ services:
       HOMEPAGE_VAR_CHANGEDETECTION_KEY: ${HOMEPAGE_VAR_CHANGEDETECTION_KEY}
     networks:
       - proxy
+      - dockerproxy
     volumes:
       - ${HOMEPAGE_CONFIG_PATH}:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock
 
   dashdot:
     extends:
@@ -91,3 +94,6 @@ services:
 
 networks:
   proxy:
+  # Defined with the broker in compose.core.yml; redeclared here so this file
+  # still validates standalone.
+  dockerproxy:
