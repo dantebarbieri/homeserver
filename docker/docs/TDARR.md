@@ -76,6 +76,22 @@ needed.**
 The Tdarr service is defined in `docker/compose.starr.yml`. Only minor
 environment tuning is needed — **no volume mount or network changes required**.
 
+### NixOS NVIDIA utility compatibility
+
+The image defaults `LD_LIBRARY_PATH` to `/usr/lib/x86_64-linux-gnu`. That makes
+the host-mounted NixOS `nvidia-smi` load the container's glibc with the host
+loader, producing `GLIBC_PRIVATE` / `__nptl_change_stack_perm` errors. This is
+separate from the historical DV5 relative-FFmpeg-path error and does not, by
+itself, prove that NVENC is broken.
+
+Compose overrides the value with
+`/usr/local/nvidia/lib64:/usr/local/nvidia/lib`, matching the CDI driver mounts
+without globally forcing the container's glibc. Both `nvidia-smi` and a synthetic
+Jellyfin-FFmpeg NVENC encode as user `abc` were checked with these paths.
+Apply the environment change by recreating Tdarr only after its workers are
+idle. Preserve the existing worker limits, flows, originals, sidecars and
+`Custom/state` ownership manifests.
+
 ### Worker tuning
 
 With an EPYC CPU you can run more than 2 transcode workers. Each `libx265

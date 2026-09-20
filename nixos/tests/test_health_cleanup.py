@@ -33,7 +33,10 @@ class HealthCleanupTests(unittest.TestCase):
                   mailSyncTimer = builtins.hasAttr "vdirsyncer-sync" c.systemd.timers;
                   packages = map system.pkgs.lib.getName c.environment.systemPackages;
                   shellInit = c.programs.zsh.interactiveShellInit;
-                  socketConsumerService = builtins.hasAttr "docker-socket-consumers" c.systemd.services;
+                  socketConsumerUnit = {
+                    inherit (c.systemd.services.docker-socket-consumers)
+                      wantedBy after requires partOf serviceConfig unitConfig;
+                  };
                   updateScript = c.systemd.services.docker-compose-update.script;
                   updateFailure = c.systemd.services.docker-compose-update.unitConfig.OnFailure;
                   scrubFailure = c.systemd.services.mdadm-scrub.unitConfig.OnFailure;
@@ -60,13 +63,23 @@ class HealthCleanupTests(unittest.TestCase):
         for key in ("scrubFailure", "updateFailure"):
             self.assertEqual(self.config[key], "ntfy-failure@%n.service")
 
-    def test_mail_calendar_retired_and_container_hook_deferred(self):
+    def test_mail_calendar_retired(self):
         self.assertFalse(self.config["mailSyncService"])
         self.assertFalse(self.config["mailSyncTimer"])
-        self.assertFalse(self.config["socketConsumerService"])
         for package in ("aerc", "khard", "khal", "vdirsyncer", "w3m"):
             self.assertNotIn(package, self.config["packages"])
         self.assertNotIn("khal list", self.config["shellInit"])
+
+    def test_socket_reconciliation_follows_daemon_lifecycle(self):
+        unit = self.config["socketConsumerUnit"]
+        for key in ("wantedBy", "after", "requires", "partOf"):
+            self.assertIn("docker.service", unit[key])
+        self.assertEqual(unit["serviceConfig"]["Type"], "oneshot")
+        self.assertTrue(unit["serviceConfig"]["RemainAfterExit"])
+        self.assertEqual(
+            unit["serviceConfig"]["WorkingDirectory"], "/srv/homeserver/docker"
+        )
+        self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
 
     def test_update_preserves_fail_fast_sequence(self):
         harness = """

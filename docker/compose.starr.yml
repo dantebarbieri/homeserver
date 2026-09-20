@@ -115,6 +115,8 @@ services:
       internalNode: true
       inContainer: true
       ffmpegVersion: 7
+      # Avoid Tdarr's image-wide glibc path overriding NixOS CDI utility libraries.
+      LD_LIBRARY_PATH: /usr/local/nvidia/lib64:/usr/local/nvidia/lib
       nodeName: HomeServer
       auth: true
       apiKey: ${TDARR_API_KEY}

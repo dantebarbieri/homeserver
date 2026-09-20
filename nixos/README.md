@@ -76,6 +76,22 @@ A deploy key is auto-generated on first activation at
 `/root/.ssh/docker-compose-deploy` — add the public key to GitHub as a
 read-only deploy key.
 
+### Docker socket consumers
+
+`docker-socket-consumers.service` follows Docker starts/restarts and serially
+recreates only running Homepage, Alloy, cAdvisor and VPN namespace watcher
+services in project `compose`. File bind mounts can otherwise retain an obsolete
+Docker socket across daemon restarts with live-restore enabled.
+
+The helper does not start stopped/absent consumers or dependencies, pull/build
+images, or prune data. Unrelated containers retain live-restore. It shares
+`/run/lock/homeserver-compose.lock` with the daily updater. Recreation briefly
+interrupts selected consumers and applies their checked-out Compose configuration
+and local image tags. Failure invokes the existing ntfy handler.
+
+See [Docker socket recovery](../docker/docs/DOCKER-SOCKET-RECOVERY.md) for
+selection, locking, limitations and verification.
+
 ## NixOS auto-upgrade
 
 The daily 04:30 job uses `system.autoUpgrade.operation = "boot"` and

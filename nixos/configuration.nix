@@ -548,6 +548,26 @@ in
     };
   };
 
+  # live-restore can retain file bind mounts pointing at the replaced daemon socket.
+  systemd.services.docker-socket-consumers = {
+    description = "Reconnect running Docker socket consumers after daemon startup";
+    wantedBy = [ "docker.service" ];
+    after = [ "docker.service" ];
+    requires = [ "docker.service" ];
+    partOf = [ "docker.service" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
+    path = with pkgs; [ docker util-linux coreutils ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      WorkingDirectory = "/srv/homeserver/docker";
+      TimeoutStartSec = "30min";
+    };
+    script = ''
+      ${pkgs.bash}/bin/bash ${../docker/scripts/reconcile-docker-socket-consumers.sh}
+    '';
+  };
+
   # Docker Compose auto-update (daily at 4 AM)
 
   # Auto-generate deploy key if it doesn't exist
