@@ -139,7 +139,9 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: ghcr.io/stuffanthings/qbit_manage:latest
+    image: qbit-manage-inactivity:4.13.0-1
+    build:
+      context: dockerfiles/qbit-manage
     container_name: qbit-manage
     network_mode: "container:vpn-netns"
     environment:
