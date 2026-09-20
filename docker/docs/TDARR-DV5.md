@@ -31,6 +31,26 @@ scan, scheduled scan or processing enabled. Installation does not enqueue
 the movie collection. Test a single file before deliberately enabling a
 backlog.
 
+To enable automatic movie processing after the pilot:
+
+```bash
+bash /srv/homeserver/docker/scripts/install-tdarr-dv5-flow.sh --apply --enable
+```
+
+This enables only the Movies compatibility library, preserves the existing
+CPU worker limits and configures one GPU transcode worker through the live
+API and persistent node settings. Compose also seeds one GPU worker on
+recreation. The node must use generic GPU tagging (`gpuSelect: "-"`) with
+`allowGpuDoCpu: false`; the module itself selects CUDA/NVENC.
+
+The watcher polls every ten minutes, scans on startup, excludes `Plex Versions`,
+and holds new files for three minutes before processing. Health checks remain
+disabled for this library. Other libraries and the disabled pilot are untouched.
+Source classification runs on CPU; only eligible Profile 5 files are requeued
+through `tagsWorkerType` for the single GPU worker. Normal films skip conversion.
+This preserves the four CPU transcode workers for existing TV processing while
+preventing concurrent compatibility encodes from colliding on the safety lock.
+
 ## Processing contract
 
 Only HEVC with a Dolby Vision configuration record reporting `dv_profile=5`
@@ -59,13 +79,13 @@ does not compete with its tracked original. Plex can scan the copy as another
 version of the movie. This is not a Plex Optimizer job; do not configure
 Optimizer cleanup to own this directory.
 
-The module serializes its GPU work, checks available space, waits for stable
-source files by rejecting recently modified inputs, and validates the result
+The module locks its GPU work, checks available space, rejects source files
+modified within the last two minutes, and validates the result
 before publishing it. It never overwrites an unrecognized existing file.
 Source fingerprints and ownership records make repeated processing a no-op
 only when the generated version is still valid. A changed source or conflicting
 output requires deliberate review rather than silent replacement.
-Run one compatibility job at a time: another worker encountering the GPU
+Keep exactly one GPU transcode worker: another worker encountering the GPU
 lock fails explicitly and must be retried after the owner finishes. If a
 worker is forcibly killed, confirm no compatibility encode remains before
 removing a stale `Custom/dv5-sidecar.lock` directory.

@@ -148,14 +148,15 @@ function runner(args) {
 async function generate(args, injected = {}) {
   const io = injected.fs || fs, run = injected.run || runner(args), now = injected.now || Date.now;
   const home = injected.home || HOME, minAge = injected.minAge ?? 120000;
-  const result = () => ({ outputFileObj: args.inputFileObj, outputNumber: 1, variables: args.variables });
+  const result = (outputNumber = 1) => ({ outputFileObj: args.inputFileObj, outputNumber, variables: args.variables });
+  const skip = () => result(injected.classifyOnly ? 2 : 1);
   const log = message => args.jobLog(`DV5 sidecar: ${message}`);
   const input = args.inputFileObj?._id, folder = args.librarySettings?.folder;
   assert(typeof input === 'string' && path.isAbsolute(input) && typeof folder === 'string' && path.isAbsolute(folder), 'absolute source/library paths required');
-  if (skipped(input)) { log('skipped generated/partial file'); return result(); }
+  if (skipped(input)) { log('skipped generated/partial file'); return skip(); }
   const root = await io.realpath(folder), source = await io.realpath(input);
   assert(inside(root, source), 'source escapes library folder');
-  if (skipped(source)) { log('skipped generated target'); return result(); }
+  if (skipped(source)) { log('skipped generated target'); return skip(); }
   const initial = await io.stat(source);
   assert(initial.isFile() && initial.size > 0, 'source is not a nonempty regular file');
   assert(now() - initial.mtimeMs >= minAge, 'source is still settling (minimum 120 seconds)');
@@ -168,7 +169,11 @@ async function generate(args, injected = {}) {
     try { return JSON.parse(res.stdout); } catch { throw new Error('DV5 sidecar: invalid ffprobe JSON'); }
   };
   const p = plan(await probe(source));
-  if (!p) { log('skipped: not HEVC Dolby Vision profile 5 compatibility 0'); return result(); }
+  if (!p) { log('skipped: not HEVC Dolby Vision profile 5 compatibility 0'); return skip(); }
+  if (injected.classifyOnly) {
+    log('eligible Profile 5 source; routing to the dedicated GPU worker');
+    return result();
+  }
   for (const s of p.audio) if (!COPY_AUDIO.has(s.codec_name) || s.channels > 6) log(`audio stream ${s.index}: ${s.codec_name}/${s.channels}ch -> AAC/${Math.min(s.channels, 6)}ch`);
   const name = path.basename(path.dirname(source)).replace(/[\x00-\x1f]/g, '').trim();
   assert(name && name !== '.' && name !== '..', 'invalid movie folder name');
@@ -244,4 +249,5 @@ async function generate(args, injected = {}) {
 }
 
 module.exports = async args => generate(args);
+module.exports.classify = async args => generate(args, { classifyOnly: true });
 module.exports.internals = { VERSION, dimensions, plan, streamArgs, encodeArgs, validate, skipped, inside, fingerprint, runProcess, generate };

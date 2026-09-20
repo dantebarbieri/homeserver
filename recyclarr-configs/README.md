@@ -28,6 +28,15 @@ Personal [Recyclarr](https://github.com/recyclarr/recyclarr) configuration for s
 
 `secrets.yml` is gitignored and must never be committed. It contains API keys and instance URLs. See `secrets.yml.example` for the expected structure.
 
+On this server the file is `/srv/homeserver/recyclarr-configs/secrets.yml`,
+also mounted as `/config/secrets.yml` in the Recyclarr container. Keep it mode
+`600`, owned by the container's UID 1000. The template uses the internal Docker
+URLs `http://sonarr:8989` and `http://radarr:7878`; replace only the API-key
+placeholders with values from each application's **Settings > General**.
+Dummy keys allow configuration parsing but cannot authenticate a sync.
+Deploy the committed custom-format configuration before a full sync: an older
+configuration with `reset_unmatched_scores` can clear a manually applied score.
+
 ## Dolby Vision playback compatibility
 
 The standard `4K UHD - 2160p` and `At most 2160p` profiles in both apps assign

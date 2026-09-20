@@ -5,9 +5,10 @@ repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 container="${TDARR_CONTAINER:-tdarr}"
 destination=/app/server/Tdarr/Custom
 
-if [[ "${1:-}" != "--apply" || "$#" -ne 1 ]]; then
-    echo "Usage: $0 --apply" >&2
+if [[ "${1:-}" != "--apply" || "$#" -gt 2 || ( "$#" -eq 2 && "${2:-}" != "--enable" ) ]]; then
+    echo "Usage: $0 --apply [--enable]" >&2
     echo "Installs the versioned module and API flow; a new library starts disabled." >&2
+    echo "--enable starts the movie watcher and configures one GPU worker." >&2
     exit 2
 fi
 
@@ -45,4 +46,4 @@ for file in dv5-sidecar.cjs install-flow.cjs; do
     docker exec "$container" node --check "$destination/$file.new.cjs"
     docker exec "$container" mv "$destination/$file.new.cjs" "$destination/$file"
 done
-docker exec --user abc "$container" node "$destination/install-flow.cjs" --apply
+docker exec --user abc "$container" node "$destination/install-flow.cjs" "$@"

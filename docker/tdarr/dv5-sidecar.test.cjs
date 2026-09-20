@@ -125,6 +125,20 @@ test('uses the DV-aware bundled tools instead of Tdarr wrapper paths', async () 
   await h.generate(f.args, f.options);
   assert.ok(f.calls.every(call => call.binary.startsWith('/usr/lib/jellyfin-ffmpeg/')));
 });
+test('CPU classification routes only eligible sources to GPU without creating output or locks', async () => {
+  const f = fixture();
+  const options = { ...f.options, classifyOnly: true };
+  assert.equal((await h.generate(f.args, options)).outputNumber, 1);
+  assert.equal(f.files.size, 1);
+  assert.equal(f.dirs.has('/state/state'), false);
+  assert.equal(f.calls.filter(call => call.options.encode).length, 0);
+  const probe = sourceProbe();
+  probe.streams[0].side_data_list[0].dv_profile = 8;
+  options.run = async () => ({ stdout: JSON.stringify(probe) });
+  assert.equal((await h.generate(f.args, options)).outputNumber, 2);
+  f.args.inputFileObj._id = '/media/Movie/Plex Versions/Homeserver SDR/movie.mp4';
+  assert.equal((await h.generate(f.args, options)).outputNumber, 2);
+});
 test('unowned/conflicting output is never overwritten', async () => {
   const f = fixture();
   const output = '/media/Movie (2026)/Plex Versions/Homeserver SDR/Movie (2026) - [WEBRip-1080p][SDR][h264]-PlexSDR.mp4';

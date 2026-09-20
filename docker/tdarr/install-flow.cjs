@@ -23,18 +23,36 @@ function flowDefinition() {
         fpEnabled: true, inputsDB: {},
       },
       {
+        name: 'Probe: skip everything except Dolby Vision Profile 5',
+        sourceRepo: 'Community', pluginName: 'customFunction', version: '1.0.0',
+        id: 'classify', position: { x: 0, y: 150 }, fpEnabled: true,
+        inputsDB: {
+          code: `module.exports = async args => require('${MODULE_PATH}').classify(args);`,
+        },
+      },
+      {
+        name: 'Queue eligible files for the single GPU worker',
+        sourceRepo: 'Community', pluginName: 'tagsWorkerType', version: '1.0.0',
+        id: 'gpu-worker', position: { x: 0, y: 300 }, fpEnabled: true,
+        inputsDB: { requiredWorkerType: 'GPU', requiredNodeTags: '' },
+      },
+      {
         name: 'Profile 5 only: validated SDR sidecar; original unchanged',
         sourceRepo: 'Community', pluginName: 'customFunction', version: '1.0.0',
-        id: 'dv5-sidecar', position: { x: 0, y: 150 }, fpEnabled: true,
+        id: 'dv5-sidecar', position: { x: 0, y: 450 }, fpEnabled: true,
         inputsDB: {
           code: `module.exports = async args => require('${MODULE_PATH}')(args);`,
         },
       },
     ],
-    flowEdges: [{
-      source: 'input', sourceHandle: '1', target: 'dv5-sidecar', targetHandle: null,
-      id: 'input-to-sidecar', animated: true, type: 'smoothstep',
-    }],
+    flowEdges: [
+      ['input', 'classify'],
+      ['classify', 'gpu-worker'],
+      ['gpu-worker', 'dv5-sidecar'],
+    ].map(([source, target]) => ({
+      source, sourceHandle: '1', target, targetHandle: null,
+      id: `${source}-to-${target}`, animated: true, type: 'smoothstep',
+    })),
   };
 }
 
@@ -95,13 +113,42 @@ async function connect() {
   return { request, crud };
 }
 
+function enabledLibrarySettings() {
+  return {
+    name: 'Movies - Dolby Vision 5 compatibility',
+    processLibrary: true,
+    processTranscodes: true,
+    processHealthChecks: false,
+    folderWatching: true,
+    useFsEvents: false,
+    folderWatchScanInterval: 600,
+    scannerThreadCount: 1,
+    scanOnStart: true,
+    scheduledScanFindNew: false,
+    foldersToIgnore: 'Plex Versions',
+    foldersToIgnoreCaseInsensitive: true,
+    holdNewFiles: true,
+    holdFor: 180,
+    holdForDisplayUnit: 'minutes',
+    filterCodecsSkip: '',
+  };
+}
+
+function gpuWorkerLimits(node) {
+  assert(node.gpuSelect === '-', 'This flow requires generic GPU worker tagging (gpuSelect="-")');
+  assert(!node.allowGpuDoCpu, 'Disable GPU workers doing CPU jobs before enabling this flow');
+  return { ...node.workerLimits, transcodegpu: 1 };
+}
+
 async function main() {
   const options = process.argv.slice(2);
-  if (options.some(option => option !== '--apply')) {
-    throw new Error('Usage: node install-flow.cjs [--apply]');
+  if (options.some(option => !['--apply', '--enable'].includes(option))
+    || (options.includes('--enable') && !options.includes('--apply'))) {
+    throw new Error('Usage: node install-flow.cjs [--apply [--enable]]');
   }
   const apply = options.includes('--apply');
-  const { crud } = await connect();
+  const enable = options.includes('--enable');
+  const { crud, request } = await connect();
   const defaults = require('/app/Tdarr_Server/srcug/commonModules/jobs/libraryDefaults').default;
   assert(defaults && typeof defaults === 'object', 'Missing installed Tdarr library defaults');
   assert(Array.isArray(defaults.schedule), 'Incomplete Tdarr library defaults');
@@ -140,9 +187,34 @@ async function main() {
     for (const key of Object.keys(library)) assert.deepEqual(stored[key], library[key]);
   }
   console.log('Flow and library verified via API. Existing libraries and worker limits unchanged.');
+  if (enable) {
+    const nodes = await request('get-nodes', undefined, 'GET');
+    const entries = Object.entries(nodes);
+    assert.equal(entries.length, 1, 'Enabling requires exactly one colocated node');
+    const [nodeID, node] = entries[0];
+    const limits = gpuWorkerLimits(node);
+    const library = await crud('LibrarySettingsJSONDB', 'getById', { docID: LIBRARY_ID });
+    await fs.writeFile(path.join(ROOT, 'backups', `enable-${Date.now()}.json`),
+      JSON.stringify({ library, nodeID, workerLimits: node.workerLimits }, null, 2),
+      { mode: 0o600, flag: 'wx' });
+    await request('update-node', { data: { nodeID, nodeUpdates: { workerLimits: limits } } });
+    const updatedNode = (await request('get-nodes', undefined, 'GET'))[nodeID];
+    assert.deepEqual(updatedNode.workerLimits, limits);
+    const persistedNode = await crud('NodeJSONDB', 'getById', { docID: node.nodeName });
+    assert.deepEqual(persistedNode.workerLimits, limits);
+    const settings = enabledLibrarySettings();
+    await crud('LibrarySettingsJSONDB', 'update', { docID: LIBRARY_ID, obj: settings });
+    const enabled = await crud('LibrarySettingsJSONDB', 'getById', { docID: LIBRARY_ID });
+    for (const key of Object.keys(settings)) assert.deepEqual(enabled[key], settings[key]);
+    console.log('Movies enabled: CPU classification, one GPU encode, existing CPU limits preserved.');
+    console.log('Polling for new files every 10 minutes; new files held for 3 minutes.');
+  }
 }
 
-module.exports = { flowDefinition, libraryDefinition, connect, FLOW_ID, LIBRARY_ID, ROOT };
+module.exports = {
+  flowDefinition, libraryDefinition, enabledLibrarySettings, gpuWorkerLimits,
+  connect, FLOW_ID, LIBRARY_ID, ROOT,
+};
 if (require.main === module) {
   main().catch(error => {
     console.error(`ERROR: ${error.message}`);

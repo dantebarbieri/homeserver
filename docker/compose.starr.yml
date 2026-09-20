@@ -120,7 +120,7 @@ services:
       apiKey: ${TDARR_API_KEY}
       maxLogSizeMB: 10
       transcodecpuWorkers: 4
-      transcodegpuWorkers: 0
+      transcodegpuWorkers: 1
       healthcheckcpuWorkers: 4
       healthcheckgpuWorkers: 0
     networks:
