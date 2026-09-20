@@ -54,27 +54,42 @@ manual sync failed. No secret changes or redundant sync were performed here.
 The earlier Tdarr relative-FFmpeg-path failure was likewise already repaired
 and successfully exercised by that work; this rollout did not change its flow.
 
-### Remaining application work
+### Application repairs after renewed sudo access
 
 **AdGuard:** the post-reboot investigation found 11 Quad9 DoH `unexpected EOF`
 errors between **07:50 and 08:20 CDT**, with other upstreams and local DNS
 working. The precise intermittent cause is unproven; increasing timeouts or
 disabling IPv6 is not supported by the evidence. The provider-preserving
-candidate replaces only `https://dns10.quad9.net/dns-query` with
+workaround replaces only `https://dns10.quad9.net/dns-query` with
 `tls://dns10.quad9.net`.
 
 Complete certificate-checked DoT A/AAAA exchanges and connection reuse passed
 from the server against both Quad9 IPv4 and both IPv6 endpoints. A guarded,
 reversible migration and six regression tests were committed/pushed as
 `4d3d1bf`; see [AdGuard recovery](docker/docs/ADGUARD-QUAD9.md).
-**It has not been applied:** the protected production YAML requires sudo,
-the maintenance terminal became unavailable, and the owner could not provide
-interactive authentication. No DNS settings, providers, router settings or
-fallback policy were changed. Normal-traffic observation after applying the
-candidate remains necessary; successful direct probes alone do not prove an
-intermittent issue resolved.
+After the owner renewed sudo access, it was **applied at 08:47:06 CDT**.
+Stopping/starting only AdGuard took approximately one second. Its own
+`--check-config` passed, and a byte comparison against the private mode-600
+backup verified that only the Quad9 URL changed. Cloudflare, Google, bootstrap
+DNS, fallback policy, IPv6, load balancing, timeouts and router settings are
+unchanged.
 
-**qbit-manage:** version 4.13.0 still rejects the `noHL` combination of a positive
+Through **09:18 CDT**, more than 30 minutes after the change, AdGuard logged
+**zero upstream errors and zero EOFs**. Query-log counts confirmed actual use,
+including 377 uncached Quad9 DoT responses in one bounded sample: 376 NOERROR
+and one SERVFAIL for a different domain, not the probe domain. This does not
+claim every recursive DNS answer succeeds.
+
+The initial loopback observer passed 11 paired A/AAAA samples, then one UDP
+probe hit its five-second timeout. That anomaly was not reproduced: ten
+immediate follow-up queries passed, ten real LAN-client queries passed, and
+14 subsequent paired samples passed with response times of 0.28-172.85 ms.
+The follow-up client timeout was 12 seconds, above AdGuard's configured
+ten-second upstream timeout; no server timeout setting was changed. The
+workaround is functioning under real traffic, not a proof that provider or UDP
+failures can never recur.
+
+**qbit-manage:** upstream version 4.13.0 rejected the `noHL` combination of a positive
 minimum seeding time and unlimited ratio. The persisted comments explicitly
 require **at least 14 days seeded AND seven days inactive AND at least two
 seeders**, with no ratio or maximum-time cap. Removing the minimum or inventing
@@ -89,21 +104,41 @@ upgrades require explicitly reviewing/removing this compatibility patch.
 All 16 actual-source regression tests passed locally **and inside a real Docker
 build on the server**, covering the three cleanup gates, exact boundaries,
 other rejected configurations and dry-run nonmutation. The resulting
-`qbit-manage-inactivity:4.13.0-1` image is built, but **the running service has not
-been replaced**. Its effective dry-run was verified true, with no private
-configuration override. The private configuration is untouched.
+`qbit-manage-inactivity:4.13.0-1` image was **deployed at 08:46 CDT**.
+Its effective dry-run remained true, with no private configuration override.
 
-Immediate deployment is blocked by unavailable sudo access and protected
-checkout files. An ordinary-account bundle fast-forward failed on the
-root-owned tests directory; only that attempt's partial changes were removed.
-Production's checkout is verified clean at `712831a`, and qbit-manage still runs
-the original upstream image. The published main branch contains the tested new
-build configuration, so the normal privileged daily updater can also pick it up
-on its next run. A first live run of the patched service still needs verification.
+Fixing the first validator exposed a previously masked directory requirement:
+`recyclebin.save_torrents: true` needs access to qBittorrent's `.torrent`
+metadata backups, not downloaded media. Commit `fb9c2bc` adds the existing
+`BT_backup` directory as a read-only mount and refuses to create a missing host
+directory. The service was stopped, its private config backed up with mode 600,
+and only the blank `directory.torrents_dir` was set to `/qbittorrent/BT_backup`.
+Other configuration values were compared unchanged before restarting.
+
+The **08:58 CDT** recreation exposed the read-only mount and completed its first
+full run in nine seconds. Upstream filled five missing category mappings;
+it can write default configuration fields even in dry-run. A subsequent genuine
+one-shot run completed with **zero errors and zero configuration warnings**.
+The original 14-day/7-day/two-seeder policy, unlimited ratio/time caps, torrent
+backup saving and 14-day recycle retention remain unchanged. **No cleanup was
+enabled.**
+
+For one-shot verification, `QBT_RUN=true` must be set for that exec:
+the inherited `QBT_RUN=false` overrides the CLI `--run` flag. An initial
+verification invocation therefore remained scheduled after completing its run;
+its exact process and child were stopped, and no extra verification scheduler
+remains. The documented command now supplies explicit exec-time run/dry-run
+environment values without changing the normal service schedule.
+
+The earlier non-root bundle deployment attempt had failed on a protected checkout
+directory; its partial changes were removed before the successful privileged
+pull. Production's checkout is clean.
+
+### Remaining owner action
 
 **Hytale:** downloader authentication remains blocked by an expired refresh
-token. The owner must complete the official device login; they were unavailable
-when prompted. The container remains in its existing restart loop, and no
+token. The owner must complete the official device login; that authorization
+has not been completed. The container remains in its existing restart loop, and no
 credential file, world or machine identity was deleted or changed. Downloader
 OAuth is separate from game-server `/auth` commands. See the
 [safe reauthorization procedure](docker/docs/HYTALE.md).
@@ -111,7 +146,8 @@ OAuth is separate from game-server `/auth` commands. See the
 The new host lifecycle assertions and seven socket-helper regression tests
 passed against Nixpkgs `20b1ddd1aa5ace70c9468305030aa4f9ef79671b`, along with
 the full system derivation, actual Linux build and production Compose validation.
-These checks do not substitute for the explicitly blocked AdGuard/Hytale work.
+These checks do not substitute for the remaining Hytale authorization or full
+parity-check completion.
 
 ## September 20 maintenance follow-up
 

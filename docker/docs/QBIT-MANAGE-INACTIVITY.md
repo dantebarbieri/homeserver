@@ -70,9 +70,18 @@ Compose entry point. Never commit the private configuration.
 
 Afterward verify a complete run without `ERROR`, `CRITICAL`, `Config Error` or
 tracebacks. The application can print `Finished Run` and exit successfully even
-when it caught a configuration failure. A one-shot verification can use
-`docker compose exec -T qbit-manage python3 /app/qbit_manage.py --run --dry-run`;
-avoid overlapping it with the scheduled run, and keep dry-run enabled.
+when it caught a configuration failure. Avoid overlapping verification with the
+scheduled run. For a genuine one-shot, override the inherited scheduling
+environment for that exec only:
+
+```bash
+docker compose exec -T -e QBT_RUN=true -e QBT_DRY_RUN=true \
+  qbit-manage python3 /app/qbit_manage.py --run --dry-run
+```
+
+`QBT_RUN=false` in the normal container environment overrides the CLI `--run`
+flag; omitting the exec-time override starts another scheduler instead of exiting.
+The command above leaves the service's normal schedule and dry-run setting intact.
 
 ## Local validation
 
