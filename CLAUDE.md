@@ -173,7 +173,6 @@ Key system services managed by NixOS:
 - **Firewall** — explicitly opened ports for HTTP/HTTPS, Plex, Coturn, LiveKit, game servers
 - **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`
 - **RAID/drive monitoring** — `smartd`, `mdadm-ntfy`, 6-hourly health checks, weekly Sunday parity scrub — all alert via ntfy
-- **vdirsyncer** — syncs iCloud contacts every 15 minutes via CardDAV
 - **SSH** — key-only on port 28
 
 Rebuild: `sudo nixos-rebuild switch`
@@ -189,6 +188,10 @@ When changing service URLs, IPs, or removing/renaming services, update the corre
 ## Mail Config (`mail-config/`)
 
 Portable email/contacts setup: aerc (terminal email), khard (address book), vdirsyncer (CardDAV sync). Run `setup.sh` to install — it detects platform (macOS/Linux), symlinks configs, and bootstraps credential templates. Credentials use `pass` on Linux/WSL, Keychain on macOS.
+
+This is now an optional legacy setup. The homeserver no longer installs its
+mail/calendar packages or runs `vdirsyncer-sync`; existing data and credentials
+are preserved. Do not recreate the NixOS integration without an explicit request.
 
 ## Recyclarr (`recyclarr-configs/`)
 
@@ -216,7 +219,7 @@ Common sources: ddclient (dynamic DNS), Nginx Proxy Manager (reverse proxy, TLS 
 - **NPM → Authelia**: nginx snippets in NPM config provide SSO middleware (see `production-configs/` for reference copies)
 - **NPM → Coturn**: Let's Encrypt certs from NPM are passed to Matrix's Coturn for RTC
 - **Recyclarr → Starr**: runs as a container in `compose.starr.yml`, syncs quality profiles to Radarr/Sonarr via their APIs
-- **Mail → NixOS**: vdirsyncer (in `mail-config/`) runs as a NixOS systemd timer on the server, syncing iCloud contacts every 15 minutes
+- **Mail config**: optional portable templates remain in `mail-config/`; the former NixOS sync timer and server packages have been retired.
 - **ddclient → Cloudflare**: updates A (IPv4) and AAAA (IPv6) DNS records for `danteb.com` every 5 minutes. Requires an IPv6-enabled Docker network (`ddns`) so it can detect the host's public GUA via NAT.
 - **NPM → BMC (IPMI)**: reverse-proxies `ipmi.danteb.com` to the ASRock Rack BMC at `https://192.168.50.50` with Authelia SSO (admins group, two-factor). Requires `proxy_ssl_verify off` (self-signed cert) and BMC bonding disabled (otherwise host→BMC traffic is blocked by NCSI sideband). The `bmc-ip-monitor` container auto-updates the proxy host if the BMC's DHCP IP changes.
 - **Router → Server (IPv6)**: Unlike IPv4 port forwarding, IPv6 uses firewall allow-rules on the ASUS router (Firewall > IPv6 Firewall) specifying the server's GUA and permitted ports

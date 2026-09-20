@@ -78,9 +78,12 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 | Timer | Schedule | Purpose |
 |-------|----------|---------|
 | `docker-compose-update` | Daily 04:00 (±5m) | Pull monorepo, update containers |
-| `vdirsyncer-sync` | Every 15 min | Sync iCloud contacts via CardDAV |
 | `drive-health-check` | Every 6 hours | RAID + LVM health → ntfy |
 | `mdadm-scrub` | Weekly Sunday 02:00 | RAID parity scrub |
+
+Terminal mail/calendar packages, the login calendar, and `vdirsyncer-sync` were
+retired in September 2026. Preserve existing user data and credentials; do not
+reintroduce the timer just because optional `mail-config/` templates remain.
 
 ## Networking & IPv6
 

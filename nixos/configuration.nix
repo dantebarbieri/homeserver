@@ -126,10 +126,12 @@ in
     interfaces = [ "enp66s0f0" "enp66s0f1" ];
     driverOptions = {
       mode = "active-backup";
-      primary = "enp66s0f1";
       miimon = "100";
     };
   };
+
+  # networkd ignores the legacy bond driverOptions.primary setting.
+  systemd.network.networks."40-enp66s0f1".networkConfig.PrimarySlave = true;
 
   networking.interfaces.bond0 = {
     useDHCP = false;
@@ -286,17 +288,6 @@ in
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
       [[ $SHLVL -eq 1 ]] && fastfetch
 
-      # ── khal: show today's calendar events on login ──
-      if [[ $SHLVL -eq 1 ]] && command -v khal &>/dev/null; then
-        local _khal_out
-        _khal_out="$(khal list --day-format "" --format "{start-end-time-style} {title}{repeat-symbol}{alarm-symbol}" today today 2>/dev/null)"
-        if [[ -n "$_khal_out" ]]; then
-          echo ""
-          echo "\e[1;34m📅 Today's events:\e[0m"
-          echo "$_khal_out"
-          echo ""
-        fi
-      fi
     '';
     shellAliases = {
       ns = "nix shell";
@@ -339,10 +330,7 @@ in
       docker-compose
       # Backup
       rclone
-      # Mail (aerc + contact sync)
-      aerc khard khal vdirsyncer
-      w3m              # HTML-to-text — used by aerc's built-in html filter
-      pass             # password store — credential backend for aerc & vdirsyncer
+      pass             # general-purpose password store; preserve existing credentials
       # Typing practice
       gtypist toipe
     ]) ++ [ ntfyNotify ];
@@ -442,29 +430,6 @@ in
       { device = "/dev/nvme1"; options = "-a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,60,70 -m root -M exec ${smartdAlert}"; }
     ];
     notifications.wall.enable = false;
-  };
-
-  # vdirsyncer contact sync (every 15 min)
-  systemd.services.vdirsyncer-sync = {
-    description = "Sync iCloud contacts and calendars via vdirsyncer";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "danteb";
-    };
-    path = with pkgs; [ vdirsyncer pass gnupg ];
-    script = ''
-      vdirsyncer sync icloud_contacts icloud_calendars google_calendars
-    '';
-  };
-
-  systemd.timers.vdirsyncer-sync = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "*:0/15";
-      Persistent = true;
-    };
   };
 
   # nix-index — weekly database rebuild for nix-locate / nwp
@@ -604,7 +569,8 @@ in
     after = [ "docker.service" "network-online.target" ];
     requires = [ "docker.service" ];
     wants = [ "network-online.target" ];
-    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils pkgs.findutils ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
+    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils pkgs.findutils pkgs.util-linux ];
     environment = {
       GIT_SSH_COMMAND = "ssh -i /root/.ssh/docker-compose-deploy -o StrictHostKeyChecking=accept-new";
     };
@@ -628,6 +594,9 @@ in
     # <locally-built> need no entry here: they rebuild from the repo, which
     # git already versions.
     script = ''
+      exec 9>/run/lock/homeserver-compose.lock
+      flock 9
+
       SNAPSHOT_DIR=/srv/docker/image-snapshots
       mkdir -p "$SNAPSHOT_DIR"
       SNAPSHOT="$SNAPSHOT_DIR/$(date +%Y-%m-%d-%H%M%S).tsv"
@@ -656,14 +625,29 @@ in
       # Keep two weeks of snapshots — enough to cover a vacation.
       find "$SNAPSHOT_DIR" -name '*.tsv' -type f -mtime +14 -delete
 
-      git -c safe.directory=/srv/homeserver pull && \
-      chown -R danteb:docker .git && \
-      cd docker && \
-      docker compose pull --ignore-buildable && \
-      docker compose build --pull && \
-      docker compose up -d --remove-orphans && \
-      docker compose up -d --force-recreate homepage && \
-      docker image prune -f && \
+      # Finish Git maintenance before chown traverses transient lock files.
+      git -c safe.directory=/srv/homeserver \
+          -c maintenance.autoDetach=false -c gc.autoDetach=false pull --ff-only
+      chown -R danteb:docker .git
+      cd docker
+
+      for attempt in 1 2 3; do
+        if docker compose --parallel 4 pull --ignore-buildable; then
+          break
+        fi
+        if [ "$attempt" -eq 3 ]; then
+          echo "Image pull failed after 3 attempts; refusing to build or deploy." >&2
+          exit 1
+        fi
+        delay=$((attempt * 60))
+        echo "Image pull attempt $attempt failed; retrying in $delay seconds." >&2
+        sleep "$delay"
+      done
+
+      docker compose build --pull
+      docker compose up -d --remove-orphans
+      docker compose up -d --force-recreate homepage
+      docker image prune -f
       docker network prune -f
     '';
   };
@@ -678,11 +662,12 @@ in
   };
 
   # NixOS auto-upgrade (daily at 04:30, after Docker update at 04:00)
-  # Downloads and builds new system closure but does NOT auto-reboot.
-  # Manually reboot or run `nixos-rebuild switch` to activate.
+  # Stage the next boot without switching NVIDIA userspace under loaded modules.
+  # Activation (including OS security updates) requires a planned reboot.
   system.autoUpgrade = {
     enable = true;
     dates = "04:30";
+    operation = "boot";
     allowReboot = false;
   };
 
@@ -765,6 +750,9 @@ in
   # sentinel to suppress the otherwise-noisy Rebuild{Started,Finished} events.
   systemd.services.mdadm-scrub = {
     description = "RAID array data scrub (parity consistency check)";
+    # The kernel keeps scrubbing if systemd stops this monitoring process.
+    restartIfChanged = false;
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
@@ -778,37 +766,72 @@ in
       SYNC=/sys/block/$MD/md/sync_action
       MISMATCH=/sys/block/$MD/md/mismatch_cnt
 
-      echo check > "$SYNC"
+      ACTION=$(cat "$SYNC")
+      case "$ACTION" in
+        idle) echo check > "$SYNC" ;;
+        check) echo "Monitoring existing parity check on /dev/$MD" ;;
+        *)
+          echo "Cannot start a parity check while /dev/$MD is performing $ACTION" >&2
+          exit 1
+          ;;
+      esac
 
       # Wait for the kernel to actually start the operation.
+      STARTED=0
       for _ in $(seq 1 30); do
-        [ "$(cat "$SYNC")" != "idle" ] && break
+        ACTION=$(cat "$SYNC")
+        case "$ACTION" in
+          check) STARTED=1; break ;;
+          idle) ;;
+          *)
+            echo "Unexpected RAID action while waiting for check: $ACTION" >&2
+            exit 1
+            ;;
+        esac
         sleep 1
       done
+      if [ "$STARTED" -ne 1 ]; then
+        echo "Parity check did not start within 30 seconds on /dev/$MD" >&2
+        exit 1
+      fi
 
       # Block until the scrub finishes — can take >24h on the full array.
-      while [ "$(cat "$SYNC")" != "idle" ]; do
+      while true; do
+        ACTION=$(cat "$SYNC")
+        case "$ACTION" in
+          idle) break ;;
+          check) ;;
+          *)
+            echo "Parity check replaced by unexpected RAID action: $ACTION" >&2
+            exit 1
+            ;;
+        esac
         sleep 60
       done
 
       # Hold the sentinel a bit longer so RebuildFinished is suppressed.
       sleep 30
 
-      COUNT=$(cat "$MISMATCH" 2>/dev/null || echo "?")
+      COUNT=$(cat "$MISMATCH")
+      if ! [[ "$COUNT" =~ ^[0-9]+$ ]]; then
+        echo "Invalid mismatch count for /dev/$MD: $COUNT" >&2
+        exit 1
+      fi
       if [ "$COUNT" = "0" ]; then
-        curl -s \
+        curl --fail-with-body --show-error --silent --max-time 30 \
           -H "Title: RAID Scrub Clean on ${config.networking.hostName}" \
           -H "Priority: low" \
           -H "Tags: white_check_mark,computer" \
           -d "Weekly parity check complete on /dev/$MD — mismatch_cnt=0" \
           "${ntfyUrl}/${ntfyTopic}"
       else
-        curl -s \
+        curl --fail-with-body --show-error --silent --max-time 30 \
           -H "Title: RAID Scrub Found Mismatches on ${config.networking.hostName}" \
           -H "Priority: high" \
           -H "Tags: warning,computer" \
           -d "Parity check on /dev/$MD finished with mismatch_cnt=$COUNT — investigate" \
           "${ntfyUrl}/${ntfyTopic}"
+        exit 1
       fi
     '';
   };

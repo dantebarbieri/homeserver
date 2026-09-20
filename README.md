@@ -24,14 +24,14 @@ Monorepo for my NixOS-based home server infrastructure. 50+ Docker containers, N
 docker/              Docker Compose orchestration (18 category files)
 nixos/               NixOS system configuration (configuration.nix)
 homepage/            Homepage dashboard YAML config
-mail-config/         Portable email/contacts (aerc, khard, vdirsyncer)
+mail-config/         Optional legacy terminal mail/calendar config (not installed on server)
 recyclarr-configs/   TRaSH Guides quality profiles for Sonarr/Radarr
 production-configs/  Gitignored production config copies for debugging
 ```
 
 ## How It Works
 
-**NixOS** is the declarative OS layer — it manages the Docker daemon, a daily auto-update timer, RAID/drive health monitoring, and system services like vdirsyncer and SSH.
+**NixOS** is the declarative OS layer — it manages the Docker daemon, a daily auto-update timer, RAID/drive health monitoring, and SSH. Terminal mail/calendar tooling and its synchronization timer have been retired; existing data is preserved.
 
 **Docker Compose** is the service orchestration layer. `docker-compose.yml` uses the `include:` directive to pull in self-contained category files (`compose.*.yml`). Each category can run independently. Services extend from shared base templates in `compose.common.yml`.
 

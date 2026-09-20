@@ -21,6 +21,10 @@ Docker-based services (see [homeserver-docker](https://github.com/dantebarbieri/
 ## Networking
 
 - **Bond** (`bond0`): `enp66s0f0` + `enp66s0f1` in `active-backup` mode.
+- **Preferred member**: `enp66s0f1`, set through networkd's `PrimarySlave`
+  on `40-enp66s0f1`. The legacy `driverOptions.primary` is not translated
+  by NixOS's networkd backend. Applying this setting can change the active link;
+  use a maintenance window with console access available.
 - **Stack**: `systemd-networkd` + `systemd-resolved` (NetworkManager disabled).
 - **IPv6**: SLAAC from router (`2603:8080:1e00:1c97::/64`); stable EUI-64 GUA `2603:8080:1e00:1c97:9e6b:ff:fe45:2bc2`.
 - **DNS**: `127.0.0.1` (AdGuard Home), `1.1.1.1`, `8.8.8.8`.
@@ -51,12 +55,61 @@ only — it does **not** enable X11.
 A systemd timer (`docker-compose-update.timer`) runs daily at 04:00 (±5 min
 jitter). The corresponding oneshot service:
 
-1. `git pull --recurse-submodules` from `/srv/homeserver`
-2. `docker compose pull && build && up -d --remove-orphans`
+1. Record running image digests for rollback in `/srv/docker/image-snapshots`.
+2. `git pull` from `/srv/homeserver`, with automatic Git maintenance kept in
+   the foreground so its temporary lock files cannot race the subsequent
+   ownership repair.
+3. Pull non-buildable images with at most four parallel Compose operations,
+   rebuild local images, reconcile containers,
+   recreate Homepage, and prune unused images/networks.
+
+Failures stop the update and trigger the existing `ntfy-failure@` handler.
+Image pulls get at most three attempts, with 60- and 120-second delays. An
+exhausted pull does not proceed with a partial deployment. Retries mitigate
+transient registry throttling; they cannot fix invalid credentials, missing
+images, or a sustained registry outage. Git uses `--ff-only`, and automatic
+maintenance finishes before ownership repair. The entire job holds
+`/run/lock/homeserver-compose.lock`; manual Compose operations do not
+automatically honor that lock.
 
 A deploy key is auto-generated on first activation at
 `/root/.ssh/docker-compose-deploy` — add the public key to GitHub as a
 read-only deploy key.
+
+## NixOS auto-upgrade
+
+The daily 04:30 job uses `system.autoUpgrade.operation = "boot"` and
+`allowReboot = false`: it builds a generation and selects it for the next boot
+without switching the running system. `allowReboot = false` alone does **not**
+prevent live activation; the upstream operation defaults to `"switch"`.
+
+Schedule regular maintenance reboots to activate staged OS/security updates.
+This keeps NVIDIA userspace and the loaded kernel module on matching versions.
+A manual `nixos-rebuild switch --upgrade` can still create a mismatch and is
+not a substitute for rebooting after a driver update.
+
+The RAID scrub service is not restarted when its definition changes during a
+manual switch. Its existing monitor and suppression sentinel remain alive until
+the kernel finishes the check; script changes take effect on the next run.
+If started while a parity check is already running, the new monitor attaches to
+that check without writing a second `check` request. It refuses competing RAID
+actions such as recovery/reshape and fails explicitly if a new check does not
+start within 30 seconds. Mismatches, unreadable/invalid results, and notification
+HTTP failures are reported as failed units through the existing ntfy handler.
+
+Do not reboot or manually interrupt a running scrub expecting its monitor to
+prove full completion afterward. A transition to idle and a zero mismatch count
+alone cannot distinguish a completed check from an externally canceled one.
+Finish the active check before rebooting, or deliberately arrange a fresh full
+check after the maintenance reboot.
+
+## Retired terminal mail and calendar
+
+The server no longer installs aerc, khard, khal, vdirsyncer or aerc's w3m helper.
+The login calendar and `vdirsyncer-sync` service/timer have been removed.
+Existing credentials, downloaded mail, contacts, calendars and sync state are
+not deleted. The general-purpose `pass` tool and GPG support are retained.
+`mail-config/` remains an optional portable setup, not an active NixOS integration.
 
 ## Security
 
@@ -98,3 +151,15 @@ machine. `kickstart.nvim` already sets `vim.g.have_nerd_font = true`.
 ```bash
 sudo nixos-rebuild switch
 ```
+
+## Local regression checks
+
+With Python 3, Bash, Nix, and a `nixpkgs` search-path entry available:
+
+```bash
+python3 nixos/tests/test_health_cleanup.py
+```
+
+Run from the repository root. This evaluates NixOS options and exercises scrub
+and update success/failure paths with mock commands; it does not contact or modify the
+server, synchronize real data, or build a system closure.

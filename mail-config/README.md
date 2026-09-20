@@ -1,5 +1,10 @@
 # mail-config
 
+**Optional legacy setup:** terminal mail/calendar tooling and the vdirsyncer
+timer have been retired from the homeserver. These portable templates remain
+for reference or explicit use on another machine. Existing server data and
+credentials are preserved; running `setup.sh` opts back into this setup.
+
 Portable terminal mail setup using [aerc](https://aerc-mail.org/),
 [khard](https://github.com/luber/khard) (contacts), and
 [vdirsyncer](https://github.com/pimutils/vdirsyncer) (CardDAV sync). Works on
@@ -47,8 +52,8 @@ brew install aerc khard vdirsyncer w3m
 # Arch
 sudo pacman -S aerc khard vdirsyncer w3m
 
-# NixOS (declared in configuration.nix)
-# aerc khard vdirsyncer w3m pass
+# NixOS: install explicitly if opting back in; not part of the server config
+# Required packages: aerc khard vdirsyncer w3m pass
 ```
 
 You also need a credential store:
@@ -78,8 +83,8 @@ git clone <this-repo> && cd mail-config
 4. **Bootstraps credential files** by copying `.example` templates to their
    real names (if they don't already exist). `accounts.conf` is chmod 600.
 5. **Registers periodic contact sync** — adds a crontab entry on systems with
-   cron, or skips gracefully on NixOS (which uses a declarative systemd timer
-   in `configuration.nix` instead).
+   cron. Without cron, scheduling must be explicitly configured; the homeserver
+   no longer provides a vdirsyncer systemd timer.
 
 ## Post-install setup
 

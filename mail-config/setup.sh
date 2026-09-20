@@ -117,8 +117,8 @@ if command -v crontab >/dev/null 2>&1; then
         echo "    Added: $CRON_JOB"
     fi
 else
-    echo "    crontab not found — if you're on NixOS, the systemd timer"
-    echo "    (vdirsyncer-sync.timer) handles this instead."
+    echo "    crontab not found — configure scheduling explicitly if desired."
+    echo "    The homeserver's former vdirsyncer-sync.timer has been retired."
 fi
 echo ""
 
