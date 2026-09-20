@@ -79,6 +79,13 @@ folder. Keep the original and compatible copies grouped under the same Plex
 movie so watch history is retained and Plex can automatically choose a playable
 version.
 
+For Radarr-managed movies, put alternate copies under
+`<movie folder>/Plex Versions/<version label>/` and retain the movie name in
+each filename. Radarr excludes this directory from imports; sibling movie
+files can instead be imported and change its tracked original. Verify both
+Plex's version registration and Radarr's original-file association after a
+targeted rescan. The [Tdarr compatibility flow](TDARR-DV5.md) uses this layout.
+
 Validate the **general** playback decision, not just `directPlayDecisionCode`,
 using the client's profile, subtitle selection and quality limit. Confirm both
 automatic version selection and seeking around the resume point; an

@@ -549,16 +549,16 @@ Both the HDR and SDR branches converge here.
 |-----------|--------------------------|-------|
 | **HDR10** (static metadata) | ✅ Yes | The `checkHdr` branch adds the required x265-params and color flags |
 | **HDR10+** (dynamic metadata) | ❌ No | Dynamic metadata is lost during re-encode — degrades to HDR10 |
-| **Dolby Vision** | ❌ No | DV metadata cannot be preserved through libx265. Content degrades to base HDR10 layer or SDR |
+| **Dolby Vision** | ❌ Not by this flow | A compatible base layer is not guaranteed; Profile 5 requires Dolby-Vision-aware tone mapping |
 
-If you want to **skip Dolby Vision content entirely** instead of losing DV
-metadata, add a `video/checkVideoCodec` node checking for DV profile headers
-before the transcode, or use `ffmpegCommand/ffmpegCommandCustomArguments` to
-detect DV in the stream and route to Cancel Flow.
+Do not route Dolby Vision Profile 5 through the ordinary HDR10 branch or
+simply strip its metadata: it has no HDR10-compatible base layer. A codec
+check for `hevc` does not distinguish Dolby Vision profiles. Inspect the
+`DOVI configuration record` in FFprobe's video stream side data.
 
-> **Practical note:** Most TV shows are SDR or HDR10. Dolby Vision TV content
-> is relatively rare outside streaming originals, which you typically wouldn't
-> have as files anyway.
+The separate [Dolby Vision compatibility flow](TDARR-DV5.md) makes an SDR
+sidecar without replacing the source. It is intentionally independent of
+this compression flow and its early HEVC skip filters.
 
 ### Step 5: Assign flows to libraries
 
