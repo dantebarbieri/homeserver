@@ -164,6 +164,12 @@ services:
       QBT_WIDTH: 100
     volumes:
       - ${DATA}/qbit-manage/config:/config:rw
+      - type: bind
+        source: ${DATA}/qbittorrent/config/qBittorrent/BT_backup
+        target: /qbittorrent/BT_backup
+        read_only: true
+        bind:
+          create_host_path: false
       - ${RAID}/shared/torrents:/data/torrents:rw
     depends_on:
       qbittorrent:

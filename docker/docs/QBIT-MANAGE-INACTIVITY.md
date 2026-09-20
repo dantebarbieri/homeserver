@@ -39,6 +39,41 @@ already-applied patch fails the build. It then runs tests against those actual
 image sources, without accessing `/config`, qBittorrent, credentials or media.
 The base entrypoint and command are inherited unchanged.
 
+## Torrent backup path
+
+With `recyclebin.save_torrents: true`, `directory.torrents_dir` means
+qBittorrent's **`.torrent` metadata backup directory**, not downloaded media.
+Compose mounts the existing
+`${DATA}/qbittorrent/config/qBittorrent/BT_backup` read-only at
+`/qbittorrent/BT_backup`. Missing host directories fail deployment rather than
+silently creating an empty backup location.
+
+The private configuration must contain:
+
+```yaml
+directory:
+  root_dir: /data/torrents/
+  recycle_bin: /data/torrents/.RecycleBin
+  torrents_dir: /qbittorrent/BT_backup
+```
+
+Preserve the rest of that mapping and configuration. No `remote_dir` translation
+is needed because both applications already use `/data/torrents`. Keep torrent
+backup saving enabled and the existing 14-day recycle retention.
+
+Upstream validates share limits before directories: the old validator error
+masked the missing backup path. It also adds default fields/directories even
+during dry-run; dry-run protects torrent actions, not every configuration write.
+Stop qbit-manage before editing its config, keep a private mode-600 backup,
+fill only the blank `torrents_dir`, and recreate only that service using the main
+Compose entry point. Never commit the private configuration.
+
+Afterward verify a complete run without `ERROR`, `CRITICAL`, `Config Error` or
+tracebacks. The application can print `Finished Run` and exit successfully even
+when it caught a configuration failure. A one-shot verification can use
+`docker compose exec -T qbit-manage python3 /app/qbit_manage.py --run --dry-run`;
+avoid overlapping it with the scheduled run, and keep dry-run enabled.
+
 ## Local validation
 
 With Docker available, build without starting any service:
@@ -83,8 +118,8 @@ hash failure by weakening the check.
 
 Rollback means reverting the Compose image/build selection to the pinned upstream
 base, keeping dry-run enabled. That restores the known validation failure rather
-than silently changing seeding/deletion policy. No production config edit is
-required for either deployment or rollback.
+than silently changing seeding/deletion policy. Reverting the validator patch
+does not require undoing the correct torrent-backup path or read-only mount.
 
 Sources:
 - [Upstream validator](https://github.com/StuffAnThings/qbit_manage/blob/906af0f74818abaaa62f9f22e1e4e73ccb0d2bd5/modules/config.py#L1038-L1058)
