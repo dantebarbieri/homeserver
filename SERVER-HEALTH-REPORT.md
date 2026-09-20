@@ -1,5 +1,118 @@
 # Server health audit - 2026-09-19
 
+## September 20 Docker maintenance follow-up
+
+The owner authorized proceeding with Docker repairs after host maintenance.
+The earlier Recyclarr and Tdarr playback work was preserved.
+
+### Deployed and verified
+
+**Docker socket recovery and Tdarr's loader fix** were committed/pushed as
+`712831a` and pulled on production.
+
+`docker-socket-consumers.service` is installed and active/exited with
+`Result=success`, `ExecMainStatus=0`. Its first run at **08:15 CDT** recreated
+only Homepage, Alloy, cAdvisor and the VPN namespace watcher. Docker itself
+remained running from **07:50:02**; unrelated containers were not restarted.
+The actual unit dependencies include `Requires`/`After`/`PartOf=docker.service`,
+and Docker's `Wants`/`ConsistsOf` include the recovery unit. The helper is
+store-pinned, shares the updater's lock, skips stopped/absent services, and
+does not pull/build images or start dependencies.
+
+Homepage and cAdvisor returned healthy. Prometheus reported cAdvisor's root
+sample approximately **14.6 seconds old** and **zero new out-of-bounds samples**
+over five minutes. Alloy delivered **269 recent Tdarr log entries** to Loki.
+Two startup batches containing August Hytale logs were rejected by Loki's
+existing seven-day age limit; these were historical backfill, not continuing
+Docker socket failures. A tailer warning when the old Tdarr container was
+deliberately removed also settled. Do not disable timestamp checks to hide this.
+
+Tdarr's separate `GLIBC_PRIVATE` / `__nptl_change_stack_perm` error came from its
+image-wide `/usr/lib/x86_64-linux-gnu` library override colliding with the
+host-mounted NixOS GPU utility. Compose now limits `LD_LIBRARY_PATH` to the
+NVIDIA CDI library directories, as Plex already does. The idle Tdarr node was
+paused, recreated alone at **08:16 CDT**, and resumed. Both the actual server
+and node processes inherited the corrected paths; `nvidia-smi` and a synthetic
+NVENC encode succeed without an exec-time environment override. CPU encoding
+was also checked with the new paths before rollout.
+
+The existing four CPU transcode/four CPU health workers and one GPU transcode
+worker remain unchanged, as do `gpuSelect="-"` and `allowGpuDoCpu=false`.
+No real encode was interrupted. Originals, SDR sidecars, flow settings and
+`Custom/state` ownership manifests were untouched.
+
+The NixOS build changed only the new recovery unit/helper and generated system
+metadata; no kernel/driver packages changed. The live switch preserved the
+scrub monitor's **PID 53367 and invocation ID**, and its kernel check continued
+advancing. NVIDIA remains **595.99.02**. Full scrub completion is still pending.
+
+**Recyclarr was already fixed** by the separate Plex playback work: the owner
+populated the private secret file and ran a successful two-application sync
+around **07:28 CDT**. That session verified the live Sonarr/Radarr custom-format
+scores. Its earlier midnight 401 log is historical, not evidence that the later
+manual sync failed. No secret changes or redundant sync were performed here.
+The earlier Tdarr relative-FFmpeg-path failure was likewise already repaired
+and successfully exercised by that work; this rollout did not change its flow.
+
+### Remaining application work
+
+**AdGuard:** the post-reboot investigation found 11 Quad9 DoH `unexpected EOF`
+errors between **07:50 and 08:20 CDT**, with other upstreams and local DNS
+working. The precise intermittent cause is unproven; increasing timeouts or
+disabling IPv6 is not supported by the evidence. The provider-preserving
+candidate replaces only `https://dns10.quad9.net/dns-query` with
+`tls://dns10.quad9.net`.
+
+Complete certificate-checked DoT A/AAAA exchanges and connection reuse passed
+from the server against both Quad9 IPv4 and both IPv6 endpoints. A guarded,
+reversible migration and six regression tests were committed/pushed as
+`4d3d1bf`; see [AdGuard recovery](docker/docs/ADGUARD-QUAD9.md).
+**It has not been applied:** the protected production YAML requires sudo,
+the maintenance terminal became unavailable, and the owner could not provide
+interactive authentication. No DNS settings, providers, router settings or
+fallback policy were changed. Normal-traffic observation after applying the
+candidate remains necessary; successful direct probes alone do not prove an
+intermittent issue resolved.
+
+**qbit-manage:** version 4.13.0 still rejects the `noHL` combination of a positive
+minimum seeding time and unlimited ratio. The persisted comments explicitly
+require **at least 14 days seeded AND seven days inactive AND at least two
+seeders**, with no ratio or maximum-time cap. Removing the minimum or inventing
+a ratio would change deletion policy. A narrowly pinned validation repair is
+committed/pushed as `b6a72e8`; see
+[qbit-manage repair](docker/docs/QBIT-MANAGE-INACTIVITY.md).
+It changes only the validator exception for unlimited ratio, unlimited maximum
+seeding time and a positive inactivity trigger. Runtime cleanup is unchanged.
+The deployed upstream 4.13.0 image digest and source hashes are pinned, so future
+upgrades require explicitly reviewing/removing this compatibility patch.
+
+All 16 actual-source regression tests passed locally **and inside a real Docker
+build on the server**, covering the three cleanup gates, exact boundaries,
+other rejected configurations and dry-run nonmutation. The resulting
+`qbit-manage-inactivity:4.13.0-1` image is built, but **the running service has not
+been replaced**. Its effective dry-run was verified true, with no private
+configuration override. The private configuration is untouched.
+
+Immediate deployment is blocked by unavailable sudo access and protected
+checkout files. An ordinary-account bundle fast-forward failed on the
+root-owned tests directory; only that attempt's partial changes were removed.
+Production's checkout is verified clean at `712831a`, and qbit-manage still runs
+the original upstream image. The published main branch contains the tested new
+build configuration, so the normal privileged daily updater can also pick it up
+on its next run. A first live run of the patched service still needs verification.
+
+**Hytale:** downloader authentication remains blocked by an expired refresh
+token. The owner must complete the official device login; they were unavailable
+when prompted. The container remains in its existing restart loop, and no
+credential file, world or machine identity was deleted or changed. Downloader
+OAuth is separate from game-server `/auth` commands. See the
+[safe reauthorization procedure](docker/docs/HYTALE.md).
+
+The new host lifecycle assertions and seven socket-helper regression tests
+passed against Nixpkgs `20b1ddd1aa5ace70c9468305030aa4f9ef79671b`, along with
+the full system derivation, actual Linux build and production Compose validation.
+These checks do not substitute for the explicitly blocked AdGuard/Hytale work.
+
 ## September 20 maintenance follow-up
 
 The owner authorized host maintenance and a reboot, while deferring the
