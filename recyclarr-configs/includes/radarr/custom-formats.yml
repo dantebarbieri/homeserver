@@ -340,3 +340,8 @@ custom_formats:
     assign_scores_to: &uhd_profiles
       - name: 4K UHD - 2160p
       - name: At most 2160p
+
+  # DV-only WEB releases cannot fall back to HDR10 when playback needs conversion.
+  - trash_ids:
+      - 923b6abef9b17f937fab56cfcf89e1f1 # DV (w/o HDR fallback)
+    assign_scores_to: *uhd_profiles

@@ -28,6 +28,20 @@ Personal [Recyclarr](https://github.com/recyclarr/recyclarr) configuration for s
 
 `secrets.yml` is gitignored and must never be committed. It contains API keys and instance URLs. See `secrets.yml.example` for the expected structure.
 
+## Dolby Vision playback compatibility
+
+The standard `4K UHD - 2160p` and `At most 2160p` profiles in both apps assign
+TRaSH's **DV (w/o HDR fallback)** custom format its default **-10000** score.
+This penalizes DV-only WEB releases while retaining the existing preference
+for Dolby Vision releases that also advertise HDR fallback. It does not
+change anime scoring or modify already-downloaded files.
+
+This is release-title/source matching, not an inspection of the video's Dolby
+Vision profile, so it is a prevention layer rather than a playback guarantee.
+In particular, a Dolby Vision Profile 5 file has no HDR10-compatible base
+layer and may need a separate, properly tone-mapped compatibility version.
+See [Plex playback](../docker/docs/PLEX.md) for that distinction.
+
 ## AI-Assisted Development
 
 This repo is intentionally small so that AI coding tools (Claude Code, Copilot, etc.) can load the full context. When making changes:
