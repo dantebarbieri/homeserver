@@ -27,6 +27,12 @@ services:
       - MIRKLURK_SECRET_KEY
       - MIRKLURK_UPGRADE_KEY
       - MIRKLURK_CAPTCHA_QUESTIONS
+    volumes:
+      - type: bind
+        source: ${DATA}/mirklurk/images
+        target: /var/www/html/images
+        bind:
+          create_host_path: false
     networks:
       - proxy
       - mirklurk
