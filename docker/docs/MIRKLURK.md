@@ -23,7 +23,7 @@ credential discovery or changes. Those remain under the operator's control.
 | Public URL | `MIRKLURK_SERVER_URL`, initially `https://wiki.mirklurk.danteb.com` |
 | Proxy trust | `MIRKLURK_TRUSTED_PROXY_CIDRS`, verified proxy addresses only |
 | Database | `mirklurk-db:3306`, database/user `mirklurk`, named volume `compose_mirklurk-db` |
-| Images | `${DATA}/mirklurk/images` -> `/var/www/html/images` |
+| Images | No host mount initially; uploads and external images are disabled |
 | Secrets | `${DATA}/mirklurk/secrets` -> individual `/run/secrets/` files |
 | Local SQL dumps | `${DATA}/mirklurk/backups`, owned by `${UID}:${GID}` |
 
@@ -72,9 +72,11 @@ password only at
 `/srv/docker/data/mirklurk/secrets/MIRKLURK_ADMIN_PASSWORD`.
 An authorized operator retrieves it directly from that protected file.
 
-Provision the images directory for UID 33 and the backup directory for
-`${UID}:${GID}` before starting. Bind mounts use `create_host_path: false` so
-missing directories fail rather than silently become root-owned.
+Provision the backup directory for `${UID}:${GID}` before starting. Its bind
+mount uses `create_host_path: false` so a missing directory fails rather than
+silently becoming root-owned. No images bind is needed while uploads are
+disabled. If uploads are explicitly enabled later, provision persistent image
+storage for Apache UID 33 and add its mount and backup coverage before use.
 
 `MIRKLURK_TRUSTED_PROXY_CIDRS` maps to the image's
 `MW_TRUSTED_PROXY_CIDRS`. Use the reverse proxy's actual container-side
@@ -147,7 +149,7 @@ same-day run replaces that day's snapshot. Backup health is visible in Docker;
 there is no additional offsite transfer or alerting credential in the sidecar.
 
 The existing encrypted daily offsite job already includes
-`/srv/docker/data/mirklurk/`, so dumps, wiki secrets, and images are covered
+`/srv/docker/data/mirklurk/`, so dumps and wiki secrets are covered
 without modifying NixOS or rebuilding it. The live named MariaDB volume is
 **not** backed up by that file sync; the SQL dumps are essential. Offsite
 replication follows the existing daily schedule, not the six-hour dump cadence.
