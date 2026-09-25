@@ -2,6 +2,114 @@
 # Uncomment services as needed
 
 services:
+  mirklurk:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mirklurk-wiki:local
+    build:
+      context: ${MIRKLURK_WIKI_PATH:?Set MIRKLURK_WIKI_PATH in .env}
+      dockerfile: deploy/Dockerfile
+    container_name: mirklurk
+    environment:
+      MW_SERVER_URL: ${MIRKLURK_SERVER_URL:-https://wiki.mirklurk.danteb.com}
+      MW_TRUSTED_PROXY_CIDRS: ${MIRKLURK_TRUSTED_PROXY_CIDRS:?Set the exact trusted reverse-proxy IPs/CIDRs in .env}
+      MW_READ_ONLY: ${MIRKLURK_READ_ONLY:-}
+      MW_DB_SERVER: mirklurk-db
+      MW_DB_NAME: mirklurk
+      MW_DB_USER: mirklurk
+      MW_DB_PASSWORD_FILE: /run/secrets/MIRKLURK_DB_PASSWORD
+      MW_SECRET_KEY_FILE: /run/secrets/MIRKLURK_SECRET_KEY
+      MW_UPGRADE_KEY_FILE: /run/secrets/MIRKLURK_UPGRADE_KEY
+      MW_CAPTCHA_QUESTIONS_FILE: /run/secrets/MIRKLURK_CAPTCHA_QUESTIONS
+    secrets:
+      - MIRKLURK_DB_PASSWORD
+      - MIRKLURK_SECRET_KEY
+      - MIRKLURK_UPGRADE_KEY
+      - MIRKLURK_CAPTCHA_QUESTIONS
+    volumes:
+      - type: bind
+        source: ${DATA}/mirklurk/images
+        target: /var/www/html/images
+        bind:
+          create_host_path: false
+    networks:
+      - proxy
+      - mirklurk
+    depends_on:
+      mirklurk-db:
+        condition: service_healthy
+
+  mirklurk-db:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: &mirklurk-mariadb mariadb:11.4.13@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
+    container_name: mirklurk-db
+    environment:
+      MARIADB_DATABASE: mirklurk
+      MARIADB_USER: mirklurk
+      MARIADB_PASSWORD_FILE: /run/secrets/MIRKLURK_DB_PASSWORD
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/MIRKLURK_DB_ROOT_PASSWORD
+      TZ: ${TZ}
+    secrets:
+      - MIRKLURK_DB_PASSWORD
+      - MIRKLURK_DB_ROOT_PASSWORD
+    volumes:
+      - mirklurk-db:/var/lib/mysql
+    networks:
+      - mirklurk
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 30s
+      start_interval: 10s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  mirklurk-backup:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: *mirklurk-mariadb
+    container_name: mirklurk-backup
+    init: true
+    user: "${UID}:${GID}"
+    entrypoint: ["bash", "/opt/mirklurk-backup.sh"]
+    command: []
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m
+      - /var/lib/mysql:size=1m
+    environment:
+      MW_DB_SERVER: mirklurk-db
+      MW_DB_NAME: mirklurk
+      MW_DB_USER: mirklurk
+      MW_DB_PASSWORD_FILE: /run/secrets/MIRKLURK_DB_PASSWORD
+    secrets:
+      - MIRKLURK_DB_PASSWORD
+    volumes:
+      - ./scripts/mirklurk-backup.sh:/opt/mirklurk-backup.sh:ro
+      - type: bind
+        source: ${DATA}/mirklurk/backups
+        target: /backups
+        bind:
+          create_host_path: false
+    networks:
+      - mirklurk
+    depends_on:
+      mirklurk-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "/opt/mirklurk-backup.sh", "--healthcheck"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 10m
+
   travel-planner:
     build:
       context: ${TRAVEL_PLANNER_PATH:?Set TRAVEL_PLANNER_PATH in .env}
@@ -207,9 +315,12 @@ services:
 
 networks:
   proxy:
+  mirklurk:
+    internal: true
   skyjo:
   sorry:
 
 volumes:
+  mirklurk-db:
   skyjo-pgdata:
   skyjo-data:

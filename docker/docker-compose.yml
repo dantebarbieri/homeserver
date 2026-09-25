@@ -52,3 +52,13 @@ secrets:
     file: '${DATA}/mcp-idp/secrets/IDP_PEPPER'
   IDP_PROXY_SECRET:
     file: '${DATA}/mcp-idp/secrets/IDP_PROXY_SECRET'
+  MIRKLURK_DB_PASSWORD:
+    file: '${DATA}/mirklurk/secrets/MIRKLURK_DB_PASSWORD'
+  MIRKLURK_DB_ROOT_PASSWORD:
+    file: '${DATA}/mirklurk/secrets/MIRKLURK_DB_ROOT_PASSWORD'
+  MIRKLURK_SECRET_KEY:
+    file: '${DATA}/mirklurk/secrets/MIRKLURK_SECRET_KEY'
+  MIRKLURK_UPGRADE_KEY:
+    file: '${DATA}/mirklurk/secrets/MIRKLURK_UPGRADE_KEY'
+  MIRKLURK_CAPTCHA_QUESTIONS:
+    file: '${DATA}/mirklurk/secrets/MIRKLURK_CAPTCHA_QUESTIONS'
