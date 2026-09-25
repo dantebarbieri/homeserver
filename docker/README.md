@@ -64,7 +64,7 @@ docker compose -f compose.gaming.yml up -d
 | **SearXNG** | searxng, searxng_redis |
 | **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
 | **Utilities** | vaultwarden, syncthing, ntfy |
-| **Websites** | travel-planner |
+| **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup |
 
 ## Shared Templates
 
@@ -106,6 +106,11 @@ See [`../docs/ROMM.md`](../docs/ROMM.md) for ROM library storage, native authent
 ## Model Recipe Apps
 
 See [RECIPE-APPS.md](docs/RECIPE-APPS.md) for immutable source versions, storage, proxy setup, validation, and rollback.
+
+## MirkLurk Wiki
+
+See [MIRKLURK.md](docs/MIRKLURK.md) for the external wiki release, scoped secrets,
+nested-domain TLS, first installation, database backups, and controlled updates.
 
 ## Service Catalogue
 

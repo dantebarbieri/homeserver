@@ -428,6 +428,13 @@
         container: satisfactory-server
 
     - Custom Services:
+        - MirkLurk Wiki:
+            icon: mdi-book-open-page-variant
+            href: https://wiki.mirklurk.danteb.com
+            description: Community game reference
+            siteMonitor: https://wiki.mirklurk.danteb.com
+            server: my-docker
+            container: mirklurk
         - Travel Planner:
             icon: mdi-airplane
             href: https://travel.danteb.com
