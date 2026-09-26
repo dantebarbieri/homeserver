@@ -140,16 +140,20 @@ something this runbook automates.
 
 ## Published wiki edit freeze
 
-The canonical frontend currently sets the literal `MW_READ_ONLY` reason
-`MirkLurk content update in progress`. This temporary edit freeze survives
+Normal operation sets the explicit empty literal `MW_READ_ONLY: ""` in the
+canonical frontend. Do not use `.env` interpolation: a stale environment value
+must not refreeze editing. For future releases, deliberately set a literal
+reason such as `MirkLurk content update in progress` in a reviewed homeserver
+change. This temporary edit freeze survives
 ordinary Compose recreation and cannot be cleared through `.env`. Readers
 remain online; the images mount and normal cache/thumbnail writes stay writable.
 For approved publication, follow the external repository's guarded procedure
 in a one-off maintenance container with `MW_READ_ONLY` cleared for that process
 only. Preserve existing edits, history, accounts, and original images. Clear
 the frontend freeze in a separate reviewed homeserver change **only after**
-the coordinator and host operator verify successful publication; never
-automatically clear it on failure.
+the coordinator and host operator verify successful publication and all
+preservation, public-reader, and derived-data checks; never automatically clear
+it on failure.
 
 ## Backups and restore gate
 
