@@ -146,7 +146,13 @@ must not refreeze editing. For future releases, deliberately set a literal
 reason such as `MirkLurk content update in progress` in a reviewed homeserver
 change. This temporary edit freeze survives
 ordinary Compose recreation and cannot be cleared through `.env`. Readers
-remain online; the images mount and normal cache/thumbnail writes stay writable.
+remain online; the images filesystem and normal caches remain writable.
+However, MediaWiki 1.43.9's global `MW_READ_ONLY` also makes its local
+FileBackend read-only: existing fresh thumbnails are served, but uncached
+public sizes fail before filesystem save, not because of filesystem ACLs.
+While frozen, prewarm required new derivatives using approved write-capable
+CLI with `MW_READ_ONLY` cleared for that process only, and verify actual
+public responses. Ordinary new thumbnail generation resumes after unfreezing.
 For approved publication, follow the external repository's guarded procedure
 in a one-off maintenance container with `MW_READ_ONLY` cleared for that process
 only. Preserve existing edits, history, accounts, and original images. Clear
