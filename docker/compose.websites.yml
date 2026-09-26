@@ -6,15 +6,13 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: mirklurk-wiki:local
-    build:
-      context: ${MIRKLURK_WIKI_PATH:?Set MIRKLURK_WIKI_PATH in .env}
-      dockerfile: deploy/Dockerfile
+    image: sha256:e6f1ced16f5b7178087b76da5d2ecb507bd66bd4dff53c8a4cf2952a95773f9d
+    pull_policy: never
     container_name: mirklurk
     environment:
       MW_SERVER_URL: ${MIRKLURK_SERVER_URL:-https://wiki.mirklurk.danteb.com}
       MW_TRUSTED_PROXY_CIDRS: ${MIRKLURK_TRUSTED_PROXY_CIDRS:?Set the exact trusted reverse-proxy IPs/CIDRs in .env}
-      MW_READ_ONLY: ${MIRKLURK_READ_ONLY:-}
+      MW_READ_ONLY: "MirkLurk content update in progress"
       MW_DB_SERVER: mirklurk-db
       MW_DB_NAME: mirklurk
       MW_DB_USER: mirklurk

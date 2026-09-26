@@ -17,9 +17,9 @@ credential discovery or changes. Those remain under the operator's control.
 
 | Item | Value |
 |------|-------|
-| External clone | `/srv/docker/mirklurk-wiki`, selected by `MIRKLURK_WIKI_PATH` |
-| Build | External repository root, `deploy/Dockerfile` |
-| App | `mirklurk`, Apache port 80, image `mirklurk-wiki:local` |
+| External clone | `/srv/docker/mirklurk-wiki`, reviewed build source only |
+| Build | Operator builds `deploy/Dockerfile` once from the reviewed external release; no Compose build fallback |
+| App | `mirklurk`, Apache port 80, exact local `sha256` image ID in `compose.websites.yml`, `pull_policy: never` |
 | Public URL | `MIRKLURK_SERVER_URL`, initially `https://wiki.mirklurk.danteb.com` |
 | Proxy trust | `MIRKLURK_TRUSTED_PROXY_CIDRS`, verified proxy addresses only |
 | Database | `mirklurk-db:3306`, database/user `mirklurk`, named volume `compose_mirklurk-db` |
@@ -38,17 +38,24 @@ not a second homeserver stack.
 
 ## Before merging or starting
 
-The daily homeserver updater pulls `main` and builds all configured services.
-Prepare the external checkout, required `.env` values, directories, and secret
-files before merging this integration. An absent checkout, unset proxy trust,
-or missing secret otherwise breaks that update. Do not deploy from an
-untracked production override or a feature-branch checkout: the next updater
-can remove those containers with `--remove-orphans`.
+The daily homeserver updater pulls `main`, but it cannot pull or rebuild the
+pinned wiki image. The authorized operator must build and verify that exact
+image locally before its homeserver pin is merged. Keep the image available;
+a missing image must fail rather than fall back to another release. Required
+`.env` values, directories, and secret files must also already exist. Do not
+deploy from an untracked production override or a feature-branch checkout:
+the next updater can remove those containers with `--remove-orphans`.
 
 Use a reviewed, committed wiki release and record its exact commit. The
 external checkout belongs under `/srv/docker`, alongside the existing
 external-app pattern; it is not part of `${DATA}` and is not the live database.
 The homeserver updater does **not** pull this external repository.
+
+For a first installation on another host, or a later application release,
+build `deploy/Dockerfile` from that reviewed external checkout on the target
+host, verify the resulting image, and record its full local `sha256` image ID.
+Have a reviewed homeserver change pin that ID before starting the app. The
+current local image ID is not a registry artifact that a fresh host can pull.
 
 Create the wiki's own secret directory with mode `0700`. Individual secret
 files must be readable by the mounted app (Apache UID 33), database, or backup
@@ -105,9 +112,8 @@ Once deployment is approved and the merged production configuration is ready:
 ```bash
 z /srv/homeserver/docker
 docker compose config --quiet
-docker compose build mirklurk
 docker compose up -d mirklurk-db
-docker compose run --rm --no-deps \
+docker compose run --rm --no-deps --env MW_READ_ONLY= \
   --volume /srv/docker/data/mirklurk/secrets/MIRKLURK_ADMIN_PASSWORD:/run/secrets/MIRKLURK_ADMIN_PASSWORD:ro \
   mirklurk php /usr/local/lib/mirklurk/install.php \
   --admin WikiAdmin --password-file /run/secrets/MIRKLURK_ADMIN_PASSWORD
@@ -118,11 +124,6 @@ external repository's `tools/build_wiki.py --fresh` flow and follow its guarded
 fresh-only import procedure **before** enabling public access. Do not regularly
 re-import source pages over community edits. GitHub source content is not a
 backup of the live wiki's users, revision history, or settings.
-
-`MIRKLURK_READ_ONLY` optionally supplies an edit-freeze reason to the app.
-For any later approved import, stop the web service and run the maintenance
-import in a one-off container with `MW_READ_ONLY` cleared; use only reviewed
-fresh or missing-title XML according to the external repository's procedure.
 
 Start only `mirklurk` and `mirklurk-backup` after initialization and seeding.
 The image's healthcheck is
@@ -136,6 +137,19 @@ edits/uploads, CAPTCHA-enforced registration, and authenticated editing before
 declaring deployment complete. Verify both IP families where supported.
 Reverse-proxy/TLS configuration is an operator-managed prerequisite, not
 something this runbook automates.
+
+## Published wiki edit freeze
+
+The canonical frontend currently sets the literal `MW_READ_ONLY` reason
+`MirkLurk content update in progress`. This temporary edit freeze survives
+ordinary Compose recreation and cannot be cleared through `.env`. Readers
+remain online; the images mount and normal cache/thumbnail writes stay writable.
+For approved publication, follow the external repository's guarded procedure
+in a one-off maintenance container with `MW_READ_ONLY` cleared for that process
+only. Preserve existing edits, history, accounts, and original images. Clear
+the frontend freeze in a separate reviewed homeserver change **only after**
+the coordinator and host operator verify successful publication; never
+automatically clear it on failure.
 
 ## Backups and restore gate
 
@@ -178,10 +192,14 @@ after an in-wiki password change it is not the current credential.
 
 Application and database versions are pinned; update them deliberately with
 a current backup, matching extension versions, the upstream MediaWiki update
-procedure, and health/content checks. The homeserver's normal daily build
-does not perform schema migrations or pull the external wiki checkout.
-Record both repository commits for each release. The existing generic
-deploy helper also pulls only homeserver and may skip external-only changes.
+procedure, and health/content checks. Verify required extension files and
+configuration, including ParserFunctions, before pinning the new image's full
+immutable ID. Verify the loaded runtime during the wiki-only rollout before
+any import or content write.
+The homeserver's normal daily build does not rebuild the wiki, perform schema
+migrations, or pull the external wiki checkout. Record both repository commits
+and the local image ID for each release. The existing generic deploy helper
+does not build this pinned frontend or advance its image.
 
 Change `MIRKLURK_SERVER_URL` for a future domain migration and update the
 Homepage URL alongside the operator-managed proxy. Database, image paths,
