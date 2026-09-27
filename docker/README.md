@@ -64,7 +64,7 @@ docker compose -f compose.gaming.yml up -d
 | **SearXNG** | searxng, searxng_redis |
 | **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
 | **Utilities** | vaultwarden, syncthing, ntfy |
-| **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup |
+| **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup, mirklurk-map |
 
 ## Shared Templates
 
@@ -111,6 +111,11 @@ See [RECIPE-APPS.md](docs/RECIPE-APPS.md) for immutable source versions, storage
 
 See [MIRKLURK.md](docs/MIRKLURK.md) for the external wiki release, scoped secrets,
 nested-domain TLS, first installation, database backups, and controlled updates.
+
+## Mirklurk World Viewer
+
+See [MIRKLURK-MAP.md](docs/MIRKLURK-MAP.md) for the pinned static viewer release,
+proxy settings, validation, and updates.
 
 ## Service Catalogue
 

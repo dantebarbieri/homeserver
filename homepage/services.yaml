@@ -435,6 +435,13 @@
             siteMonitor: https://wiki.mirklurk.danteb.com
             server: my-docker
             container: mirklurk
+        - Mirklurk World Viewer:
+            icon: mdi-map-search
+            href: https://map.mirklurk.danteb.com
+            description: Browser-only world map
+            siteMonitor: https://map.mirklurk.danteb.com
+            server: my-docker
+            container: mirklurk-map
         - Travel Planner:
             icon: mdi-airplane
             href: https://travel.danteb.com

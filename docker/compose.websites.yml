@@ -108,6 +108,38 @@ services:
       retries: 3
       start_period: 10m
 
+  # map.mirklurk.danteb.com — static Mirklurk World Viewer. Saves are read in
+  # the visitor's browser: no backend, volume, or secrets. Update the image
+  # tag, context SHA, and revision label together (docs/MIRKLURK-MAP.md).
+  mirklurk-map:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mirklurk-map:fb027e0
+    build:
+      context: "https://github.com/dantebarbieri/mirklurk-map.git#fb027e0c890c26f52cab88df28b815183fddd535"
+      labels:
+        org.opencontainers.image.source: https://github.com/dantebarbieri/mirklurk-map
+        org.opencontainers.image.revision: fb027e0c890c26f52cab88df28b815183fddd535
+    container_name: mirklurk-map
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m
+    expose:
+      - "8080"
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+
   travel-planner:
     build:
       context: ${TRAVEL_PLANNER_PATH:?Set TRAVEL_PLANNER_PATH in .env}
