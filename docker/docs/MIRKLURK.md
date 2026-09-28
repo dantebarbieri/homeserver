@@ -24,6 +24,7 @@ credential discovery or changes. Those remain under the operator's control.
 | Proxy trust | `MIRKLURK_TRUSTED_PROXY_CIDRS`, verified proxy addresses only |
 | Database | `mirklurk-db:3306`, database/user `mirklurk`, named volume `compose_mirklurk-db` |
 | Images | `${DATA}/mirklurk/images` -> `/var/www/html/images` |
+| Branding | `${DATA}/mirklurk/branding` -> `/var/www/html/branding` (read-only) |
 | Secrets | `${DATA}/mirklurk/secrets` -> individual `/run/secrets/` files |
 | Local SQL dumps | `${DATA}/mirklurk/backups`, owned by `${UID}:${GID}` |
 
@@ -89,7 +90,7 @@ setfacl -m u:33:rwx,m::rwx /srv/docker/data/mirklurk/images
 setfacl -m d:u::rwx,d:u:33:rwx,d:g::---,d:m::rwx,d:o::--- /srv/docker/data/mirklurk/images
 ```
 
-Both bind mounts use `create_host_path: false`. Persistent images remain
+All data bind mounts use `create_host_path: false`. Persistent images remain
 available for later explicitly approved CLI imports even while browser
 uploads are disabled. Game assets stay outside Git.
 
@@ -98,6 +99,60 @@ uploads are disabled. Game assets stay outside Git.
 address(es), preferably `/32` and `/128`, not `0.0.0.0/0`, `::/0`, or the
 entire shared web-service network. Verify forwarding and rate-limit behavior
 with that configuration. Recheck the value if the proxy's address changes.
+
+## Operator-supplied branding
+
+Provision `${DATA}/mirklurk/branding` before merging this mount, even when
+branding URLs are unset. It is separate from MediaWiki uploads and mounted
+read-only in the frontend. The existing offsite backup includes it under
+`/srv/docker/data/mirklurk/`; include it alongside images in pre-rollout and
+recovery snapshots. This does not enable uploads or change wiki content.
+Keep the host branding root operator-owned with mode `0700` plus an Apache
+UID 33 read/traverse ACL (`setfacl -m u:33:rx,m::rx` on that directory).
+Use `0755` for its versioned subdirectory and `0644` for the public files.
+
+The operator supplied two Edym Pixels artworks and selected them for public
+wiki branding. Display permission is operator-reported, confirmed 2026-09-25;
+it is **not permission to redistribute the artwork in Git**. Preserve the
+originals byte-for-byte and keep all artwork/derivatives out of Git, PRs,
+issues, CI artifacts and runtime image builds. Store only the approved
+originals, the required legacy derivative, and a public `attribution.txt`
+under the versioned `branding/2026-09/` directory. The attribution identifies
+Edym Pixels, the original filenames, the legacy resize, and display-only
+permission without implying a general reuse license. Never overwrite
+existing artwork; use a new versioned directory for later replacements.
+
+| File | Dimensions | SHA-256 |
+|------|------------|---------|
+| `spr_256x256.png` | 256 x 256 original | `2d0fdbb12de9e09a83be6fd9742ddc40b838be1f8b2a7626b3930171f7112064` |
+| `icon184x184.png` | 184 x 184 original | `d365cdb569ecd682bbfcdbb60835d6ba10b98cf129f576b1554fa9e4ef7e9416` |
+| `logo-128.png` | 128 x 128 nearest-neighbor derivative of `spr_256x256.png` | Record in the private rollout manifest |
+
+Set the following nonsecret values in the production `docker/.env` only
+after provisioning and verifying the files:
+
+```dotenv
+MIRKLURK_LOGO_URL=/branding/2026-09/logo-128.png
+MIRKLURK_LOGO_ICON_URL=/branding/2026-09/spr_256x256.png
+MIRKLURK_FAVICON_URL=/branding/2026-09/icon184x184.png
+```
+
+Compose passes these through as `MW_LOGO_URL`, `MW_LOGO_ICON_URL`, and
+`MW_FAVICON_URL`. Set both logo URLs together or leave both empty to retain
+MediaWiki defaults. The favicon is independently optional. Paths must be
+single-slash root-relative PNG paths with ASCII alphanumeric, underscore or
+hyphen segments, and dots only within the filename; external origins,
+queries, fragments and traversal are rejected by the runtime. Vector 2022
+uses the exact 256-pixel icon at 50 x 50 display size and retains its normal
+wiki title text. Legacy skins use the separate 128-pixel logo without
+cropping the original; the favicon uses the supplied 184-pixel PNG.
+
+Before acceptance, check anonymous HTTPS responses for all three PNGs
+(`image/png`), dimensions and hashes against the staged files, the public
+attribution, and the actual Vector/legacy logo and favicon HTML. Verify
+application health and unchanged upload/edit policy, existing page revisions,
+image records and database/backup container identities. Do not use a content
+publisher, upload API, installer or schema updater for a branding rollout.
 
 ## First installation, before publishing
 
@@ -197,22 +252,22 @@ migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
 
-### Scribunto runtime-only release
+### Branding runtime-only release
 
-The frontend pin enables the bundled Scribunto extension with its default
-bounded `luastandalone` engine; MediaWiki, database, authentication, editing,
-upload and network policies are unchanged. No schema migration is required
-for this configuration-only activation.
+The frontend pin adds the optional logo/favicon runtime settings described
+above, retaining Scribunto with its bounded `luastandalone` engine.
+MediaWiki, database, authentication, editing, upload and network policies
+are unchanged. No schema migration or content publication is required.
 
 | Provenance | Immutable value |
 |------------|-----------------|
-| Wiki runtime source | `84b8b6c541e7e325e6a77d915bf6b69ade2978bf` from [wiki PR 24](https://github.com/dantebarbieri/mirklurk-wiki/pull/24); runtime files only, not a content publication |
+| Wiki runtime source | `cc7dd6552ce122bc32b0149f5cc338a57fda7396` from [wiki PR 27](https://github.com/dantebarbieri/mirklurk-wiki/pull/27); runtime files only, not a content publication |
 | Base image | `mediawiki:1.43.9@sha256:39a6503b8739f6aa58f8a458e9537258dd537f7cec7dd93c665bd3b43252d971` |
-| Frontend image | `sha256:adf9aa9bfcb04911ce8a814581784106224cd6db05e21a4c8dc2f9d398afbe8d` |
-| Retained rollback image | `sha256:e6f1ced16f5b7178087b76da5d2ecb507bd66bd4dff53c8a4cf2952a95773f9d` (`mirklurk-wiki:capable-55f4e2d`) |
+| Frontend image | `sha256:5e9c67b606c1e52b964359b42fa71f9027261ceb816e0791fd97b3d53356c4dc` |
+| Retained rollback image | `sha256:adf9aa9bfcb04911ce8a814581784106224cd6db05e21a4c8dc2f9d398afbe8d` (`mirklurk-wiki:scribunto-84b8b6c`) |
 
 The new local image has source/revision OCI labels and tag
-`mirklurk-wiki:scribunto-84b8b6c`; Compose uses only its exact image ID.
+`mirklurk-wiki:branding-cc7dd65`; Compose uses only its exact image ID.
 The Dockerfile and `.dockerignore` copy only `LocalSettings.template.php`,
 `mirklurk-runtime.php`, `install.php` and `healthcheck.php`. No source wiki
 pages, templates, modules or publishing tools are installed by this build.
@@ -221,7 +276,7 @@ For an explicitly approved runtime rollout, use an isolated checkout of the
 reviewed immutable commit rather than changing a shared external checkout.
 Build and validate the image on the target host before merging its reviewed
 homeserver pin. Preserve the old image, take a fresh consistent SQL dump and
-images backup, and capture frontend mounts/policy and database/backup
+images/branding backup, and capture frontend mounts/policy and database/backup
 container identities. Coordinate with the existing updater through
 `/run/lock/homeserver-compose.lock` (an exclusive `flock` on a read-only
 descriptor is sufficient; do not replace the lock file).
@@ -236,14 +291,15 @@ docker compose up -d --no-deps --no-build --pull never mirklurk
 ```
 
 Do not restart the database or backup sidecar, run `update.php`, install/import
-content, or change the image/secret mounts. Require healthy Docker and public
-HTTP/API responses, unchanged existing page revisions/images/accounts and
+content, or change the existing images/secret mounts. Require healthy Docker
+and public HTTP/API responses, unchanged existing page revisions/images/accounts and
 access policy, Scribunto plus canonical Module namespace 828 in siteinfo,
 and the `Scribunto` content model in edit paraminfo. Verify real Lua through
 `scribunto-console` with unsaved module text and an exact expected result;
 this uses only an ephemeral console cache and does not save a module.
-Do not use publisher `--apply` as a runtime test. Only then rerun the wiki
-PR's read-only preview; content merge/publication remains a separate decision.
+Do not use publisher `--apply` as a runtime test. Verify the branding markup,
+anonymous image responses and original hashes described above; content
+merge/publication remains a separate decision.
 
 If runtime acceptance fails, restore only the frontend to the retained image,
 preserving its mounts and policy; no database restore is part of this rollback.
