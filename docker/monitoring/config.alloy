@@ -1,9 +1,14 @@
 // Grafana Alloy configuration — Docker log collection → Loki
 // Replaces Promtail (EOL March 2026)
+//
+// Reaches the Docker API through docker-socket-proxy (compose.core.yml),
+// which allows GET /containers/* only, instead of mounting the raw socket.
+// Both blocks below need container listing plus the log stream endpoint;
+// neither needs write access.
 
 // Discover all Docker containers
 discovery.docker "containers" {
-  host = "unix:///var/run/docker.sock"
+  host = "tcp://docker-socket-proxy:2375"
 }
 
 // Extract container metadata as labels
@@ -29,7 +34,7 @@ discovery.relabel "docker" {
 
 // Collect logs from Docker containers via the Docker daemon API
 loki.source.docker "containers" {
-  host       = "unix:///var/run/docker.sock"
+  host       = "tcp://docker-socket-proxy:2375"
   targets    = discovery.relabel.docker.output
   forward_to = [loki.write.local.receiver]
 }
