@@ -119,11 +119,10 @@ docker compose run --rm --no-deps --env MW_READ_ONLY= \
   --admin WikiAdmin --password-file /run/secrets/MIRKLURK_ADMIN_PASSWORD
 ```
 
-The installer refuses a nonempty schema. Build the fresh seed XML using the
-external repository's `tools/build_wiki.py --fresh` flow and follow its guarded
-fresh-only import procedure **before** enabling public access. Do not regularly
-re-import source pages over community edits. GitHub source content is not a
-backup of the live wiki's users, revision history, or settings.
+The installer refuses a nonempty schema. Follow the external repository's
+current installation and API publishing documentation for content setup.
+Do not re-import source pages over community edits. GitHub source content is
+not a backup of the live wiki's users, revision history, or settings.
 
 Start only `mirklurk` and `mirklurk-backup` after initialization and seeding.
 The image's healthcheck is
@@ -138,28 +137,15 @@ declaring deployment complete. Verify both IP families where supported.
 Reverse-proxy/TLS configuration is an operator-managed prerequisite, not
 something this runbook automates.
 
-## Published wiki edit freeze
+## Content publication is separate
 
 Normal operation sets the explicit empty literal `MW_READ_ONLY: ""` in the
 canonical frontend. Do not use `.env` interpolation: a stale environment value
-must not refreeze editing. For future releases, deliberately set a literal
-reason such as `MirkLurk content update in progress` in a reviewed homeserver
-change. This temporary edit freeze survives
-ordinary Compose recreation and cannot be cleared through `.env`. Readers
-remain online; the images filesystem and normal caches remain writable.
-However, MediaWiki 1.43.9's global `MW_READ_ONLY` also makes its local
-FileBackend read-only: existing fresh thumbnails are served, but uncached
-public sizes fail before filesystem save, not because of filesystem ACLs.
-While frozen, prewarm required new derivatives using approved write-capable
-CLI with `MW_READ_ONLY` cleared for that process only, and verify actual
-public responses. Ordinary new thumbnail generation resumes after unfreezing.
-For approved publication, follow the external repository's guarded procedure
-in a one-off maintenance container with `MW_READ_ONLY` cleared for that process
-only. Preserve existing edits, history, accounts, and original images. Clear
-the frontend freeze in a separate reviewed homeserver change **only after**
-the coordinator and host operator verify successful publication and all
-preservation, public-reader, and derived-data checks; never automatically clear
-it on failure.
+must not refreeze editing. Content is published separately by the wiki
+repository's `tools/sync_wiki.py` API publisher after its reviewed main merge;
+see its `docs/PUBLISHING.md`. The former freeze/native/operator page-release
+flow is retired. A runtime rollout must not freeze editing, run a content
+import/publisher, merge a content PR, or retrieve publishing bot secrets.
 
 ## Backups and restore gate
 
@@ -205,11 +191,65 @@ a current backup, matching extension versions, the upstream MediaWiki update
 procedure, and health/content checks. Verify required extension files and
 configuration, including ParserFunctions, before pinning the new image's full
 immutable ID. Verify the loaded runtime during the wiki-only rollout before
-any import or content write.
+any separately authorized content publication.
 The homeserver's normal daily build does not rebuild the wiki, perform schema
 migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
+
+### Scribunto runtime-only release
+
+The frontend pin enables the bundled Scribunto extension with its default
+bounded `luastandalone` engine; MediaWiki, database, authentication, editing,
+upload and network policies are unchanged. No schema migration is required
+for this configuration-only activation.
+
+| Provenance | Immutable value |
+|------------|-----------------|
+| Wiki runtime source | `84b8b6c541e7e325e6a77d915bf6b69ade2978bf` from [wiki PR 24](https://github.com/dantebarbieri/mirklurk-wiki/pull/24); runtime files only, not a content publication |
+| Base image | `mediawiki:1.43.9@sha256:39a6503b8739f6aa58f8a458e9537258dd537f7cec7dd93c665bd3b43252d971` |
+| Frontend image | `sha256:adf9aa9bfcb04911ce8a814581784106224cd6db05e21a4c8dc2f9d398afbe8d` |
+| Retained rollback image | `sha256:e6f1ced16f5b7178087b76da5d2ecb507bd66bd4dff53c8a4cf2952a95773f9d` (`mirklurk-wiki:capable-55f4e2d`) |
+
+The new local image has source/revision OCI labels and tag
+`mirklurk-wiki:scribunto-84b8b6c`; Compose uses only its exact image ID.
+The Dockerfile and `.dockerignore` copy only `LocalSettings.template.php`,
+`mirklurk-runtime.php`, `install.php` and `healthcheck.php`. No source wiki
+pages, templates, modules or publishing tools are installed by this build.
+
+For an explicitly approved runtime rollout, use an isolated checkout of the
+reviewed immutable commit rather than changing a shared external checkout.
+Build and validate the image on the target host before merging its reviewed
+homeserver pin. Preserve the old image, take a fresh consistent SQL dump and
+images backup, and capture frontend mounts/policy and database/backup
+container identities. Coordinate with the existing updater through
+`/run/lock/homeserver-compose.lock` (an exclusive `flock` on a read-only
+descriptor is sufficient; do not replace the lock file).
+
+Fast-forward the clean canonical checkout to the reviewed main merge and,
+while holding that lock, use the main Compose entrypoint only:
+
+```bash
+z /srv/homeserver/docker
+docker compose config --quiet
+docker compose up -d --no-deps --no-build --pull never mirklurk
+```
+
+Do not restart the database or backup sidecar, run `update.php`, install/import
+content, or change the image/secret mounts. Require healthy Docker and public
+HTTP/API responses, unchanged existing page revisions/images/accounts and
+access policy, Scribunto plus canonical Module namespace 828 in siteinfo,
+and the `Scribunto` content model in edit paraminfo. Verify real Lua through
+`scribunto-console` with unsaved module text and an exact expected result;
+this uses only an ephemeral console cache and does not save a module.
+Do not use publisher `--apply` as a runtime test. Only then rerun the wiki
+PR's read-only preview; content merge/publication remains a separate decision.
+
+If runtime acceptance fails, restore only the frontend to the retained image,
+preserving its mounts and policy; no database restore is part of this rollback.
+Reconcile the rollback through a reviewed pin revert on canonical main. Any
+emergency image override is temporary, must be reported, and must be removed
+once the tracked pin matches the restored service.
 
 Change `MIRKLURK_SERVER_URL` for a future domain migration and update the
 Homepage URL alongside the operator-managed proxy. Database, image paths,

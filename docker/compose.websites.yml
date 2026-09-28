@@ -6,7 +6,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: sha256:e6f1ced16f5b7178087b76da5d2ecb507bd66bd4dff53c8a4cf2952a95773f9d
+    image: sha256:adf9aa9bfcb04911ce8a814581784106224cd6db05e21a4c8dc2f9d398afbe8d
     pull_policy: never
     container_name: mirklurk
     environment:
