@@ -36,6 +36,8 @@ services:
       service: linuxserver-service
     image: lscr.io/linuxserver/ddclient:latest
     container_name: ddclient
+    environment:
+      FILE__CLOUDFLARE_MIRKLURK_TOKEN: /config/mirklurk.wiki.token
     networks:
       - ddns
     volumes:
