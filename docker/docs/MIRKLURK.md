@@ -39,6 +39,18 @@ not a second homeserver stack.
 
 ## Before merging or starting
 
+**Origin gate for installation and recovery:** the tracked Compose fallback,
+`docker/sample.env`, and Homepage wiki `href`/`siteMonitor` still reference
+the initial `https://wiki.mirklurk.danteb.com` hostname. They are not evidence
+of the current canonical origin or of a verified supported alias. Do not
+copy that sample value or rely on the fallback when recovering this instance.
+Require the operator-approved `MIRKLURK_SERVER_URL=https://mirklurk.wiki`
+and verify the resolved frontend's `MW_SERVER_URL` before exposing it;
+an incorrect origin can issue cacheable redirects to the wrong host.
+The existing production value is already correct and must remain unchanged
+for this release. Aligning the legacy setup defaults and Homepage consumers
+requires a separately reviewed follow-up, not this image-only rollout.
+
 The daily homeserver updater pulls `main`, but it cannot pull or rebuild the
 pinned wiki image. The authorized operator must build and verify that exact
 image locally before its homeserver pin is merged. Keep the image available;
