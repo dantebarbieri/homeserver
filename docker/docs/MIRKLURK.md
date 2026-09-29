@@ -20,7 +20,7 @@ credential discovery or changes. Those remain under the operator's control.
 | External clone | `/srv/docker/mirklurk-wiki`, reviewed build source only |
 | Build | Operator builds `deploy/Dockerfile` once from the reviewed external release; no Compose build fallback |
 | App | `mirklurk`, Apache port 80, exact local `sha256` image ID in `compose.websites.yml`, `pull_policy: never` |
-| Public URL | `MIRKLURK_SERVER_URL`, initially `https://wiki.mirklurk.danteb.com` |
+| Public URL | `MIRKLURK_SERVER_URL`; current production is `https://mirklurk.wiki` (the initial-domain Compose fallback is not the live value) |
 | Proxy trust | `MIRKLURK_TRUSTED_PROXY_CIDRS`, verified proxy addresses only |
 | Database | `mirklurk-db:3306`, database/user `mirklurk`, named volume `compose_mirklurk-db` |
 | Images | `${DATA}/mirklurk/images` -> `/var/www/html/images` |
@@ -38,6 +38,18 @@ Always use the main `docker/docker-compose.yml` entrypoint with project name
 not a second homeserver stack.
 
 ## Before merging or starting
+
+**Origin gate for installation and recovery:** the tracked Compose fallback,
+`docker/sample.env`, and Homepage wiki `href`/`siteMonitor` still reference
+the initial `https://wiki.mirklurk.danteb.com` hostname. They are not evidence
+of the current canonical origin or of a verified supported alias. Do not
+copy that sample value or rely on the fallback when recovering this instance.
+Require the operator-approved `MIRKLURK_SERVER_URL=https://mirklurk.wiki`
+and verify the resolved frontend's `MW_SERVER_URL` before exposing it;
+an incorrect origin can issue cacheable redirects to the wrong host.
+The existing production value is already correct and must remain unchanged
+for this release. Aligning the legacy setup defaults and Homepage consumers
+requires a separately reviewed follow-up, not this image-only rollout.
 
 The daily homeserver updater pulls `main`, but it cannot pull or rebuild the
 pinned wiki image. The authorized operator must build and verify that exact
@@ -252,60 +264,172 @@ migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
 
-### Branding runtime-only release
+### Short-URL runtime-only release (prepared, not activated)
 
-The frontend pin adds the optional logo/favicon runtime settings described
-above, retaining Scribunto with its bounded `luastandalone` engine.
-MediaWiki, database, authentication, editing, upload and network policies
-are unchanged. No schema migration or content publication is required.
+This pin prepares the merged
+[dantebarbieri/mirklurk-wiki#32](https://github.com/dantebarbieri/mirklurk-wiki/pull/32)
+release, merged at `2026-09-29T16:08:47Z`. It does not include the separate
+navigation, mobile, SEO or VisualEditor proposals. The only tracked changes
+for this homeserver release are the `mirklurk.image` value in
+`docker/compose.websites.yml` and this runbook.
 
 | Provenance | Immutable value |
 |------------|-----------------|
-| Wiki runtime source | `cc7dd6552ce122bc32b0149f5cc338a57fda7396` from [wiki PR 27](https://github.com/dantebarbieri/mirklurk-wiki/pull/27); runtime files only, not a content publication |
+| Wiki runtime source | `810ddfeb3a18c56a72850a70b4d86030fabe06df`, the reviewed merge commit, not latest `main` |
 | Base image | `mediawiki:1.43.9@sha256:39a6503b8739f6aa58f8a458e9537258dd537f7cec7dd93c665bd3b43252d971` |
-| Frontend image | `sha256:5e9c67b606c1e52b964359b42fa71f9027261ceb816e0791fd97b3d53356c4dc` |
-| Retained rollback image | `sha256:adf9aa9bfcb04911ce8a814581784106224cd6db05e21a4c8dc2f9d398afbe8d` (`mirklurk-wiki:scribunto-84b8b6c`) |
+| Prepared frontend image | `sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e` (`mirklurk-wiki:short-urls-810ddfe`) |
+| Retained pre-short-URL image | `sha256:5e9c67b606c1e52b964359b42fa71f9027261ceb816e0791fd97b3d53356c4dc` (`mirklurk-wiki:branding-cc7dd65`), source `cc7dd6552ce122bc32b0149f5cc338a57fda7396`; see the post-publication rollback restriction below |
 
-The new local image has source/revision OCI labels and tag
-`mirklurk-wiki:branding-cc7dd65`; Compose uses only its exact image ID.
-The Dockerfile and `.dockerignore` copy only `LocalSettings.template.php`,
-`mirklurk-runtime.php`, `install.php` and `healthcheck.php`. No source wiki
-pages, templates, modules or publishing tools are installed by this build.
+Built and verified on `homeserver` on 2026-09-29 from an isolated detached
+checkout of that exact commit, with `docker build --network none --pull=false`.
+The build set OCI labels `org.opencontainers.image.source` to
+`https://github.com/dantebarbieri/mirklurk-wiki` and
+`org.opencontainers.image.revision` to the full source SHA above.
+The existing external checkout was not advanced. Both image IDs are retained
+locally; the tag is only a retention/reference aid, never a Compose fallback.
+Do not prune either image before the approved rollout and acceptance.
 
-For an explicitly approved runtime rollout, use an isolated checkout of the
-reviewed immutable commit rather than changing a shared external checkout.
-Build and validate the image on the target host before merging its reviewed
-homeserver pin. Preserve the old image, take a fresh consistent SQL dump and
-images/branding backup, and capture frontend mounts/policy and database/backup
-container identities. Coordinate with the existing updater through
-`/run/lock/homeserver-compose.lock` (an exclusive `flock` on a read-only
-descriptor is sufficient; do not replace the lock file).
+The build context was 13.05 kB. Only the four PHP runtime files and the new
+Apache vhost are copied, not wiki content, publication tools or artwork.
+Copied files match the immutable source; Apache syntax, the active port-80
+vhost, `mod_rewrite`, PHP policy fixtures and URL-reader tests passed.
+Disposable network-isolated synthetic front controllers verified the actual
+Apache encoded path/query/method/body routing, root scripts and REST path-info.
+They did not install a wiki or connect to production. Actual MediaWiki
+title/revision identity, missing-title 404s, browser login/edit/save and full
+publication-preservation coverage passed in the
+[reviewed release CI](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/36592211481).
+These checks are not evidence of live activation or public-proxy acceptance.
 
-Fast-forward the clean canonical checkout to the reviewed main merge and,
-while holding that lock, use the main Compose entrypoint only:
+#### Routing and unchanged integration
+
+The image sets articlepath `/w/$1` with empty scriptpath. Its real Apache
+port-80 vhost uses `AllowEncodedSlashes NoDecode` and adds fixed-`index.php`
+rules only for `/w`, `/w/...` and `/`; it never reconstructs `?title=` from
+a decoded path. The base image's existing non-file/non-directory fallback
+also remains unchanged; the new rules are not a claim that Apache rejects
+every other path. MediaWiki handles missing article titles.
+Root `/api.php`, `/rest.php` with path-info, `/load.php`, `/resources`,
+`/skins` and `/images` remain at their existing paths.
+
+Plain legacy article-view GET/HEAD requests receive a 301 to `/w/...`.
+Extra/duplicate parameters, special pages, actions, history, oldid/diff,
+POSTs, login/search and native wiki redirects retain upstream behavior.
+The root/empty article path uses MediaWiki's configured main page.
+
+Scoped nonsecret NPM configuration inspection on 2026-09-29 found
+`mirklurk.wiki` forwarding `location /` to `http://mirklurk:80` through
+`proxy_pass $forward_scheme://$server:$port$request_uri`, with existing
+Host/protocol/client-IP headers. No `/w` stripping or title rewrite was found.
+Recheck this prerequisite before activation: preserve the original encoded
+path, query, method and REST path-info. Any needed proxy correction is an
+operator-owned, separately approved step, not part of this PR.
+No DNS, certificate, domain or CDN change is required.
+
+No new `.env` variable is needed. `MIRKLURK_SERVER_URL` already supplies
+`MW_SERVER_URL=https://mirklurk.wiki`; do not switch to the old-domain fallback.
+Preserve literal `MW_READ_ONLY: ""`, authentication/CAPTCHA/rate-limit and
+upload policies, Scribunto, database/secrets/images/branding mounts, networks
+and proxy trust. Do not overwrite `LocalSettings.php`, run an installer or
+schema updater, publish/import content, rename articles or restore the DB.
+
+#### Approval and activation gate
+
+**Building/pinning is not activation. Keep this PR unmerged until rollout
+is explicitly approved.** The normal daily updater can activate a merged
+pin without the operator running the command below. Coordinate the approved
+merge and manual activation in one window protected by its existing lock;
+do not change updater policy or use an untracked production override.
+
+Before that window, require a current verified consistent SQL backup plus
+matching images and branding backups, with restoreability established in a
+disposable database. Verify both local images are present. Capture current
+page/revision/image/account and access-policy baselines, frontend mounts,
+and database/backup container identities without printing credentials.
+Preparation of this pin did not take a fresh production backup or satisfy
+this activation-time gate.
+
+In the server's operator shell, enter the canonical directory, then start an
+authorized privileged Bash shell for the root-owned checkout and hold the
+existing updater lock **before allowing the merge**:
 
 ```bash
 z /srv/homeserver/docker
-docker compose config --quiet
-docker compose up -d --no-deps --no-build --pull never mirklurk
+sudo bash
+set -euo pipefail
+exec 9</run/lock/homeserver-compose.lock
+flock -x 9
 ```
 
-Do not restart the database or backup sidecar, run `update.php`, install/import
-content, or change the existing images/secret mounts. Require healthy Docker
-and public HTTP/API responses, unchanged existing page revisions/images/accounts and
-access policy, Scribunto plus canonical Module namespace 828 in siteinfo,
-and the `Scribunto` content model in edit paraminfo. Verify real Lua through
-`scribunto-console` with unsaved module text and an exact expected result;
-this uses only an ephemeral console cache and does not save a module.
-Do not use publisher `--apply` as a runtime test. Verify the branding markup,
-anonymous image responses and original hashes described above; content
-merge/publication remains a separate decision.
+Keep that shell open. After the reviewed homeserver pin is merged with
+explicit approval, run in the same locked shell:
 
-If runtime acceptance fails, restore only the frontend to the retained image,
-preserving its mounts and policy; no database restore is part of this rollback.
-Reconcile the rollback through a reviewed pin revert on canonical main. Any
-emergency image override is temporary, must be reported, and must be removed
-once the tracked pin matches the restored service.
+```bash
+test "$(git -C /srv/homeserver branch --show-current)" = main
+test -z "$(git -C /srv/homeserver status --porcelain)"
+git -C /srv/homeserver pull --ff-only origin main
+image=sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e
+test "$(docker image inspect --format '{{.Id}}' "$image")" = "$image"
+test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" = 810ddfeb3a18c56a72850a70b4d86030fabe06df
+docker image inspect --format '{{.Id}}' sha256:5e9c67b606c1e52b964359b42fa71f9027261ceb816e0791fd97b3d53356c4dc
+docker compose -p compose -f /srv/homeserver/docker/docker-compose.yml config --quiet
+docker compose -p compose -f /srv/homeserver/docker/docker-compose.yml config --images mirklurk | grep -Fx "$image"
+docker compose -p compose -f /srv/homeserver/docker/docker-compose.yml up -d --no-deps --no-build --pull never mirklurk
+```
+
+This recreates only the frontend, not the database, backup sidecar or other
+services. Require healthy Docker/API responses and public HTTPS checks:
+siteinfo reports server `https://mirklurk.wiki`, empty scriptpath and
+articlepath `/w/$1`; old/new views identify the same title/revision; ordinary
+legacy GET/HEAD views redirect once; query/actions/history/oldid/diff and
+non-writing POST views still work; encoded punctuation/Unicode/subpages,
+missing-title 404s, root API/REST/load/static paths and branding still work.
+Check login and edit-form access without saving production content. Verify
+unchanged policy, stored page/revision/image/account data, mounts, and
+database/backup identities. Do not use publication or a production edit/save
+as a rollout test.
+
+#### Separately authorized cache refresh
+
+Old parser output can still contain long links. This image has no deployment
+environment setting for `$wgCacheEpoch`: do not patch/bind-mount settings or
+invent an environment variable. After activation is healthy, obtain separate
+approval for a bounded, named page set and use MediaWiki's supported
+**POST `/api.php` `action=purge`** with `titles` and `format=json`.
+Check each per-title result for `purged` or errors, then fetch those pages to
+regenerate output. Do not add forced recursive/link updates, run a blanket
+job-queue drain, edit pages, or clear session storage. Confirm fresh article,
+category and template-generated links use `/w/`.
+
+If any proxy/CDN HTML cache is enabled, separately authorize invalidating only
+the affected wiki HTML/redirect entries, including earlier `/w/...` main-page
+responses and root redirects. Do not flush unrelated caches or change proxy
+configuration. Record remaining stale pages rather than claiming a bounded
+purge refreshed the entire wiki.
+
+After acceptance, record the merged homeserver commit and running image ID,
+then release the lock and leave the temporary Bash shell:
+
+```bash
+flock -u 9
+exec 9<&-
+exit
+```
+
+#### Rollback after short URLs become public
+
+Before any public exposure, the retained branding image is a pre-release
+recovery reference. Once `/w/...` links or legacy 301s have been served, it
+is **not a safe standalone rollback**: it does not provide the matching
+articlepath/routing pair, and browsers can retain redirects. Prefer a
+forward fix or a separately reviewed rollback image retaining both halves.
+Never add reverse redirects from `/w/...` to legacy views; cached 301s can
+loop. Server-side cache clearing cannot erase browser redirects.
+
+Reconcile any approved recovery through a reviewed canonical homeserver pin,
+preserving runtime mounts and policies. Do not restore production data for
+this URL-only release. Removing short URLs after public use requires a
+separate compatibility plan, not a simple revert to the old image.
 
 Change `MIRKLURK_SERVER_URL` for a future domain migration and update the
 Homepage URL alongside the operator-managed proxy. Database, image paths,
