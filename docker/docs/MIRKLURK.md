@@ -310,6 +310,7 @@ chat or widen sudo policy for this procedure.
 sudo install -d -o 33 -g 33 -m 0755 \
   /srv/docker/data/mirklurk/sitemap \
   /srv/docker/data/mirklurk/sitemap/public
+sudo chmod g-s /srv/docker/data/mirklurk/sitemap /srv/docker/data/mirklurk/sitemap/public
 sudo systemctl stop docker-compose-update.timer
 systemctl show docker-compose-update.timer docker-compose-update.service -p Id -p ActiveState
 ```
@@ -322,7 +323,10 @@ Stopping is intentionally not disabling/masking: a reboot can reactivate the
 timer. Avoid reboot/NixOS activation/manual broad Compose commands during this
 window; recheck state after any interruption. No unattended/perpetual lock.
 
-The dedicated storage is outside Git. Do not recursively chown the shared
+The dedicated storage is outside Git. The explicit `chmod g-s` clears a
+setgid bit inherited from the shared parent; `install -d -m 0755` can retain
+that bit, yielding `2755` instead of the required exact `0755`.
+Do not recursively chown the shared
 parent or populate it from an old sitemap. `create_host_path: false` makes
 missing provisioning a hard failure. The candidate must already be built and
 tested; no build or image pull occurs during activation.

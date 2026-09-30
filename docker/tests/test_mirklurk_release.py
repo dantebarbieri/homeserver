@@ -253,6 +253,16 @@ class MirklurkReleaseTests(unittest.TestCase):
             self.preflight()
         self.assertFalse(any("up" in call for call in self.commands))
 
+    def test_sitemap_special_permission_bits_are_rejected(self):
+        for folder in (self.root / "sitemap", self.root / "sitemap/public"):
+            for mode in (0o1755, 0o2755, 0o4755):
+                with self.subTest(folder=folder.name, mode=oct(mode)):
+                    folder.chmod(mode)
+                    with self.assertRaisesRegex(release.ReleaseError, "mode 0755"):
+                        self.preflight()
+                    folder.chmod(0o755)
+        self.preflight()
+
     def test_resource_thresholds(self):
         with patch.object(Path, "read_text", return_value="MemAvailable: 2097152 kB\n"), \
              patch.object(release.os, "getloadavg", return_value=(3, 0, 0)), \

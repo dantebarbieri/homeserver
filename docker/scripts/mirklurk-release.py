@@ -197,7 +197,7 @@ def preflight(root, source, image, previous):
     for folder in (storage, storage / "public"):
         require(folder.is_dir(), f"Missing sitemap directory: {folder}")
         st = folder.stat()
-        require(not folder.is_symlink() and (st.st_uid, st.st_gid, st.st_mode & 0o777) == (33, 33, 0o755),
+        require(not folder.is_symlink() and (st.st_uid, st.st_gid, st.st_mode & 0o7777) == (33, 33, 0o755),
                 f"Sitemap directory must be UID/GID 33, mode 0755: {folder}")
     print(f"Preflight OK: source={source} image={image}; live={live['Image']}", flush=True)
     return live, environment
