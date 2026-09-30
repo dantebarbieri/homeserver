@@ -130,7 +130,10 @@ def preflight(root, source, image, previous):
         require(re.fullmatch(r"sha256:[0-9a-f]{64}", identifier), "Expected full immutable image IDs")
     require(image != previous, "Candidate and predecessor must differ")
     require(not run("git", "-C", str(root), "status", "--porcelain"), "Checkout is not clean")
-    config = json.loads(compose(root, "config", "--format", "json"))
+    if root.resolve() == CANONICAL:
+        compose(root, "config", "--quiet")
+    # Other stacks' env_file contents are not needed to verify this app.
+    config = json.loads(compose(root, "config", "--format", "json", "--no-env-resolution"))
     service = config["services"]["mirklurk"]
     require(service["image"] == image and service["pull_policy"] == "never"
             and "build" not in service, "Candidate does not match reviewed Compose image pin")
