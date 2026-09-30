@@ -25,6 +25,7 @@ credential discovery or changes. Those remain under the operator's control.
 | Database | `mirklurk-db:3306`, database/user `mirklurk`, named volume `compose_mirklurk-db` |
 | Images | `${DATA}/mirklurk/images` -> `/var/www/html/images` |
 | Branding | `${DATA}/mirklurk/branding` -> `/var/www/html/branding` (read-only) |
+| Sitemap | `${DATA}/mirklurk/sitemap` -> `/var/lib/mirklurk-sitemap` (UID/GID 33, mode 0755) |
 | Secrets | `${DATA}/mirklurk/secrets` -> individual `/run/secrets/` files |
 | Local SQL dumps | `${DATA}/mirklurk/backups`, owned by `${UID}:${GID}` |
 
@@ -264,44 +265,213 @@ migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
 
-### Short-URL runtime-only release (prepared, not activated)
+### Combined mobile and metadata release (prepared, not activated)
 
-This pin prepares the merged
-[dantebarbieri/mirklurk-wiki#32](https://github.com/dantebarbieri/mirklurk-wiki/pull/32)
-release, merged at `2026-09-29T16:08:47Z`. It does not include the separate
-navigation, mobile, SEO or VisualEditor proposals. The only tracked changes
-for this homeserver release are the `mirklurk.image` value in
-`docker/compose.websites.yml` and this runbook.
+**Do not merge until the operator has paused the updater and provisioned the
+sitemap directories below.** A merged pin can otherwise be activated by the
+04:00 daily updater, without the release command. A completed preflight or an
+expired lock does not protect a future merge. Keep the PR draft until this
+gate is confirmed; arrange a short, attended merge/activation window.
 
 | Provenance | Immutable value |
 |------------|-----------------|
-| Wiki runtime source | `810ddfeb3a18c56a72850a70b4d86030fabe06df`, the reviewed merge commit, not latest `main` |
-| Base image | `mediawiki:1.43.9@sha256:39a6503b8739f6aa58f8a458e9537258dd537f7cec7dd93c665bd3b43252d971` |
-| Prepared frontend image | `sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e` (`mirklurk-wiki:short-urls-810ddfe`) |
-| Retained pre-short-URL image | `sha256:5e9c67b606c1e52b964359b42fa71f9027261ceb816e0791fd97b3d53356c4dc` (`mirklurk-wiki:branding-cc7dd65`), source `cc7dd6552ce122bc32b0149f5cc338a57fda7396`; see the post-publication rollback restriction below |
+| Reviewed wiki source | `7efcb77407a5e3d49f533525d7a0c5c71dafd0d2` |
+| Candidate image | `sha256:8f9e7aad4dff754cf3701c6ff2c056a08f51c6fbf865a6ef891ca31c2ee37aca` |
+| Retention tag (not a deployment reference) | `mirklurk-wiki:release-7efcb77407a5` |
+| Routing-compatible predecessor | `sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e`, source `810ddfeb3a18c56a72850a70b4d86030fabe06df` |
+| Unchanged base | `mediawiki:1.43.9@sha256:39a6503b8739f6aa58f8a458e9537258dd537f7cec7dd93c665bd3b43252d971` |
+| Unchanged DB/client | `mariadb:11.4.13@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b` |
 
-Built and verified on `homeserver` on 2026-09-29 from an isolated detached
-checkout of that exact commit, with `docker build --network none --pull=false`.
-The build set OCI labels `org.opencontainers.image.source` to
-`https://github.com/dantebarbieri/mirklurk-wiki` and
-`org.opencontainers.image.revision` to the full source SHA above.
-The existing external checkout was not advanced. Both image IDs are retained
-locally; the tag is only a retention/reference aid, never a Compose fallback.
-Do not prune either image before the approved rollout and acceptance.
+The source includes reviewed navigation, mobile, short URLs, metadata and human
+item reconciliation; it excludes the paused VisualEditor research proposal.
+[Release CI attempt 2](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/36745982412)
+passed at this exact SHA (the unchanged first attempt timed out).
+The candidate was built on the target on 2026-09-30 from a clean detached
+checkout at `/srv/docker/mirklurk-release-7efcb77.L3cwQp/source`, with
+`--pull=false` and OCI source/revision labels. Its copied runtime files were
+compared byte-for-byte with that commit. Targeted disposable checks use their
+own synthetic data and secrets, no live volumes or database. Keep both images
+tagged against the existing updater's dangling-image prune.
 
-The build context was 13.05 kB. Only the four PHP runtime files and the new
-Apache vhost are copied, not wiki content, publication tools or artwork.
-Copied files match the immutable source; Apache syntax, the active port-80
-vhost, `mod_rewrite`, PHP policy fixtures and URL-reader tests passed.
-Disposable network-isolated synthetic front controllers verified the actual
-Apache encoded path/query/method/body routing, root scripts and REST path-info.
-They did not install a wiki or connect to production. Actual MediaWiki
-title/revision identity, missing-title 404s, browser login/edit/save and full
-publication-preservation coverage passed in the
-[reviewed release CI](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/36592211481).
-These checks are not evidence of live activation or public-proxy acceptance.
+Source, content and runtime are separate states: reviewed content is already
+live, including the Items/quest-category reconciliation. This rollout **must
+not publish/reseed/adopt content**, freeze edits, create accounts, run schema
+updates, or change CAPTCHA, rights, proxy trust, secrets, images or branding.
+Do not compare all live revisions to an old fixed snapshot: community edits
+can legitimately advance while the runtime is prepared.
 
-#### Routing and unchanged integration
+#### Pre-merge gate and preflight
+
+Run these privileged steps in an attended operator shell shortly before merge,
+not hours in advance. They do not stop the wiki. Never request a password in
+chat or widen sudo policy for this procedure.
+
+```bash
+sudo install -d -o 33 -g 33 -m 0755 \
+  /srv/docker/data/mirklurk/sitemap \
+  /srv/docker/data/mirklurk/sitemap/public
+sudo systemctl stop docker-compose-update.timer
+systemctl show docker-compose-update.timer docker-compose-update.service -p Id -p ActiveState
+```
+
+Require **both units inactive**. Stopping the timer does not stop an already
+running update. If the service is active, wait for its normal completion and
+recheck; do not kill it. If the rollout is deferred **before merging**, promptly
+restart the timer with `sudo systemctl start docker-compose-update.timer`.
+Stopping is intentionally not disabling/masking: a reboot can reactivate the
+timer. Avoid reboot/NixOS activation/manual broad Compose commands during this
+window; recheck state after any interruption. No unattended/perpetual lock.
+
+The dedicated storage is outside Git. Do not recursively chown the shared
+parent or populate it from an old sitemap. `create_host_path: false` makes
+missing provisioning a hard failure. The candidate must already be built and
+tested; no build or image pull occurs during activation.
+
+Set the reviewed values once in the operator shell:
+
+```bash
+source=7efcb77407a5e3d49f533525d7a0c5c71dafd0d2
+image=sha256:8f9e7aad4dff754cf3701c6ff2c056a08f51c6fbf865a6ef891ca31c2ee37aca
+previous=sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e
+```
+
+From a clean checkout of the exact proposed homeserver PR, run:
+
+```bash
+nix shell nixpkgs#python3 --command python3 docker/scripts/mirklurk-release.py preflight \
+  --checkout "$PWD" --source "$source" --image "$image" --previous-image "$previous"
+```
+
+The standard-library Python helper reads the canonical `.env` without printing
+it and acquires the same existing `/run/lock/homeserver-compose.lock` for at
+most 30 seconds. It checks the explicit source and image against the reviewed
+Compose pin/revision and image labels, local predecessor, unchanged runtime
+environment/mounts/networks, healthy app/DB/backup, correct public origin,
+storage permissions and headroom (2 GiB available RAM, 5 GiB free disk,
+one-minute load below logical CPU count). Preflight does not pull, back up,
+refresh, publish or restart anything. It releases its lock on exit.
+
+#### After the operator merges
+
+Keep the timer paused. Bootstrap the new helper into clean canonical `main`
+under the existing lock; this pull alone does not activate containers:
+
+```bash
+z /srv/homeserver
+test "$(git branch --show-current)" = main
+test -z "$(git status --porcelain)"
+bash -c 'exec 9</run/lock/homeserver-compose.lock; flock -x -w 30 9 && git pull --ff-only origin main'
+nix shell nixpkgs#python3 --command python3 docker/scripts/mirklurk-release.py deploy \
+  --source "$source" --image "$image" --previous-image "$previous"
+```
+
+The deploy command locks, verifies the updater is paused, fast-forwards clean
+canonical `main` again **under that same lock**, and reruns preflight. If the
+helper itself changed during the pull, it refuses activation until rerun. It
+takes a fresh consistent SQL dump through the existing scoped backup client
+before invoking exactly:
+
+```bash
+docker compose --project-name compose --project-directory /srv/homeserver/docker \
+  --env-file /srv/homeserver/docker/.env --file /srv/homeserver/docker/docker-compose.yml \
+  up -d --no-deps --no-build --pull never mirklurk
+```
+
+Only the app is recreated; DB, backup, ddclient, proxy and other container IDs
+must remain unchanged. **Expect a brief interruption with one app container.**
+In-flight requests/edits can fail; this is not zero downtime. The helper reports
+sampled public API failures and an activation-to-readiness upper bound rather
+than claiming exact outage precision. It checks API/short paths, device-width
+viewport, canonical metadata, ResourceLoader and branding; then processes a
+bounded batch of already-pending jobs and refreshes the native sitemap.
+No publication or revision rollback is part of this command. Repeating an
+accepted deployment checks/refreshes it without recreating the app again.
+
+The SQL backup is atomic, `--single-transaction`, and gzip/schema-checked using
+the established backup mechanism. Previous restore drills remain the evidence
+for restoreability; this runtime-only release does not modify images/branding
+or run an expensive production restore test. Existing offsite coverage includes
+the new sitemap directory (which is derived data, not a content backup).
+
+After acceptance, record canonical homeserver HEAD, running image, observed
+availability, sitemap freshness and preserved service IDs, then restore normal
+scheduling and verify the next run:
+
+```bash
+sudo systemctl start docker-compose-update.timer
+systemctl list-timers docker-compose-update.timer --no-pager
+```
+
+#### Sitemap schedule and freshness
+
+The image uses core `generateSitemap` behind its reviewed guarded wrapper, not
+a new sitemap implementation. Only public main/category namespaces are
+enumerated; redirects and author noindex pages are excluded. Generation runs
+as `www-data` after pending jobs, stages outside the public directory and
+atomically replaces the index after publishing unique shards.
+
+The NixOS `mirklurk-sitemap` oneshot/timer runs daily at **05:30** and after a
+missed schedule, using the same Compose lock and the same helper's
+`refresh-sitemap` mode. Nonzero exits use the existing `ntfy-failure@` handler.
+Every refresh checks local index age below five minutes plus anonymous
+robots/index/all-shard responses and canonical URLs. An absent first sitemap
+is failure, never an empty-success placeholder.
+
+Install the schedule only after the merged runtime is accepted, at the next
+operator-reviewed NixOS switch:
+
+```bash
+sudo nixos-rebuild switch
+systemctl list-timers mirklurk-sitemap.timer --no-pager
+sudo systemctl start mirklurk-sitemap.service
+journalctl -u mirklurk-sitemap.service -n 30 --no-pager
+```
+
+A full NixOS switch can apply **other pending OS changes**; it is not part of
+the app's narrow activation and must not be run blindly just to install the
+timer. Until that switch, manually run the refresh daily and after content
+releases/significant edits:
+
+```bash
+z /srv/homeserver
+nix shell nixpkgs#python3 --command python3 docker/scripts/mirklurk-release.py refresh-sitemap
+```
+
+Inspect the journal/ntfy and the index file's mtime; more than 26 hours without
+a successful refresh needs investigation (a stopped timer cannot send an
+OnFailure alert). Keep old shards at least a day for cached indexes. No
+automatic cleanup is needed for this rollout; later cleanup must select only
+unreferenced `sitemap-*.xml` in this dedicated `public` directory, never shared
+paths. The existing proxy forwards `location /` transparently; verify anonymous
+`/robots.txt`, `/sitemap.xml` and root `/sitemap-*.xml` after activation without
+changing DNS/TLS/CDN/access policy.
+
+#### Failure and routing-compatible recovery
+
+Failures are nonzero; **do not automatically restart the updater after a
+failed activation**. Inspect the wiki's scoped logs locally. A failed sitemap
+refresh leaves the previous complete index intact; fix/retry it without
+recreating an already-healthy candidate. A missing initial index is still a
+release blocker. A failed app needs an attended runtime recovery, not a
+database/content restore.
+
+The retained `ea903376...` image already supports public `/w/` links and is the
+compatible predecessor. The older `5e9c67b6...` pre-short-URL image is **not**
+a safe fallback after public 301s. Use a reviewed canonical recovery commit
+that restores the predecessor image **and matching source label**, preserves
+origin/read-write/access policy and the storage mount, and defers its sitemap
+schedule (the old image lacks the wrapper). Pull that merged commit under the
+same lock and run the app-only `up` command above, then verify old/new URLs,
+API, branding and unaffected service IDs before resuming the updater.
+Do not make raw local pin edits that the next updater undoes, reverse the
+public redirects, restore the DB, or overwrite newer community content.
+
+The helper deliberately does not manufacture a recovery commit or auto-rollback.
+If reviewed recovery cannot be made promptly, escalate while keeping the
+updater paused and explicitly owned; never call that unresolved state complete.
+GHCR publishing/image-pin automation is deferred, not a prerequisite here.
+
+### Routing contract retained from the short-URL release
 
 The image sets articlepath `/w/$1` with empty scriptpath. Its real Apache
 port-80 vhost uses `AllowEncodedSlashes NoDecode` and adds fixed-`index.php`
@@ -317,7 +487,7 @@ Extra/duplicate parameters, special pages, actions, history, oldid/diff,
 POSTs, login/search and native wiki redirects retain upstream behavior.
 The root/empty article path uses MediaWiki's configured main page.
 
-Scoped nonsecret NPM configuration inspection on 2026-09-29 found
+Scoped nonsecret NPM configuration inspection on 2026-09-30 found
 `mirklurk.wiki` forwarding `location /` to `http://mirklurk:80` through
 `proxy_pass $forward_scheme://$server:$port$request_uri`, with existing
 Host/protocol/client-IP headers. No `/w` stripping or title rewrite was found.
@@ -332,62 +502,6 @@ Preserve literal `MW_READ_ONLY: ""`, authentication/CAPTCHA/rate-limit and
 upload policies, Scribunto, database/secrets/images/branding mounts, networks
 and proxy trust. Do not overwrite `LocalSettings.php`, run an installer or
 schema updater, publish/import content, rename articles or restore the DB.
-
-#### Approval and activation gate
-
-**Building/pinning is not activation. Keep this PR unmerged until rollout
-is explicitly approved.** The normal daily updater can activate a merged
-pin without the operator running the command below. Coordinate the approved
-merge and manual activation in one window protected by its existing lock;
-do not change updater policy or use an untracked production override.
-
-Before that window, require a current verified consistent SQL backup plus
-matching images and branding backups, with restoreability established in a
-disposable database. Verify both local images are present. Capture current
-page/revision/image/account and access-policy baselines, frontend mounts,
-and database/backup container identities without printing credentials.
-Preparation of this pin did not take a fresh production backup or satisfy
-this activation-time gate.
-
-In the server's operator shell, enter the canonical directory, then start an
-authorized privileged Bash shell for the root-owned checkout and hold the
-existing updater lock **before allowing the merge**:
-
-```bash
-z /srv/homeserver/docker
-sudo bash
-set -euo pipefail
-exec 9</run/lock/homeserver-compose.lock
-flock -x 9
-```
-
-Keep that shell open. After the reviewed homeserver pin is merged with
-explicit approval, run in the same locked shell:
-
-```bash
-test "$(git -C /srv/homeserver branch --show-current)" = main
-test -z "$(git -C /srv/homeserver status --porcelain)"
-git -C /srv/homeserver pull --ff-only origin main
-image=sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e
-test "$(docker image inspect --format '{{.Id}}' "$image")" = "$image"
-test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" = 810ddfeb3a18c56a72850a70b4d86030fabe06df
-docker image inspect --format '{{.Id}}' sha256:5e9c67b606c1e52b964359b42fa71f9027261ceb816e0791fd97b3d53356c4dc
-docker compose -p compose -f /srv/homeserver/docker/docker-compose.yml config --quiet
-docker compose -p compose -f /srv/homeserver/docker/docker-compose.yml config --images mirklurk | grep -Fx "$image"
-docker compose -p compose -f /srv/homeserver/docker/docker-compose.yml up -d --no-deps --no-build --pull never mirklurk
-```
-
-This recreates only the frontend, not the database, backup sidecar or other
-services. Require healthy Docker/API responses and public HTTPS checks:
-siteinfo reports server `https://mirklurk.wiki`, empty scriptpath and
-articlepath `/w/$1`; old/new views identify the same title/revision; ordinary
-legacy GET/HEAD views redirect once; query/actions/history/oldid/diff and
-non-writing POST views still work; encoded punctuation/Unicode/subpages,
-missing-title 404s, root API/REST/load/static paths and branding still work.
-Check login and edit-form access without saving production content. Verify
-unchanged policy, stored page/revision/image/account data, mounts, and
-database/backup identities. Do not use publication or a production edit/save
-as a rollout test.
 
 #### Separately authorized cache refresh
 
@@ -406,30 +520,6 @@ the affected wiki HTML/redirect entries, including earlier `/w/...` main-page
 responses and root redirects. Do not flush unrelated caches or change proxy
 configuration. Record remaining stale pages rather than claiming a bounded
 purge refreshed the entire wiki.
-
-After acceptance, record the merged homeserver commit and running image ID,
-then release the lock and leave the temporary Bash shell:
-
-```bash
-flock -u 9
-exec 9<&-
-exit
-```
-
-#### Rollback after short URLs become public
-
-Before any public exposure, the retained branding image is a pre-release
-recovery reference. Once `/w/...` links or legacy 301s have been served, it
-is **not a safe standalone rollback**: it does not provide the matching
-articlepath/routing pair, and browsers can retain redirects. Prefer a
-forward fix or a separately reviewed rollback image retaining both halves.
-Never add reverse redirects from `/w/...` to legacy views; cached 301s can
-loop. Server-side cache clearing cannot erase browser redirects.
-
-Reconcile any approved recovery through a reviewed canonical homeserver pin,
-preserving runtime mounts and policies. Do not restore production data for
-this URL-only release. Removing short URLs after public use requires a
-separate compatibility plan, not a simple revert to the old image.
 
 Change `MIRKLURK_SERVER_URL` for a future domain migration and update the
 Homepage URL alongside the operator-managed proxy. Database, image paths,

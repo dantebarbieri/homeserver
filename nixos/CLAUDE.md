@@ -78,6 +78,7 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 | Timer | Schedule | Purpose |
 |-------|----------|---------|
 | `docker-compose-update` | Daily 04:00 (±5m) | Pull monorepo, update containers |
+| `mirklurk-sitemap` | Daily 05:30 | Guarded native sitemap refresh + public freshness checks |
 | `drive-health-check` | Every 6 hours | RAID + LVM health → ntfy |
 | `mdadm-scrub` | Weekly Sunday 02:00 | RAID parity scrub |
 

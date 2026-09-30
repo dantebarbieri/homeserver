@@ -681,6 +681,30 @@ in
     };
   };
 
+  systemd.services.mirklurk-sitemap = {
+    description = "Refresh and verify the public MirkLurk sitemap";
+    after = [ "docker.service" "network-online.target" ];
+    requires = [ "docker.service" ];
+    wants = [ "network-online.target" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
+    path = with pkgs; [ docker systemd ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "10min";
+    };
+    script = ''
+      ${pkgs.python3}/bin/python3 /srv/homeserver/docker/scripts/mirklurk-release.py refresh-sitemap
+    '';
+  };
+
+  systemd.timers.mirklurk-sitemap = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 05:30:00";
+      Persistent = true;
+    };
+  };
+
   # NixOS auto-upgrade (daily at 04:30, after Docker update at 04:00)
   # Stage the next boot without switching NVIDIA userspace under loaded modules.
   # Activation (including OS security updates) requires a planned reboot.

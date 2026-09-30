@@ -6,8 +6,10 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e
+    image: sha256:8f9e7aad4dff754cf3701c6ff2c056a08f51c6fbf865a6ef891ca31c2ee37aca
     pull_policy: never
+    labels:
+      org.opencontainers.image.revision: 7efcb77407a5e3d49f533525d7a0c5c71dafd0d2
     container_name: mirklurk
     environment:
       MW_SERVER_URL: ${MIRKLURK_SERVER_URL:-https://wiki.mirklurk.danteb.com}
@@ -38,6 +40,11 @@ services:
         source: ${DATA}/mirklurk/branding
         target: /var/www/html/branding
         read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA}/mirklurk/sitemap
+        target: /var/lib/mirklurk-sitemap
         bind:
           create_host_path: false
     networks:
