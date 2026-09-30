@@ -161,32 +161,29 @@ def preflight(root, source, image, previous):
     volumes = service["volumes"]
     require({v["target"] for v in volumes} == {"/var/www/html/images", "/var/www/html/branding", SITEMAP},
             "Unexpected application volume set")
-    require(not service.get("ports") and "command" not in service and "entrypoint" not in service,
+    require(not service.get("ports") and service.get("command") is None and service.get("entrypoint") is None,
             "Unexpected application ports or startup override")
     for volume in volumes:
         require(volume["type"] == "bind" and volume["bind"]["create_host_path"] is False,
                 "Unsafe application bind mount")
-        require(Path(volume["source"]).is_dir(), f"Missing directory for {volume['target']}")
         if volume["target"] != SITEMAP:
+            require(Path(volume["source"]).is_dir(), f"Missing directory for {volume['target']}")
             actual = actual_mounts.get(volume["target"], {})
             require(actual.get("Source") == volume["source"]
                     and actual.get("RW") == (not volume.get("read_only", False)),
                     f"Existing mount changed: {volume['target']}")
     for secret in service["secrets"]:
-        target = "/run/secrets/" + secret["target"]
-        require(actual_mounts.get(target, {}).get("Source") == config["secrets"][secret["source"]]["file"],
+        target = str(Path("/run/secrets") / secret["target"])
+        actual = actual_mounts.get(target, {})
+        require(actual.get("Source") == config["secrets"][secret["source"]]["file"] and actual.get("RW") is False,
                 "Existing secret mount changed (values suppressed)")
     expected_mounts = {v["target"] for v in volumes} | {
-        "/run/secrets/" + secret["target"] for secret in service["secrets"]}
+        str(Path("/run/secrets") / secret["target"]) for secret in service["secrets"]}
     require(set(actual_mounts) - {SITEMAP} == expected_mounts - {SITEMAP},
             "Existing mount set changed")
     expected_networks = {config["networks"][name]["name"] for name in service["networks"]}
     require(set(live["NetworkSettings"]["Networks"]) == expected_networks, "Application networks changed")
     storage = Path(next(v["source"] for v in volumes if v["target"] == SITEMAP))
-    for folder in (storage, storage / "public"):
-        st = folder.stat()
-        require(not folder.is_symlink() and (st.st_uid, st.st_gid, st.st_mode & 0o777) == (33, 33, 0o755),
-                f"Sitemap directory must be UID/GID 33, mode 0755: {folder}")
     if live["Image"] == image:
         require(actual_mounts.get(SITEMAP, {}).get("Source") == str(storage),
                 "Candidate is running without the reviewed sitemap mount")
@@ -195,8 +192,13 @@ def preflight(root, source, image, previous):
         if name != "mirklurk":
             require(inspect(name)["Config"]["Image"] == config["services"][name]["image"],
                     f"{name} pin differs from the running service")
-    headroom(storage)
+    headroom(storage.parent)
     siteinfo()
+    for folder in (storage, storage / "public"):
+        require(folder.is_dir(), f"Missing sitemap directory: {folder}")
+        st = folder.stat()
+        require(not folder.is_symlink() and (st.st_uid, st.st_gid, st.st_mode & 0o777) == (33, 33, 0o755),
+                f"Sitemap directory must be UID/GID 33, mode 0755: {folder}")
     print(f"Preflight OK: source={source} image={image}; live={live['Image']}", flush=True)
     return live, environment
 
@@ -285,6 +287,8 @@ def availability_monitor():
 
 def deploy(root, source, image, previous):
     require(root.resolve() == CANONICAL, "Activation is only allowed from /srv/homeserver")
+    require(Path(__file__).resolve() == CANONICAL / "docker/scripts/mirklurk-release.py",
+            "Run the merged helper from the canonical checkout")
     updater_paused()
     require(run("git", "-C", str(root), "branch", "--show-current") == "main", "Canonical branch must be main")
     require(not run("git", "-C", str(root), "status", "--porcelain"), "Canonical checkout is not clean")

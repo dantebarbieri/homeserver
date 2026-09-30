@@ -38,9 +38,10 @@ class MirklurkReleaseTests(unittest.TestCase):
             "services": {
                 "mirklurk": {
                     "image": IMAGE, "pull_policy": "never",
+                    "command": None, "entrypoint": None,
                     "labels": {"org.opencontainers.image.revision": SOURCE},
                     "environment": self.environment, "volumes": volumes, "networks": {"proxy": {}},
-                    "secrets": [{"target": "PASSWORD", "source": "PASSWORD"}],
+                    "secrets": [{"target": "/run/secrets/PASSWORD", "source": "PASSWORD"}],
                 },
                 "mirklurk-db": {"image": "pinned-database"},
                 "mirklurk-backup": {"image": "pinned-database"},
@@ -112,6 +113,10 @@ class MirklurkReleaseTests(unittest.TestCase):
         self.assertTrue(all(command[0] == "git" or command[:2] == ("compose", "config")
                             for command in self.commands))
 
+    def test_relative_secret_target_normalizes_without_changing_mount(self):
+        self.config["services"]["mirklurk"]["secrets"][0]["target"] = "PASSWORD"
+        self.preflight()
+
     def test_wrong_source_and_image_provenance_fail_closed(self):
         self.config["services"]["mirklurk"]["labels"]["org.opencontainers.image.revision"] = "0" * 40
         with self.assertRaisesRegex(release.ReleaseError, "Source SHA"):
@@ -147,6 +152,10 @@ class MirklurkReleaseTests(unittest.TestCase):
 
     def deploy_mocks(self):
         self.stack.enter_context(patch.object(release, "CANONICAL", self.root))
+        script = self.root / "docker/scripts/mirklurk-release.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("fixture")
+        self.stack.enter_context(patch.object(release, "__file__", str(script)))
         self.stack.enter_context(patch.object(release, "availability_monitor", return_value=nullcontext()))
         acceptance = self.stack.enter_context(patch.object(release, "public_acceptance"))
         refresh = self.stack.enter_context(patch.object(release, "refresh_sitemap"))
@@ -240,7 +249,7 @@ class MirklurkReleaseTests(unittest.TestCase):
 
     def test_missing_storage_prevents_activation(self):
         (self.root / "sitemap/public").rmdir()
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaisesRegex(release.ReleaseError, "Missing sitemap directory"):
             self.preflight()
         self.assertFalse(any("up" in call for call in self.commands))
 
