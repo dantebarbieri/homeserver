@@ -74,13 +74,14 @@ class MirklurkReleaseTests(unittest.TestCase):
         self.stack.enter_context(patch.object(release, "headroom"))
         self.siteinfo = self.stack.enter_context(patch.object(release, "siteinfo"))
         real_stat = Path.stat
+        self.sitemap_owner = (33, 33)
 
         def directory_stat(path, **kwargs):
             result = real_stat(path, **kwargs)
             if path in (self.root / "sitemap", self.root / "sitemap/public"):
                 import os
                 fields = list(result)
-                fields[4] = fields[5] = 33
+                fields[4], fields[5] = self.sitemap_owner
                 return os.stat_result(fields)
             return result
         self.stack.enter_context(patch.object(Path, "stat", directory_stat))
@@ -253,15 +254,29 @@ class MirklurkReleaseTests(unittest.TestCase):
             self.preflight()
         self.assertFalse(any("up" in call for call in self.commands))
 
-    def test_sitemap_special_permission_bits_are_rejected(self):
+    def test_sitemap_inherited_setgid_is_allowed_but_unsafe_modes_are_rejected(self):
         for folder in (self.root / "sitemap", self.root / "sitemap/public"):
-            for mode in (0o1755, 0o2755, 0o4755):
+            folder.chmod(0o2755)
+            self.preflight()
+            for mode in (0o1755, 0o4755, 0o6755, 0o775, 0o757, 0o2775, 0o2757):
                 with self.subTest(folder=folder.name, mode=oct(mode)):
                     folder.chmod(mode)
-                    with self.assertRaisesRegex(release.ReleaseError, "mode 0755"):
+                    with self.assertRaisesRegex(release.ReleaseError, "mode 0755 or 2755"):
                         self.preflight()
                     folder.chmod(0o755)
         self.preflight()
+
+    def test_sitemap_unexpected_owner_or_symlink_is_rejected(self):
+        for owner in ((0, 33), (33, 0)):
+            self.sitemap_owner = owner
+            with self.assertRaisesRegex(release.ReleaseError, "UID/GID 33"):
+                self.preflight()
+        self.sitemap_owner = (33, 33)
+        folder = self.root / "sitemap/public"
+        folder.rmdir()
+        folder.symlink_to(self.root / "images", target_is_directory=True)
+        with self.assertRaisesRegex(release.ReleaseError, "UID/GID 33"):
+            self.preflight()
 
     def test_resource_thresholds(self):
         with patch.object(Path, "read_text", return_value="MemAvailable: 2097152 kB\n"), \

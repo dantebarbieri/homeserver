@@ -25,7 +25,7 @@ credential discovery or changes. Those remain under the operator's control.
 | Database | `mirklurk-db:3306`, database/user `mirklurk`, named volume `compose_mirklurk-db` |
 | Images | `${DATA}/mirklurk/images` -> `/var/www/html/images` |
 | Branding | `${DATA}/mirklurk/branding` -> `/var/www/html/branding` (read-only) |
-| Sitemap | `${DATA}/mirklurk/sitemap` -> `/var/lib/mirklurk-sitemap` (UID/GID 33, mode 0755) |
+| Sitemap | `${DATA}/mirklurk/sitemap` -> `/var/lib/mirklurk-sitemap` (UID/GID 33, mode 0755 or inherited-setgid 2755) |
 | Secrets | `${DATA}/mirklurk/secrets` -> individual `/run/secrets/` files |
 | Local SQL dumps | `${DATA}/mirklurk/backups`, owned by `${UID}:${GID}` |
 
@@ -310,7 +310,6 @@ chat or widen sudo policy for this procedure.
 sudo install -d -o 33 -g 33 -m 0755 \
   /srv/docker/data/mirklurk/sitemap \
   /srv/docker/data/mirklurk/sitemap/public
-sudo chmod g-s /srv/docker/data/mirklurk/sitemap /srv/docker/data/mirklurk/sitemap/public
 sudo systemctl stop docker-compose-update.timer
 systemctl show docker-compose-update.timer docker-compose-update.service -p Id -p ActiveState
 ```
@@ -323,9 +322,11 @@ Stopping is intentionally not disabling/masking: a reboot can reactivate the
 timer. Avoid reboot/NixOS activation/manual broad Compose commands during this
 window; recheck state after any interruption. No unattended/perpetual lock.
 
-The dedicated storage is outside Git. The explicit `chmod g-s` clears a
-setgid bit inherited from the shared parent; `install -d -m 0755` can retain
-that bit, yielding `2755` instead of the required exact `0755`.
+The dedicated storage is outside Git. Both directories must be UID/GID 33
+with mode `0755` or `2755`: `install -d -m 0755` can retain the shared parent's
+setgid bit. This preserves group 33 inheritance without adding any read/write/
+execute permission, so no corrective chmod is needed. Other special bits,
+group/world write permission, unexpected ownership and symlinks are rejected.
 Do not recursively chown the shared
 parent or populate it from an old sitemap. `create_host_path: false` makes
 missing provisioning a hard failure. The candidate must already be built and

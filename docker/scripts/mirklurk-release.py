@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -197,8 +198,9 @@ def preflight(root, source, image, previous):
     for folder in (storage, storage / "public"):
         require(folder.is_dir(), f"Missing sitemap directory: {folder}")
         st = folder.stat()
-        require(not folder.is_symlink() and (st.st_uid, st.st_gid, st.st_mode & 0o7777) == (33, 33, 0o755),
-                f"Sitemap directory must be UID/GID 33, mode 0755: {folder}")
+        require(not folder.is_symlink() and (st.st_uid, st.st_gid) == (33, 33)
+                and stat.S_IMODE(st.st_mode) in (0o755, 0o2755),
+                f"Sitemap directory must be UID/GID 33, mode 0755 or 2755: {folder}")
     print(f"Preflight OK: source={source} image={image}; live={live['Image']}", flush=True)
     return live, environment
 
