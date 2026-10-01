@@ -212,7 +212,9 @@ canonical frontend. Do not use `.env` interpolation: a stale environment value
 must not refreeze editing. Content is published separately by the wiki
 repository's `tools/sync_wiki.py` API publisher after its reviewed main merge;
 see its `docs/PUBLISHING.md`. The former freeze/native/operator page-release
-flow is retired. A runtime rollout must not freeze editing, run a content
+flow is retired. A schema-neutral runtime rollout must not freeze editing.
+A schema-adding upgrade instead requires a separately authorized interruption
+with all writers stopped, as described below. Neither flow may run a content
 import/publisher, merge a content PR, or retrieve publishing bot secrets.
 
 ## Backups and restore gate
@@ -265,7 +267,129 @@ migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
 
-### Visual editing and page-icon release (prepared, not activated)
+### DiscussionTools preparation (not authorized for activation)
+
+**The existing `mirklurk-release.py deploy` is not a schema-upgrade procedure.**
+It backs up and replaces the running app, then runs readiness checks and jobs;
+it neither stops all writers before migration nor runs the schema updater.
+Do not use that mode for this release, or start the new app before migrating.
+Its successful `preflight` checks configuration/provenance, not schema readiness.
+
+Preparation on 2026-10-01 left the canonical Compose pin and live app unchanged.
+Only an immutable image and an online, restore-verified database backup were
+prepared. The updater timer was active, its service inactive, the wiki writable,
+and `mirklurk-sitemap` units not installed. These are observations, not a durable
+writer guard: recheck immediately before any later authorized operation.
+
+| Provenance | Immutable value |
+|------------|-----------------|
+| Reviewed wiki source | `493cffa19ffa403ff01ee8cedbfced200d89799f` |
+| Prepared image | `sha256:b63347127089bf020df2f5f9b843acd6c0d1d34b15cca5f45aab9018630081b9` |
+| Retention tag (not a deployment reference) | `mirklurk-wiki:release-493cffa19ffa` |
+| Current rollback candidate | `sha256:b6904cf0bb2835fef6e629fa73032d5eb4555583d2c5fb4ae2c72a617f14aca3`, source `14ac05ff13918033105b6964a9c5f6d66c9ecb43` |
+| Predecessor retention tag | `mirklurk-wiki:release-14ac05ff1391` |
+| Build checkout | `/srv/docker/mirklurk-release-493cffa1.Gizir1/source`, clean detached exact source |
+
+The build used `--pull=false`, the unchanged MediaWiki 1.43.9 base digest
+listed below, and OCI source/revision labels. Image checks ran without a
+network or production mounts/secrets. Runtime/configuration file hashes match
+the source; ParserFunctions, Scribunto, PageImages, VisualEditor, TemplateData
+and ConfirmEdit remain present alongside Echo, Linter and DiscussionTools.
+Keep `$wgLinterParseOnDerivedDataUpdate = false`: DiscussionTools requires
+Linter loaded, not an extra Parsoid parse for every links update.
+The source's [main validation run](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/36929757800)
+is a separate release gate; require its successful completion for this exact
+SHA before approving activation.
+
+#### Online backup evidence and limitation
+
+The established backup script ran once with a unique `BACKUP_DIR` beneath the
+configured backup storage, without changing its scheduler or replacing the
+ordinary daily snapshot. The retained dump is:
+
+```text
+/srv/docker/data/mirklurk/backups/predeploy-493cffa19ffa-20261001T2145Z/daily/mirklurk-2026-10-01.sql.gz
+SHA-256: 8a841ee5537a61747e50ed2166f3f3d47d7573da64727f20e6866197f178dd3a
+```
+
+Created at 21:44:34-21:44:39 UTC, it is 23,829,039 bytes, mode `0600`, beneath
+a private release backup directory. Gzip/schema checks passed. It restored
+successfully into the pinned MariaDB 11.4.13 image with `--network none`,
+`--skip-networking`, no published ports or host/named-volume mounts, and a
+disposable tmpfs database. All 58 tables passed `mariadb-check`. Restored/live
+counts matched before and after verification: 1,135 pages, 4,316 revisions,
+7 users and 636 images; the `Items` latest revision (3379) and stored-text
+SHA-256 also matched. The exact disposable container was removed; no dump,
+credentials or artwork left the server.
+
+**This is not proof of a single transactional snapshot of every table.**
+Production contains 57 InnoDB tables and a MyISAM `searchindex` table.
+`--single-transaction --skip-lock-tables` provides the InnoDB snapshot, but
+cannot guarantee a consistent MyISAM search index while edits continue.
+Successful restoration and matching counts do not remove that limitation.
+Do not lock writers or convert tables during preparation. The eventual
+authorized interruption must include a fresh final backup after every writer
+is stopped. The preparation snapshot also cannot include later community edits.
+The new dump resides within existing offsite coverage, but offsite replication
+and remote restoreability were not verified by this local drill.
+
+#### Required approval and migration sequence
+
+The following is a **pending operator-reviewed sequence**, not authorization
+to execute it. No new image pin accompanies this preparation.
+
+1. Obtain new explicit approval for the interruption, writer/service controls,
+   final backup, schema migration, pin merge and application replacement.
+   Require exact-source CI success, retained images and a reviewed canonical
+   pin/revision change. Pause the homeserver updater before merging that pin,
+   require both updater units inactive, and hold the existing bounded Compose
+   lock through the attended operation. A previous preflight is not a merge
+   lock; do not enable auto-merge or rely on an inactive service alone.
+2. Finish/coordinate wiki publication workflows and prevent new publication
+   during the window. Identify and stop all wiki web/background writers,
+   including the app, job runners, CLI maintenance and any sitemap job.
+   No dedicated runner was observed during preparation, but re-enumerate.
+   Stopping the updater alone is not a writer guard. Keep the DB and scoped
+   backup client running; do not stop unrelated services or rebuild NixOS.
+3. With writers confirmed stopped, take and verify a fresh final retained
+   backup using the established client. Preserve matching images, branding
+   and runtime secrets in protected storage. Reconfirm the reviewed
+   configuration changes only the image/revision and preserves the live
+   `https://mirklurk.wiki` origin, literal empty `MW_READ_ONLY`, mounts,
+   proxy trust, networks, routes and access policy.
+4. Run the new image's `php maintenance/run.php update --quick` **once in a
+   one-off app container**, with `MW_READ_ONLY` explicitly cleared and the
+   reviewed production Compose environment, DB network and secret-file
+   mounts. Use the main Compose entry point, `--no-deps`, `--pull never`,
+   `--rm`, and `--user www-data`; never start the new web app first.
+   Check the updater exit status and required Echo/Linter/DiscussionTools
+   tables. A failure leaves writers stopped for attended diagnosis, not an
+   automatic retry, rollback or service restart.
+5. Only after successful migration, recreate just `mirklurk` with
+   `up -d --no-deps --no-build --pull never mirklurk` from the reviewed
+   canonical main configuration. Check readiness, loaded old/new extensions,
+   canonical routes, branding and preserved content. Then perform an
+   explicitly authorized bounded purge of existing talk pages, and signed-in
+   Reply/Add topic/notification checks. Do not reseed, upload assets,
+   initialize all PageImages again, activate the reader sidebar or publish
+   articles as part of this rollout.
+6. Resume only the writers/schedules deliberately paused for this window,
+   after acceptance. Record actual sampled interruption and final identities.
+   Installing the absent sitemap timer is a separate OS-change decision.
+
+Expect an outage from stopping web writers through the final backup, migration
+and new-app readiness. The prior schema-neutral release's short restart time
+is not an estimate for this upgrade; migration duration has not been rehearsed.
+
+**Rollback after schema changes is not an image-only guarantee.** Retain the
+predecessor, but inspect completed/partial migrations and establish compatibility
+before considering it against the upgraded database. Prefer a forward fix when
+safe. Restoring the matching pre-upgrade database requires separate explicit
+approval, all writers stopped, and matching files/secrets; it discards writes
+made after that snapshot. Never run an automatic DB restore, downgrade updater
+or blindly apply the schema-neutral recovery instructions below.
+
+### Visual editing and page-icon release (deployed predecessor)
 
 **Do not merge until the operator has paused the updater.** A merged pin can
 otherwise be activated by the 04:00 daily updater, without the release command.
