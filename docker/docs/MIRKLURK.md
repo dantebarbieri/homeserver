@@ -265,37 +265,48 @@ migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
 
-### Combined mobile and metadata release (prepared, not activated)
+### Visual editing and page-icon release (prepared, not activated)
 
-**Do not merge until the operator has paused the updater and provisioned the
-sitemap directories below.** A merged pin can otherwise be activated by the
-04:00 daily updater, without the release command. A completed preflight or an
-expired lock does not protect a future merge. Keep the PR draft until this
-gate is confirmed; arrange a short, attended merge/activation window.
+**Do not merge until the operator has paused the updater.** A merged pin can
+otherwise be activated by the 04:00 daily updater, without the release command.
+A completed preflight or an expired lock does not protect a future merge.
+Arrange a short, attended merge/activation window.
 
 | Provenance | Immutable value |
 |------------|-----------------|
-| Reviewed wiki source | `7efcb77407a5e3d49f533525d7a0c5c71dafd0d2` |
-| Candidate image | `sha256:8f9e7aad4dff754cf3701c6ff2c056a08f51c6fbf865a6ef891ca31c2ee37aca` |
-| Retention tag (not a deployment reference) | `mirklurk-wiki:release-7efcb77407a5` |
-| Routing-compatible predecessor | `sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e`, source `810ddfeb3a18c56a72850a70b4d86030fabe06df` |
+| Reviewed wiki source | `14ac05ff13918033105b6964a9c5f6d66c9ecb43` |
+| Candidate image | `sha256:b6904cf0bb2835fef6e629fa73032d5eb4555583d2c5fb4ae2c72a617f14aca3` |
+| Retention tag (not a deployment reference) | `mirklurk-wiki:release-14ac05ff1391` |
+| Live predecessor | `sha256:8f9e7aad4dff754cf3701c6ff2c056a08f51c6fbf865a6ef891ca31c2ee37aca`, source `7efcb77407a5e3d49f533525d7a0c5c71dafd0d2` (mobile and metadata release) |
 | Unchanged base | `mediawiki:1.43.9@sha256:39a6503b8739f6aa58f8a458e9537258dd537f7cec7dd93c665bd3b43252d971` |
 | Unchanged DB/client | `mariadb:11.4.13@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b` |
 
-The source includes reviewed navigation, mobile, short URLs, metadata and human
-item reconciliation; it excludes the paused VisualEditor research proposal.
-[Release CI attempt 2](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/36745982412)
-passed at this exact SHA (the unchanged first attempt timed out).
-The candidate was built on the target on 2026-09-30 from a clean detached
-checkout at `/srv/docker/mirklurk-release-7efcb77.L3cwQp/source`, with
-`--pull=false` and OCI source/revision labels. Its copied runtime files were
-compared byte-for-byte with that commit. Targeted disposable checks use their
-own synthetic data and secrets, no live volumes or database. Keep both images
-tagged against the existing updater's dangling-image prune.
+The source adds VisualEditor and TemplateData (mirklurk-wiki #36; shared-data
+owner pages stay source-only) and PageImages per-page search/link-preview icons
+(mirklurk-wiki #37). All three ship with MediaWiki 1.43; none adds database
+tables. Both PRs passed full release CI, including the Docker smoke test.
+The candidate was built on the target on 2026-10-01 from a clean detached
+checkout at `/srv/docker/mirklurk-release-14ac05ff.Evoqtd/source`, with
+`--pull=false` and OCI source/revision labels. Keep both images tagged against
+the existing updater's dangling-image prune.
 
-Source, content and runtime are separate states: reviewed content is already
-live, including the Items/quest-category reconciliation. This rollout **must
-not publish/reseed/adopt content**, freeze edits, create accounts, run schema
+The sitemap directories were provisioned for the mobile release and are reused
+unchanged. After the deploy command is accepted, populate PageImages' page
+properties once and drain the queued jobs (no schema update):
+
+```bash
+docker exec --user www-data mirklurk php /var/www/html/maintenance/run.php \
+  /var/www/html/extensions/PageImages/maintenance/initImageData.php
+docker exec --user www-data mirklurk php /var/www/html/maintenance/run.php runJobs
+```
+
+Then verify, signed in: an ordinary article such as `Weather` offers **Edit**
+(visual) and **Edit source**; a shared-data owner such as `Antidote` offers only
+**Edit source** with the source-editing notice. Anonymous users see source
+editing only. `Special:Search` shows item icons.
+
+Source, content and runtime are separate states. This rollout **must not
+publish/reseed/adopt content**, freeze edits, create accounts, run schema
 updates, or change CAPTCHA, rights, proxy trust, secrets, images or branding.
 Do not compare all live revisions to an old fixed snapshot: community edits
 can legitimately advance while the runtime is prepared.
@@ -307,9 +318,6 @@ not hours in advance. They do not stop the wiki. Never request a password in
 chat or widen sudo policy for this procedure.
 
 ```bash
-sudo install -d -o 33 -g 33 -m 0755 \
-  /srv/docker/data/mirklurk/sitemap \
-  /srv/docker/data/mirklurk/sitemap/public
 sudo systemctl stop docker-compose-update.timer
 systemctl show docker-compose-update.timer docker-compose-update.service -p Id -p ActiveState
 ```
@@ -335,9 +343,9 @@ tested; no build or image pull occurs during activation.
 Set the reviewed values once in the operator shell:
 
 ```bash
-source=7efcb77407a5e3d49f533525d7a0c5c71dafd0d2
-image=sha256:8f9e7aad4dff754cf3701c6ff2c056a08f51c6fbf865a6ef891ca31c2ee37aca
-previous=sha256:ea903376b63cd189c6b3d83ec32bc579c7c49688677a23c6520df5b1d0d1ed4e
+source=14ac05ff13918033105b6964a9c5f6d66c9ecb43
+image=sha256:b6904cf0bb2835fef6e629fa73032d5eb4555583d2c5fb4ae2c72a617f14aca3
+previous=sha256:8f9e7aad4dff754cf3701c6ff2c056a08f51c6fbf865a6ef891ca31c2ee37aca
 ```
 
 From a clean checkout of the exact proposed homeserver PR, run:
@@ -460,8 +468,10 @@ recreating an already-healthy candidate. A missing initial index is still a
 release blocker. A failed app needs an attended runtime recovery, not a
 database/content restore.
 
-The retained `ea903376...` image already supports public `/w/` links and is the
-compatible predecessor. The older `5e9c67b6...` pre-short-URL image is **not**
+The live `8f9e7aad...` mobile/metadata image is the immediate predecessor and
+includes the sitemap wrapper. Recovering to it needs only a reviewed pin
+restore; existing VisualEditor/PageImages data are harmless page properties.
+The retained `ea903376...` image also supports public `/w/` links. The older `5e9c67b6...` pre-short-URL image is **not**
 a safe fallback after public 301s. Use a reviewed canonical recovery commit
 that restores the predecessor image **and matching source label**, preserves
 origin/read-write/access policy and the storage mount, and defers its sitemap
