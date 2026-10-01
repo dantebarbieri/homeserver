@@ -3,8 +3,9 @@
 `mirklurk-map` serves the static Mirklurk World Viewer at
 <https://map.mirklurk.danteb.com>. Visitors open their own save folder and it
 is read entirely in their browser. The site has no backend, database,
-persistent volume, secrets, or outbound requests, and it is intentionally
-public without Authelia.
+persistent volume, secrets, uploads, or third-party requests, and it is
+intentionally public without Authelia. Optional Realistic mode loads bundled
+game art from this same site; save processing stays entirely browser-local.
 
 The application, its `Dockerfile`, and its nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
@@ -15,13 +16,19 @@ the `seedfinder.mirklurk.danteb.com` name mentioned in [MIRKLURK.md](MIRKLURK.md
 | Item | Value |
 |---|---|
 | Service / container | `mirklurk-map` in `compose.websites.yml` |
-| Source commit | `fb027e0c890c26f52cab88df28b815183fddd535` on `main`; CI run 36347695211 passed `test` and `docker-smoke` |
-| Image | `mirklurk-map:fb027e0`, built by Compose from the pinned Git URL |
+| Source commit | `5520bd07e3158757b14cf14281bca1f6bdcf1679` on `main`; [CI run 36934817738](https://github.com/dantebarbieri/mirklurk-map/actions/runs/36934817738) passed `test` and `docker-smoke` |
+| Image | `mirklurk-map:5520bd0`, built by Compose from the pinned Git URL |
 | Runtime | `nginxinc/nginx-unprivileged:1.29-alpine`, non-root, port 8080 over IPv4 and IPv6 |
 | Network | `proxy` only; no published host ports, firewall, or router rules |
 | Hardening | Read-only root filesystem, 16 MiB `/tmp` tmpfs, all capabilities dropped, `no-new-privileges` |
 | Health | `http://127.0.0.1:8080/healthz` returns `ok` |
 | Storage and backups | None; the pinned commit and this repository fully describe the deployment |
+
+This release adds an opt-in **Realistic** toggle, **off by default**, for
+terrain rendered from the visitor's saved map layers. Its 72 content-hashed
+PNGs are selected game art used with the developer's permission. The static
+build packages only `src/artdata.json`-listed files under `assets/game/`;
+no game executables or user saves are shipped. There are no data migrations.
 
 ## Build, deploy, and update
 
@@ -44,16 +51,19 @@ commit. After merging, deploy it without waiting for 04:00:
 
 ```bash
 z /srv/homeserver/docker
-./scripts/deploy-update.sh mirklurk-map
+bash -c 'exec 9</run/lock/homeserver-compose.lock; flock -x -w 30 9 && ./scripts/deploy-update.sh mirklurk-map'
 ```
 
 `deploy-update.sh` pulls `main`, builds only this service, recreates it, and
 waits for it to become healthy. If `main` was already pulled and it reports no
-updates, rerun it with `--no-pull`. Avoid manual deploys around 04:00; they do
-not take the updater's lock.
+updates, rerun it with `--no-pull` inside the same lock wrapper. The wrapper
+coordinates with the nightly updater; the deploy script alone does not take
+that lock. Avoid manual deploys around 04:00.
 
 Roll back by reverting the homeserver commit (or restoring the previous tag,
 SHA, and label), then deploy the same way. There is no data to restore.
+The previous source is `fb027e0c890c26f52cab88df28b815183fddd535`, tagged
+`mirklurk-map:fb027e0`; retain that image until the release is verified.
 
 ## Nginx Proxy Manager (owner-managed)
 
@@ -83,7 +93,7 @@ On the server:
 ```bash
 docker compose ps mirklurk-map
 docker inspect mirklurk-map --format '{{.Name}} restart={{.HostConfig.RestartPolicy.Name}} health={{.State.Health.Status}} readonly={{.HostConfig.ReadonlyRootfs}}'
-docker image inspect mirklurk-map:fb027e0 --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+docker image inspect mirklurk-map:5520bd0 --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
 docker exec nginxproxymanager curl -fsS http://mirklurk-map:8080/healthz
 docker exec nginxproxymanager curl -fsSI http://mirklurk-map:8080/
 ```
@@ -96,6 +106,9 @@ Publicly, after NPM is configured, over both IPv4 and IPv6 (`curl -4`/`-6`):
   Content-Security-Policy, `Cache-Control: no-cache`, and a single HSTS header.
 - The hashed `app.*.js` and `style.*.css` files return
   `public, max-age=31536000, immutable` with JavaScript and CSS content types.
-  Unknown paths return 404.
+  All 72 manifest-listed `assets/game/*.png` files return the same immutable
+  cache policy with `image/png`. Unknown paths return 404.
 - In a browser, opening a save folder renders the map with no CSP violations
-  and no further network requests.
+  and Realistic off by default. Enabling Realistic fetches only same-origin
+  bundled game art; save contents are never uploaded. Switching it off
+  restores the original overview.
