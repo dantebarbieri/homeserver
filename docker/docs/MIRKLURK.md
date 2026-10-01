@@ -298,8 +298,9 @@ and ConfirmEdit remain present alongside Echo, Linter and DiscussionTools.
 Keep `$wgLinterParseOnDerivedDataUpdate = false`: DiscussionTools requires
 Linter loaded, not an extra Parsoid parse for every links update.
 The source's [main validation run](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/36929757800)
-is a separate release gate; require its successful completion for this exact
-SHA before approving activation.
+completed successfully for this exact SHA, including the disposable
+DiscussionTools Docker smoke test and the existing publication workflow.
+CI success does not authorize production migration or activation.
 
 #### Online backup evidence and limitation
 
