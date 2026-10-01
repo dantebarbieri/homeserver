@@ -267,7 +267,7 @@ migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
 
-### DiscussionTools preparation (not authorized for activation)
+### DiscussionTools schema release
 
 **The existing `mirklurk-release.py deploy` is not a schema-upgrade procedure.**
 It backs up and replaces the running app, then runs readiness checks and jobs;
@@ -337,7 +337,13 @@ and remote restoreability were not verified by this local drill.
 #### Required approval and migration sequence
 
 The following is a **pending operator-reviewed sequence**, not authorization
-to execute it. No new image pin accompanies this preparation.
+to execute it. On 2026-10-01 the operator explicitly authorized the guarded
+deployment, including writer shutdown, final backup, migration, app switch and
+talk-page purge, and interactively paused the updater. The proposed Compose
+pin now selects the exact prepared image/revision above. Keep both updater
+units inactive through the attended merge and migration; this pin must not be
+activated by the generic daily updater before the schema update succeeds.
+Database restoration is not authorized.
 
 1. Obtain new explicit approval for the interruption, writer/service controls,
    final backup, schema migration, pin merge and application replacement.
