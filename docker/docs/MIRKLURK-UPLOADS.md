@@ -3,8 +3,9 @@
 This supplements [MIRKLURK.md](MIRKLURK.md). The user approved a brief daily
 wiki interruption for consistent backups. **This runbook does not itself
 authorize a live deployment, reboot, restore drill or account grant.**
-The app image/source pin stays unchanged until the coordinated upload revision
-is reviewed and its deployment gates pass.
+The reviewed app image/source pin and completed baseline recovery evidence are
+recorded in [the release history](MIRKLURK.md#native-upload-runtime-release).
+Activation still requires the coordinated deployment and acceptance gates below.
 Infrastructure regressions run in GitHub-hosted CI; native upload integration
 belongs to the companion app's CI. General-purpose disposable app smoke tests
 must not run on the homeserver. A scoped isolated restore drill requires separate
@@ -151,9 +152,12 @@ Compare page/revision/user counts, known page text, `image`/`oldimage`/
 `filearchive` records, original/prior/deleted-file hashes and approved branding.
 Verify UID/GID 33 can traverse/read/write the restored tree, thumbnails
 regenerate, and `/images/deleted` and `/images/temp` are denied over HTTP.
-Do not publish private files to prove they exist. Exercise upload, replacement,
-deletion and undelete against disposable data, then remove only the explicitly
-named disposable resources.
+Do not publish private files to prove they exist. For an upload-enabled recovery
+point, exercise upload, replacement, deletion and undelete against disposable
+data. The initial uploads-disabled baseline is restored with its captured old
+runtime; it cannot exercise these writes. Native lifecycle coverage for that
+transition comes from the companion app CI, followed by authenticated live
+upload acceptance. Remove only the explicitly named disposable resources.
 
 For real recovery, keep writers offline, restore **SQL and both trees from
 the same bundle**, preserve numeric ownership/ACLs, supply matching secrets
@@ -189,7 +193,8 @@ sudo bash -eu <<'SH'
 exec 9</run/lock/homeserver-compose.lock
 flock -x -w 30 9
 state=/var/lib/mirklurk-upload-deployment
-test ! -e "$state" && test ! -L "$state"
+test ! -e "$state"
+test ! -L "$state"
 systemctl stop docker-compose-update.timer nixos-upgrade.timer rclone-offsite-daily.timer
 for name in docker-compose-update nixos-upgrade rclone-offsite-daily; do
   test "$(systemctl show "$name.service" -p LoadState --value)" = loaded
@@ -216,12 +221,44 @@ without a correctly installed boot entry is insufficient. Retain the recorded
 previous generations and existing known-good wiki image; do not garbage-collect
 them during this window.
 
+Verify a **selectable** known-good entry, not just a retained store path/profile.
+The five-generation boot-menu limit can remove the entry for the actually
+booted system. `/run/booted-system` identifies that tested system;
+`/run/current-system` can instead identify a later live activation. If the tested
+entry is missing, an authorized operator can retain it in a separate native
+system profile without changing the selected default or activating packages:
+
+```bash
+sudo bash -eu <<'SH'
+next=$(readlink -f /nix/var/nix/profiles/system)
+good=$(readlink -f /run/booted-system)
+recovery=/nix/var/nix/profiles/system-profiles/known-good-before-wiki-uploads
+test -f /var/lib/mirklurk-upload-deployment/hold
+test ! -e "$recovery"
+test ! -L "$recovery"
+mkdir -p /nix/var/nix/profiles/system-profiles
+nix-env --profile "$recovery" --set "$good"
+"$next/bin/switch-to-configuration" boot
+test "$(readlink -f /nix/var/nix/profiles/system)" = "$next"
+bootctl list --no-pager
+SH
+```
+
+Require the intended upgraded entry to remain default and the named recovery
+entry's `init`, kernel and initrd to match the tested system. The bootloader
+includes this named profile independently of the main profile's five-entry
+limit. Do not overwrite an existing recovery profile without reviewing it.
+
 After that review, the operator may run `sudo reboot` over SSH. The disconnect
 is expected; this reboots the whole host, not just the wiki. Have local or
 independent BMC console access first: the host-proxied `ipmi.danteb.com` cannot
 be the only fallback while the host is down. If boot fails, use the retained
 generation from the boot menu. **An older generation lacks these guards**:
-keep the updater paused and re-establish coordination before any further action.
+before booting that fallback, use the console boot-entry editor to append
+`systemd.mask=docker-compose-update.service systemd.mask=docker-compose-update.timer systemd.mask=nixos-upgrade.service systemd.mask=nixos-upgrade.timer systemd.mask=rclone-offsite-daily.service systemd.mask=rclone-offsite-daily.timer`.
+These native systemd arguments block the unguarded jobs for that boot while
+leaving SSH available. Confirm boot-entry editing is enabled before relying
+on this recovery path; then re-establish coordination before any further action.
 Restoring a previous next-boot selection is a separate reviewed `boot` action,
 never a blind live switch to newer or older packages.
 
@@ -262,16 +299,19 @@ while another coordinated deployment is unfinished.
    homeserver revision and activate only `mirklurk` using the guarded runtime
    procedure. `deploy` now requires a recent complete snapshot as well as its
    fresh SQL dump. Keep DB/backup/proxy containers and all current mounts intact.
-5. Verify upload denial/acceptance, boundaries, rate limits, private-path
-   denial, original file/branding hashes and the isolated recovery lifecycle.
-   Take a fresh complete snapshot and verify public recovery. Only then may
-   the authorized wiki admin verify exact `DavidLokison` in `Special:ListUsers`
-   and grant **confirmed only** through `Special:UserRights`, never administrator.
-   No production username or account rights were changed by this preparation.
-6. Install the daily snapshot and hourly health timers through the separately
-   reviewed NixOS activation or planned-reboot procedure above, keeping the
-   deployment hold until acceptance; a full switch may include other pending OS changes.
-   Verify timers, ntfy failures and actual offsite recovery. Until installed,
+5. Verify native upload policy/effective rights, private-path denial, original
+   file/branding hashes and recovery evidence. After runtime acceptance, the
+   authorized operator may verify exact `DavidLokison` and grant **confirmed
+   only** using native `Special:UserRights` or the existing-user maintenance
+   command. Preserve other groups and passwords; never grant administrator,
+   bot or rate-limit exemptions. Verify the resulting effective rights, then
+   have the operator perform an authenticated near-cap upload in their own
+   session. Native boundary/lifecycle tests belong to companion hosted CI.
+   Take a fresh complete snapshot after acceptance and verify public recovery.
+6. Ensure the daily snapshot and hourly health timers were installed through
+   the separately reviewed NixOS activation or planned-reboot procedure above,
+   keeping the deployment hold until acceptance; a full switch may include
+   other pending OS changes. Verify timers, ntfy failures and actual offsite recovery. Until installed,
    an authorized operator must run/check snapshots at least daily. A committed
    timer is not a running schedule. Resume the updater after joint acceptance.
 
