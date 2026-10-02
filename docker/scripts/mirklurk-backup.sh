@@ -7,6 +7,7 @@ MW_DB_SERVER="${MW_DB_SERVER:-mirklurk-db}"
 MW_DB_NAME="${MW_DB_NAME:-mirklurk}"
 MW_DB_USER="${MW_DB_USER:-mirklurk}"
 MW_DB_PASSWORD_FILE="${MW_DB_PASSWORD_FILE:-/run/secrets/MIRKLURK_DB_PASSWORD}"
+snapshot=""
 
 case "${1:-}" in
   --healthcheck)
@@ -19,6 +20,13 @@ case "${1:-}" in
     exit 0
     ;;
   --once) ;;
+  --snapshot)
+    if [[ "$#" != 2 || ! "$2" =~ ^[0-9]{8}T[0-9]{12}Z$ ]]; then
+      echo "Snapshot requires an explicit UTC timestamp identifier." >&2
+      exit 2
+    fi
+    snapshot="$BACKUP_DIR/.mirklurk-snapshot-sql-$2.sql.gz"
+    ;;
   "")
     while true; do
       if bash "$0" --once; then
@@ -30,7 +38,7 @@ case "${1:-}" in
     done
     ;;
   *)
-    echo "Usage: $0 [--once|--healthcheck]" >&2
+    echo "Usage: $0 [--once|--healthcheck|--snapshot UTC-ID]" >&2
     exit 2
     ;;
 esac
@@ -78,6 +86,13 @@ if ! gzip -cd "$temporary/dump.sql.gz" |
      awk '/^CREATE TABLE / { found = 1 } END { exit !found }'; then
   echo "Database dump has no tables; initialize the wiki before backing it up." >&2
   exit 1
+fi
+
+if [[ -n "$snapshot" ]]; then
+  # Never share the replaceable daily filename with an overlapping online dump.
+  ln "$temporary/dump.sql.gz" "$snapshot"
+  echo "MirkLurk snapshot SQL complete."
+  exit 0
 fi
 
 if [[ "$(date -u +%u)" == 7 ]]; then

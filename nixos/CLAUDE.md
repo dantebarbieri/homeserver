@@ -79,6 +79,8 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 |-------|----------|---------|
 | `docker-compose-update` | Daily 04:00 (±5m) | Pull monorepo, update containers |
 | `mirklurk-sitemap` | Daily 05:30 | Guarded native sitemap refresh + public freshness checks |
+| `mirklurk-snapshot` | Daily 03:15 | SQL + images/branding snapshot; briefly stops only the wiki |
+| `mirklurk-backup-check` | Hourly :45 | SQL/files backup freshness + free space/inodes -> ntfy |
 | `drive-health-check` | Every 6 hours | RAID + LVM health → ntfy |
 | `mdadm-scrub` | Weekly Sunday 02:00 | RAID parity scrub |
 

@@ -66,9 +66,9 @@ esac
         executable.write_text(content)
         executable.chmod(0o755)
 
-    def run_script(self, argument="--once", **overrides):
+    def run_script(self, argument="--once", *arguments, **overrides):
         result = subprocess.run(
-            ["bash", str(SCRIPT), argument],
+            ["bash", str(SCRIPT), argument, *arguments],
             env={**self.env, **overrides},
             capture_output=True,
             text=True,
@@ -102,6 +102,28 @@ esac
         result = self.run_script(BACKUP_TEST_WEEKDAY="5")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(list((self.backups / "weekly").iterdir()), [])
+
+    def test_snapshot_sql_is_unique_and_independent_of_online_daily_dump(self):
+        identifier = "20261002T143000123456Z"
+        self.assertEqual(self.run_script().returncode, 0)
+        daily = self.backups / "daily/mirklurk-2026-09-27.sql.gz"
+        previous = daily.read_bytes()
+        result = self.run_script("--snapshot", identifier)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        snapshot = self.backups / f".mirklurk-snapshot-sql-{identifier}.sql.gz"
+        self.assertEqual(gzip.decompress(snapshot.read_bytes()).decode(), SQL)
+        self.assertEqual(snapshot.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(daily.read_bytes(), previous)
+        self.assertNotEqual(self.run_script("--snapshot", identifier).returncode, 0)
+        self.assertEqual(gzip.decompress(snapshot.read_bytes()).decode(), SQL)
+        daily.write_bytes(b"another concurrent online dump")
+        self.assertEqual(gzip.decompress(snapshot.read_bytes()).decode(), SQL)
+
+    def test_snapshot_identifier_rejects_paths_and_missing_argument(self):
+        for arguments in ((), ("../outside",), ("20261002T143000123456Z", "extra")):
+            with self.subTest(arguments=arguments):
+                self.assertEqual(self.run_script("--snapshot", *arguments).returncode, 2)
+        self.assertFalse(self.call_log.exists())
 
     def test_failed_dump_preserves_last_good_file_and_recovers(self):
         self.assertEqual(self.run_script().returncode, 0)

@@ -1,0 +1,32 @@
+name: Validate MirkLurk Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mirklurk-validate.yml
+      - docker/compose.websites.yml
+      - docker/scripts/mirklurk-*.*
+      - docker/tests/test_mirklurk*.py
+      - nixos/configuration.nix
+  pull_request:
+    paths:
+      - .github/workflows/mirklurk-validate.yml
+      - docker/compose.websites.yml
+      - docker/scripts/mirklurk-*.*
+      - docker/tests/test_mirklurk*.py
+      - nixos/configuration.nix
+
+permissions:
+  contents: read
+
+jobs:
+  backup-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check backup shell syntax
+        run: bash -n docker/scripts/mirklurk-backup.sh
+      - name: Exercise backup, snapshot restore and release safeguards
+        run: python3 -B -m unittest discover -s docker/tests -p 'test_mirklurk*.py'

@@ -3,14 +3,17 @@
 
 import argparse
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import re
+import signal
 import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from urllib.error import URLError
@@ -24,6 +27,8 @@ ORIGIN = "https://mirklurk.wiki"
 SOURCE = "https://github.com/dantebarbieri/mirklurk-wiki"
 USER_AGENT = "MirkLurkDeploymentCheck/1.0"
 SITEMAP = "/var/lib/mirklurk-sitemap"
+BACKUP_CONTROL = "/var/lib/mirklurk-backup"
+DATA = Path("/srv/docker/data/mirklurk")
 NS = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
 
@@ -36,13 +41,13 @@ def require(condition, message):
         raise ReleaseError(message)
 
 
-def run(*args, timeout=60):
+def run(*args, timeout=60, input=None):
     environment = dict(os.environ)
     if args[0] == "git":
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_SSH_COMMAND"] = environment.get("GIT_SSH_COMMAND", "ssh") + " -o BatchMode=yes"
     try:
-        result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=environment)
+        result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=environment, input=input)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ReleaseError(f"{args[0]} unavailable or timed out") from error
     # Compose/inspect output can contain secrets. Never echo captured output on failure.
@@ -160,7 +165,8 @@ def preflight(root, source, image, previous):
             "Runtime environment differs; review separately (values suppressed)")
     actual_mounts = {mount["Destination"]: mount for mount in live["Mounts"]}
     volumes = service["volumes"]
-    require({v["target"] for v in volumes} == {"/var/www/html/images", "/var/www/html/branding", SITEMAP},
+    require({v["target"] for v in volumes} == {
+        "/var/www/html/images", "/var/www/html/branding", SITEMAP, BACKUP_CONTROL},
             "Unexpected application volume set")
     require(not service.get("ports") and service.get("command") is None and service.get("entrypoint") is None,
             "Unexpected application ports or startup override")
@@ -203,6 +209,182 @@ def preflight(root, source, image, previous):
                 f"Sitemap directory must be UID/GID 33, mode 0755 or 2755: {folder}")
     print(f"Preflight OK: source={source} image={image}; live={live['Image']}", flush=True)
     return live, environment
+
+
+def storage_headroom():
+    for folder in (DATA / "images", DATA / "branding", DATA / "backups", DATA / "backup-control"):
+        require(folder.is_dir() and not folder.is_symlink(), f"Missing or symlinked storage: {folder}")
+        require(shutil.disk_usage(folder).free >= 5 * 1024**3, f"Less than 5 GiB free: {folder}")
+        usage = os.statvfs(folder)
+        require(usage.f_files > 0 and usage.f_favail >= max(10000, usage.f_files // 20),
+                f"Less than 5% or 10000 free inodes: {folder}")
+
+
+def check_backups():
+    storage_headroom()
+    require(not os.path.lexists(DATA / "backup-control/read-only"), "Wiki backup/operator read-only marker remains")
+    marker = DATA / "backups/.last-snapshot"
+    require(marker.is_file() and 0 <= time.time() - marker.stat().st_mtime < 26 * 3600,
+            "Complete SQL/files snapshot missing or older than 26 hours")
+    name = marker.read_text().strip()
+    require(re.fullmatch(r"mirklurk-\d{8}T\d{12}Z\.tar\.gz", name)
+            and (DATA / "backups/snapshots/daily" / name).is_file(), "Snapshot marker has no matching bundle")
+    run("docker", "exec", "mirklurk-backup", "bash", "/opt/mirklurk-backup.sh", "--healthcheck")
+    print("Wiki SQL/files backup freshness and storage headroom OK.", flush=True)
+
+
+def snapshot_mounts():
+    storage_headroom()
+    for name in ("mirklurk", "mirklurk-db", "mirklurk-backup"):
+        healthy(name)
+    live = inspect("mirklurk")
+    require(live["Config"]["Labels"].get("com.docker.compose.project") == "compose",
+            "Unexpected wiki Compose project")
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", live["Image"])
+            and re.fullmatch(r"[0-9a-f]{40}", live["Config"]["Labels"].get("org.opencontainers.image.revision", "")),
+            "Wiki image/source provenance missing")
+    mounts = {mount["Destination"]: mount for mount in live["Mounts"]}
+    for target, folder, writable in (
+        ("/var/www/html/images", "images", True),
+        ("/var/www/html/branding", "branding", False),
+        (BACKUP_CONTROL, "backup-control", False),
+    ):
+        actual = mounts.get(target, {})
+        require(actual.get("Type") == "bind" and actual.get("Source") == str(DATA / folder)
+                and actual.get("RW") is writable, f"Unexpected snapshot mount: {target}")
+    backup = inspect("mirklurk-backup")
+    for container in (live, backup):
+        environment = dict(value.split("=", 1) for value in container["Config"]["Env"])
+        require(environment.get("MW_DB_SERVER") == "mirklurk-db"
+                and environment.get("MW_DB_NAME") == "mirklurk"
+                and environment.get("MW_DB_USER") == "mirklurk",
+                "App/backup database contract differs (values suppressed)")
+    require(any(m.get("Destination") == "/backups" and m.get("Source") == str(DATA / "backups")
+                and m.get("Type") == "bind" and m.get("RW") for m in backup["Mounts"]),
+            "Backup client does not use the expected backup directory")
+    # Only the frontend may write upload storage. Operator CLI imports must also
+    # take the Compose lock; never run independent writers against the wiki DB.
+    containers = [json.loads(line) for line in run(
+        "docker", "inspect", "--format", '{"Id":{{json .Id}},"Name":{{json .Name}},"Mounts":{{json .Mounts}}}',
+        *run("docker", "ps", "-q").split()).splitlines()]
+    for container in containers:
+        if container["Id"] == live["Id"]:
+            continue
+        for mount in container["Mounts"]:
+            if mount.get("Type") != "bind":
+                continue
+            source = Path(mount.get("Source", "/"))
+            images = DATA / "images"
+            if mount.get("RW") and source in images.parents and container.get("Name") == "/code-server":
+                print("Administrative code-server mount present: wiki file changes must obey the Compose lock.",
+                      flush=True)
+                continue
+            require(not (mount.get("RW") and (source == images or source in images.parents
+                                               or images in source.parents)),
+                    "Another running container can write wiki images")
+    return live
+
+
+def wait_healthy(name):
+    deadline = time.monotonic() + 120
+    while inspect(name)["State"].get("Health", {}).get("Status") != "healthy":
+        require(time.monotonic() < deadline, f"{name} readiness timeout")
+        time.sleep(2)
+
+
+def snapshot():
+    """Called with the shared Compose lock held; never changes app/DB images."""
+    require(os.geteuid() == 0, "Run the snapshot as root to preserve all file ownership, ACLs and private images")
+    live = snapshot_mounts()
+    identifier = live["Id"]
+    backups = DATA / "backups"
+    owner = backups.stat()
+    snapshots = backups / "snapshots"
+    for folder in (snapshots, snapshots / "daily", snapshots / "weekly"):
+        if not folder.exists():
+            folder.mkdir(mode=0o700)
+            os.chown(folder, owner.st_uid, owner.st_gid)
+        require(folder.is_dir() and not folder.is_symlink(), f"Unsafe snapshot directory: {folder}")
+    size = sum(int(line.split()[0]) for line in run(
+        "du", "--summarize", "--apparent-size", "--block-size=1",
+        str(DATA / "images"), str(DATA / "branding"), str(backups / "daily")).splitlines())
+    require(shutil.disk_usage(backups).free >= size + 5 * 1024**3,
+            "Insufficient space for a complete snapshot plus 5 GiB reserve")
+    now = datetime.now(timezone.utc)
+    snapshot_id = now.strftime("%Y%m%dT%H%M%S%fZ")
+    name = "mirklurk-" + snapshot_id + ".tar.gz"
+    dump = backups / f".mirklurk-snapshot-sql-{snapshot_id}.sql.gz"
+    require(not os.path.lexists(dump), "Snapshot SQL identifier already exists")
+    lock = DATA / "backup-control/read-only"
+    # Exclusive creation refuses an existing operator lock, including symlinks.
+    descriptor = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(descriptor, "w") as handle:
+        os.fchmod(handle.fileno(), 0o644)
+        handle.write("Scheduled backup: editing and uploads will resume shortly.\n")
+        identity = os.fstat(handle.fileno())
+    stopped = False
+    restored = False
+    try:
+        with tempfile.TemporaryDirectory(prefix=".mirklurk-snapshot-", dir=backups) as temporary:
+            staging = Path(temporary)
+            try:
+                # Apache's SIGWINCH drains requests. A forced stop is not a
+                # consistency barrier and must never produce a "good" bundle.
+                stopped = True
+                run("docker", "stop", "--signal=SIGWINCH", "--timeout=120", identifier, timeout=140)
+                state = inspect(identifier)["State"]
+                require(not state["Running"] and state["ExitCode"] == 0 and not state.get("OOMKilled"),
+                        "Frontend did not stop cleanly; no consistent snapshot taken")
+                # Stream the reviewed script: a file bind may still reference
+                # its old inode after git updates, without recreating the sidecar.
+                run("docker", "exec", "-i", "mirklurk-backup", "timeout", "--kill-after=5s", "280s",
+                    "bash", "-s", "--", "--snapshot", snapshot_id, timeout=300,
+                    input=Path(__file__).with_name("mirklurk-backup.sh").read_text())
+                require(dump.is_file() and not dump.is_symlink(), "Backup client did not publish snapshot SQL")
+                os.replace(dump, staging / "database.sql.gz")
+                (staging / "manifest.json").write_text(json.dumps({
+                    "format": 1, "created_utc": now.isoformat(), "image": live["Image"],
+                    "source": live["Config"]["Labels"].get("org.opencontainers.image.revision"),
+                    "database": "mirklurk", "quiescence": "frontend gracefully stopped under Compose lock",
+                    "files": ["images", "branding"], "secrets": "separately encrypted offsite",
+                }, indent=2) + "\n")
+                run("tar", "--create", "--gzip", "--acls", "--xattrs", "--numeric-owner",
+                    "--file", str(staging / name), "--directory", str(staging),
+                    "database.sql.gz", "manifest.json", "--directory", str(DATA), "images", "branding",
+                    timeout=600)
+            finally:
+                if stopped:
+                    run("docker", "start", identifier, timeout=60)
+                    wait_healthy(identifier)
+                    restored = True
+            run("tar", "--list", "--gzip", "--file", str(staging / name), timeout=600)
+            (staging / name).chmod(0o600)
+            os.chown(staging / name, owner.st_uid, owner.st_gid)
+            destination = snapshots / "daily" / name
+            os.replace(staging / name, destination)
+            if now.isoweekday() == 7:
+                os.link(destination, snapshots / "weekly" / name)
+            (staging / "last-snapshot").write_text(name + "\n")
+            os.chown(staging / "last-snapshot", owner.st_uid, owner.st_gid)
+            os.replace(staging / "last-snapshot", backups / ".last-snapshot")
+            for tier, days in (("daily", 7), ("weekly", 28)):
+                for path in (snapshots / tier).iterdir():
+                    if (re.fullmatch(r"mirklurk-\d{8}T\d{12}Z\.tar\.gz", path.name)
+                            and not path.is_symlink() and path.is_file()
+                            and path.stat().st_mtime < time.time() - days * 86400):
+                        path.unlink()
+    finally:
+        if dump.exists() and not dump.is_symlink():
+            dump.unlink()
+        if not stopped or restored:
+            current = lock.lstat()
+            require((current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino),
+                    "Read-only marker was replaced; leaving it for operator review")
+            lock.unlink()
+        else:
+            print("Frontend recovery failed; read-only marker retained. Operator intervention required.",
+                  file=sys.stderr)
+    print(f"Complete SQL/files snapshot: snapshots/daily/{name}", flush=True)
 
 
 def refresh_sitemap(root):
@@ -302,6 +484,7 @@ def deploy(root, source, image, previous):
     live, environment = preflight(root, source, image, previous)
     before = container_ids()
     if live["Image"] != image:
+        check_backups()
         run("docker", "exec", "mirklurk-backup", "timeout", "--kill-after=5s", "280s",
             "bash", "/opt/mirklurk-backup.sh", "--once", timeout=300)
         run("docker", "exec", "mirklurk-backup", "bash", "/opt/mirklurk-backup.sh", "--healthcheck")
@@ -326,7 +509,7 @@ def deploy(root, source, image, previous):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("preflight", "deploy", "refresh-sitemap"))
+    parser.add_argument("mode", choices=("preflight", "deploy", "refresh-sitemap", "snapshot", "check-backups"))
     parser.add_argument("--checkout", type=Path, default=CANONICAL, help="Alternate checkout for preflight only")
     parser.add_argument("--source", help="Reviewed full wiki source commit")
     parser.add_argument("--image", help="Reviewed full candidate sha256 image ID")
@@ -335,17 +518,26 @@ def main():
     try:
         require(args.mode == "preflight" or args.checkout.resolve() == CANONICAL,
                 "Alternate checkout is only allowed for preflight")
-        if args.mode != "refresh-sitemap":
+        if args.mode in ("preflight", "deploy"):
             require(args.source and args.image and args.previous_image, "Explicit source, image and predecessor required")
+        if args.mode == "snapshot":
+            def interrupted(signum, frame):
+                raise ReleaseError(f"Snapshot interrupted by signal {signum}")
+            signal.signal(signal.SIGTERM, interrupted)
+            signal.signal(signal.SIGINT, interrupted)
         with locked():
             if args.mode == "preflight":
                 preflight(args.checkout, args.source, args.image, args.previous_image)
                 print("No activation performed. Pause updater BEFORE merge; preflight is not a merge lock.")
             elif args.mode == "deploy":
                 deploy(args.checkout, args.source, args.image, args.previous_image)
-            else:
+            elif args.mode == "refresh-sitemap":
                 siteinfo()
                 refresh_sitemap(args.checkout)
+            elif args.mode == "snapshot":
+                snapshot()
+            else:
+                check_backups()
     except (ReleaseError, OSError, ValueError, KeyError, ET.ParseError) as error:
         message = str(error) if isinstance(error, ReleaseError) else f"Unexpected {type(error).__name__}; inspect locally"
         print(f"MirkLurk release FAILED: {message}. No automatic rollback. "
