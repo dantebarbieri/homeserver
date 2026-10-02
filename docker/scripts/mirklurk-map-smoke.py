@@ -76,6 +76,7 @@ def exercise():
         time.sleep(2)
         request("PUT", path, 403, replacement)
         request("DELETE", path, 403)
+        request("PUT", path, 403, replacement, share["id"])
         request("PUT", path, 429, replacement, share["edit"])
         time.sleep(31)
         changed, _ = request("PUT", path, 200, replacement, share["edit"])
