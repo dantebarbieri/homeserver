@@ -299,16 +299,19 @@ while another coordinated deployment is unfinished.
    homeserver revision and activate only `mirklurk` using the guarded runtime
    procedure. `deploy` now requires a recent complete snapshot as well as its
    fresh SQL dump. Keep DB/backup/proxy containers and all current mounts intact.
-5. Verify upload denial/acceptance, boundaries, rate limits, private-path
-   denial, original file/branding hashes and the isolated recovery lifecycle.
-   Take a fresh complete snapshot and verify public recovery. Only then may
-   the authorized wiki admin verify exact `DavidLokison` in `Special:ListUsers`
-   and grant **confirmed only** through `Special:UserRights`, never administrator.
-   No production username or account rights were changed by this preparation.
-6. Install the daily snapshot and hourly health timers through the separately
-   reviewed NixOS activation or planned-reboot procedure above, keeping the
-   deployment hold until acceptance; a full switch may include other pending OS changes.
-   Verify timers, ntfy failures and actual offsite recovery. Until installed,
+5. Verify native upload policy/effective rights, private-path denial, original
+   file/branding hashes and recovery evidence. After runtime acceptance, the
+   authorized operator may verify exact `DavidLokison` and grant **confirmed
+   only** using native `Special:UserRights` or the existing-user maintenance
+   command. Preserve other groups and passwords; never grant administrator,
+   bot or rate-limit exemptions. Verify the resulting effective rights, then
+   have the operator perform an authenticated near-cap upload in their own
+   session. Native boundary/lifecycle tests belong to companion hosted CI.
+   Take a fresh complete snapshot after acceptance and verify public recovery.
+6. Ensure the daily snapshot and hourly health timers were installed through
+   the separately reviewed NixOS activation or planned-reboot procedure above,
+   keeping the deployment hold until acceptance; a full switch may include
+   other pending OS changes. Verify timers, ntfy failures and actual offsite recovery. Until installed,
    an authorized operator must run/check snapshots at least daily. A committed
    timer is not a running schedule. Resume the updater after joint acceptance.
 
