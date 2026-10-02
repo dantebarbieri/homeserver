@@ -130,19 +130,19 @@ services:
       retries: 3
       start_period: 10m
 
-  # map.mirklurk.danteb.com — static Mirklurk World Viewer. Saves are read in
-  # the visitor's browser: no backend, volume, or secrets. Update the image
-  # tag, context SHA, and revision label together (docs/MIRKLURK-MAP.md).
+  # Local viewing uploads nothing. Explicit sharing uses the isolated backend.
+  # Update BOTH targets' pins together (docs/MIRKLURK-MAP.md).
   mirklurk-map:
     extends:
       file: compose.common.yml
       service: common-service
-    image: mirklurk-map:8ca82be
+    image: mirklurk-map:77b1263
     build:
-      context: "https://github.com/dantebarbieri/mirklurk-map.git#8ca82beb753ff53dfc8f8b72ad2c6180279ee54e"
+      context: "https://github.com/dantebarbieri/mirklurk-map.git#77b12638469682856c92ce9bed704ad3a6004f6f"
+      target: web
       labels:
         org.opencontainers.image.source: https://github.com/dantebarbieri/mirklurk-map
-        org.opencontainers.image.revision: 8ca82beb753ff53dfc8f8b72ad2c6180279ee54e
+        org.opencontainers.image.revision: 77b12638469682856c92ce9bed704ad3a6004f6f
     container_name: mirklurk-map
     read_only: true
     cap_drop: [ALL]
@@ -152,10 +152,60 @@ services:
       - /tmp:size=16m
     expose:
       - "8080"
+    volumes:
+      - type: bind
+        source: ./nginx/mirklurk-map.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - proxy
+      - mirklurk-map-uploads
+    depends_on:
+      mirklurk-map-uploads:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+
+  mirklurk-map-uploads:
+    # No common-service logging: filesystem exceptions can contain capability
+    # filenames. Health and HTTP errors remain observable without retaining keys.
+    image: mirklurk-map-uploads:77b1263
+    build:
+      context: "https://github.com/dantebarbieri/mirklurk-map.git#77b12638469682856c92ce9bed704ad3a6004f6f"
+      target: uploads
+      labels:
+        org.opencontainers.image.source: https://github.com/dantebarbieri/mirklurk-map
+        org.opencontainers.image.revision: 77b12638469682856c92ce9bed704ad3a6004f6f
+    container_name: mirklurk-map-uploads
+    restart: unless-stopped
+    logging:
+      driver: none
+    environment:
+      TRUST_UPLOAD_PROXY: "true"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 64
+    volumes:
+      - mirklurk-map-shares:/data
+    networks:
+      mirklurk-map-uploads:
+        aliases:
+          - uploads
+    healthcheck:
+      test: ["CMD", "deno", "eval", "const r = await fetch('http://127.0.0.1:8081/healthz'); Deno.exit(r.ok ? 0 : 1)"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -369,10 +419,13 @@ networks:
   proxy:
   mirklurk:
     internal: true
+  mirklurk-map-uploads:
+    internal: true
   skyjo:
   sorry:
 
 volumes:
   mirklurk-db:
+  mirklurk-map-shares:
   skyjo-pgdata:
   skyjo-data:
