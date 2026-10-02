@@ -64,7 +64,7 @@ docker compose -f compose.gaming.yml up -d
 | **SearXNG** | searxng, searxng_redis |
 | **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
 | **Utilities** | vaultwarden, syncthing, ntfy |
-| **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup, mirklurk-map |
+| **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup, mirklurk-map, mirklurk-map-uploads |
 
 ## Shared Templates
 
