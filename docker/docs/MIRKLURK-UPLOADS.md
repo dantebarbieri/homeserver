@@ -217,12 +217,44 @@ without a correctly installed boot entry is insufficient. Retain the recorded
 previous generations and existing known-good wiki image; do not garbage-collect
 them during this window.
 
+Verify a **selectable** known-good entry, not just a retained store path/profile.
+The five-generation boot-menu limit can remove the entry for the actually
+booted system. `/run/booted-system` identifies that tested system;
+`/run/current-system` can instead identify a later live activation. If the tested
+entry is missing, an authorized operator can retain it in a separate native
+system profile without changing the selected default or activating packages:
+
+```bash
+sudo bash -eu <<'SH'
+next=$(readlink -f /nix/var/nix/profiles/system)
+good=$(readlink -f /run/booted-system)
+recovery=/nix/var/nix/profiles/system-profiles/known-good-before-wiki-uploads
+test -f /var/lib/mirklurk-upload-deployment/hold
+test ! -e "$recovery"
+test ! -L "$recovery"
+mkdir -p /nix/var/nix/profiles/system-profiles
+nix-env --profile "$recovery" --set "$good"
+"$next/bin/switch-to-configuration" boot
+test "$(readlink -f /nix/var/nix/profiles/system)" = "$next"
+bootctl list --no-pager
+SH
+```
+
+Require the intended upgraded entry to remain default and the named recovery
+entry's `init`, kernel and initrd to match the tested system. The bootloader
+includes this named profile independently of the main profile's five-entry
+limit. Do not overwrite an existing recovery profile without reviewing it.
+
 After that review, the operator may run `sudo reboot` over SSH. The disconnect
 is expected; this reboots the whole host, not just the wiki. Have local or
 independent BMC console access first: the host-proxied `ipmi.danteb.com` cannot
 be the only fallback while the host is down. If boot fails, use the retained
 generation from the boot menu. **An older generation lacks these guards**:
-keep the updater paused and re-establish coordination before any further action.
+before booting that fallback, use the console boot-entry editor to append
+`systemd.mask=docker-compose-update.service systemd.mask=docker-compose-update.timer systemd.mask=nixos-upgrade.service systemd.mask=nixos-upgrade.timer systemd.mask=rclone-offsite-daily.service systemd.mask=rclone-offsite-daily.timer`.
+These native systemd arguments block the unguarded jobs for that boot while
+leaving SSH available. Confirm boot-entry editing is enabled before relying
+on this recovery path; then re-establish coordination before any further action.
 Restoring a previous next-boot selection is a separate reviewed `boot` action,
 never a blind live switch to newer or older packages.
 
