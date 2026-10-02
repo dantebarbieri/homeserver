@@ -1,0 +1,23 @@
+name: Verify deployed Mirklurk map sharing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirklurk-map-production-smoke
+  cancel-in-progress: false
+
+jobs:
+  synthetic-share:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Record a capability-free external client probe
+        run: curl -4 -fsS "https://map.mirklurk.danteb.com/healthz?map-peer-check=actions-${GITHUB_RUN_ID}"
+      - name: Verify one synthetic share and remove its payload
+        run: python3 -B docker/scripts/mirklurk-map-smoke.py --family 4

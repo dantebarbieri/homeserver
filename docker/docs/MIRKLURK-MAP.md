@@ -136,6 +136,16 @@ bash -c '
    capability keys never reached proxy/container logs. Do not upload real saves.
    Confirm other containers and all maintenance/timer state remained unchanged.
 
+`python3 -B docker/scripts/mirklurk-map-smoke.py --family 4` (or `6`)
+performs the synthetic HTTPS lifecycle without printing tokens. The manually
+dispatched **Verify deployed Mirklurk map sharing** workflow runs it from a
+GitHub-hosted external IPv4 client, so acceptance is not limited to LAN hairpin
+traffic. It never deploys and runs only on merged main. Each run uses one of
+that client's six daily creations even after deletion; do not run it in a loop.
+Compare its capability-free health-probe peer with a separate IPv6 client's
+quota bucket. LAN IPv4 hairpin requests may correctly share the router's
+`192.168.50.1` NAT identity; do not mistake that for the Docker proxy identity.
+
 ## Rollback
 
 Previous source: `8ca82beb753ff53dfc8f8b72ad2c6180279ee54e`, tag
