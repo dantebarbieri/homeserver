@@ -910,6 +910,57 @@ in
 
   # ── Backup automation (database dumps + Vaultwarden + rclone offsite) ─────
 
+  systemd.services.mirklurk-snapshot = {
+    description = "Consistent MirkLurk database and uploaded-file snapshot";
+    after = [ "docker.service" ];
+    requires = [ "docker.service" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
+    path = with pkgs; [ docker coreutils gnutar gzip ];
+    serviceConfig = {
+      Type = "oneshot";
+      UMask = "0077";
+      TimeoutStartSec = "30min";
+      TimeoutStopSec = "4min";
+      KillMode = "mixed";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+    };
+    script = ''
+      exec ${pkgs.python3}/bin/python3 /srv/homeserver/docker/scripts/mirklurk-release.py snapshot
+    '';
+  };
+
+  systemd.timers.mirklurk-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 03:15:00";
+      Persistent = true;
+    };
+  };
+
+  systemd.services.mirklurk-backup-check = {
+    description = "Check wiki backup freshness, storage space and inodes";
+    after = [ "docker.service" "mirklurk-snapshot.service" ];
+    requires = [ "docker.service" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
+    path = with pkgs; [ docker ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "2min";
+    };
+    script = ''
+      ${pkgs.python3}/bin/python3 /srv/homeserver/docker/scripts/mirklurk-release.py check-backups
+    '';
+  };
+
+  systemd.timers.mirklurk-backup-check = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* *:45:00";
+      Persistent = true;
+    };
+  };
+
   systemd.services.postgres-backup = {
     description = "Dump databases and copy Vaultwarden data";
     after = [ "docker.service" "network-online.target" ];
@@ -1038,7 +1089,7 @@ in
 
   systemd.services.rclone-offsite-daily = {
     description = "Daily rclone sync of backups, configs, and active data to Google Drive";
-    after = [ "postgres-backup.service" "network-online.target" ];
+    after = [ "postgres-backup.service" "mirklurk-snapshot.service" "network-online.target" ];
     wants = [ "network-online.target" ];
     unitConfig.OnFailure = "ntfy-failure@%n.service";
     serviceConfig = {
@@ -1090,6 +1141,8 @@ in
           --exclude "prometheus/**" \
           --exclude "loki/**" \
           --exclude "alloy/**" \
+          --exclude "mirklurk/backups/.mirklurk-*/**" \
+          --exclude "mirklurk/backup-control/**" \
           --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED docker-data"
       fi

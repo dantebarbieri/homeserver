@@ -47,6 +47,12 @@ services:
         target: /var/lib/mirklurk-sitemap
         bind:
           create_host_path: false
+      - type: bind
+        source: ${DATA}/mirklurk/backup-control
+        target: /var/lib/mirklurk-backup
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - proxy
       - mirklurk

@@ -26,8 +26,10 @@ credential discovery or changes. Those remain under the operator's control.
 | Images | `${DATA}/mirklurk/images` -> `/var/www/html/images` |
 | Branding | `${DATA}/mirklurk/branding` -> `/var/www/html/branding` (read-only) |
 | Sitemap | `${DATA}/mirklurk/sitemap` -> `/var/lib/mirklurk-sitemap` (UID/GID 33, mode 0755 or inherited-setgid 2755) |
+| Backup control | `${DATA}/mirklurk/backup-control` -> `/var/lib/mirklurk-backup` (read-only in app; native `$wgReadOnlyFile` is `read-only`) |
 | Secrets | `${DATA}/mirklurk/secrets` -> individual `/run/secrets/` files |
 | Local SQL dumps | `${DATA}/mirklurk/backups`, owned by `${UID}:${GID}` |
+| Complete snapshots | `${DATA}/mirklurk/backups/snapshots/{daily,weekly}/mirklurk-<UTC timestamp>.tar.gz` |
 
 The app joins the existing `proxy` network and the dedicated `mirklurk`
 network. The database and backup client join **only** `mirklurk`, which is
@@ -93,8 +95,8 @@ password only at
 `/srv/docker/data/mirklurk/secrets/MIRKLURK_ADMIN_PASSWORD`.
 An authorized operator retrieves it directly from that protected file.
 
-Provision the images and backup directories as the host data owner before
-starting. Grant Apache UID 33 access to the new images directory using an
+For a **new installation only**, provision images and backup directories as
+the host data owner before starting. Grant Apache UID 33 access using an
 owner-controlled POSIX ACL, without changing ownership of shared directories:
 
 ```bash
@@ -106,6 +108,13 @@ setfacl -m d:u::rwx,d:u:33:rwx,d:g::---,d:m::rwx,d:o::--- /srv/docker/data/mirkl
 All data bind mounts use `create_host_path: false`. Persistent images remain
 available for later explicitly approved CLI imports even while browser
 uploads are disabled. Game assets stay outside Git.
+
+Do not run the initial-directory examples on populated production storage or
+replace its existing ACLs. The current pinned runtime has browser uploads off;
+the coordinated upload release preserves the existing images mount and adds
+consistent SQL/files snapshots. See [native uploads and recovery](MIRKLURK-UPLOADS.md)
+for the verified storage contract, control-directory provisioning, backup
+interruption, proxy limits and attended activation gates.
 
 `MIRKLURK_TRUSTED_PROXY_CIDRS` maps to the image's
 `MW_TRUSTED_PROXY_CIDRS`. Use the reverse proxy's actual container-side
@@ -218,6 +227,14 @@ with all writers stopped, as described below. Neither flow may run a content
 import/publisher, merge a content PR, or retrieve publishing bot secrets.
 
 ## Backups and restore gate
+
+**With native uploads, the SQL-only dumps described here are supplemental.**
+Restore from the matching SQL/files bundles described in
+[MIRKLURK-UPLOADS.md](MIRKLURK-UPLOADS.md), not the newest SQL dump plus an
+independent copy of live images. The full snapshot runs daily at 03:15 with
+an explicitly approved brief wiki-only interruption; hourly checks monitor
+backup freshness, space and inodes through the existing ntfy failure handler.
+Preparing these timers does not activate them.
 
 `mirklurk-backup` runs as the host data owner in a read-only container with all
 capabilities dropped. It has no Docker socket, no host privilege, no root DB
@@ -531,10 +548,12 @@ bounded batch of already-pending jobs and refreshes the native sitemap.
 No publication or revision rollback is part of this command. Repeating an
 accepted deployment checks/refreshes it without recreating the app again.
 
-The SQL backup is atomic, `--single-transaction`, and gzip/schema-checked using
-the established backup mechanism. Previous restore drills remain the evidence
-for restoreability; this runtime-only release does not modify images/branding
-or run an expensive production restore test. Existing offsite coverage includes
+The supplemental SQL backup is atomic, `--single-transaction`, and
+gzip/schema-checked. With native uploads, the helper additionally requires a
+recent full SQL/files snapshot and healthy storage. Its matching bundle and
+restore drill are the recovery evidence; do not combine newer SQL with an
+arbitrary older images tree. This runtime-only deployment does not modify
+images/branding or run a production restore test. Existing offsite coverage includes
 the new sitemap directory (which is derived data, not a content backup).
 
 After acceptance, record canonical homeserver HEAD, running image, observed
