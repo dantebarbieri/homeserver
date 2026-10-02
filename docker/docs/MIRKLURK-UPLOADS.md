@@ -4,6 +4,10 @@ This supplements [MIRKLURK.md](MIRKLURK.md). The user approved a brief daily
 wiki interruption for consistent backups. **No live deployment, NixOS switch,
 or account grant is authorized by this preparation.** The app image/source pin
 is intentionally unchanged until the coordinated upload revision is reviewed.
+Infrastructure regressions run in GitHub-hosted CI; native upload integration
+belongs to the companion app's CI. The user declined disposable test containers
+on the homeserver. The recovery drills below remain future, separately
+authorized operator actions, not permission to launch test containers there.
 
 ## Verified storage and proxy contract
 
@@ -166,6 +170,10 @@ password. Unit tests/archive integrity alone do not prove restoreability.
    **existing pinned app** with the control mount, then take a baseline with
    `snapshot` and prove its isolated restore. Alternatively take an attended
    offline SQL/files baseline first. Do not bypass the helper's mount guard.
+   The old pinned image does **not** honor the new `$wgReadOnlyFile` path;
+   its baseline is consistent because SQL and files are captured while the
+   frontend is stopped, not because the marker exists. Native maintenance
+   protection takes effect only with the coordinated app release.
 4. Pin the coordinated, reviewed upload build/source in a subsequent reviewed
    homeserver revision and activate only `mirklurk` using the guarded runtime
    procedure. `deploy` now requires a recent complete snapshot as well as its
