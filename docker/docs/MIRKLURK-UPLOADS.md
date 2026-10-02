@@ -189,7 +189,8 @@ sudo bash -eu <<'SH'
 exec 9</run/lock/homeserver-compose.lock
 flock -x -w 30 9
 state=/var/lib/mirklurk-upload-deployment
-test ! -e "$state" && test ! -L "$state"
+test ! -e "$state"
+test ! -L "$state"
 systemctl stop docker-compose-update.timer nixos-upgrade.timer rclone-offsite-daily.timer
 for name in docker-compose-update nixos-upgrade rclone-offsite-daily; do
   test "$(systemctl show "$name.service" -p LoadState --value)" = loaded
