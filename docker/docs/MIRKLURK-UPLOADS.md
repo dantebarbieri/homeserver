@@ -50,8 +50,11 @@ overrides using Apache configuration outside writable storage.
 Preserve the current proxy route, client-IP trust and canonical
 `https://mirklurk.wiki` origin. If the effective proxy limit changes before
 rollout, the owner must ensure it is at least `12m`; do not change a global
-limit for unrelated sites. Require an actual near-10-MiB multipart upload
-end-to-end in acceptance, not just a configuration check.
+limit for unrelated sites. Record an actual authenticated multipart upload
+end-to-end in acceptance, including its byte size, alongside the effective
+proxy/PHP limits and companion hosted boundary tests. Prefer a near-10-MiB
+case when practical, but never claim a small upload proves near-cap transport.
+Configuration checks or unauthenticated rejection alone do not prove upload success.
 
 ## Consistent snapshots
 
@@ -305,8 +308,9 @@ while another coordinated deployment is unfinished.
    only** using native `Special:UserRights` or the existing-user maintenance
    command. Preserve other groups and passwords; never grant administrator,
    bot or rate-limit exemptions. Verify the resulting effective rights, then
-   have the operator perform an authenticated near-cap upload in their own
-   session. Native boundary/lifecycle tests belong to companion hosted CI.
+   have the operator perform an authenticated upload in their own session,
+   recording the tested size and any untested near-cap transport limitation.
+   Native boundary/lifecycle tests belong to companion hosted CI.
    Take a fresh complete snapshot after acceptance and verify public recovery.
 6. Ensure the daily snapshot and hourly health timers were installed through
    the separately reviewed NixOS activation or planned-reboot procedure above,

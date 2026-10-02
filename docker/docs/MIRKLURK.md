@@ -291,7 +291,7 @@ does not build this pinned frontend or advance its image.
 | Provenance | Immutable value |
 |------------|-----------------|
 | Reviewed merged wiki source | `6d36a4dd3c74869bb4cc879b186f9d60e5d0aa80` |
-| Prepared / Compose-pinned image | `sha256:ef30d7dab1581fb04dac7007343f52fed176928739cbd59c245e8920e9c6278f` |
+| Deployed / Compose-pinned image | `sha256:ef30d7dab1581fb04dac7007343f52fed176928739cbd59c245e8920e9c6278f` |
 | Retention tag | `mirklurk-wiki:staged-6d36a4dd3c74` |
 | Retained predecessor | `sha256:b63347127089bf020df2f5f9b843acd6c0d1d34b15cca5f45aab9018630081b9`, tag `mirklurk-wiki:release-493cffa19ffa` |
 
@@ -299,6 +299,13 @@ This release changes runtime policy, not the installed database schema.
 Do not run an installer, schema updater, content publisher or production
 restore during its app-only rollout. Keep every existing mount, secret,
 network, canonical URL and branding file unchanged.
+
+The retained predecessor lacks this release's explicit Apache upload-directory
+protections. It is available for offline recovery, **not a preapproved public
+rollback once private deleted/temp files exist**. Preserve the new Apache
+protections and verify private-path denial before serving an older runtime.
+For temporary maintenance, prefer the current hardened runtime's native
+read-only mechanism rather than blindly reverting the image pin.
 
 Before this pin, the operator installed persistent guarded scheduling through
 the planned NixOS reboot. The unchanged predecessor received only the read-only
@@ -309,6 +316,43 @@ Apache UID 33 write access and a healthy read-only recovered wiki. All owned
 restore resources were removed. The baseline's prior-version/deleted-file
 tables were empty; native lifecycle/boundary coverage comes from the
 [companion upload CI](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/37017031601).
+
+The 2026-10-02 app-only cutover used homeserver revision
+`952105270bcdb85fdab01d6d710bb85cee35aa0b`. All 3,051 images/branding files
+present immediately before cutover retained their bytes, owners and modes;
+every other container kept its identity. Readiness took 11.3 seconds, with one
+public probe failure and a sampled 1.5-second failure-to-recovery interval
+(not an exact outage measurement).
+
+Native runtime checks confirmed the configured upload limits/validator,
+ordinary-user rates and effective rights. The active Apache vhost matched
+reviewed source, private deleted/temp paths returned 403, and existing
+originals/thumbnails returned 200. Verified existing `DavidLokison` (user 7)
+received only `confirmed`: upload and own-file replacement are allowed,
+while broad replacement, shared replacement, user-rights management and
+rate-limit exemption remain denied. The operator's existing sysop account
+`DanteB` (user 4) successfully uploaded `File:Icon184x184.png`: 5,201 bytes,
+184 x 184 PNG, native upload log 1771/revision 4327. Public original bytes
+matched native SHA-1 and its generated thumbnail returned 200. This proves
+authenticated functional upload, **not near-cap production transport**;
+exact boundaries remain covered by the companion hosted CI.
+
+The post-cutover bundle `mirklurk-20261002T160306699366Z.tar.gz` is
+22,554,044 bytes, SHA-256
+`7f2f4f7ec65ebff40bf9c9108508af6c74f577b87c0a50f846d1ed5683b08455`.
+Its encrypted offsite roundtrip is identical and includes the actual uploaded
+image, its SQL image row and user 7's `confirmed` membership. The same frontend
+recovered with a sampled 4.6-second snapshot interruption; backing containers
+were unchanged. The live test image is no longer an acceptance dependency:
+its owner may remove it through MediaWiki without invalidating this retained
+recovery evidence.
+
+At 11:20 CDT the operator removed only this deployment's verified hold and
+resumed all five timers: snapshot, backup check, offsite sync, OS upgrade and
+Docker update. The handback verified future next triggers, successful inactive
+jobs, unchanged healthy containers and David's scoped rights. No timer stamps
+were reset, services manually started, or further reboot performed. Subsequent
+deployments must establish their own coordinated maintenance window.
 
 Keep the deployment hold through runtime acceptance and the post-release
 snapshot. A configured `upload` permission alone is not proof uploads are
