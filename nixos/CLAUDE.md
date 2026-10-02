@@ -84,6 +84,13 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 | `drive-health-check` | Every 6 hours | RAID + LVM health → ntfy |
 | `mdadm-scrub` | Weekly Sunday 02:00 | RAID parity scrub |
 
+The root-owned `/var/lib/mirklurk-upload-deployment/hold` file gates both the
+service and timer for Docker updates, OS upgrades, offsite sync, wiki snapshots,
+and wiki backup checks. It survives a planned reboot without stopping the
+existing SQL backup sidecar. See `docker/docs/MIRKLURK-UPLOADS.md` before creating
+or removing it; never clear another operator's hold or resume timers before
+coordinated deployment acceptance.
+
 Terminal mail/calendar packages, the login calendar, and `vdirsyncer-sync` were
 retired in September 2026. Preserve existing user data and credentials; do not
 reintroduce the timer just because optional `mail-config/` templates remain.

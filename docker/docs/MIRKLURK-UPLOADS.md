@@ -1,13 +1,14 @@
 # MirkLurk native uploads: storage and recovery
 
 This supplements [MIRKLURK.md](MIRKLURK.md). The user approved a brief daily
-wiki interruption for consistent backups. **No live deployment, NixOS switch,
-or account grant is authorized by this preparation.** The app image/source pin
-is intentionally unchanged until the coordinated upload revision is reviewed.
+wiki interruption for consistent backups. **This runbook does not itself
+authorize a live deployment, reboot, restore drill or account grant.**
+The app image/source pin stays unchanged until the coordinated upload revision
+is reviewed and its deployment gates pass.
 Infrastructure regressions run in GitHub-hosted CI; native upload integration
-belongs to the companion app's CI. The user declined disposable test containers
-on the homeserver. The recovery drills below remain future, separately
-authorized operator actions, not permission to launch test containers there.
+belongs to the companion app's CI. General-purpose disposable app smoke tests
+must not run on the homeserver. A scoped isolated restore drill requires separate
+authorization; approving it does not authorize unrelated test containers.
 
 ## Verified storage and proxy contract
 
@@ -162,11 +163,88 @@ marker. Independent newer SQL needs a separately proven file/history match.
 The initial administrator password file may no longer contain the current
 password. Unit tests/archive integrity alone do not prove restoreability.
 
+## Installing scheduling with an operator-planned reboot
+
+Use the normal, reviewed `/etc/nixos/configuration.nix` configuration, which
+resolves to `/srv/homeserver/nixos/configuration.nix` and imports the tracked
+hardware configuration. Do not substitute an old pinned generation for an
+operator's planned `nixos-rebuild boot --upgrade`.
+
+The root-owned `/var/lib/mirklurk-upload-deployment/hold` file is a **deployment
+hold**, not MediaWiki's native read-only marker. While it exists, declarative
+`ConditionPathExists` guards prevent both the services and timers for
+`docker-compose-update`, `nixos-upgrade`, `rclone-offsite-daily`,
+`mirklurk-snapshot`, and `mirklurk-backup-check` from starting. It survives
+reboot, blocks persistent-timer catch-up, and prevents the scheduled OS upgrade
+from replacing the attended boot selection. It does not stop existing jobs,
+block arbitrary root/CLI commands, or pause the six-hour SQL sidecar.
+
+Only after the guard changes are merged and the coordinator has confirmed the
+exact clean canonical revision and no competing host writers, run this root
+preparation. It pauses timers but never kills services or changes containers.
+If it fails, leave timers paused and investigate before building or rebooting.
+
+```bash
+sudo bash -eu <<'SH'
+exec 9</run/lock/homeserver-compose.lock
+flock -x -w 30 9
+state=/var/lib/mirklurk-upload-deployment
+test ! -e "$state" && test ! -L "$state"
+systemctl stop docker-compose-update.timer nixos-upgrade.timer rclone-offsite-daily.timer
+for name in docker-compose-update nixos-upgrade rclone-offsite-daily; do
+  test "$(systemctl show "$name.service" -p LoadState --value)" = loaded
+  test "$(systemctl show "$name.service" -p ActiveState --value)" = inactive
+done
+mkdir -m 0700 "$state"
+umask 077
+printf '%s\n' 'Awaiting coordinated post-reboot wiki acceptance.' > "$state/hold"
+readlink -f /run/current-system > "$state/previous-active"
+readlink -f /nix/var/nix/profiles/system > "$state/previous-boot"
+git -c safe.directory=/srv/homeserver -C /srv/homeserver rev-parse HEAD > "$state/source-revision"
+SH
+
+sudo nixos-rebuild boot --upgrade
+sudo bootctl list --no-pager
+```
+
+`boot --upgrade` can update packages/kernel and the next-boot entry; it does
+**not** activate those changes or restart the wiki now. Do not use `switch`.
+Keep the hold if the build/bootloader installation fails. Before reboot, verify
+build success, the intended default boot entry, the unchanged running generation,
+and all ten service/timer guards in the selected generation. A successful build
+without a correctly installed boot entry is insufficient. Retain the recorded
+previous generations and existing known-good wiki image; do not garbage-collect
+them during this window.
+
+After that review, the operator may run `sudo reboot` over SSH. The disconnect
+is expected; this reboots the whole host, not just the wiki. Have local or
+independent BMC console access first: the host-proxied `ipmi.danteb.com` cannot
+be the only fallback while the host is down. If boot fails, use the retained
+generation from the boot menu. **An older generation lacks these guards**:
+keep the updater paused and re-establish coordination before any further action.
+Restoring a previous next-boot selection is a separate reviewed `boot` action,
+never a blind live switch to newer or older packages.
+
+After reconnecting, verify the booted/running generation, SSH/networking,
+Docker and storage, the original wiki/DB/SQL-backup health and image identities,
+and all five guarded timers/services loaded but inactive with the hold present.
+Inspect failed units before proceeding. Do not remove the hold just because
+reboot succeeded. Baseline capture, offsite roundtrip, isolated restore and
+app-only rollout remain separate authorized steps below. Refresh any staged
+helper's exact canonical-SHA guard after reviewed source changes; never bypass it.
+
+Only after joint acceptance, verify that this is still the deployment's own
+hold, remove that **one file**, and start the snapshot/check/offsite timers,
+then the OS-upgrade and Docker-updater timers. Inspect actual next triggers
+and results; persistent timers may run immediately when resumed. Never delete
+another operator's hold, clear the entire directory, or resume the updater
+while another coordinated deployment is unfinished.
+
 ## Attended deployment sequence
 
 1. Coordinate reviewed app and infrastructure revisions, exact local image
-   build and permissions. The daily interruption is approved; **live activation
-   is not**. Pause the updater before merge using the existing maintenance
+   build and permissions, with explicit authorization for live activation.
+   Pause the updater before merge using the existing maintenance
    procedure. Confirm no manual writers, inventory/hash existing images and
    branding without exposing contents, and recheck actual mounts.
 2. Provision only the dedicated backup-control path as above before merging
@@ -190,8 +268,9 @@ password. Unit tests/archive integrity alone do not prove restoreability.
    the authorized wiki admin verify exact `DavidLokison` in `Special:ListUsers`
    and grant **confirmed only** through `Special:UserRights`, never administrator.
    No production username or account rights were changed by this preparation.
-6. At a separately reviewed NixOS activation, install the daily snapshot and
-   hourly health timers; a full switch may include other pending OS changes.
+6. Install the daily snapshot and hourly health timers through the separately
+   reviewed NixOS activation or planned-reboot procedure above, keeping the
+   deployment hold until acceptance; a full switch may include other pending OS changes.
    Verify timers, ntfy failures and actual offsite recovery. Until installed,
    an authorized operator must run/check snapshots at least daily. A committed
    timer is not a running schedule. Resume the updater after joint acceptance.

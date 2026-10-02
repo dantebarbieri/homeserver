@@ -10,6 +10,7 @@ let
   # Subscribe on your phone — see NTFY-PHONE-SETUP.md
   ntfyUrl   = "https://ntfy.danteb.com";
   ntfyTopic = "homeserver-alerts";
+  mirklurkDeploymentCondition = "!/var/lib/mirklurk-upload-deployment/hold";
 
   # General-purpose CLI helper (available in $PATH as `ntfy-notify`)
   #   Usage: ntfy-notify "Title" "Message body" [priority] [tags]
@@ -590,6 +591,7 @@ in
     requires = [ "docker.service" ];
     wants = [ "network-online.target" ];
     unitConfig.OnFailure = "ntfy-failure@%n.service";
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils pkgs.findutils pkgs.util-linux ];
     environment = {
       GIT_SSH_COMMAND = "ssh -i /root/.ssh/docker-compose-deploy -o StrictHostKeyChecking=accept-new";
@@ -674,6 +676,7 @@ in
 
   systemd.timers.docker-compose-update = {
     wantedBy = [ "timers.target" ];
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     timerConfig = {
       OnCalendar = "*-*-* 04:00:00";
       Persistent = true;
@@ -714,6 +717,8 @@ in
     operation = "boot";
     allowReboot = false;
   };
+  systemd.services.nixos-upgrade.unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
+  systemd.timers.nixos-upgrade.unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
 
   # ── Drive health monitoring (RAID + LVM → ntfy) ───────────────────────────
 
@@ -915,6 +920,7 @@ in
     after = [ "docker.service" ];
     requires = [ "docker.service" ];
     unitConfig.OnFailure = "ntfy-failure@%n.service";
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     path = with pkgs; [ docker coreutils gnutar gzip ];
     serviceConfig = {
       Type = "oneshot";
@@ -932,6 +938,7 @@ in
 
   systemd.timers.mirklurk-snapshot = {
     wantedBy = [ "timers.target" ];
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     timerConfig = {
       OnCalendar = "*-*-* 03:15:00";
       Persistent = true;
@@ -943,6 +950,7 @@ in
     after = [ "docker.service" "mirklurk-snapshot.service" ];
     requires = [ "docker.service" ];
     unitConfig.OnFailure = "ntfy-failure@%n.service";
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     path = with pkgs; [ docker ];
     serviceConfig = {
       Type = "oneshot";
@@ -955,6 +963,7 @@ in
 
   systemd.timers.mirklurk-backup-check = {
     wantedBy = [ "timers.target" ];
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     timerConfig = {
       OnCalendar = "*-*-* *:45:00";
       Persistent = true;
@@ -1092,6 +1101,7 @@ in
     after = [ "postgres-backup.service" "mirklurk-snapshot.service" "network-online.target" ];
     wants = [ "network-online.target" ];
     unitConfig.OnFailure = "ntfy-failure@%n.service";
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
@@ -1165,6 +1175,7 @@ in
 
   systemd.timers.rclone-offsite-daily = {
     wantedBy = [ "timers.target" ];
+    unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
     timerConfig = {
       OnCalendar = "*-*-* 03:30:00";
       Persistent = true;
