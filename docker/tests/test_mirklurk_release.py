@@ -391,11 +391,14 @@ class MirklurkSnapshotTests(unittest.TestCase):
                 raise release.ReleaseError("start failed")
             self.live["State"]["Running"] = True
             return ""
-        if "--once" in args:
+        if "--snapshot" in args:
             self.assertFalse(self.live["State"]["Running"])
             if self.failure == "dump":
                 raise release.ReleaseError("dump failed")
-            (self.root / "backups/daily/mirklurk-2026-10-02.sql.gz").write_bytes(gzip.compress(self.sql))
+            self.assertIn("--snapshot)", kwargs["input"])
+            snapshot_id = args[args.index("--snapshot") + 1]
+            (self.root / f"backups/.mirklurk-snapshot-sql-{snapshot_id}.sql.gz").write_bytes(gzip.compress(self.sql))
+            (self.root / "backups/daily/mirklurk-2026-10-02.sql.gz").write_bytes(b"unrelated online dump")
             return ""
         if "--healthcheck" in args:
             return ""

@@ -67,6 +67,12 @@ is not a writer-drain barrier.
 
 With the frontend stopped, the helper requests a fresh checked SQL dump from
 the scoped sidecar and archives it with all of `images/` and `branding/`.
+It streams the reviewed backup script to the existing client and requests a
+unique snapshot SQL file; it never reads the replaceable daily SQL filename,
+which an overlapping six-hour online dump could overwrite. Streaming also
+avoids a stale file-bind inode after a Git update, without recreating the
+sidecar. The unique intermediate SQL is removed after capture and excluded
+from offsite sync.
 Each bundle contains:
 
 | Member | Coverage |

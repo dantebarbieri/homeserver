@@ -41,13 +41,13 @@ def require(condition, message):
         raise ReleaseError(message)
 
 
-def run(*args, timeout=60):
+def run(*args, timeout=60, input=None):
     environment = dict(os.environ)
     if args[0] == "git":
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_SSH_COMMAND"] = environment.get("GIT_SSH_COMMAND", "ssh") + " -o BatchMode=yes"
     try:
-        result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=environment)
+        result = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=environment, input=input)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ReleaseError(f"{args[0]} unavailable or timed out") from error
     # Compose/inspect output can contain secrets. Never echo captured output on failure.
@@ -310,6 +310,11 @@ def snapshot():
         str(DATA / "images"), str(DATA / "branding"), str(backups / "daily")).splitlines())
     require(shutil.disk_usage(backups).free >= size + 5 * 1024**3,
             "Insufficient space for a complete snapshot plus 5 GiB reserve")
+    now = datetime.now(timezone.utc)
+    snapshot_id = now.strftime("%Y%m%dT%H%M%S%fZ")
+    name = "mirklurk-" + snapshot_id + ".tar.gz"
+    dump = backups / f".mirklurk-snapshot-sql-{snapshot_id}.sql.gz"
+    require(not os.path.lexists(dump), "Snapshot SQL identifier already exists")
     lock = DATA / "backup-control/read-only"
     # Exclusive creation refuses an existing operator lock, including symlinks.
     descriptor = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
@@ -319,8 +324,6 @@ def snapshot():
         identity = os.fstat(handle.fileno())
     stopped = False
     restored = False
-    now = datetime.now(timezone.utc)
-    name = "mirklurk-" + now.strftime("%Y%m%dT%H%M%S%fZ") + ".tar.gz"
     try:
         with tempfile.TemporaryDirectory(prefix=".mirklurk-snapshot-", dir=backups) as temporary:
             staging = Path(temporary)
@@ -332,15 +335,13 @@ def snapshot():
                 state = inspect(identifier)["State"]
                 require(not state["Running"] and state["ExitCode"] == 0 and not state.get("OOMKilled"),
                         "Frontend did not stop cleanly; no consistent snapshot taken")
-                started = time.time()
-                run("docker", "exec", "mirklurk-backup", "timeout", "--kill-after=5s", "280s",
-                    "bash", "/opt/mirklurk-backup.sh", "--once", timeout=300)
-                dumps = list((backups / "daily").glob("mirklurk-????-??-??.sql.gz"))
-                require(dumps, "Backup client did not publish SQL")
-                dump = max(dumps, key=lambda path: path.stat().st_mtime)
-                require(not dump.is_symlink() and dump.stat().st_mtime >= started - 1,
-                        "Backup client did not publish fresh SQL")
-                shutil.copyfile(dump, staging / "database.sql.gz")
+                # Stream the reviewed script: a file bind may still reference
+                # its old inode after git updates, without recreating the sidecar.
+                run("docker", "exec", "-i", "mirklurk-backup", "timeout", "--kill-after=5s", "280s",
+                    "bash", "-s", "--", "--snapshot", snapshot_id, timeout=300,
+                    input=Path(__file__).with_name("mirklurk-backup.sh").read_text())
+                require(dump.is_file() and not dump.is_symlink(), "Backup client did not publish snapshot SQL")
+                os.replace(dump, staging / "database.sql.gz")
                 (staging / "manifest.json").write_text(json.dumps({
                     "format": 1, "created_utc": now.isoformat(), "image": live["Image"],
                     "source": live["Config"]["Labels"].get("org.opencontainers.image.revision"),
@@ -373,6 +374,8 @@ def snapshot():
                             and path.stat().st_mtime < time.time() - days * 86400):
                         path.unlink()
     finally:
+        if dump.exists() and not dump.is_symlink():
+            dump.unlink()
         if not stopped or restored:
             current = lock.lstat()
             require((current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino),

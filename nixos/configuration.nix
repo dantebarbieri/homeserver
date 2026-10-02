@@ -1142,6 +1142,7 @@ in
           --exclude "loki/**" \
           --exclude "alloy/**" \
           --exclude "mirklurk/backups/.mirklurk-*/**" \
+          --exclude "mirklurk/backups/.mirklurk-snapshot-sql-*.sql.gz" \
           --exclude "mirklurk/backup-control/**" \
           --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED docker-data"
