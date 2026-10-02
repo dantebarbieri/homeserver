@@ -3,8 +3,9 @@
 This supplements [MIRKLURK.md](MIRKLURK.md). The user approved a brief daily
 wiki interruption for consistent backups. **This runbook does not itself
 authorize a live deployment, reboot, restore drill or account grant.**
-The app image/source pin stays unchanged until the coordinated upload revision
-is reviewed and its deployment gates pass.
+The reviewed app image/source pin and completed baseline recovery evidence are
+recorded in [the release history](MIRKLURK.md#native-upload-runtime-release).
+Activation still requires the coordinated deployment and acceptance gates below.
 Infrastructure regressions run in GitHub-hosted CI; native upload integration
 belongs to the companion app's CI. General-purpose disposable app smoke tests
 must not run on the homeserver. A scoped isolated restore drill requires separate
@@ -151,9 +152,12 @@ Compare page/revision/user counts, known page text, `image`/`oldimage`/
 `filearchive` records, original/prior/deleted-file hashes and approved branding.
 Verify UID/GID 33 can traverse/read/write the restored tree, thumbnails
 regenerate, and `/images/deleted` and `/images/temp` are denied over HTTP.
-Do not publish private files to prove they exist. Exercise upload, replacement,
-deletion and undelete against disposable data, then remove only the explicitly
-named disposable resources.
+Do not publish private files to prove they exist. For an upload-enabled recovery
+point, exercise upload, replacement, deletion and undelete against disposable
+data. The initial uploads-disabled baseline is restored with its captured old
+runtime; it cannot exercise these writes. Native lifecycle coverage for that
+transition comes from the companion app CI, followed by authenticated live
+upload acceptance. Remove only the explicitly named disposable resources.
 
 For real recovery, keep writers offline, restore **SQL and both trees from
 the same bundle**, preserve numeric ownership/ACLs, supply matching secrets

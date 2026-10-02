@@ -110,9 +110,10 @@ available for later explicitly approved CLI imports even while browser
 uploads are disabled. Game assets stay outside Git.
 
 Do not run the initial-directory examples on populated production storage or
-replace its existing ACLs. The current pinned runtime has browser uploads off;
-the coordinated upload release preserves the existing images mount and adds
-consistent SQL/files snapshots. See [native uploads and recovery](MIRKLURK-UPLOADS.md)
+replace its existing ACLs. The pinned native-upload runtime permits bounded
+uploads for eligible autoconfirmed/confirmed users and admins, preserves the
+existing images mount, and requires consistent SQL/files snapshots.
+See [native uploads and recovery](MIRKLURK-UPLOADS.md)
 for the verified storage contract, control-directory provisioning, backup
 interruption, proxy limits and attended activation gates.
 
@@ -179,8 +180,9 @@ publisher, upload API, installer or schema updater for a branding rollout.
 ## First installation, before publishing
 
 The image owns the account policy: public reading and self-registration,
-registered-user editing, anonymous editing off, uploads off, QuestyCaptcha,
-and rate limits. Email is disabled initially, so email-based password recovery
+registered-user editing, anonymous editing off, bounded native uploads for
+eligible users, QuestyCaptcha, and rate limits. Email is disabled initially,
+so email-based password recovery
 is unavailable. Follow the external repository's installation and content
 licensing instructions; never upload raw game files or decompiled source.
 
@@ -283,6 +285,39 @@ The homeserver's normal daily build does not rebuild the wiki, perform schema
 migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
+
+### Native-upload runtime release
+
+| Provenance | Immutable value |
+|------------|-----------------|
+| Reviewed merged wiki source | `6d36a4dd3c74869bb4cc879b186f9d60e5d0aa80` |
+| Prepared / Compose-pinned image | `sha256:ef30d7dab1581fb04dac7007343f52fed176928739cbd59c245e8920e9c6278f` |
+| Retention tag | `mirklurk-wiki:staged-6d36a4dd3c74` |
+| Retained predecessor | `sha256:b63347127089bf020df2f5f9b843acd6c0d1d34b15cca5f45aab9018630081b9`, tag `mirklurk-wiki:release-493cffa19ffa` |
+
+This release changes runtime policy, not the installed database schema.
+Do not run an installer, schema updater, content publisher or production
+restore during its app-only rollout. Keep every existing mount, secret,
+network, canonical URL and branding file unchanged.
+
+Before this pin, the operator installed persistent guarded scheduling through
+the planned NixOS reboot. The unchanged predecessor received only the read-only
+backup-control mount, then a consistent SQL/files baseline. On 2026-10-02 its
+encrypted offsite roundtrip was byte-identical; an isolated restore passed with
+3,049 byte/owner/mode-preserved files, matching SQL text/count/image fingerprints,
+Apache UID 33 write access and a healthy read-only recovered wiki. All owned
+restore resources were removed. The baseline's prior-version/deleted-file
+tables were empty; native lifecycle/boundary coverage comes from the
+[companion upload CI](https://github.com/dantebarbieri/mirklurk-wiki/actions/runs/37017031601).
+
+Keep the deployment hold through runtime acceptance and the post-release
+snapshot. A configured `upload` permission alone is not proof uploads are
+enabled: verify the native global flag and effective user rights. Grant only
+the explicitly authorized `confirmed` membership after runtime acceptance,
+never `sysop`, `bot` or rate-limit exemptions. An authenticated live upload
+uses the operator's own session; do not discover/reset credentials or mint a
+session for another user. Follow [the upload runbook](MIRKLURK-UPLOADS.md) before
+resuming timers.
 
 ### DiscussionTools schema release
 
