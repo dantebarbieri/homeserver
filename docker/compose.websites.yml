@@ -137,12 +137,12 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: mirklurk-map:5520bd0
+    image: mirklurk-map:8ca82be
     build:
-      context: "https://github.com/dantebarbieri/mirklurk-map.git#5520bd07e3158757b14cf14281bca1f6bdcf1679"
+      context: "https://github.com/dantebarbieri/mirklurk-map.git#8ca82beb753ff53dfc8f8b72ad2c6180279ee54e"
       labels:
         org.opencontainers.image.source: https://github.com/dantebarbieri/mirklurk-map
-        org.opencontainers.image.revision: 5520bd07e3158757b14cf14281bca1f6bdcf1679
+        org.opencontainers.image.revision: 8ca82beb753ff53dfc8f8b72ad2c6180279ee54e
     container_name: mirklurk-map
     read_only: true
     cap_drop: [ALL]
