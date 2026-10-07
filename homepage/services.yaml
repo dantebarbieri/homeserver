@@ -33,6 +33,7 @@
           type: jellyfin
           url: http://jellyfin:8096
           key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
+          version: 2
           enableNowPlaying: true
     - Seerr:
         icon: seerr.svg
@@ -182,10 +183,23 @@
         server: my-docker
         container: suwayomi
         widget:
-            type: suwayomi
-            url: http://suwayomi:4567
+            type: customapi
+            url: http://suwayomi-widget:8080/stats
             username: "{{HOMEPAGE_VAR_SUWAYOMI_USER}}"
             password: "{{HOMEPAGE_VAR_SUWAYOMI_PASS}}"
+            mappings:
+              - field: download
+                label: Downloaded
+                format: number
+              - field: nondownload
+                label: Not Downloaded
+                format: number
+              - field: read
+                label: Read
+                format: number
+              - field: unread
+                label: Unread
+                format: number
     - SearXNG:
         icon: searxng.svg
         href: https://searxng.danteb.com
@@ -430,9 +444,9 @@
     - Custom Services:
         - MirkLurk Wiki:
             icon: mdi-book-open-page-variant
-            href: https://wiki.mirklurk.danteb.com
+            href: https://mirklurk.wiki
             description: Community game reference
-            siteMonitor: https://wiki.mirklurk.danteb.com
+            siteMonitor: https://mirklurk.wiki
             server: my-docker
             container: mirklurk
         - Mirklurk World Viewer:
@@ -456,34 +470,6 @@
             siteMonitor: https://recipe.danteb.com
             server: my-docker
             container: recipe
-        - GPT-5.6 Sol Recipe:
-            icon: mdi-robot
-            href: https://gpt-sol.recipe.danteb.com
-            description: GPT-5.6 Sol implementation
-            siteMonitor: https://gpt-sol.recipe.danteb.com
-            server: my-docker
-            container: recipe-gpt-sol
-        - Gemini 3.1 Pro Recipe:
-            icon: mdi-creation
-            href: https://gemini.recipe.danteb.com
-            description: Gemini 3.1 Pro implementation
-            siteMonitor: https://gemini.recipe.danteb.com
-            server: my-docker
-            container: recipe-gemini
-        - Claude Opus 5 Recipe:
-            icon: mdi-brain
-            href: https://claude.recipe.danteb.com
-            description: Claude Opus 5 implementation
-            siteMonitor: https://claude.recipe.danteb.com
-            server: my-docker
-            container: recipe-claude
-        - Grok 4.5 Recipe:
-            icon: mdi-rocket-launch
-            href: https://grok.recipe.danteb.com
-            description: Grok 4.5 implementation
-            siteMonitor: https://grok.recipe.danteb.com
-            server: my-docker
-            container: recipe-grok
         - Skyjo:
             icon: mdi-cards-playing
             href: https://skyjo.danteb.com

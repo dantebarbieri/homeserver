@@ -1,5 +1,5 @@
 # Dashboard and monitoring services
-# homepage, dashdot, uptime-kuma
+# homepage, suwayomi-widget, dashdot, uptime-kuma
 
 services:
   homepage:
@@ -52,9 +52,38 @@ services:
       HOMEPAGE_VAR_CHANGEDETECTION_KEY: ${HOMEPAGE_VAR_CHANGEDETECTION_KEY}
     networks:
       - proxy
+      - homepage-widgets
     volumes:
       - ${HOMEPAGE_CONFIG_PATH}:/app/config
       - /var/run/docker.sock:/var/run/docker.sock
+
+  suwayomi-widget:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: suwayomi-widget:latest
+    build:
+      context: ./dockerfiles/suwayomi-widget
+      pull: true
+    container_name: suwayomi-widget
+    environment:
+      SUWAYOMI_URL: http://suwayomi:4567
+      SUWAYOMI_USERNAME: ${HOMEPAGE_VAR_SUWAYOMI_USER}
+      SUWAYOMI_PASSWORD: ${HOMEPAGE_VAR_SUWAYOMI_PASS}
+    networks:
+      - homepage-widgets
+      - suwayomi
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/stats',{headers:{Authorization:'Basic '+Buffer.from(process.env.SUWAYOMI_USERNAME+':'+process.env.SUWAYOMI_PASSWORD).toString('base64')},signal:AbortSignal.timeout(15000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
 
   dashdot:
     extends:
@@ -91,3 +120,6 @@ services:
 
 networks:
   proxy:
+  homepage-widgets:
+    internal: true
+  suwayomi:

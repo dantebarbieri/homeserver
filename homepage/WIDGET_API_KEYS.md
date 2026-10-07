@@ -32,6 +32,31 @@ and look for `X-Plex-Token`.
 3. Click **+** to create a new key, name it `homepage`.
 4. Copy the generated key.
 
+Jellyfin 12 / 10.12 and newer requires `version: 2` in the widget. The old
+`/emby/...` routes return 404; the existing API key does not need replacing.
+
+---
+
+## Suwayomi - `HOMEPAGE_VAR_SUWAYOMI_USER` / `HOMEPAGE_VAR_SUWAYOMI_PASS`
+
+Keep Suwayomi's **UI_LOGIN** mode. Set these variables to the UI account whose
+library and reading progress should appear on Homepage, not the Postgres
+credentials. The same variables are passed to Homepage and `suwayomi-widget`.
+After changing them, recreate both services from the main Compose entry point:
+`docker compose up -d homepage suwayomi-widget`.
+
+Homepage's built-in Suwayomi widget sends Basic Auth, which UI_LOGIN does not
+accept for GraphQL. The local adapter logs in through Suwayomi's GraphQL API,
+keeps its bearer token only in memory, and logs in again once if it expires.
+Homepage's `customapi` widget reads the four library chapter counts from its
+authenticated, read-only `/stats` endpoint. Failures remain visible as errors,
+not zero counts. Its health check verifies the authenticated upstream query.
+
+The adapter has no published ports or NPM host and is not on `proxy`. Only
+Homepage shares its internal `homepage-widgets` network; the adapter also joins
+`suwayomi` to reach the server. Do not disable Suwayomi authentication or expose
+the adapter publicly to make the widget work.
+
 ---
 
 ## Seerr — `HOMEPAGE_VAR_SEERR_KEY`
@@ -209,6 +234,8 @@ Grafana's Homepage widget uses the built-in admin credentials (same as login).
 |---|---|---|
 | `HOMEPAGE_VAR_PLEX_TOKEN` | Plex | Account token |
 | `HOMEPAGE_VAR_JELLYFIN_KEY` | Jellyfin | API key |
+| `HOMEPAGE_VAR_SUWAYOMI_USER` | Suwayomi | UI_LOGIN username |
+| `HOMEPAGE_VAR_SUWAYOMI_PASS` | Suwayomi | UI_LOGIN password |
 | `HOMEPAGE_VAR_SEERR_KEY` | Seerr | API key |
 | `HOMEPAGE_VAR_IMMICH_KEY` | Immich | API key |
 | `HOMEPAGE_VAR_KOMGA_USER` | Komga | Username |

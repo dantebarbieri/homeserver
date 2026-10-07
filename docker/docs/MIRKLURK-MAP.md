@@ -67,8 +67,7 @@ discrepancy is separate from this release. Always use the HTTPS URL.
 
 `scripts/mirklurk-map-proxy.sh --check` verifies the exact existing host through
 NPM's supported REST API. `--apply` installs only this reviewed Advanced block,
-using the existing `bmc-ip-monitor` credential environment (same method as
-`configure-recipe-app-proxies.sh`). It refuses unexpected routing, extra domains,
+using the existing `bmc-ip-monitor` credential environment. It refuses unexpected routing, extra domains,
 custom locations, caching, missing TLS or unknown nonempty Advanced content.
 It never prints credentials, edits the database, or patches generated files.
 NPM performs its normal configuration reload; no container restart is needed.
