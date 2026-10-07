@@ -16,7 +16,6 @@ Docker Compose configuration for my home server, organized into logical service 
 ├── compose.matrix.yml      # Matrix communication stack (Synapse, Element, Coturn, LiveKit)
 ├── compose.media.yml       # Media consumption (Plex, Jellyfin, ARM, Komga, Suwayomi)
 ├── compose.nextcloud.yml   # Nextcloud cloud storage stack
-├── compose.recipe-apps.yml # Isolated model-generated recipe applications
 ├── compose.romm.yml        # RomM library and MariaDB
 ├── compose.searxng.yml     # SearXNG search engine stack
 ├── compose.starr.yml       # *arr apps + Seerr + Whisper ASR + Tdarr
@@ -52,14 +51,13 @@ docker compose -f compose.gaming.yml up -d
 |----------|----------|
 | **Core** | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | **Auth** | authelia, authelia_postgres, authelia_redis |
-| **Dashboards** | homepage, dashdot |
+| **Dashboards** | homepage, suwayomi-widget, dashdot |
 | **Downloads** | vpn-netns, gluetun, qbittorrent, qbit-port-sync, qbit-manage, sabnzbd, flaresolverr |
 | **Gaming** | hytale-server, minecraft-server, rlcraft-minecraft-server, satisfactory-server |
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
 | **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres |
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |
-| **Recipe apps** | recipe-gpt-sol, recipe-gemini, recipe-claude, recipe-grok |
 | **RomM** | romm, romm-db |
 | **SearXNG** | searxng, searxng_redis |
 | **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
@@ -103,9 +101,11 @@ See [TDARR.md](docs/TDARR.md) for the full Tdarr configuration guide (HEVC compr
 
 See [`../docs/ROMM.md`](../docs/ROMM.md) for ROM library storage, native authentication, reverse proxy, and Steam Deck setup.
 
-## Model Recipe Apps
+## Recipe Collection
 
-See [RECIPE-APPS.md](docs/RECIPE-APPS.md) for immutable source versions, storage, proxy setup, validation, and rollback.
+The handwritten `recipe` service at `https://recipe.danteb.com` remains in
+`compose.websites.yml`. The four model-generated experiments are retired; see
+[RECIPE-APPS.md](docs/RECIPE-APPS.md) for cleanup and retained data.
 
 ## MirkLurk Wiki
 

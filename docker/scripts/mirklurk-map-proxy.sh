@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-# Same supported API path as configure-recipe-app-proxies.sh. Credentials stay
-# inside the existing monitor; no database edits or generated-config patches.
+# Use NPM's supported REST API; credentials stay inside the existing monitor.
+# No database edits or generated-config patches.
 mode="${1:---check}"
 case "$mode" in --check|--apply) ;; *) echo "Usage: $0 [--check|--apply]" >&2; exit 1 ;; esac
 if [ "${MAP_PROXY_INNER:-}" != 1 ]; then
