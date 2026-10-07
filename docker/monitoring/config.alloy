@@ -10,6 +10,13 @@ discovery.docker "containers" {
 discovery.relabel "docker" {
   targets = discovery.docker.containers.targets
 
+  // This service intentionally retains no logs because errors can contain capabilities.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "mirklurk-map-uploads"
+    action        = "drop"
+  }
+
   rule {
     source_labels = ["__meta_docker_container_name"]
     target_label  = "container"
@@ -17,12 +24,12 @@ discovery.relabel "docker" {
   }
 
   rule {
-    source_labels = ["__meta_docker_compose_service"]
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
   }
 
   rule {
-    source_labels = ["__meta_docker_compose_project"]
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
     target_label  = "project"
   }
 }

@@ -143,6 +143,7 @@ services:
     build:
       context: dockerfiles/qbit-manage
     container_name: qbit-manage
+    profiles: ["qbit-manage"]
     network_mode: "container:vpn-netns"
     environment:
       QBT_RUN: false
@@ -188,7 +189,7 @@ services:
     environment:
       NETNS_CONTAINER: vpn-netns
       NETNS_SERVICE: vpn-netns
-      SIBLING_SERVICES: gluetun qbittorrent qbit-port-sync qbit-manage
+      SIBLING_SERVICES: gluetun qbittorrent qbit-port-sync
       COMPOSE_DIR: /compose
       DEBOUNCE: "30"
       SETTLE: "3"

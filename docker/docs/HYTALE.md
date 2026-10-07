@@ -4,6 +4,24 @@ The `hytale-server` service uses the persistent `compose_hytale-server` volume.
 Do not remove that volume, its worlds, or `/data/.machine-id` during recovery.
 Use the main Compose entry point in `/srv/homeserver/docker`.
 
+## Disabled until needed
+
+Hytale is deliberately stopped while its downloader credentials are expired.
+The `hytale` Compose profile keeps ordinary `docker compose up -d`, including the
+nightly updater, from starting it again. The persistent volume and credentials
+remain intact. Leave `COMPOSE_PROFILES` unset in the server's `.env`.
+
+After completing the recovery below, opt in to start only Hytale:
+
+```bash
+z /srv/homeserver/docker
+docker compose --profile hytale up -d hytale-server
+```
+
+To leave it off again, use `docker compose stop hytale-server`. Do not remove its
+volume or switch authentication off. The profile excludes Hytale from unattended
+updates as well as startup; explicitly pull it when re-enabling after a long break.
+
 ## Downloader versus game-server authentication
 
 There are two independent authentication stages:

@@ -1,5 +1,47 @@
 # qbit-manage inactivity-only cleanup policy
 
+## Paused pending upstream compatibility
+
+The manager is deliberately stopped: its stable upstream API dependency does
+not support the deployed qBittorrent 5.2.4. The owner chose to wait for a stable
+release instead of backporting the dependency fix or using `develop`.
+
+The `qbit-manage` Compose profile prevents the nightly updater from starting the
+failed container again. It is also excluded from `vpn-netns-watcher`'s
+`SIBLING_SERVICES`, so a VPN namespace repair cannot restart it indirectly.
+Keep `COMPOSE_PROFILES` unset in `.env`. qBittorrent itself remains running.
+
+Before re-enabling, review a stable upstream image with 5.2.4 support, update the
+pin and policy tests as described below, and run a complete dry-run. Restore
+`qbit-manage` to the watcher's sibling list and recreate the watcher. Remove the
+opt-in profile when returning it to ordinary unattended operation.
+Do not bypass the version check or enable deletion just to clear startup errors.
+
+## What the current policy previews
+
+Every 30 minutes, the manager previews category/tag updates, unregistered-torrent
+removal, no-hardlink tagging for the `radarr` and `sonarr` categories, and share-limit
+cleanup. **Dry-run remains enabled; these torrent actions are not applied.**
+
+The `noHL` cleanup group requires at least 14 days seeded, seven days inactive,
+and two reported seeders, with no ratio requirement. Other torrents default to
+no cleanup. Missing hardlinks are a storage signal, not proof that an item has
+been watched or imported successfully. Reported seeder counts are not a guarantee
+that a torrent can be downloaded again.
+
+Unregistered-torrent removal is a separate path and does not inherit those three
+gates. The current settings permit incomplete torrents, use a ten-minute grace
+setting, and cap removals at ten per tracker per run. The recycle bin retains
+removed data and saved `.torrent` metadata for 14 days; after that they can be
+permanently deleted. Some share-limit actions also resume paused torrents.
+
+Before a first real-mode run, review actual dry-run candidates and separately
+decide whether to enable unregistered removal. Prefer leaving that removal path
+off initially rather than treating `QBT_DRY_RUN=false` as only the conservative
+inactivity cleanup toggle.
+
+## Pinned implementation
+
 `compose.downloads.yml` builds `qbit-manage-inactivity:4.13.0-1` from the exact
 upstream image deployed on September 20, 2026:
 

@@ -46,6 +46,23 @@ metrics. The helper verifies command success, not full application readiness;
 afterward check Homepage health, Alloy/watcher connection errors, and cAdvisor
 sample freshness.
 
+## Log collection exclusions and stale filesystem entries
+
+Alloy intentionally excludes the `mirklurk-map-uploads` Compose service because
+that container uses `logging: none` to avoid retaining capability-bearing error
+paths. Its health check and HTTP status remain available. Keep this exclusion
+aligned with `compose.websites.yml`; do not re-enable its logs to silence Alloy.
+Service/project labels come from the sanitized
+`__meta_docker_container_label_com_docker_compose_*` discovery labels.
+
+For cAdvisor `could not stat` errors, first identify the referenced container and
+check whether Docker still knows it. Retired one-off containers and stale cached
+filesystem entries are not evidence of a failed live service. Remove only
+reviewed, stopped disposable containers, preserve their bind mounts/volumes,
+then recreate cAdvisor alone if it retains references to removed containers.
+Verify both recent errors and `time() - container_last_seen` afterward; do not
+disable filesystem metrics or timestamp checks to hide stale collection.
+
 ## Host lifecycle integration
 
 Recommended `docker-socket-consumers.service` shape (the NixOS configuration owns
