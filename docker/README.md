@@ -53,7 +53,7 @@ docker compose -f compose.gaming.yml up -d
 | **Auth** | authelia, authelia_postgres, authelia_redis |
 | **Dashboards** | homepage, suwayomi-widget, dashdot |
 | **Downloads** | vpn-netns, gluetun, qbittorrent, qbit-port-sync, qbit-manage, sabnzbd, flaresolverr |
-| **Gaming** | hytale-server, minecraft-server, rlcraft-minecraft-server, satisfactory-server |
+| **Gaming** | minecraft-server (vanilla Hardcore), matcha-minecraft-server (Fabric/Matcha), rlcraft-minecraft-server, satisfactory-server; hytale-server (opt-in profile) |
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
 | **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres |
@@ -88,6 +88,11 @@ services:
 See [MATRIX.md](docs/MATRIX.md) for the full Matrix stack setup guide (Synapse, Element, Coturn, PostgreSQL).
 
 See [MATRIX-RTC.md](docs/MATRIX-RTC.md) for adding voice/video call support via LiveKit (MatrixRTC).
+
+## Game Servers
+
+See [MINECRAFT.md](docs/MINECRAFT.md) for the separate Hardcore, Matcha and RLCraft
+worlds, and [HYTALE.md](docs/HYTALE.md) for Hytale's disabled profile and recovery.
 
 ## Nextcloud Setup
 

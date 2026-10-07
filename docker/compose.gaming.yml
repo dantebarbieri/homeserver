@@ -1,5 +1,5 @@
 # Game servers
-# minecraft-server, rlcraft-minecraft-server, hytale-server, satisfactory-server
+# minecraft-server, matcha-minecraft-server, rlcraft-minecraft-server, hytale-server, satisfactory-server
 
 services:
   hytale-server:
@@ -8,6 +8,7 @@ services:
       service: common-service
     image: hybrowse/hytale-server:latest
     container_name: hytale-server
+    profiles: ["hytale"]
     tty: true
     stdin_open: true
     mem_limit: 24g
@@ -84,10 +85,14 @@ services:
       - "36677:25565/udp"
     environment:
       EULA: true
+      TYPE: VANILLA
       MODE: "survival"
       MOTD: "§bHardcore§r Minecraft Server\nRunning Version: §c§o%VERSION%§r."
       DIFFICULTY: "hard"
       HARDCORE: true
+      RESOURCE_PACK: ""
+      RESOURCE_PACK_SHA1: ""
+      RESOURCE_PACK_ENFORCE: false
       OPS: |
         DanteVB
         ElVonHresvelg

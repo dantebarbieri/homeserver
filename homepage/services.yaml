@@ -431,7 +431,7 @@
     - Hytale:
         icon: hytale.webp
         href: https://hytale-servers.com/server/dante-s-hytale-server
-        description: danteb.com:5205
+        description: Disabled - awaiting reauthorization
         server: my-docker
         container: hytale-server
     - Satisfactory:
