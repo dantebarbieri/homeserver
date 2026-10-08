@@ -55,6 +55,13 @@ aligned with `compose.websites.yml`; do not re-enable its logs to silence Alloy.
 Service/project labels come from the sanitized
 `__meta_docker_container_label_com_docker_compose_*` discovery labels.
 
+Correcting stream labels can cause a one-time replay of retained Docker logs.
+Loki may reject entries older than its acceptance window; verify that current
+entries arrive under the new labels and that the backlog settles. Do not disable
+age checks or confuse these historical rejections with a continuing tailer failure.
+Likewise, brief "dead or marked for removal" errors during an actual container
+replacement are distinct from repeated attempts to read a logless service.
+
 For cAdvisor `could not stat` errors, first identify the referenced container and
 check whether Docker still knows it. Retired one-off containers and stale cached
 filesystem entries are not evidence of a failed live service. Remove only

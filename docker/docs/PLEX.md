@@ -1,5 +1,29 @@
 # Plex playback
 
+## Bazarr library refreshes
+
+Bazarr connects internally to `http://plex:32400` using manual/API-key
+authentication. Its saved OAuth connection had an obsolete public IP and a
+token rejected by Plex; changing the URL alone was not sufficient.
+
+The owner authorized using the existing working Plex server token already used
+by Homepage. Store it through Bazarr's `POST /api/plex/apikey` endpoint (or its
+settings UI), not as a tracked value. Configure `plex.ip=plex`, `plex.port=32400`,
+`plex.ssl=false` and `plex.disable_auto_migration=true`; this prevents a later
+startup from migrating the working internal connection back to OAuth discovery.
+Keep the selected movie/TV libraries and subtitle-refresh options unchanged.
+If that Plex token is revoked or replaced, update both consumers.
+
+Before changing authentication, keep a private backup of
+`${DATA}/bazarr/config/config/config.yaml`. The maintenance backup is
+`production-configs/bazarr-plex-2026-10-07.yaml` on the server (mode 600,
+gitignored). Never commit it: it contains application credentials.
+
+Verify both Bazarr's `POST /api/plex/test-connection` and an authenticated
+`GET /library/sections` on Plex. The public `/identity` response alone does not
+establish that a token can access libraries. Confirm the machine identifier and
+selected library IDs still match the intended server.
+
 ## LAN bandwidth classification
 
 Set **Settings > Network > Show Advanced > LAN Networks** to
