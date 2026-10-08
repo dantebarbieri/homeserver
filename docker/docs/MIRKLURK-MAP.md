@@ -17,9 +17,9 @@ in either image; 72 manifest-listed game-art PNGs are used with permission.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `80be5bcd5327fc1017b73ec102c1eef60b016205`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/37808085520) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:80be5bc`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:80be5bc`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `8676b175bfb6020a0461a604c80b89e546059926`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/37860799737) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:8676b17`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:8676b17`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -147,13 +147,13 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `77b12638469682856c92ce9bed704ad3a6004f6f`, tags
-`mirklurk-map:77b1263` / `mirklurk-map-uploads:77b1263`. Preflight on
+Previous source: `80be5bcd5327fc1017b73ec102c1eef60b016205`, tags
+`mirklurk-map:80be5bc` / `mirklurk-map-uploads:80be5bc`. Preflight on
 2026-10-08 observed exact running images
-`sha256:896d211b4b748554b2a32dbd3d18e5fadc29500770d7c695727d90858491211d` (web)
-and `sha256:40da9155ff8cc3bd9b4d371377eb0194dcb3cba7ccc1c97a19a3f0e84f64ca16`
+`sha256:58db8b925b65f526af15a10b38972c3ff4f981ad9845a365ae3dd29898895f76` (web)
+and `sha256:0d8aaa77b897fcf8562e35899bf472ee15a742cbfd9adf5085d28d9f907df47c`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The 77b1263 → 80be5bc release changed only frontend source (no
+change it. The 80be5bc → 8676b17 release changed only frontend source (no
 Dockerfile, nginx contract or upload-backend changes), so rolling back is a
 pin revert plus recreating web (and uploads) only.
 
