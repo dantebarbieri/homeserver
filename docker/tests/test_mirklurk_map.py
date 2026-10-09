@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import re
 import struct
 import unittest
 
@@ -26,6 +27,23 @@ class MapDeploymentTests(unittest.TestCase):
     def test_redirects_do_not_forward_capabilities(self):
         self.assertIsNone(smoke.NoRedirect().redirect_request(None, None, 302, "", {}, "https://elsewhere/"))
 
+    def test_world_ids_match_the_viewer(self):
+        self.assertEqual(smoke.world_id("Synthetic deployment check"), "XmxtUXYm_1NxmPzh3qV-Zi")
+        self.assertEqual(smoke.world_id("Synthetic mismatch"), "WocMC1JLxypEFxKqw6DA1o")
+
+    def test_replacement_is_the_same_world(self):
+        packet = smoke.packet(smoke.NAME, {"MDday": 2})
+        length = struct.unpack(">I", packet[:4])[0]
+        manifest = json.loads(packet[4:4 + length])
+        player = json.loads(packet[4 + length:])
+        self.assertEqual(manifest["name"], smoke.NAME)
+        self.assertEqual(player, [{"worldGrid": smoke.GRID, "MDday": 2}])
+
+    def test_synthetic_keys_are_canonical_tokens(self):
+        token = re.compile(r"^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$")
+        for _ in range(32):
+            self.assertRegex(smoke.new_key(), token)
+
     def test_map_proxy_uses_socket_peer_and_disables_api_logs(self):
         config = (ROOT / "nginx/mirklurk-map-npm.conf").read_text()
         self.assertIn("location ^~ /api/", config)
@@ -46,6 +64,13 @@ class MapDeploymentTests(unittest.TestCase):
         self.assertIn("proxy_set_header X-Upload-IP $remote_addr;", config)
         self.assertIn("error_log /dev/null;", config)
         self.assertIn("connect-src 'self'", config)
+
+    def test_hashed_game_and_wiki_art_are_immutable(self):
+        config = (ROOT / "nginx/mirklurk-map.conf").read_text()
+        self.assertIn(
+            '~^/assets/(game|wiki)/[a-z0-9_]+\\.[0-9a-f]+\\.png$ "public, max-age=31536000, immutable";',
+            config,
+        )
 
 
 if __name__ == "__main__":

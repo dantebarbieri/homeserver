@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Exercise one synthetic share over HTTPS; never print capability keys."""
+"""Exercise one synthetic synced world over HTTPS; never print sync or share keys."""
 
 import argparse
+import base64
+import hashlib
 import json
+import os
 import socket
 import struct
 import time
@@ -11,15 +14,32 @@ import urllib.request
 
 
 ORIGIN = "https://map.mirklurk.danteb.com"
+NAME = "Synthetic deployment check"
+GRID = [[1] * 5 for _ in range(5)]
+CONFIG = {"worldsPerLibrary": 5, "retentionDays": 30, "maxBytes": 64 * 1024 * 1024, "pollSeconds": 30}
+WORLD_FIELDS = {"id", "name", "created", "updated", "expires", "version", "size", "share"}
+RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+# Web nginx allows 2 requests/second per client; stay below it so every 429 is the backend's.
+PACE_SECONDS = 0.6
 
 
-def packet(name):
-    player = json.dumps([{"worldGrid": [[1] * 5 for _ in range(5)]}]).encode()
+def packet(name, extra=None):
+    player = json.dumps([{"worldGrid": GRID, **(extra or {})}]).encode()
     manifest = json.dumps({
         "name": name,
         "entries": [{"path": "Player.save", "size": len(player), "modified": 0}],
     }).encode()
     return struct.pack(">I", len(manifest)) + manifest + player
+
+
+def world_id(name, grid=GRID):
+    """Same character name and zone layout = same world (src/sharing-format.ts worldId)."""
+    text = "mirklurk/world\n" + json.dumps([name, grid], separators=(",", ":"), ensure_ascii=False)
+    return base64.urlsafe_b64encode(hashlib.sha256(text.encode()).digest()).rstrip(b"=").decode()[:22]
+
+
+def new_key():
+    return base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode()
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -30,10 +50,11 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def exercise():
     opener = urllib.request.build_opener(NoRedirect)
 
-    def request(method, path, expected, body=None, owner=None, headers=None):
+    def request(method, path, expected, body=None, key=None, headers=None):
+        time.sleep(PACE_SECONDS)
         values = {"Content-Type": "application/octet-stream", **(headers or {})}
-        if owner:
-            values["Authorization"] = f"Bearer {owner}"
+        if key:
+            values["Authorization"] = "Bearer " + key
         req = urllib.request.Request(ORIGIN + path, data=body, headers=values, method=method)
         try:
             response = opener.open(req, timeout=90)
@@ -44,58 +65,89 @@ def exercise():
         with response:
             status, data, result_headers = response.status, response.read(), response.headers
         if status != expected:
-            raise RuntimeError(f"{method} returned {status}, expected {expected}; response withheld")
+            raise RuntimeError(f"{method} {path} returned {status}, expected {expected}; response withheld")
         return data, result_headers
 
-    config, _ = request("GET", "/api/shares", 200)
-    settings = json.loads(config)
-    assert settings == {
-        "enabled": True, "maxBytes": 64 * 1024 * 1024,
-        "maxActivePerIP": 3, "lifetimeDays": 7, "pollSeconds": 30,
-    }, "Unexpected sharing contract"
-    original = packet("Synthetic deployment check")
-    replacement = packet("Synthetic deployment check updated")
-    created, _ = request("POST", "/api/shares", 201, original, headers={
-        "X-Forwarded-For": "198.51.100.111",
-        "X-Real-IP": "198.51.100.112",
-        "X-Upload-IP": "198.51.100.113",
-    })
-    share = json.loads(created)
-    path = "/api/shares/" + share["id"]
+    def check_world(info, expected_id):
+        assert set(info) == WORLD_FIELDS, "World info exposed unexpected fields"
+        assert info["id"] == expected_id and info["name"] == NAME, "Unexpected world identity"
+        assert info["expires"] - info["updated"] == RETENTION_MS, "Retention is not 30 days after the last update"
+
+    config, _ = request("GET", "/api/config", 200)
+    assert json.loads(config) == CONFIG, "Unexpected sharing contract"
+    request("GET", "/api/library", 401)
+
+    sync = new_key()
+    listing, _ = request("GET", "/api/library", 200, key=sync)
+    assert json.loads(listing) == {"name": "", "worlds": [], "limits": CONFIG}, "Fresh library is not empty"
+
+    wid = world_id(NAME)
+    path = "/api/library/worlds/" + wid
+    original = packet(NAME)
+    replacement = packet(NAME, {"MDday": 2})
+    created = None
     deleted = False
     try:
-        metadata, _ = request("GET", path, 200)
-        metadata = json.loads(metadata)
-        assert "edit" not in metadata and "owner" not in metadata, "Read API exposed owner data"
-        assert metadata["expires"] - metadata["created"] == 7 * 24 * 60 * 60 * 1000
-        data, headers = request("GET", path + "/data", 200)
+        data, _ = request("PUT", path, 201, original, sync, {
+            "X-Forwarded-For": "198.51.100.111",
+            "X-Real-IP": "198.51.100.112",
+            "X-Upload-IP": "198.51.100.113",
+        })
+        created = json.loads(data)
+        check_world(created, wid)
+        assert created["size"] == len(original), "Stored size differs"
+        listing, _ = request("GET", "/api/library", 200, key=sync)
+        assert [w["id"] for w in json.loads(listing)["worlds"]] == [wid], "Library does not list exactly the synthetic world"
+
+        data, headers = request("GET", path + "/data", 200, key=sync)
         assert data == original, "Read bytes differ"
         assert headers["Cache-Control"] == "no-store", "API data must not be cached"
+        assert headers["Last-Modified"], "Missing Last-Modified"
         etag = headers["ETag"]
-        request("GET", path + "/data", 304, headers={"If-None-Match": etag})
-        time.sleep(2)
-        request("PUT", path, 403, replacement)
-        request("DELETE", path, 403)
-        request("PUT", path, 403, replacement, share["id"])
-        request("PUT", path, 429, replacement, share["edit"])
+        request("GET", path + "/data", 304, key=sync, headers={"If-None-Match": etag})
+
+        share = created["share"]
+        data, _ = request("GET", "/api/view/data", 200, key=share)
+        assert data == original, "Read-only share bytes differ"
+        request("PUT", "/api/view/data", 405, replacement, share)
+        listing, _ = request("GET", "/api/library", 200, key=share)
+        assert json.loads(listing)["worlds"] == [], "A share key opened the owner's library"
+        request("DELETE", path, 404, key=share)
+
+        request("PUT", "/api/library/worlds/" + world_id("Synthetic mismatch"), 409, original, sync)
+        data, _ = request("PUT", path, 429, original, sync)
+        assert "30 seconds" in json.loads(data)["error"], "429 did not come from the per-world update throttle"
         time.sleep(31)
-        changed, _ = request("PUT", path, 200, replacement, share["edit"])
-        changed = json.loads(changed)
-        assert changed["expires"] == share["expires"], "Update extended expiry"
-        assert changed["version"] != share["version"], "Update did not change version"
-        data, headers = request("GET", path + "/data", 200, headers={"If-None-Match": etag})
+        data, _ = request("PUT", path, 200, replacement, sync, {"If-Match": "*"})
+        updated = json.loads(data)
+        check_world(updated, wid)
+        assert updated["version"] != created["version"], "Update did not change version"
+        assert updated["created"] == created["created"], "Update changed the creation time"
+        assert updated["expires"] > created["expires"], "Update did not extend retention"
+        data, headers = request("GET", path + "/data", 200, key=sync, headers={"If-None-Match": etag})
         assert data == replacement and headers["ETag"] != etag, "Updated data/ETag mismatch"
-        time.sleep(2)
-        request("DELETE", path, 204, owner=share["edit"])
+
+        data, _ = request("POST", path + "/share", 200, key=sync)
+        reset = json.loads(data)["share"]
+        assert reset != share, "Share reset kept the old key"
+        request("GET", "/api/view/data", 404, key=share)
+        data, _ = request("GET", "/api/view/data", 200, key=reset)
+        assert data == replacement, "Reset share bytes differ"
+
+        request("DELETE", path, 204, key=sync)
         deleted = True
-        request("GET", path, 404)
-        request("GET", path + "/data", 404)
-        print("PASS: synthetic create/read/ETag, anonymous mutation denial, throttle, fixed expiry, owner update/delete, final 404.")
+        request("GET", path + "/data", 404, key=sync)
+        request("GET", "/api/view/data", 404, key=reset)
+        request("PUT", path, 412, replacement, sync, {"If-Match": "*"})
+        listing, _ = request("GET", "/api/library", 200, key=sync)
+        assert json.loads(listing)["worlds"] == [], "Deleted world is still listed"
+        print("PASS: config, keyless 401, synced-world create/list/read/ETag, read-only share, share-key isolation, "
+              "mismatch 409, throttle, 30-day update, share reset, delete, no re-add, final 404.")
     finally:
-        if not deleted:
-            # This test owns exactly one record; never enumerate or remove others.
-            request("DELETE", path, 204, owner=share["edit"])
-            print("Synthetic test share cleaned after failure.")
+        if created and not deleted:
+            # This test owns exactly one world in its own random library; never touch others.
+            request("DELETE", path, 204, key=sync)
+            print("Synthetic test world cleaned after failure.")
 
 
 if __name__ == "__main__":
