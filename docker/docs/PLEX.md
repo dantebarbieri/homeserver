@@ -114,3 +114,34 @@ Validate the **general** playback decision, not just `directPlayDecisionCode`,
 using the client's profile, subtitle selection and quality limit. Confirm both
 automatic version selection and seeking around the resume point; an
 unrestricted-quality test alone does not cover a capped Apple TV.
+
+## Custom episode orders (Kim Possible)
+
+Some shows are renumbered on disk into a chosen chronological order. Kim
+Possible was renamed to TheTVDB's DVD order as of 2026-03-25 by
+`kim_possible_rename.py` in the show folder. `.plexmatch` pins every file to its
+own SxxExx. TheTVDB later rewrote that DVD order, and Plex (with
+`tvdbDvd`) and Jellyfin started labelling the right files with the wrong
+titles. Playback order was never the problem; only the metadata was.
+
+`scripts/pin-episode-metadata.py` reads the file-to-TVDB-episode mapping in
+`scripts/episode-orders/<show>.json` and pins the correct metadata so upstream
+reorders can't change it again. For Jellyfin it writes a locked `<video>.nfo`
+and a `<video>-thumb.jpg`. In Plex it sets and locks the title, summary, air
+date and poster. TVDB data is cached in the show folder as
+`.pinned-episode-metadata.json`. Re-running the script is idempotent:
+
+```bash
+z /srv/homeserver
+nix-shell -p python3 --run \
+  'python3 docker/scripts/pin-episode-metadata.py docker/scripts/episode-orders/kim-possible.json --dry-run'
+```
+
+Drop `--dry-run` to apply. Re-run after a Plex "Refresh Metadata", a library
+re-add, or new files. Locked fields survive a normal refresh.
+
+Sonarr would map the renumbered files to the wrong aired episodes. The series
+is therefore removed from Sonarr (files kept) and TVDB `78259` is on Sonarr's
+import-list exclusion list. Do not re-add it. Acquire any missing episodes
+manually, rename them into the chosen order, add them to the mapping, and re-run
+the script.
