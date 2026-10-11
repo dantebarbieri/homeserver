@@ -36,6 +36,7 @@ All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 - `scripts/deploy-update.sh <service>` — Pull, rebuild, zero-downtime restart
 - `scripts/setup-vpn-watcher.sh` — One-time setup, copies vpn-watcher.sh to `${DATA}` path
 - `scripts/vpn-watcher.sh` — Long-running Docker event monitor (POSIX sh, debounced restarts)
+- `scripts/pin-episode-metadata.py <order.json>` — Pins Plex/Jellyfin episode metadata for shows renumbered into a custom order (see `docs/PLEX.md`)
 
 ## Service-Specific Docs (`docs/`)
 
