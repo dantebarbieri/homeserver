@@ -72,6 +72,15 @@ class MapDeploymentTests(unittest.TestCase):
             config,
         )
 
+    def test_save_editor_assets_are_immutable_and_base_stays_same_origin(self):
+        config = (ROOT / "nginx/mirklurk-map.conf").read_text()
+        self.assertIn(
+            '~^/(app|style|edit|editor)\\.[0-9a-f]+\\.(js|css)$ "public, max-age=31536000, immutable";',
+            config,
+        )
+        self.assertIn("base-uri 'self';", config)
+        self.assertNotIn("base-uri 'none'", config)
+
 
 if __name__ == "__main__":
     unittest.main()

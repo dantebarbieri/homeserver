@@ -27,9 +27,17 @@ A touch tap that misses every small marker picks the nearest one within 22 px.
 On a narrow full-screen map (a phone held upright) details open in a draggable
 bottom sheet and the map glides to keep the marker in sight; Back closes an
 open card or sheet before leaving full screen (client-side history only).
-Map markers show a pointer cursor. MirkMap is installable (web app manifest,
-service worker): after the first visit it keeps the page, script, stylesheet,
-manifest, icons and all bundled art (364 files) so local saves open offline.
+Map markers show a pointer cursor. The map also has gatherables layers,
+creature icons and the saved time and weather; a **C** (Cheated) or **S**
+(From Share) badge follows a world's name; and **Download** builds a playable
+world ZIP in the browser from the existing data endpoints. The **Save editor**
+at `/edit/` (linked from the map) changes a character's save files locally
+through the File System Access API (desktop Chrome/Edge) and uploads nothing;
+saving any edit writes a permanent Cheated mark (`cheated=1` in a hidden
+`MirkMap.ini` beside `Player.save`). MirkMap is installable (web app manifest,
+service worker): after the first visit it keeps the page, the save editor's
+page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
+local saves open offline.
 It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
 an online visit gets the newest release.
 
@@ -41,13 +49,16 @@ in either image; 72 manifest-listed game-art PNGs and 282 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
 six MirkMap icons drawn from the game's "Map of area" item. The web image also
 serves `/manifest.webmanifest` (as `application/manifest+json`), `/sw.js` and
-`/icons/`; like `index.html` they revalidate (`no-cache`).
+`/icons/`; like `index.html` they revalidate (`no-cache`). The editor page
+`/edit/` (`/edit` too, via the existing `try_files`) uses `<base href="../">`
+to load its hashed `edit.*.js` / `editor.*.css` from the site root; they are
+cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `d30a80686165d45fbe129f574ba8f04063180e7f`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38107246352) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:d30a806`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:d30a806`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `800f34a8f054ec0d0e092104ced20aaa0fd48946`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38159068183) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:800f34a`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:800f34a`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -71,8 +82,19 @@ Delete removes a world's data at once (no tombstones). The server stores only
 hashes of sync/share keys and salted network hashes (`/data/salt`);
 `/data/adds.json` keeps those hashes with add times for 24 hours only, so daily
 quotas survive restarts. Layout: `/data/worlds/`, `/data/libraries/`,
-`/data/adds.json`, `/data/salt`. On startup the backend (since af0e249) deletes
-old seven-day share payloads (`/data/<64 hex>.bin`); they are not migrated.
+`/data/adds.json`, `/data/cheated.json`, `/data/salt`. On startup the backend
+(since af0e249) deletes old seven-day share payloads (`/data/<64 hex>.bin`);
+they are not migrated.
+
+Since 800f34a, the first upload of a library world whose `MirkMap.ini` says
+`cheated=1` adds its record key (a hash of the library hash and world ID) to
+`/data/cheated.json`, a JSON array kept for good, outside the 30-day retention,
+so the mark outlives deletion and expiry. World records may carry `fromShare` /
+`cheated` flags, returned in WorldInfo only when true. A later upload of a
+listed world without `MirkMap.ini` is repacked with the mark before storing
+(413 if that exceeds 64 MiB). Startup tolerates a missing `cheated.json` and
+removes a stray `cheated.json.tmp`; invalid content stops the backend starting.
+API routes, quotas, `/api/config` and the sharing format are unchanged.
 
 One-time sync codes (since d30a806: `POST`/`DELETE /api/library/pair` with the
 sync key, `POST /api/pair` to claim once) live only in backend memory and are
@@ -95,6 +117,9 @@ capability filenames; HTTP failures and container health remain observable.
 Never paste sync/share keys into diagnostics, issue comments or shell arguments.
 The CSP permits only same-origin connections (`connect-src 'self'`) and
 same-origin manifests and service workers (`manifest-src`/`worker-src 'self'`).
+`base-uri 'self'` (since 800f34a; previously `'none'`, under which browsers
+ignore `/edit/`'s `<base href="../">` and the editor loads unstyled and without
+its script) still refuses a base URL on any other origin.
 
 ## NPM prerequisites (before enabling uploads)
 
@@ -173,8 +198,10 @@ bash -c '
    members and no published backend ports. Check nginx effective real-IP/log
    config, NPM health route, HTTPS IPv4/IPv6, expected sharing/mobile UI and
    exact HTML/JS/CSS/art bytes versus the pinned image, not just HTTP 200.
-   Check the CSP, `/manifest.webmanifest` content type, `/sw.js` `no-cache`
-   and that `POST /api/library/pair` without a key returns 401.
+   Check the CSP (`base-uri 'self'`), `/manifest.webmanifest` content type,
+   `/sw.js` `no-cache`, that `/edit/` serves the editor page with
+   `<base href="../">` and immutable `edit.*.js` / `editor.*.css` of the right
+   types, and that `POST /api/library/pair` without a key returns 401.
 6. Use only a small **synthetic** save in a fresh random library: create, list,
    read data with ETag/304, read through its derived share key, reject writes via
    the share key and on the read-only view, reject a mismatched world ID, respect
@@ -196,25 +223,41 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `b16fbb1a3efff5a3d09962b0bfd806a1d1c0f543`, tags
-`mirklurk-map:b16fbb1` / `mirklurk-map-uploads:b16fbb1`. Preflight on
-2026-10-10 observed exact running images
-`sha256:58eea02db725d27e000964535b32bd81662f22bb55278625aff97a5879d5d1fe` (web)
-and `sha256:18f8d788bbfe1dbdd23ef032f98f40f754e721f3d916767f4ed0517ce20b2561`
+Previous source: `d30a80686165d45fbe129f574ba8f04063180e7f`, tags
+`mirklurk-map:d30a806` / `mirklurk-map-uploads:d30a806`. Preflight on
+2026-10-11 observed exact running images
+`sha256:4aba2142a23af6c3874af7ecd3629d2b9df8ab50da26d8cf46bdf2a78cda4cfa` (web)
+and `sha256:5886b38218d8baa2f4e2079e489dc60102d670537bbe2d9df29f69cdfd62d659`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The b16fbb1 → d30a806 release adds the MirkMap rebrand, the PWA
-files (the Dockerfile/`.dockerignore` now copy `manifest.webmanifest` and
-`icons/`), the in-memory sync-code endpoints in `server/` and two nginx
-contract changes (CSP `manifest-src`/`worker-src 'self'`; the manifest content
-type). Existing API routes, quotas, `/api/config`, the `/data` layout, the
-sharing format and `assets/` are unchanged. Rolling back is a pin revert that
-includes `nginx/mirklurk-map.conf`, plus recreating uploads then web; open sync
-codes are dropped (as on any restart) and no data or proxy change is involved.
-Browsers that installed the app keep its service worker, but pages load
-network-first, so online visits get the rolled-back page and its assets. The
-same holds back to `af0e249` (`mirklurk-map:6e8929b` / `:af0e249` and their
-`mirklurk-map-uploads` tags are retained), whose releases changed only the
-frontend.
+change it. The d30a806 → 800f34a release adds the save editor (the
+Dockerfile/`.dockerignore` now also copy `edit.html` and `editor.css`; the
+service worker keeps 367 files, was 364; `assets/` is unchanged), the map's
+C/S badges, gatherables, creature icons, time and weather and world ZIP
+downloads, the additive `cheated.json` / record-flag handling in `server/`
+(above) and two nginx contract changes (`edit`/`editor` hashed assets
+immutable; CSP `base-uri 'self'`). Rolling back to d30a806 is a pin revert that
+includes `nginx/mirklurk-map.conf`, plus recreating uploads then web; no
+migration, data or proxy change is involved. The d30a806 backend ignores the
+extra record fields and `cheated.json` (which stays in the volume); a world it
+rewrites loses the record flags and a package without `MirkMap.ini` is not
+re-marked, but after rolling forward again `cheated.json` restores the mark on
+that world's next upload. `/edit/` is gone while rolled back.
+
+Rolling back to `b16fbb1` (`mirklurk-map:b16fbb1` /
+`mirklurk-map-uploads:b16fbb1`, observed
+`sha256:58eea02db725d27e000964535b32bd81662f22bb55278625aff97a5879d5d1fe` /
+`sha256:18f8d788bbfe1dbdd23ef032f98f40f754e721f3d916767f4ed0517ce20b2561` on
+2026-10-10) also removes the MirkMap rebrand, the PWA files (manifest,
+service worker, icons), the in-memory sync-code endpoints and that release's
+nginx contract changes (CSP `manifest-src`/`worker-src 'self'`; the manifest
+content type). Existing API routes, quotas, `/api/config`, the sharing format
+and `assets/` are unchanged across both releases. It is likewise a pin revert
+including `nginx/mirklurk-map.conf`, plus recreating uploads then web; open sync
+codes are dropped (as on any restart). Browsers that installed the app keep its
+service worker, but pages load network-first, so online visits get the
+rolled-back page and its assets. The same holds back to `af0e249`
+(`mirklurk-map:6e8929b` / `:af0e249` and their `mirklurk-map-uploads` tags are
+retained), whose releases changed only the frontend.
 
 Rolling back further to `8676b17` crosses the storage-format change
 (seven-day shares → synced libraries) and the wiki-art immutable-cache rule.
