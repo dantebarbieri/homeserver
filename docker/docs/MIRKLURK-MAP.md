@@ -19,6 +19,10 @@ damage-class badge and a Melee/Ranged toggle; merchants list wares and prices.
 The clickable player marker shows hit points, armor to distribute, wellbeing,
 stats, conditions and inventory (equipped badges, True/Minimum coins). These
 panels read only the locally opened save or a synced world already loaded.
+A touch tap that misses every small marker picks the nearest one within 22 px.
+On a narrow full-screen map (a phone held upright) details open in a draggable
+bottom sheet and the map glides to keep the marker in sight; Back closes an
+open card or sheet before leaving full screen (client-side history only).
 
 The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
@@ -29,9 +33,9 @@ mirklurk.wiki pictures (`assets/wiki/`) are used with permission.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `6e8929b1153c50f472f4d9f3c0f146fac8440268`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38099296762) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:6e8929b`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:6e8929b`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `b16fbb1a3efff5a3d09962b0bfd806a1d1c0f543`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38105502254) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:b16fbb1`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:b16fbb1`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -170,17 +174,19 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `af0e249965c80d575a003fbc628ab291a56b1712`, tags
-`mirklurk-map:af0e249` / `mirklurk-map-uploads:af0e249`. Preflight on
+Previous source: `6e8929b1153c50f472f4d9f3c0f146fac8440268`, tags
+`mirklurk-map:6e8929b` / `mirklurk-map-uploads:6e8929b`. Preflight on
 2026-10-10 observed exact running images
-`sha256:c391a5d84059def3c2804536903ec8902e5b810491f1617b6628af6e71ee3d4a` (web)
-and `sha256:f8a312c65802e61cd127a1a46483d441bf10c951da3f0762f060cfeb234fb8e4`
+`sha256:f9a3f5ebd1be22e10d692f1631c17fa86409e3055a8e75f7ee5bd1f5b113ca45` (web)
+and `sha256:f294f571444b8e738b900e4d2b1fcb163cf46922967af30250841f96033bc247`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The af0e249 → 6e8929b release changed only the frontend (entity
-inspection panels); `server/`, the Dockerfile, `deploy/nginx.conf`, the sharing
-format and `assets/` are unchanged, so the upload API, `/data` layout, CSP and
-caching rules are identical. Rolling back is a pin revert plus recreating
-uploads then web; no data or proxy change is involved.
+change it. The 6e8929b → b16fbb1 release changed only the frontend (mobile
+marker taps, bottom-sheet details, Back closes details); `server/`, the
+Dockerfile, `deploy/nginx.conf`, the sharing format and `assets/` are
+unchanged, so the upload API, `/data` layout, CSP and caching rules are
+identical. Rolling back is a pin revert plus recreating uploads then web; no
+data or proxy change is involved. The same holds back to `af0e249`
+(`mirklurk-map:af0e249` / `mirklurk-map-uploads:af0e249` are retained).
 
 Rolling back further to `8676b17` crosses the storage-format change
 (seven-day shares → synced libraries) and the wiki-art immutable-cache rule.
