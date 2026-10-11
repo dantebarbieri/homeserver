@@ -1,12 +1,16 @@
-# Mirklurk World Viewer
+# MirkMap · Mirklurk World Viewer
 
-<https://map.mirklurk.danteb.com> is intentionally public without Authelia.
+<https://map.mirklurk.danteb.com> (**MirkMap**) is intentionally public without Authelia.
 Opening a save folder/ZIP and desktop **Live saves** remain browser-local:
 **nothing uploads by default**. Under **My worlds & sync**, a browser keeps a
 private synced **library** (its sync key is never shown); **Add to my worlds**
 uploads only the selected character, and re-adding the same character name and
 zone layout updates that world instead of copying it. A sync link/QR code joins
-another of the owner's devices to the same library with full access. **Share...**
+another of the owner's devices to the same library with full access; so does a
+**one-time sync code** (8 characters, single use, 10 minutes), the way into a
+Home Screen app with its own storage. The browser encrypts the sync key with a
+key derived from the code; the server holds only that ciphertext, in memory,
+under the code's SHA-256 hash, and never sees the code or key. **Share...**
 gives one world a separate read-only key derived one-way from the sync key;
 **Reset link** revokes it. Followers poll every 30 seconds with ETags; opt-in
 desktop live publishing sends settled snapshots, not unsaved game movement.
@@ -23,19 +27,27 @@ A touch tap that misses every small marker picks the nearest one within 22 px.
 On a narrow full-screen map (a phone held upright) details open in a draggable
 bottom sheet and the map glides to keep the marker in sight; Back closes an
 open card or sheet before leaving full screen (client-side history only).
+Map markers show a pointer cursor. MirkMap is installable (web app manifest,
+service worker): after the first visit it keeps the page, script, stylesheet,
+manifest, icons and all bundled art (364 files) so local saves open offline.
+It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
+an online visit gets the newest release.
 
 The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
 This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
 in either image; 72 manifest-listed game-art PNGs and 282 manifest-listed
-mirklurk.wiki pictures (`assets/wiki/`) are used with permission.
+mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
+six MirkMap icons drawn from the game's "Map of area" item. The web image also
+serves `/manifest.webmanifest` (as `application/manifest+json`), `/sw.js` and
+`/icons/`; like `index.html` they revalidate (`no-cache`).
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `b16fbb1a3efff5a3d09962b0bfd806a1d1c0f543`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38105502254) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:b16fbb1`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:b16fbb1`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `d30a80686165d45fbe129f574ba8f04063180e7f`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38107246352) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:d30a806`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:d30a806`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -62,6 +74,13 @@ quotas survive restarts. Layout: `/data/worlds/`, `/data/libraries/`,
 `/data/adds.json`, `/data/salt`. On startup the backend (since af0e249) deletes
 old seven-day share payloads (`/data/<64 hex>.bin`); they are not migrated.
 
+One-time sync codes (since d30a806: `POST`/`DELETE /api/library/pair` with the
+sync key, `POST /api/pair` to claim once) live only in backend memory and are
+never written to `/data`. A library has one open code (a new one replaces it);
+limits are ten open codes per network, 1,024 in total and 20 wrong or reused
+codes per network per hour. Codes expire after 10 minutes and a restart or
+recreate forgets them; users simply make a new one.
+
 **Do not back up this volume or copy its payloads for rollback.** The current
 Docker root is `/var/lib/docker`; existing rclone jobs cover selected
 `/srv/docker/data`, `/data/automated-backups` and media/Nextcloud, not Docker named
@@ -74,7 +93,8 @@ API access/error logs are disabled in both web nginx and its NPM location.
 Backend Docker logging is disabled because filesystem exceptions can include
 capability filenames; HTTP failures and container health remain observable.
 Never paste sync/share keys into diagnostics, issue comments or shell arguments.
-The CSP permits only same-origin connections (`connect-src 'self'`).
+The CSP permits only same-origin connections (`connect-src 'self'`) and
+same-origin manifests and service workers (`manifest-src`/`worker-src 'self'`).
 
 ## NPM prerequisites (before enabling uploads)
 
@@ -153,6 +173,8 @@ bash -c '
    members and no published backend ports. Check nginx effective real-IP/log
    config, NPM health route, HTTPS IPv4/IPv6, expected sharing/mobile UI and
    exact HTML/JS/CSS/art bytes versus the pinned image, not just HTTP 200.
+   Check the CSP, `/manifest.webmanifest` content type, `/sw.js` `no-cache`
+   and that `POST /api/library/pair` without a key returns 401.
 6. Use only a small **synthetic** save in a fresh random library: create, list,
    read data with ETag/304, read through its derived share key, reject writes via
    the share key and on the read-only view, reject a mismatched world ID, respect
@@ -174,19 +196,25 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `6e8929b1153c50f472f4d9f3c0f146fac8440268`, tags
-`mirklurk-map:6e8929b` / `mirklurk-map-uploads:6e8929b`. Preflight on
+Previous source: `b16fbb1a3efff5a3d09962b0bfd806a1d1c0f543`, tags
+`mirklurk-map:b16fbb1` / `mirklurk-map-uploads:b16fbb1`. Preflight on
 2026-10-10 observed exact running images
-`sha256:f9a3f5ebd1be22e10d692f1631c17fa86409e3055a8e75f7ee5bd1f5b113ca45` (web)
-and `sha256:f294f571444b8e738b900e4d2b1fcb163cf46922967af30250841f96033bc247`
+`sha256:58eea02db725d27e000964535b32bd81662f22bb55278625aff97a5879d5d1fe` (web)
+and `sha256:18f8d788bbfe1dbdd23ef032f98f40f754e721f3d916767f4ed0517ce20b2561`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The 6e8929b → b16fbb1 release changed only the frontend (mobile
-marker taps, bottom-sheet details, Back closes details); `server/`, the
-Dockerfile, `deploy/nginx.conf`, the sharing format and `assets/` are
-unchanged, so the upload API, `/data` layout, CSP and caching rules are
-identical. Rolling back is a pin revert plus recreating uploads then web; no
-data or proxy change is involved. The same holds back to `af0e249`
-(`mirklurk-map:af0e249` / `mirklurk-map-uploads:af0e249` are retained).
+change it. The b16fbb1 → d30a806 release adds the MirkMap rebrand, the PWA
+files (the Dockerfile/`.dockerignore` now copy `manifest.webmanifest` and
+`icons/`), the in-memory sync-code endpoints in `server/` and two nginx
+contract changes (CSP `manifest-src`/`worker-src 'self'`; the manifest content
+type). Existing API routes, quotas, `/api/config`, the `/data` layout, the
+sharing format and `assets/` are unchanged. Rolling back is a pin revert that
+includes `nginx/mirklurk-map.conf`, plus recreating uploads then web; open sync
+codes are dropped (as on any restart) and no data or proxy change is involved.
+Browsers that installed the app keep its service worker, but pages load
+network-first, so online visits get the rolled-back page and its assets. The
+same holds back to `af0e249` (`mirklurk-map:6e8929b` / `:af0e249` and their
+`mirklurk-map-uploads` tags are retained), whose releases changed only the
+frontend.
 
 Rolling back further to `8676b17` crosses the storage-format change
 (seven-day shares → synced libraries) and the wiki-art immutable-cache rule.
