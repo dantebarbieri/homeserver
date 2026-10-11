@@ -13,7 +13,12 @@ desktop live publishing sends settled snapshots, not unsaved game movement.
 Links from the earlier seven-day share system no longer work. The full-screen
 map, floating legend and wiki pictures are same-origin static assets. Mobile
 controls and midpoint pinch zoom are included. Realistic rendering remains
-default-off.
+default-off. Inspecting a creature or NPC shows its saved hit-point grid
+(armor shields; burned, lost, poison and bleed), attack pattern with a
+damage-class badge and a Melee/Ranged toggle; merchants list wares and prices.
+The clickable player marker shows hit points, armor to distribute, wellbeing,
+stats, conditions and inventory (equipped badges, True/Minimum coins). These
+panels read only the locally opened save or a synced world already loaded.
 
 The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
@@ -24,9 +29,9 @@ mirklurk.wiki pictures (`assets/wiki/`) are used with permission.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `af0e249965c80d575a003fbc628ab291a56b1712`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/37957859132) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:af0e249`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:af0e249`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `6e8929b1153c50f472f4d9f3c0f146fac8440268`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38099296762) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:6e8929b`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:6e8929b`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -50,7 +55,7 @@ Delete removes a world's data at once (no tombstones). The server stores only
 hashes of sync/share keys and salted network hashes (`/data/salt`);
 `/data/adds.json` keeps those hashes with add times for 24 hours only, so daily
 quotas survive restarts. Layout: `/data/worlds/`, `/data/libraries/`,
-`/data/adds.json`, `/data/salt`. On first start the af0e249 backend deletes
+`/data/adds.json`, `/data/salt`. On startup the backend (since af0e249) deletes
 old seven-day share payloads (`/data/<64 hex>.bin`); they are not migrated.
 
 **Do not back up this volume or copy its payloads for rollback.** The current
@@ -165,19 +170,24 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `8676b175bfb6020a0461a604c80b89e546059926`, tags
-`mirklurk-map:8676b17` / `mirklurk-map-uploads:8676b17`. Preflight on
-2026-10-09 observed exact running images
-`sha256:a10d01909a670a4bf84437c0c6483a5005515d35bb5afe2a43509efd42cb0867` (web)
-and `sha256:0783d3e843d95662cb8af010a12918c098782923e4d20f22043da36e833d8676`
+Previous source: `af0e249965c80d575a003fbc628ab291a56b1712`, tags
+`mirklurk-map:af0e249` / `mirklurk-map-uploads:af0e249`. Preflight on
+2026-10-10 observed exact running images
+`sha256:c391a5d84059def3c2804536903ec8902e5b810491f1617b6628af6e71ee3d4a` (web)
+and `sha256:f8a312c65802e61cd127a1a46483d441bf10c951da3f0762f060cfeb234fb8e4`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The 8676b17 → af0e249 release replaced the upload backend's storage
-format (seven-day shares → synced libraries) and added wiki art to the web
-image plus its immutable-cache rule. Old seven-day payloads are deleted on the
-first af0e249 start and cannot be restored. Per upstream, the 8676b17 backend
-ignores the new `worlds/`, `libraries/` and `adds.json` files and starts empty,
-so rolling back is a pin revert (including the nginx cache rule) plus
-recreating uploads then web; rolling forward again serves the retained worlds.
+change it. The af0e249 → 6e8929b release changed only the frontend (entity
+inspection panels); `server/`, the Dockerfile, `deploy/nginx.conf`, the sharing
+format and `assets/` are unchanged, so the upload API, `/data` layout, CSP and
+caching rules are identical. Rolling back is a pin revert plus recreating
+uploads then web; no data or proxy change is involved.
+
+Rolling back further to `8676b17` crosses the storage-format change
+(seven-day shares → synced libraries) and the wiki-art immutable-cache rule.
+Per upstream, the 8676b17 backend ignores the `worlds/`, `libraries/` and
+`adds.json` files and starts empty, so that is a pin revert (including the
+nginx cache rule) plus recreating uploads then web; rolling forward again
+serves the retained worlds. Deleted seven-day payloads cannot be restored.
 
 To remove sharing entirely (rollback to a pre-sharing release), restore
 **only** the prior web image/pin and remove its
