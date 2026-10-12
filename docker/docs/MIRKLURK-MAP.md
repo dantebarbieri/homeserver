@@ -45,7 +45,12 @@ dialogs instead of the browser's `confirm()`. Since 911dc35 the editor also
 equips items by the game's slot rules: **Wear it** puts a new item on in a free
 equipment slot (so a character with no bag can put on a backpack), worn items
 have **Take off** (into the other bags) and carried items that fit a free slot
-have **Wear**. MirkMap is installable (web app manifest,
+have **Wear**. Since 006f096 the map, editor and upload server read a bag kept
+inside another bag the way the game loads it (below), so such saves open
+instead of failing with "Invalid inventory cell"; the editor's items get a
+**Move to…** menu (between worn containers, only where an item fits, upright
+or turned sideways), worn containers show their size and free cells, and
+adding an item can turn it sideways. MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
 local saves open offline.
@@ -67,9 +72,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `911dc35077b8ff3e0e2e7cc30fa4d622395d475f`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38272111499) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:911dc35`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:911dc35`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `006f096ca20d755d8364e284f7292818548f1042`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38275744523) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:006f096`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:006f096`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -112,6 +117,15 @@ Since 0a38974 the mark and `fromShare` are read from the package's
 existing records keep their stored flags, and a world's `fromShare` is re-read
 on its next upload. No migration. API routes, quotas, `/api/config`, record
 fields and the sharing format are otherwise unchanged.
+
+Since 006f096 the upload server's `Player.save` validation (it parses
+equipment inventories with the map's shared inventory reader) follows the
+game's loader (`item_recreate_grid`, 0.8.1.5): a `null` inventory cell counts
+as empty, and a container kept inside another container's grid is read as
+empty without parsing its own stale saved grid. Saves like that, previously
+rejected with 400 "Invalid inventory cell", are accepted; genuinely malformed
+cells are still rejected. API routes, quotas, `/api/config` and stored formats
+are unchanged; no migration.
 
 One-time sync codes (since d30a806: `POST`/`DELETE /api/library/pair` with the
 sync key, `POST /api/pair` to claim once) live only in backend memory and are
@@ -240,22 +254,39 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `0a38974793b401368804626cd8b801575ad2c0cb`, tags
-`mirklurk-map:0a38974` / `mirklurk-map-uploads:0a38974`. Preflight on
+Previous source: `911dc35077b8ff3e0e2e7cc30fa4d622395d475f`, tags
+`mirklurk-map:911dc35` / `mirklurk-map-uploads:911dc35`. Preflight on
 2026-10-12 observed exact running images
-`sha256:b1ee5a914038cd3da742a53c937be953ada989f647b001d5ed5419bad952b484` (web)
-and `sha256:f1a8107546faf69897993763ae4a616a6aa656d103db723fe9bb10dddca6cc1a`
+`sha256:6bbad9fa2f3f0491cfeb9c0947af26881f7b35755a3c56b5702f9cf22367ca0b` (web)
+and `sha256:9d7a52ee25e7a20a5af2ab05545eac969dca993147c7ab3c71526bb291638236`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The 0a38974 → 911dc35 release is frontend only: it changes
-`src/editor/`, `editor.css`, tests and the README (the save editor's
-equipping, above). `server/`, the Dockerfile, `.dockerignore`, source
-`deploy/nginx.conf`, the sharing code, `assets/` and `tools/smoke.sh` are
+change it. The 911dc35 → 006f096 release changes `src/inventory.ts` (the
+shared inventory reader, above), `src/editor/`, `editor.css`, tests and the
+README. `server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
+compose, the sharing code, `assets/` and `tools/smoke.sh` are unchanged
+(`nginx/mirklurk-map.conf` changed only its source-SHA comment; the service
+worker still keeps 367 files), but the uploads image does change behavior:
+`unpackSave` validates `Player.save` with that reader. Rolling back to 911dc35
+is a pin revert plus recreating uploads then web; the API and stored formats
+are the same, so no migration, data or proxy change is involved, and no data
+is lost. The 911dc35 images (and clients loaded from them) again reject
+`Player.save` files with a stale grid inside a nested container: uploading one
+returns 400, and a world stored with one since 006f096 does not open in a
+rolled-back client until it is uploaded again or after rolling forward. The
+editor's Move to…, container sizes and sideways adding disappear.
+
+Rolling back further to `0a38974793b401368804626cd8b801575ad2c0cb`
+(`mirklurk-map:0a38974` / `mirklurk-map-uploads:0a38974`, observed
+`sha256:b1ee5a914038cd3da742a53c937be953ada989f647b001d5ed5419bad952b484` /
+`sha256:f1a8107546faf69897993763ae4a616a6aa656d103db723fe9bb10dddca6cc1a` on
+2026-10-12) also removes the 911dc35 release, which was frontend only: it
+changed `src/editor/`, `editor.css`, tests and the README (the save editor's
+equipping, above); `server/`, the Dockerfile, `.dockerignore`, source
+`deploy/nginx.conf`, the sharing code, `assets/` and `tools/smoke.sh` were
 unchanged (`nginx/mirklurk-map.conf` changed only its source-SHA comment; the
-service worker still keeps 367 files). The uploads image is rebuilt only
-because both targets share the pin. Rolling back to 0a38974 is a pin revert
-plus recreating uploads then web; the API and stored formats are the same, so
-no migration, data or proxy change is involved. Only the editor's Wear it /
-Wear / Take off disappear.
+service worker kept 367 files). It is a pin revert plus recreating uploads then
+web; the API and stored formats are the same, so no migration, data or proxy
+change is involved. The editor's Wear it / Wear / Take off also disappear.
 
 Rolling back further to `800f34a8f054ec0d0e092104ced20aaa0fd48946`
 (`mirklurk-map:800f34a` / `mirklurk-map-uploads:800f34a`, observed
