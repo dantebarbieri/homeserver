@@ -136,13 +136,13 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: mirklurk-map:006f096
+    image: mirklurk-map:a70f513
     build:
-      context: "https://github.com/dantebarbieri/mirklurk-map.git#006f096ca20d755d8364e284f7292818548f1042"
+      context: "https://github.com/dantebarbieri/mirklurk-map.git#a70f5135cf9afe3ca9490a17e0cc365f6141e448"
       target: web
       labels:
         org.opencontainers.image.source: https://github.com/dantebarbieri/mirklurk-map
-        org.opencontainers.image.revision: 006f096ca20d755d8364e284f7292818548f1042
+        org.opencontainers.image.revision: a70f5135cf9afe3ca9490a17e0cc365f6141e448
     container_name: mirklurk-map
     read_only: true
     cap_drop: [ALL]
@@ -176,13 +176,13 @@ services:
   mirklurk-map-uploads:
     # No common-service logging: filesystem exceptions can contain capability
     # filenames. Health and HTTP errors remain observable without retaining keys.
-    image: mirklurk-map-uploads:006f096
+    image: mirklurk-map-uploads:a70f513
     build:
-      context: "https://github.com/dantebarbieri/mirklurk-map.git#006f096ca20d755d8364e284f7292818548f1042"
+      context: "https://github.com/dantebarbieri/mirklurk-map.git#a70f5135cf9afe3ca9490a17e0cc365f6141e448"
       target: uploads
       labels:
         org.opencontainers.image.source: https://github.com/dantebarbieri/mirklurk-map
-        org.opencontainers.image.revision: 006f096ca20d755d8364e284f7292818548f1042
+        org.opencontainers.image.revision: a70f5135cf9afe3ca9490a17e0cc365f6141e448
     container_name: mirklurk-map-uploads
     restart: unless-stopped
     logging:
