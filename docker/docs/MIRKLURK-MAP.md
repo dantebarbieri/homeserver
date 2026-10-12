@@ -32,7 +32,8 @@ creature icons and the saved time and weather; a **C** (Cheated) or **S**
 (From Share) badge follows a world's name; and **Download** builds a playable
 world ZIP in the browser from the existing data endpoints. The **Save editor**
 at `/edit/` (linked from the map) changes a character's save files locally
-through the File System Access API (desktop Chrome/Edge) and uploads nothing;
+through the File System Access API (desktop Chrome/Edge) and uploads nothing
+unless the owner saves to My worlds (since f7257fc, below);
 saving any edit writes a permanent Cheated mark (a `cheated` entry in
 MirkMap's notes file `MirkMap.json` beside `Player.save`). Since 0a38974 that
 file is JSON (`fromShare`, `shareDownloaded`, `cheated: {since, edits}`)
@@ -65,6 +66,27 @@ go only on tiles the game lets them live on; and the map gains a **Rafts**
 layer (under Items) with raft symbols, whose inspection shows the game's raft
 picture from the already-bundled `spr_placed_16x16_wider` strip. The parsed
 `Player.save` gains an `onRaft` flag (`ensureRaft`); nothing new is uploaded.
+Since f7257fc the map's crosshair button (under **World**) locates the
+character, opening the interior or zone they are in; neighbouring zones also
+draw their ground overlays, and a zoomed-out survey hides the zone outline.
+Inventories show each item's condition as the game's tooltip does (durability
+out of its maximum, _Portions left_, _Oil left_, a torch's or lantern's fuel,
+wetness), and a **Journal** (under the map, in the player inspection and in
+the editor) rebuilds the journal from the saved main-quest stage in the game's
+own words, linking its people and places to the map. The editor adds
+**Repair all** / **Refuel all** / **Dry all** and a per-item **Condition…**,
+sets poison, bleeding and stun on picked hit points, edits sickness and the
+warm/fed/rested/stamina-boost timers (`Player.save` also parses `fedTime` and
+`staminaBoostTime`), and moves you inside caves, ruin cellars, quest rooms and
+Scaal's depths. The map and the editor now share one opened save: **Save
+editor** / **Back to MirkMap** hand it over (a Live saves folder handle kept in
+this browser's IndexedDB `mirkmap-open`, a My worlds world, or a copy of the
+character's files). The editor can open and save **My worlds** library worlds
+through the existing `GET /api/library` and `GET`/`PUT
+/api/library/worlds/:id[/data]` routes (one upload of the whole character, the
+usual 30-second throttle) or download an edited ZIP, so editing no longer needs
+the File System Access API. Shared packages are now gzip-compressed (sharing
+limits, below).
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
@@ -78,7 +100,8 @@ This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
 in either image; 72 manifest-listed game-art PNGs and 282 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
-six MirkMap icons drawn from the game's "Map of area" item. The web image also
+six MirkMap icons drawn from the game's "Map of area" item and (since f7257fc)
+the journal's text copied from the game's `UI.ini`. The web image also
 serves `/manifest.webmanifest` (as `application/manifest+json`), `/sw.js` and
 `/icons/`; like `index.html` they revalidate (`no-cache`). The editor page
 `/edit/` (`/edit` too, via the existing `try_files`) uses `<base href="../">`
@@ -87,9 +110,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `d2ad2d4d57530b68ec1e754c81a4d172aca9d9fe`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38291758838) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:d2ad2d4`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:d2ad2d4`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `f7257fc0c5c409aac06dba8a8f5976d1d1cf81bc`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38317892991) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:f7257fc`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:f7257fc`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -102,8 +125,17 @@ Five worlds per library; updating a world already in it never counts. Per
 network (IPv4 address or IPv6 /64): ten stored worlds, ten new worlds per
 rolling 24 hours (deleted ones count; rejected uploads do not) and ten named
 libraries. A world is deleted **30 days after its last update**; updates extend
-it. Packages are bounded at 64 MiB / 4096 files; each world has a 30-second
-update throttle and the backend allows 60 API requests/minute per network.
+it. Packages are bounded at 64 MiB as sent and stored and at 4096 files; each
+world has a 30-second update throttle and the backend allows 60 API
+requests/minute per network. Since f7257fc clients send gzip-compressed
+packages holding up to **256 MiB** of save once inflated. The backend inflates
+into a buffer sized from the gzip trailer, refuses a declared size above
+256 MiB before inflating and rejects a stream that disagrees; uncompressed
+packages from older clients are still accepted up to 64 MiB, and are stored as
+sent. The request body limit (`MAX_UPLOAD`, `/api/config` `maxBytes`, nginx's
+and NPM's body bounds) stays 64 MiB. Worst case for one 256 MiB save is about
+64 + 256 + 128 MiB (~450 MiB) and the backend processes one upload body at a
+time, inside its 768 MiB limit; do not lower that limit.
 The single-process store limits totals to 1 GiB / 128 worlds / 2,048 named
 libraries. Do not scale the backend or attach a second writer to its volume.
 The 1 GiB limit is an **application admission limit**, not a filesystem quota;
@@ -123,7 +155,8 @@ Cheated mark adds its record key (a hash of the library hash and world ID) to
 so the mark outlives deletion and expiry. World records may carry `fromShare` /
 `cheated` flags, returned in WorldInfo only when true. A later upload of a
 listed world without the mark is repacked with it before storing
-(413 if that exceeds 64 MiB). Startup tolerates a missing `cheated.json` and
+(413 if that exceeds 64 MiB; since f7257fc the repack is gzip-compressed, and
+413 also above 256 MiB inflated). Startup tolerates a missing `cheated.json` and
 removes a stray `cheated.json.tmp`; invalid content stops the backend starting.
 Since 0a38974 the mark and `fromShare` are read from the package's
 `MirkMap.json` (a `cheated` entry; `"fromShare": true`), the repack writes
@@ -141,6 +174,11 @@ empty without parsing its own stale saved grid. Saves like that, previously
 rejected with 400 "Invalid inventory cell", are accepted; genuinely malformed
 cells are still rejected. API routes, quotas, `/api/config` and stored formats
 are unchanged; no migration.
+
+Since f7257fc that reader also requires an item's `burnTimeLeft` (torch and
+lantern fuel), when present, to be a finite number, as `durability` and `wet`
+already were; the game always writes a number, and a package that breaks this
+is refused with 400 "Invalid item burnTimeLeft".
 
 One-time sync codes (since d30a806: `POST`/`DELETE /api/library/pair` with the
 sync key, `POST /api/pair` to claim once) live only in backend memory and are
@@ -269,26 +307,54 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `a70f5135cf9afe3ca9490a17e0cc365f6141e448`, tags
-`mirklurk-map:a70f513` / `mirklurk-map-uploads:a70f513`. Preflight on
+Previous source: `d2ad2d4d57530b68ec1e754c81a4d172aca9d9fe`, tags
+`mirklurk-map:d2ad2d4` / `mirklurk-map-uploads:d2ad2d4`. Preflight on
 2026-10-12 observed exact running images
-`sha256:27e83d743dcbb4148b6bda04424f7e4ade30aff1f571a925d6f92c0df4968993` (web)
-and `sha256:120045f3859362305baafa08b745c30f9491e0fffb75859a6835c7d6466809c3`
+`sha256:55530d749d1432b9f283577a331bc5f52e6c72f55b26434026e525714eaa2a3e` (web)
+and `sha256:eb36ba0e5f1ea7dd981e6fe747d025b77d0e51746f2558e218cefd9c1514024a`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The a70f513 → d2ad2d4 release is frontend: it changes `edit.html`,
-`style.css`, `src/editor/`, `src/dialog.ts`, `src/inspect.ts`,
+change it. The d2ad2d4 → f7257fc release (mirklurk-map#29–#34, #36, #39)
+changes the frontend (above) and the upload server's behavior: of
+`server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
+compose, `assets/` and `tools/smoke.sh`, only `server/uploads.ts` changed (it
+awaits the now-async `unpackSave`), and `deno.json` gained only tasks, lint
+and coverage settings. Of what the upload server imports, `src/sharing-format.ts`
+now reads gzip packages up to 256 MiB inflated and writes the Cheated-mark
+repack gzip-compressed (above); `src/inventory.ts` also validates
+`burnTimeLeft`; `src/save.ts`, `src/health.ts` and `src/files.ts` changed
+additively. API routes, quotas and `/api/config` are unchanged
+(`nginx/mirklurk-map.conf` changed only its source-SHA comment; the service
+worker still keeps 367 files). No config, secret, proxy or nginx change and no
+migration. Rolling back to d2ad2d4 is a pin revert plus recreating uploads
+then web, with a **format caveat**: packages uploaded after this deploy (and
+any the backend repacked with the Cheated mark) are stored gzip-compressed.
+The d2ad2d4 client cannot open those worlds, and the d2ad2d4 backend rejects
+gzip uploads from browsers that still run the cached f7257fc app, until rolling
+forward again. Stored data is never lost, and worlds stored uncompressed (by
+older clients) keep working. The locate crosshair, item condition display and
+editing, the journal, hit-point status and timed-condition editing, interior
+moves and the shared opened save (with the editor's My worlds saving)
+disappear.
+
+Rolling back further to `a70f5135cf9afe3ca9490a17e0cc365f6141e448`
+(`mirklurk-map:a70f513` / `mirklurk-map-uploads:a70f513`, observed
+`sha256:27e83d743dcbb4148b6bda04424f7e4ade30aff1f571a925d6f92c0df4968993` /
+`sha256:120045f3859362305baafa08b745c30f9491e0fffb75859a6835c7d6466809c3` on
+2026-10-12) also removes the d2ad2d4 release, which was frontend: it changed
+`edit.html`, `style.css`, `src/editor/`, `src/dialog.ts`, `src/inspect.ts`,
 `src/itemdata.ts`, `src/mapview.ts`, `src/objects.ts`, `src/save.ts`,
 `src/view.ts`, `tools/itemdata.ts`, tests and the README (water and raft
 moves, every carryable item, creatures only where they live, the Rafts layer,
 above). `server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
-compose, the sharing code, `assets/` and `tools/smoke.sh` are unchanged
+compose, the sharing code, `assets/` and `tools/smoke.sh` were unchanged
 (`nginx/mirklurk-map.conf` changed only its source-SHA comment; the service
-worker still keeps 367 files). Of what the upload server imports only
+worker kept 367 files). Of what the upload server imports only
 `src/save.ts` changed, additively (`parsePlayer` also reads `ensureRaft` into
-`onRaft`), so the uploads image changes but no API route, quota,
-`/api/config`, validation outcome or stored format does. Rolling back to
-a70f513 is a pin revert plus recreating uploads then web; no migration, data
-or proxy change is involved and no data is lost. The editor again refuses to
+`onRaft`), so the uploads image changed but no API route, quota,
+`/api/config`, validation outcome or stored format did. It is a pin revert
+plus recreating uploads then web; no migration, data or proxy change is
+involved and no data is lost (the f7257fc gzip caveat above applies to this
+and every earlier release). The editor again refuses to
 move you into water, rafts are neither brought, made, left nor docked, the
 non-lootable items and creature habitat checks disappear, and the map loses
 its Rafts layer. Edits already saved to local game files are unaffected.
