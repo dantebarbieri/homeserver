@@ -41,7 +41,11 @@ in that API and could not save at all. The editor has an **Editor** /
 **Full map** switch (MirkMap's own map of the save with unsaved edits; move
 yourself from it), per-change **Undo**, and a list of worn and carried items
 with **Remove**; the editor and the map's sharing panel ask in in-page
-dialogs instead of the browser's `confirm()`. MirkMap is installable (web app manifest,
+dialogs instead of the browser's `confirm()`. Since 911dc35 the editor also
+equips items by the game's slot rules: **Wear it** puts a new item on in a free
+equipment slot (so a character with no bag can put on a backpack), worn items
+have **Take off** (into the other bags) and carried items that fit a free slot
+have **Wear**. MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
 local saves open offline.
@@ -63,9 +67,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `0a38974793b401368804626cd8b801575ad2c0cb`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38270006556) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:0a38974`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:0a38974`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `911dc35077b8ff3e0e2e7cc30fa4d622395d475f`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38272111499) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:911dc35`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:911dc35`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -236,23 +240,38 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `800f34a8f054ec0d0e092104ced20aaa0fd48946`, tags
-`mirklurk-map:800f34a` / `mirklurk-map-uploads:800f34a`. Preflight on
+Previous source: `0a38974793b401368804626cd8b801575ad2c0cb`, tags
+`mirklurk-map:0a38974` / `mirklurk-map-uploads:0a38974`. Preflight on
 2026-10-12 observed exact running images
-`sha256:0ed5a76acc1ab12e683b0acd19a2e26f745714e610cc322333594478487e5247` (web)
-and `sha256:91b8bda1c2b068421907924a43827bef9757524db4b1cbc47f45b23cd9c28db3`
+`sha256:b1ee5a914038cd3da742a53c937be953ada989f647b001d5ed5419bad952b484` (web)
+and `sha256:f1a8107546faf69897993763ae4a616a6aa656d103db723fe9bb10dddca6cc1a`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The 800f34a → 0a38974 release changes only application code: the
-Dockerfile, `.dockerignore`, source `deploy/nginx.conf`, `assets/` and
-`tools/smoke.sh` are unchanged (`nginx/mirklurk-map.conf` changed only its
-source-SHA comment; the service worker still keeps 367 files). It moves
-MirkMap's notes from `MirkMap.ini` to `MirkMap.json` (above) and adds the
-editor's Full map, per-change Undo, item removal and in-page dialogs. Rolling
-back to 800f34a is a pin revert plus recreating uploads then web; no
-migration, data or proxy change is involved. The 800f34a backend accepts the
+change it. The 0a38974 → 911dc35 release is frontend only: it changes
+`src/editor/`, `editor.css`, tests and the README (the save editor's
+equipping, above). `server/`, the Dockerfile, `.dockerignore`, source
+`deploy/nginx.conf`, the sharing code, `assets/` and `tools/smoke.sh` are
+unchanged (`nginx/mirklurk-map.conf` changed only its source-SHA comment; the
+service worker still keeps 367 files). The uploads image is rebuilt only
+because both targets share the pin. Rolling back to 0a38974 is a pin revert
+plus recreating uploads then web; the API and stored formats are the same, so
+no migration, data or proxy change is involved. Only the editor's Wear it /
+Wear / Take off disappear.
+
+Rolling back further to `800f34a8f054ec0d0e092104ced20aaa0fd48946`
+(`mirklurk-map:800f34a` / `mirklurk-map-uploads:800f34a`, observed
+`sha256:0ed5a76acc1ab12e683b0acd19a2e26f745714e610cc322333594478487e5247` /
+`sha256:91b8bda1c2b068421907924a43827bef9757524db4b1cbc47f45b23cd9c28db3` on
+2026-10-12) also removes the 0a38974 release, which changed only application
+code (the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`, `assets/`
+and `tools/smoke.sh` were unchanged; `nginx/mirklurk-map.conf` changed only its
+source-SHA comment; the service worker kept 367 files). That release moved
+MirkMap's notes from `MirkMap.ini` to `MirkMap.json` (above) and added the
+editor's Full map, per-change Undo, item removal and in-page dialogs. It is a
+pin revert plus recreating uploads then web; no migration, data or proxy
+change is involved. The 800f34a backend accepts the
 same record fields and keeps `cheated.json`, but every release before 0a38974
 rejects packages containing `MirkMap.json` ("Invalid save file entry"): a world
-stored since this release with that file (marked by the editor, repacked with
+stored since 0a38974 with that file (marked by the editor, repacked with
 the mark, or a downloaded share added again) does not open in the rolled-back
 map until it is uploaded again from the rolled-back page (whose packer skips
 `MirkMap.json`; a listed world is re-marked with `MirkMap.ini`) or after rolling
