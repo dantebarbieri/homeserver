@@ -56,6 +56,15 @@ saving and quitting to the game's menu it rereads the save folder and replays
 the unsaved changes on the newest save, dropping (and naming) any that now do
 nothing or no longer apply; stats/wellbeing and time/weather edits write only
 the values changed. This is browser-only; nothing new is uploaded.
+Since d2ad2d4 **Where you stand** no longer refuses water: moving onto water
+or off a raft asks first, giving the water's depth, and offers to bring your
+raft, make one there, go without, leave it, or dock it at that shore (written
+to the zone's `Stations.save` as a finished raft, station 171). Every carryable
+item can be added (Campfire, Raft Base, quest items, seeds); spawned creatures
+go only on tiles the game lets them live on; and the map gains a **Rafts**
+layer (under Items) with raft symbols, whose inspection shows the game's raft
+picture from the already-bundled `spr_placed_16x16_wider` strip. The parsed
+`Player.save` gains an `onRaft` flag (`ensureRaft`); nothing new is uploaded.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
@@ -78,9 +87,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `a70f5135cf9afe3ca9490a17e0cc365f6141e448`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38284031556) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:a70f513`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:a70f513`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `d2ad2d4d57530b68ec1e754c81a4d172aca9d9fe`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38291758838) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:d2ad2d4`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:d2ad2d4`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -260,23 +269,44 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `006f096ca20d755d8364e284f7292818548f1042`, tags
-`mirklurk-map:006f096` / `mirklurk-map-uploads:006f096`. Preflight on
+Previous source: `a70f5135cf9afe3ca9490a17e0cc365f6141e448`, tags
+`mirklurk-map:a70f513` / `mirklurk-map-uploads:a70f513`. Preflight on
 2026-10-12 observed exact running images
-`sha256:8a7efa4afe823a45efc745c1ba3a2d1e9bea2c9effa7089e17bac86cd6d46f93` (web)
-and `sha256:5edbf80ddaece62fbfcef5919c378d6b94a4e23dc4035c287af4e4ec1e5851ff`
+`sha256:27e83d743dcbb4148b6bda04424f7e4ade30aff1f571a925d6f92c0df4968993` (web)
+and `sha256:120045f3859362305baafa08b745c30f9491e0fffb75859a6835c7d6466809c3`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The 006f096 → a70f513 release is frontend only: it changes
-`edit.html`, `src/editor/`, tests and the README (the editor's Reload save,
+change it. The a70f513 → d2ad2d4 release is frontend: it changes `edit.html`,
+`style.css`, `src/editor/`, `src/dialog.ts`, `src/inspect.ts`,
+`src/itemdata.ts`, `src/mapview.ts`, `src/objects.ts`, `src/save.ts`,
+`src/view.ts`, `tools/itemdata.ts`, tests and the README (water and raft
+moves, every carryable item, creatures only where they live, the Rafts layer,
 above). `server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
-compose, the sharing code, `assets/` and `tools/smoke.sh` are unchanged, and
-nothing the upload server imports changed (`nginx/mirklurk-map.conf` changed
-only its source-SHA comment; the service worker still keeps 367 files). The
-uploads image is rebuilt only because both targets share the pin. Rolling back
-to 006f096 is a pin revert plus recreating uploads then web; the API and
-stored formats are the same, so no migration, data or proxy change is
-involved. Only the editor's Reload save disappears (and stats/time edits again
-write every value of their group).
+compose, the sharing code, `assets/` and `tools/smoke.sh` are unchanged
+(`nginx/mirklurk-map.conf` changed only its source-SHA comment; the service
+worker still keeps 367 files). Of what the upload server imports only
+`src/save.ts` changed, additively (`parsePlayer` also reads `ensureRaft` into
+`onRaft`), so the uploads image changes but no API route, quota,
+`/api/config`, validation outcome or stored format does. Rolling back to
+a70f513 is a pin revert plus recreating uploads then web; no migration, data
+or proxy change is involved and no data is lost. The editor again refuses to
+move you into water, rafts are neither brought, made, left nor docked, the
+non-lootable items and creature habitat checks disappear, and the map loses
+its Rafts layer. Edits already saved to local game files are unaffected.
+
+Rolling back further to `006f096ca20d755d8364e284f7292818548f1042`
+(`mirklurk-map:006f096` / `mirklurk-map-uploads:006f096`, observed
+`sha256:8a7efa4afe823a45efc745c1ba3a2d1e9bea2c9effa7089e17bac86cd6d46f93` /
+`sha256:5edbf80ddaece62fbfcef5919c378d6b94a4e23dc4035c287af4e4ec1e5851ff` on
+2026-10-12) also removes the a70f513 release, which was frontend only: it
+changed `edit.html`, `src/editor/`, tests and the README (the editor's Reload
+save, above). `server/`, the Dockerfile, `.dockerignore`, source
+`deploy/nginx.conf`, compose, the sharing code, `assets/` and `tools/smoke.sh`
+were unchanged, and nothing the upload server imports changed
+(`nginx/mirklurk-map.conf` changed only its source-SHA comment; the service
+worker kept 367 files). It is a pin revert plus recreating uploads then web;
+the API and stored formats are the same, so no migration, data or proxy change
+is involved. The editor's Reload save also disappears (and stats/time edits
+again write every value of their group).
 
 Rolling back further to `911dc35077b8ff3e0e2e7cc30fa4d622395d475f`
 (`mirklurk-map:911dc35` / `mirklurk-map-uploads:911dc35`, observed
