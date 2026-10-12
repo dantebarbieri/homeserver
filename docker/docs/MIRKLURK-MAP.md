@@ -33,8 +33,15 @@ creature icons and the saved time and weather; a **C** (Cheated) or **S**
 world ZIP in the browser from the existing data endpoints. The **Save editor**
 at `/edit/` (linked from the map) changes a character's save files locally
 through the File System Access API (desktop Chrome/Edge) and uploads nothing;
-saving any edit writes a permanent Cheated mark (`cheated=1` in a hidden
-`MirkMap.ini` beside `Player.save`). MirkMap is installable (web app manifest,
+saving any edit writes a permanent Cheated mark (a `cheated` entry in
+MirkMap's notes file `MirkMap.json` beside `Player.save`). Since 0a38974 that
+file is JSON (`fromShare`, `shareDownloaded`, `cheated: {since, edits}`)
+rather than `MirkMap.ini`, because Chrome/Edge on Windows refuse `.ini` names
+in that API and could not save at all. The editor has an **Editor** /
+**Full map** switch (MirkMap's own map of the save with unsaved edits; move
+yourself from it), per-change **Undo**, and a list of worn and carried items
+with **Remove**; the editor and the map's sharing panel ask in in-page
+dialogs instead of the browser's `confirm()`. MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
 local saves open offline.
@@ -56,9 +63,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `800f34a8f054ec0d0e092104ced20aaa0fd48946`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38159068183) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:800f34a`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:800f34a`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `0a38974793b401368804626cd8b801575ad2c0cb`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38270006556) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:0a38974`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:0a38974`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -86,15 +93,21 @@ quotas survive restarts. Layout: `/data/worlds/`, `/data/libraries/`,
 (since af0e249) deletes old seven-day share payloads (`/data/<64 hex>.bin`);
 they are not migrated.
 
-Since 800f34a, the first upload of a library world whose `MirkMap.ini` says
-`cheated=1` adds its record key (a hash of the library hash and world ID) to
+Since 800f34a, the first upload of a library world whose package carries the
+Cheated mark adds its record key (a hash of the library hash and world ID) to
 `/data/cheated.json`, a JSON array kept for good, outside the 30-day retention,
 so the mark outlives deletion and expiry. World records may carry `fromShare` /
 `cheated` flags, returned in WorldInfo only when true. A later upload of a
-listed world without `MirkMap.ini` is repacked with the mark before storing
+listed world without the mark is repacked with it before storing
 (413 if that exceeds 64 MiB). Startup tolerates a missing `cheated.json` and
 removes a stray `cheated.json.tmp`; invalid content stops the backend starting.
-API routes, quotas, `/api/config` and the sharing format are unchanged.
+Since 0a38974 the mark and `fromShare` are read from the package's
+`MirkMap.json` (a `cheated` entry; `"fromShare": true`), the repack writes
+`MirkMap.json`, and package validation accepts `MirkMap.json` besides
+`.save`, `.tmap`, `.png` and `.ini`. An old `MirkMap.ini` no longer counts;
+existing records keep their stored flags, and a world's `fromShare` is re-read
+on its next upload. No migration. API routes, quotas, `/api/config`, record
+fields and the sharing format are otherwise unchanged.
 
 One-time sync codes (since d30a806: `POST`/`DELETE /api/library/pair` with the
 sync key, `POST /api/pair` to claim once) live only in backend memory and are
@@ -223,23 +236,44 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `d30a80686165d45fbe129f574ba8f04063180e7f`, tags
-`mirklurk-map:d30a806` / `mirklurk-map-uploads:d30a806`. Preflight on
-2026-10-11 observed exact running images
-`sha256:4aba2142a23af6c3874af7ecd3629d2b9df8ab50da26d8cf46bdf2a78cda4cfa` (web)
-and `sha256:5886b38218d8baa2f4e2079e489dc60102d670537bbe2d9df29f69cdfd62d659`
+Previous source: `800f34a8f054ec0d0e092104ced20aaa0fd48946`, tags
+`mirklurk-map:800f34a` / `mirklurk-map-uploads:800f34a`. Preflight on
+2026-10-12 observed exact running images
+`sha256:0ed5a76acc1ab12e683b0acd19a2e26f745714e610cc322333594478487e5247` (web)
+and `sha256:91b8bda1c2b068421907924a43827bef9757524db4b1cbc47f45b23cd9c28db3`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The d30a806 → 800f34a release adds the save editor (the
-Dockerfile/`.dockerignore` now also copy `edit.html` and `editor.css`; the
-service worker keeps 367 files, was 364; `assets/` is unchanged), the map's
+change it. The 800f34a → 0a38974 release changes only application code: the
+Dockerfile, `.dockerignore`, source `deploy/nginx.conf`, `assets/` and
+`tools/smoke.sh` are unchanged (`nginx/mirklurk-map.conf` changed only its
+source-SHA comment; the service worker still keeps 367 files). It moves
+MirkMap's notes from `MirkMap.ini` to `MirkMap.json` (above) and adds the
+editor's Full map, per-change Undo, item removal and in-page dialogs. Rolling
+back to 800f34a is a pin revert plus recreating uploads then web; no
+migration, data or proxy change is involved. The 800f34a backend accepts the
+same record fields and keeps `cheated.json`, but every release before 0a38974
+rejects packages containing `MirkMap.json` ("Invalid save file entry"): a world
+stored since this release with that file (marked by the editor, repacked with
+the mark, or a downloaded share added again) does not open in the rolled-back
+map until it is uploaded again from the rolled-back page (whose packer skips
+`MirkMap.json`; a listed world is re-marked with `MirkMap.ini`) or after rolling
+forward. Nothing is deleted. The rolled-back editor again cannot save on
+Windows Chrome/Edge.
+
+Rolling back further to `d30a80686165d45fbe129f574ba8f04063180e7f`
+(`mirklurk-map:d30a806` / `mirklurk-map-uploads:d30a806`, observed
+`sha256:4aba2142a23af6c3874af7ecd3629d2b9df8ab50da26d8cf46bdf2a78cda4cfa` /
+`sha256:5886b38218d8baa2f4e2079e489dc60102d670537bbe2d9df29f69cdfd62d659` on
+2026-10-11) also removes the 800f34a release: the save editor (the
+Dockerfile/`.dockerignore` copy `edit.html` and `editor.css`; the
+service worker kept 364 files before it; `assets/` is unchanged), the map's
 C/S badges, gatherables, creature icons, time and weather and world ZIP
 downloads, the additive `cheated.json` / record-flag handling in `server/`
 (above) and two nginx contract changes (`edit`/`editor` hashed assets
-immutable; CSP `base-uri 'self'`). Rolling back to d30a806 is a pin revert that
+immutable; CSP `base-uri 'self'`). It is a pin revert that
 includes `nginx/mirklurk-map.conf`, plus recreating uploads then web; no
 migration, data or proxy change is involved. The d30a806 backend ignores the
 extra record fields and `cheated.json` (which stays in the volume); a world it
-rewrites loses the record flags and a package without `MirkMap.ini` is not
+rewrites loses the record flags and a package without the mark is not
 re-marked, but after rolling forward again `cheated.json` restores the mark on
 that world's next upload. `/edit/` is gone while rolled back.
 
