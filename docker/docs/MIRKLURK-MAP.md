@@ -50,7 +50,13 @@ inside another bag the way the game loads it (below), so such saves open
 instead of failing with "Invalid inventory cell"; the editor's items get a
 **Move to…** menu (between worn containers, only where an item fits, upright
 or turned sideways), worn containers show their size and free cells, and
-adding an item can turn it sideways. MirkMap is installable (web app manifest,
+adding an item can turn it sideways. Since a70f513 the editor (in edit mode)
+has **Reload save**, so the page can stay open while the owner plays: after
+saving and quitting to the game's menu it rereads the save folder and replays
+the unsaved changes on the newest save, dropping (and naming) any that now do
+nothing or no longer apply; stats/wellbeing and time/weather edits write only
+the values changed. This is browser-only; nothing new is uploaded.
+MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
 local saves open offline.
@@ -72,9 +78,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `006f096ca20d755d8364e284f7292818548f1042`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38275744523) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:006f096`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:006f096`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `a70f5135cf9afe3ca9490a17e0cc365f6141e448`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38284031556) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:a70f513`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:a70f513`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -254,26 +260,42 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `911dc35077b8ff3e0e2e7cc30fa4d622395d475f`, tags
-`mirklurk-map:911dc35` / `mirklurk-map-uploads:911dc35`. Preflight on
+Previous source: `006f096ca20d755d8364e284f7292818548f1042`, tags
+`mirklurk-map:006f096` / `mirklurk-map-uploads:006f096`. Preflight on
 2026-10-12 observed exact running images
-`sha256:6bbad9fa2f3f0491cfeb9c0947af26881f7b35755a3c56b5702f9cf22367ca0b` (web)
-and `sha256:9d7a52ee25e7a20a5af2ab05545eac969dca993147c7ab3c71526bb291638236`
+`sha256:8a7efa4afe823a45efc745c1ba3a2d1e9bea2c9effa7089e17bac86cd6d46f93` (web)
+and `sha256:5edbf80ddaece62fbfcef5919c378d6b94a4e23dc4035c287af4e4ec1e5851ff`
 (uploads); record again before mutation because tagged base-image rebuilds can
-change it. The 911dc35 → 006f096 release changes `src/inventory.ts` (the
-shared inventory reader, above), `src/editor/`, `editor.css`, tests and the
-README. `server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
-compose, the sharing code, `assets/` and `tools/smoke.sh` are unchanged
-(`nginx/mirklurk-map.conf` changed only its source-SHA comment; the service
-worker still keeps 367 files), but the uploads image does change behavior:
-`unpackSave` validates `Player.save` with that reader. Rolling back to 911dc35
-is a pin revert plus recreating uploads then web; the API and stored formats
-are the same, so no migration, data or proxy change is involved, and no data
-is lost. The 911dc35 images (and clients loaded from them) again reject
-`Player.save` files with a stale grid inside a nested container: uploading one
-returns 400, and a world stored with one since 006f096 does not open in a
-rolled-back client until it is uploaded again or after rolling forward. The
-editor's Move to…, container sizes and sideways adding disappear.
+change it. The 006f096 → a70f513 release is frontend only: it changes
+`edit.html`, `src/editor/`, tests and the README (the editor's Reload save,
+above). `server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
+compose, the sharing code, `assets/` and `tools/smoke.sh` are unchanged, and
+nothing the upload server imports changed (`nginx/mirklurk-map.conf` changed
+only its source-SHA comment; the service worker still keeps 367 files). The
+uploads image is rebuilt only because both targets share the pin. Rolling back
+to 006f096 is a pin revert plus recreating uploads then web; the API and
+stored formats are the same, so no migration, data or proxy change is
+involved. Only the editor's Reload save disappears (and stats/time edits again
+write every value of their group).
+
+Rolling back further to `911dc35077b8ff3e0e2e7cc30fa4d622395d475f`
+(`mirklurk-map:911dc35` / `mirklurk-map-uploads:911dc35`, observed
+`sha256:6bbad9fa2f3f0491cfeb9c0947af26881f7b35755a3c56b5702f9cf22367ca0b` /
+`sha256:9d7a52ee25e7a20a5af2ab05545eac969dca993147c7ab3c71526bb291638236` on
+2026-10-12) also removes the 006f096 release, which changed `src/inventory.ts`
+(the shared inventory reader, above), `src/editor/`, `editor.css`, tests and
+the README. `server/`, the Dockerfile, `.dockerignore`, source
+`deploy/nginx.conf`, compose, the sharing code, `assets/` and `tools/smoke.sh`
+were unchanged (`nginx/mirklurk-map.conf` changed only its source-SHA comment;
+the service worker kept 367 files), but the uploads image did change behavior:
+`unpackSave` validates `Player.save` with that reader. It is a pin revert plus
+recreating uploads then web; the API and stored formats are the same, so no
+migration, data or proxy change is involved, and no data is lost. The 911dc35
+images (and clients loaded from them) again reject `Player.save` files with a
+stale grid inside a nested container: uploading one returns 400, and a world
+stored with one since 006f096 does not open in a rolled-back client until it
+is uploaded again or after rolling forward. The editor's Move to…, container
+sizes and sideways adding disappear.
 
 Rolling back further to `0a38974793b401368804626cd8b801575ad2c0cb`
 (`mirklurk-map:0a38974` / `mirklurk-map-uploads:0a38974`, observed
