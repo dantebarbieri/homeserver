@@ -99,9 +99,17 @@ hashing and build helpers; development path validation and the map timer are
 also corrected. Library updates with a stale exact ETag, or any supplied
 `If-Match` for a deleted world, return 412 before the update throttle is
 considered. Nothing new is uploaded automatically.
+Since a4671a4 MirkMap and the save editor also know Mirklurk 0.8.9.9, the
+Steam beta (`next_version_tester`): its new beings, items and merchants, the
+Survivors' camp (Wilda and Grand Mother's hut), the Magus realm and its rule changes,
+with regenerated game data and art. Each save's `VERSION` (in `Player.save`)
+picks the rules, and a **Latest** / **Beta** switch shows 0.8.1.5's or
+0.8.9.9's instead; the editor refuses to write items or creatures the chosen
+version lacks. This is browser code and art; the upload server only reads the
+new 0.8.9.9 keys additively, and nothing new is uploaded.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
-page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
+page, scripts, stylesheets, manifest, icons and all bundled art (368 files) so
 local saves open offline.
 It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
 an online visit gets the newest release.
@@ -110,7 +118,7 @@ The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
 This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
-in either image; 72 manifest-listed game-art PNGs and 282 manifest-listed
+in either image; 73 manifest-listed game-art PNGs and 282 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
 six MirkMap icons drawn from the game's "Map of area" item and (since f7257fc)
 the journal's text copied from the game's `UI.ini`. The web image also
@@ -122,9 +130,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `a4220adcd704a43f0c954137ce1a167c71342cc1`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38335110290) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:a4220ad`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:a4220ad`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `a4671a4250d872d893bb1b2055dfd4ea27980a54`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38426662416) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:a4671a4`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:a4671a4`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -136,14 +144,14 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.125dbf2792.js` | `125dbf2792cb56362305d041925097705b5abc6ebc7658b4a5f36e4f37712cbf` |
-| `edit.a23172e305.js` | `a23172e305fa8281bc41549ac4d3b14d3aed088fa81d1cff71b29776686562f2` |
+| `app.d04a410ec3.js` | `d04a410ec3c53b9e7e5ca70425d8c101a3552655dfad6541f26ca8ad15c23f98` |
+| `edit.8d27d00b88.js` | `8d27d00b88eed55c6393bb265990216ef6736ef6b9dac740f37ed020ed46e02e` |
 
-Stylesheets are `style.ed6530db1e.css` and `editor.b1df531e67.css`; the service
-worker still keeps 367 entries. Both browser bundles contain
-`Invalid saved record list`; the editor also contains `Cannot edit this area:`,
-`Movement and creature changes are unavailable here.` and
-`Your pending edits are unchanged.`
+Stylesheets are `style.36183e97cd.css` and `editor.b1df531e67.css` (unchanged);
+the service worker keeps 368 entries and lists both bundles. Both browser
+bundles contain `Game version rules`; the map's also contains
+`on no Steam branch now`, `next_version_tester`, `Leeching` and `Grand Mother`,
+and the editor's `does not have, so it could not load the save`.
 
 ## Privacy, limits and retention
 
@@ -335,8 +343,38 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `f7257fc0c5c409aac06dba8a8f5976d1d1cf81bc`, tags
-`mirklurk-map:f7257fc` / `mirklurk-map-uploads:f7257fc`. Preflight on
+Previous source: `a4220adcd704a43f0c954137ce1a167c71342cc1`, tags
+`mirklurk-map:a4220ad` / `mirklurk-map-uploads:a4220ad`. Preflight on
+2026-10-13 UTC observed exact running images
+`sha256:f14ad2299f50a08263039f45408e738b2a9d3d276647c9c872ca201df72ff6c0` (web)
+and `sha256:802e75bd96073caa3982f980d8260a12655441af02b5ecdd303a9e223215d791`
+(uploads); retain and recheck these exact images before mutation.
+The a4220ad -> a4671a4 release includes
+[dantebarbieri/mirklurk-map#43](https://github.com/dantebarbieri/mirklurk-map/pull/43)
+(Mirklurk 0.8.9.9's beings, items, merchants, Survivors' camp, Magus realm and
+rule changes, with regenerated data and art) and
+[dantebarbieri/mirklurk-map#44](https://github.com/dantebarbieri/mirklurk-map/pull/44)
+(each save's version is followed, the Latest/Beta switch, and the editor's
+refusal to write what the chosen version lacks). `server/`, the Dockerfile,
+`.dockerignore`, source `deploy/nginx.conf`, compose, the sharing code and
+`tools/smoke.sh` are unchanged; `assets/game/` swaps content-hashed art (one
+more PNG, so the service worker keeps 368 files) and `tools/` changes only
+generators that are not copied into the image. Of what the upload server
+imports, `src/save.ts` reads 0.8.9.9's added keys (`camp`, `campQ`, `xscale`)
+additively and `src/itemdata.ts`, `src/armor.ts` and `src/rules.ts` gain
+0.8.9.9 data, so the uploads image changes but no validation outcome, API
+route, quota, `/api/config` or stored format does.
+`nginx/mirklurk-map.conf` changes only its source-SHA comment. No migration,
+config, secret or proxy change is required. Revert the pin and recreate only
+uploads, then web, from the retained exact a4220ad images under the shared
+lock; never restore the uploads volume. The rollback has no format
+incompatibility; it removes 0.8.9.9 support and the Latest/Beta switch, so
+0.8.9.9 saves are again read with 0.8.1.5 rules. Edits already saved to local
+game files are unaffected.
+
+Rolling back further to `f7257fc0c5c409aac06dba8a8f5976d1d1cf81bc`, tags
+`mirklurk-map:f7257fc` / `mirklurk-map-uploads:f7257fc` (also tagged
+`rollback-f7257fc-20261013-a4220ad`). Preflight on
 2026-10-13 UTC observed exact running images
 `sha256:419e17708118b9f8662638d9611bac559e9ff1487e841d047eb0b5f3d158866b` (web)
 and `sha256:c9ce0d92ac676d98122974e03244513a663765366ff4acd0f5098874f63c01b6`
