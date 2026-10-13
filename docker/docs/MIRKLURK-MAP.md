@@ -87,6 +87,18 @@ through the existing `GET /api/library` and `GET`/`PUT
 usual 30-second throttle) or download an edited ZIP, so editing no longer needs
 the File System Access API. Shared packages are now gzip-compressed (sharing
 limits, below).
+Since a4220ad the character preview becomes directly editable after entering
+edit mode: vital bars, hit points and conditions apply immediately, with
+undo rather than a separate Apply button. Repeated edits to the same control
+replace the pending change. Malformed saved object lists now produce a
+warning instead of silently disappearing; an unreadable creature or station
+list disables movement and creature changes only in that area, identifies
+the file and preserves pending edits. Reader/editor equipment-copy detection
+and armor durability metadata are shared, along with numeric, formatting,
+hashing and build helpers; development path validation and the map timer are
+also corrected. Library updates with a stale exact ETag, or any supplied
+`If-Match` for a deleted world, return 412 before the update throttle is
+considered. Nothing new is uploaded automatically.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (367 files) so
@@ -110,14 +122,28 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `f7257fc0c5c409aac06dba8a8f5976d1d1cf81bc`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38317892991) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:f7257fc`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:f7257fc`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `a4220adcd704a43f0c954137ce1a167c71342cc1`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38335110290) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:a4220ad`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:a4220ad`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
 | Exposure | No host ports, no router/firewall changes, no public file listing, no outbound backend network |
 | Health | Each container's `/healthz`; web depends on healthy uploads |
+
+Expected Deno 2.9.7 build identifiers (compare the actual image and live bytes,
+not just HTTP status):
+
+| Asset | SHA-256 |
+|---|---|
+| `app.125dbf2792.js` | `125dbf2792cb56362305d041925097705b5abc6ebc7658b4a5f36e4f37712cbf` |
+| `edit.a23172e305.js` | `a23172e305fa8281bc41549ac4d3b14d3aed088fa81d1cff71b29776686562f2` |
+
+Stylesheets are `style.ed6530db1e.css` and `editor.b1df531e67.css`; the service
+worker still keeps 367 entries. Both browser bundles contain
+`Invalid saved record list`; the editor also contains `Cannot edit this area:`,
+`Movement and creature changes are unavailable here.` and
+`Your pending edits are unchanged.`
 
 ## Privacy, limits and retention
 
@@ -289,9 +315,11 @@ bash -c '
 6. Use only a small **synthetic** save in a fresh random library: create, list,
    read data with ETag/304, read through its derived share key, reject writes via
    the share key and on the read-only view, reject a mismatched world ID, respect
-   the 30-second throttle, update with `If-Match: *` (retention extended,
-   creation time kept), reset the share link, delete, then verify 404 and that a
-   deleted world is not re-added (412). Never upload real saves or print keys.
+   the 30-second throttle (including a matching exact ETag), and reject stale
+   exact ETags with 412 before throttling. Update with `If-Match: *` (retention
+   extended, creation time kept), reject the old ETag, reset the share link,
+   delete, then verify 404 and that neither a wildcard nor an exact `If-Match`
+   re-adds the deleted world (412). Never upload real saves or print keys.
    Confirm other containers and all maintenance/timer state remained unchanged.
 
 `python3 -B docker/scripts/mirklurk-map-smoke.py --family 4` (or `6`)
@@ -307,7 +335,31 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `d2ad2d4d57530b68ec1e754c81a4d172aca9d9fe`, tags
+Previous source: `f7257fc0c5c409aac06dba8a8f5976d1d1cf81bc`, tags
+`mirklurk-map:f7257fc` / `mirklurk-map-uploads:f7257fc`. Preflight on
+2026-10-13 UTC observed exact running images
+`sha256:419e17708118b9f8662638d9611bac559e9ff1487e841d047eb0b5f3d158866b` (web)
+and `sha256:c9ce0d92ac676d98122974e03244513a663765366ff4acd0f5098874f63c01b6`
+(uploads); retain and recheck these exact images before mutation.
+The f7257fc -> a4220ad release includes
+[dantebarbieri/mirklurk-map#41](https://github.com/dantebarbieri/mirklurk-map/pull/41)
+(editable character preview and exact ETag handling),
+[dantebarbieri/mirklurk-map#40](https://github.com/dantebarbieri/mirklurk-map/pull/40)
+(shared helpers, development path validation and the map timer) and
+[dantebarbieri/mirklurk-map#38](https://github.com/dantebarbieri/mirklurk-map/pull/38)
+(reliable assertions, shared equipment rules and explicit malformed-object
+warnings). The Dockerfile and `.dockerignore` add `tools/shared.ts` to the
+build; runtime hardening, mounts, networks, resources, source nginx contract,
+assets, API routes, quotas, `/api/config` and stored formats are unchanged.
+`nginx/mirklurk-map.conf` changes only its source-SHA comment. No migration,
+config, secret or proxy change is required. Revert the pin and recreate only
+uploads, then web, from the retained exact f7257fc images under the shared
+lock; never restore the uploads volume. Gzip packages already work at f7257fc,
+so this rollback has no format incompatibility. It removes the new preview
+and malformed-area behavior and the exact-ETag lost-update guard: f7257fc
+honors only `If-Match: *` when refusing to re-add deleted worlds.
+
+Rolling back further to `d2ad2d4d57530b68ec1e754c81a4d172aca9d9fe`, tags
 `mirklurk-map:d2ad2d4` / `mirklurk-map-uploads:d2ad2d4`. Preflight on
 2026-10-12 observed exact running images
 `sha256:55530d749d1432b9f283577a331bc5f52e6c72f55b26434026e525714eaa2a3e` (web)

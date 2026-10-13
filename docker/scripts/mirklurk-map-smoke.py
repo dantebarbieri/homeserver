@@ -105,6 +105,8 @@ def exercise():
         assert headers["Last-Modified"], "Missing Last-Modified"
         etag = headers["ETag"]
         request("GET", path + "/data", 304, key=sync, headers={"If-None-Match": etag})
+        request("PUT", path, 412, replacement, sync, {"If-Match": '"stale-version"'})
+        request("PUT", path, 429, replacement, sync, {"If-Match": etag})
 
         share = created["share"]
         data, _ = request("GET", "/api/view/data", 200, key=share)
@@ -126,6 +128,7 @@ def exercise():
         assert updated["expires"] > created["expires"], "Update did not extend retention"
         data, headers = request("GET", path + "/data", 200, key=sync, headers={"If-None-Match": etag})
         assert data == replacement and headers["ETag"] != etag, "Updated data/ETag mismatch"
+        request("PUT", path, 412, original, sync, {"If-Match": etag})
 
         data, _ = request("POST", path + "/share", 200, key=sync)
         reset = json.loads(data)["share"]
@@ -139,10 +142,11 @@ def exercise():
         request("GET", path + "/data", 404, key=sync)
         request("GET", "/api/view/data", 404, key=reset)
         request("PUT", path, 412, replacement, sync, {"If-Match": "*"})
+        request("PUT", path, 412, replacement, sync, {"If-Match": headers["ETag"]})
         listing, _ = request("GET", "/api/library", 200, key=sync)
         assert json.loads(listing)["worlds"] == [], "Deleted world is still listed"
         print("PASS: config, keyless 401, synced-world create/list/read/ETag, read-only share, share-key isolation, "
-              "mismatch 409, throttle, 30-day update, share reset, delete, no re-add, final 404.")
+              "mismatch 409, exact/stale/deleted If-Match, throttle, 30-day update, share reset, delete, no re-add, final 404.")
     finally:
         if created and not deleted:
             # This test owns exactly one world in its own random library; never touch others.
