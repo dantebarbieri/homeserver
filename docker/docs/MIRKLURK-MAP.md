@@ -107,6 +107,9 @@ picks the rules, and a **Latest** / **Beta** switch shows 0.8.1.5's or
 0.8.9.9's instead; the editor refuses to write items or creatures the chosen
 version lacks. This is browser code and art; the upload server only reads the
 new 0.8.9.9 keys additively, and nothing new is uploaded.
+Since 407e030 The Terror (being 40) has its own `terror` creature icon instead
+of the Mirkfangs' bat, and Magus Clay's `magus` icon is redrawn from his sprite
+as a hooded robe with folded arms and no staff. This is browser code only.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (368 files) so
@@ -130,9 +133,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `a4671a4250d872d893bb1b2055dfd4ea27980a54`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38426662416) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:a4671a4`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:a4671a4`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `407e030694efc0cc117e1df97fec3c0a1f6d293c`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38443563007) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:407e030`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:407e030`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -144,12 +147,14 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.d04a410ec3.js` | `d04a410ec3c53b9e7e5ca70425d8c101a3552655dfad6541f26ca8ad15c23f98` |
-| `edit.8d27d00b88.js` | `8d27d00b88eed55c6393bb265990216ef6736ef6b9dac740f37ed020ed46e02e` |
+| `app.516d400f60.js` | `516d400f60d203c360713eb64d9e73818ca3da57a1bcf2af11e69ef71913f500` |
+| `edit.8be3aa356d.js` | `8be3aa356d55778c1adfdd0231e3de5bac76fc39dd4f013e240e6a241d880579` |
 
 Stylesheets are `style.36183e97cd.css` and `editor.b1df531e67.css` (unchanged);
 the service worker keeps 368 entries and lists both bundles. Both browser
-bundles contain `Game version rules`; the map's also contains
+bundles contain `Game version rules`, The Terror's icon path
+`M-2 -2.3 L-2.5 -6.1` and Magus Clay's `M0 -6.8 Q2.7 -6 2.7 -3.7`, and no longer
+the old staff path `M-.6 -7 Q2 -6.8`; the map's also contains
 `on no Steam branch now`, `next_version_tester`, `Leeching` and `Grand Mother`,
 and the editor's `does not have, so it could not load the save`.
 
@@ -343,8 +348,32 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `a4220adcd704a43f0c954137ce1a167c71342cc1`, tags
-`mirklurk-map:a4220ad` / `mirklurk-map-uploads:a4220ad`. Preflight on
+Previous source: `a4671a4250d872d893bb1b2055dfd4ea27980a54`, tags
+`mirklurk-map:a4671a4` / `mirklurk-map-uploads:a4671a4` (also tagged
+`rollback-a4671a4-20261013-407e030`). Preflight on
+2026-10-13 UTC observed exact running images
+`sha256:0130950708e59f1236e131914db7d2f73c9f02c58f9e3051362dee17af841baf` (web)
+and `sha256:71c6fd12e152ed57303024dd71d2669e61aed3d112e7f8bea15ecff5b5c3f189`
+(uploads); retain and recheck these exact images before mutation.
+The a4671a4 -> 407e030 release is
+[dantebarbieri/mirklurk-map#45](https://github.com/dantebarbieri/mirklurk-map/pull/45)
+(The Terror's own creature icon and Magus Clay's redrawn one). It changes only
+`src/mapview.ts`, `src/objects.ts`, tests and the README. `server/`, the
+Dockerfile, `.dockerignore`, source `deploy/nginx.conf`, compose, the sharing
+code, `assets/` and `tools/smoke.sh` are unchanged (the service worker keeps
+368 files), and nothing the upload server imports changes, so the rebuilt
+uploads image behaves identically: no validation outcome, API route, quota,
+`/api/config` or stored format changes.
+`nginx/mirklurk-map.conf` changes only its source-SHA comment. No migration,
+config, secret or proxy change is required. Revert the pin and recreate only
+uploads, then web, from the retained exact a4671a4 images under the shared
+lock; never restore the uploads volume. The rollback has no format
+incompatibility; it only brings back the Mirkfangs' bat for The Terror and
+Magus Clay's earlier icon.
+
+Rolling back further to `a4220adcd704a43f0c954137ce1a167c71342cc1`, tags
+`mirklurk-map:a4220ad` / `mirklurk-map-uploads:a4220ad` (also tagged
+`rollback-a4220ad-20261013-a4671a4`). Preflight on
 2026-10-13 UTC observed exact running images
 `sha256:f14ad2299f50a08263039f45408e738b2a9d3d276647c9c872ca201df72ff6c0` (web)
 and `sha256:802e75bd96073caa3982f980d8260a12655441af02b5ecdd303a9e223215d791`
