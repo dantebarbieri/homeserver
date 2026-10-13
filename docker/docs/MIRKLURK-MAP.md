@@ -115,9 +115,14 @@ it leaves with nothing to do, and names them on its card: setting a field
 again, or **Heal all wounds** after poisoning hit points, keeps one change
 where there were several (and none when it only puts back what the save had).
 This is editor code only; nothing new is uploaded.
+Since 5ce1c5f the bundled mirklurk.wiki pictures are refreshed for 0.8.9.9:
+24 new pictures (items 171, 258-262 and 264-275; beings 36-41) with
+regenerated wiki art and data, and Magus Clay in his realm (being 41) shows
+his own picture and links to the wiki page `Magus Clay (boss)`. This is
+browser code and art only; nothing new is uploaded.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
-page, scripts, stylesheets, manifest, icons and all bundled art (368 files) so
+page, scripts, stylesheets, manifest, icons and all bundled art (392 files) so
 local saves open offline.
 It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
 an online visit gets the newest release.
@@ -126,7 +131,7 @@ The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
 This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
-in either image; 73 manifest-listed game-art PNGs and 282 manifest-listed
+in either image; 73 manifest-listed game-art PNGs and 306 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
 six MirkMap icons drawn from the game's "Map of area" item and (since f7257fc)
 the journal's text copied from the game's `UI.ini`. The web image also
@@ -138,9 +143,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `a83056cea70de22a736009beb5c8e8f630820f84`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38459282952) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:a83056c`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:a83056c`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `5ce1c5fb8ed6d25034c696bfd385d42e7c69bf33`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38474575467) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:5ce1c5f`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:5ce1c5f`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -152,13 +157,14 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.516d400f60.js` | `516d400f60d203c360713eb64d9e73818ca3da57a1bcf2af11e69ef71913f500` |
-| `edit.afdc4ac38d.js` | `afdc4ac38da0278a67941c0f81461e73c56d7e7d02f52d23e2d561fb93496bb9` |
-| `sw.js` | `57be396bab17994de733df518825203ecf4ed0208627e2b900aefd8580f47cb6` |
+| `app.d3d445da09.js` | `d3d445da09040485aaf6b0fbe76081754a8c8cfa4c2c3d71c0db020785f58bc0` |
+| `edit.1b742e663b.js` | `1b742e663b8ceb1368fc2fed555ac621b8cf039169102b9baaa68a197d178d22` |
+| `sw.js` | `91beb630cab69d4aa6c3c76eb407198cc2bb300d93bfa4274ab20b11ac381a7d` |
 
-The map bundle is unchanged since 407e030. Stylesheets are
-`style.36183e97cd.css` and `editor.b1df531e67.css` (unchanged);
-the service worker keeps 368 entries and lists both bundles. Both browser
+Stylesheets are `style.36183e97cd.css` and `editor.b1df531e67.css`
+(unchanged); the service worker keeps 392 entries and lists both bundles and
+`assets/wiki/being_41.26af089dcc.png`, which is served as `image/png`. Both
+browser bundles contain `Magus Clay (boss)`. Both browser
 bundles contain `Game version rules`, The Terror's icon path
 `M-2 -2.3 L-2.5 -6.1` and Magus Clay's `M0 -6.8 Q2.7 -6 2.7 -3.7`, and no longer
 the old staff path `M-.6 -7 Q2 -6.8`; the map's also contains
@@ -356,7 +362,31 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `407e030694efc0cc117e1df97fec3c0a1f6d293c`, tags
+Previous source: `a83056cea70de22a736009beb5c8e8f630820f84`, tags
+`mirklurk-map:a83056c` / `mirklurk-map-uploads:a83056c` (also tagged
+`rollback-a83056c-20261013-5ce1c5f`). Preflight on
+2026-10-13 UTC observed exact running images
+`sha256:ecb415d4283d2006e456a22a1b07d5981a5590c0019bb1218099ddc66995ea66` (web)
+and `sha256:278b87367a4b1ee8ead9a88e1e482dd14f272a199d9c47e39e5a4c783b22bbc4`
+(uploads); retain and recheck these exact images before mutation.
+The a83056c -> 5ce1c5f release is
+[dantebarbieri/mirklurk-map#47](https://github.com/dantebarbieri/mirklurk-map/pull/47)
+(refreshed wiki pictures for 0.8.9.9; Magus Clay's realm picture and boss
+page). It adds 24 PNGs under `assets/wiki/` and changes `src/wikiart.json`,
+`src/wikidata.json`, `src/wiki.ts`, `src/inspect.ts`, tests and the README.
+`server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
+compose, the sharing code and `tools/smoke.sh` are unchanged, and no existing
+asset changes (the service worker keeps 392 files), so the rebuilt uploads
+image behaves identically: no validation outcome, API route, quota,
+`/api/config` or stored format changes.
+`nginx/mirklurk-map.conf` changes only its source-SHA comment. No migration,
+config, secret or proxy change is required. Revert the pin and recreate only
+uploads, then web, from the retained exact a83056c images under the shared
+lock; never restore the uploads volume. The rollback has no format
+incompatibility; it only brings back the earlier wiki pictures and Magus
+Clay's realm without his own picture or boss link.
+
+Rolling back further to `407e030694efc0cc117e1df97fec3c0a1f6d293c`, tags
 `mirklurk-map:407e030` / `mirklurk-map-uploads:407e030` (also tagged
 `rollback-407e030-20261013-a83056c`). Preflight on
 2026-10-13 UTC observed exact running images
