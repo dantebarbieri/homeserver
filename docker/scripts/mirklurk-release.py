@@ -30,6 +30,9 @@ SITEMAP = "/var/lib/mirklurk-sitemap"
 BACKUP_CONTROL = "/var/lib/mirklurk-backup"
 DATA = Path("/srv/docker/data/mirklurk")
 NS = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+BRANDING_KEYS = ("MW_LOGO_URL", "MW_LOGO_ICON_URL", "MW_FAVICON_URL", "MW_APPLE_TOUCH_ICON_URL")
+# Optional runtime keys that a reviewed candidate may add before the live predecessor has them.
+INTRODUCED_ENV = {"MW_APPLE_TOUCH_ICON_URL"}
 
 
 class ReleaseError(Exception):
@@ -161,7 +164,9 @@ def preflight(root, source, image, previous):
     require(environment["MW_SERVER_URL"] == ORIGIN and environment["MW_READ_ONLY"] == "",
             "Canonical origin or literal empty MW_READ_ONLY was changed")
     live_env = dict(value.split("=", 1) for value in live["Config"]["Env"])
-    require({key: value for key, value in live_env.items() if key.startswith("MW_")} == environment,
+    live_mw = {key: value for key, value in live_env.items() if key.startswith("MW_")}
+    require(live_mw == {key: value for key, value in environment.items()
+                        if key in live_mw or key not in INTRODUCED_ENV},
             "Runtime environment differs; review separately (values suppressed)")
     actual_mounts = {mount["Destination"]: mount for mount in live["Mounts"]}
     volumes = service["volumes"]
@@ -424,8 +429,8 @@ def public_acceptance(environment):
             "Canonical Items metadata missing")
     require('property="og:title"' in html, "Article metadata missing")
     get("/load.php?lang=en&modules=site.styles&only=styles&skin=vector-2022")
-    for key in ("MW_LOGO_URL", "MW_LOGO_ICON_URL", "MW_FAVICON_URL"):
-        if environment[key]:
+    for key in BRANDING_KEYS:
+        if environment.get(key):
             require(get(environment[key]).startswith(b"\x89PNG\r\n\x1a\n"), f"Branding PNG failed: {key}")
 
 
