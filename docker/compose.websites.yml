@@ -6,10 +6,10 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: sha256:ef30d7dab1581fb04dac7007343f52fed176928739cbd59c245e8920e9c6278f
+    image: sha256:11dee3c275b0ffe4cd5d7a419ddeb9fa3aeb060f6bfa4fcb2bc488fc22e515a2
     pull_policy: never
     labels:
-      org.opencontainers.image.revision: 6d36a4dd3c74869bb4cc879b186f9d60e5d0aa80
+      org.opencontainers.image.revision: f0d3392ab48eb3abb12d7eb348de5e3c97a173d4
     container_name: mirklurk
     environment:
       MW_SERVER_URL: ${MIRKLURK_SERVER_URL:-https://wiki.mirklurk.danteb.com}
@@ -17,6 +17,7 @@ services:
       MW_LOGO_URL: ${MIRKLURK_LOGO_URL:-}
       MW_LOGO_ICON_URL: ${MIRKLURK_LOGO_ICON_URL:-}
       MW_FAVICON_URL: ${MIRKLURK_FAVICON_URL:-}
+      MW_APPLE_TOUCH_ICON_URL: ${MIRKLURK_APPLE_TOUCH_ICON_URL:-}
       MW_READ_ONLY: ""
       MW_DB_SERVER: mirklurk-db
       MW_DB_NAME: mirklurk

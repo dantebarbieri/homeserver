@@ -150,6 +150,10 @@ existing artwork; use a new versioned directory for later replacements.
 | `spr_256x256.png` | 256 x 256 original | `2d0fdbb12de9e09a83be6fd9742ddc40b838be1f8b2a7626b3930171f7112064` |
 | `icon184x184.png` | 184 x 184 original | `d365cdb569ecd682bbfcdbb60835d6ba10b98cf129f576b1554fa9e4ef7e9416` |
 | `logo-128.png` | 128 x 128 nearest-neighbor derivative of `spr_256x256.png` | Record in the private rollout manifest |
+| `2026-10/apple-touch-icon-180.png` | 180 x 180 lossless 2-pixel edge crop of `icon184x184.png`, no resampling | `03e3c5eaf38ef15f90d9bdda88e4322ba4fa2ae8421dd35b4a06990be79b3f23` |
+
+The 2026-10 directory has its own `attribution.txt` for the touch icon; the
+2026-09 files are unchanged.
 
 Set the following nonsecret values in the production `docker/.env` only
 after provisioning and verifying the files:
@@ -158,21 +162,24 @@ after provisioning and verifying the files:
 MIRKLURK_LOGO_URL=/branding/2026-09/logo-128.png
 MIRKLURK_LOGO_ICON_URL=/branding/2026-09/spr_256x256.png
 MIRKLURK_FAVICON_URL=/branding/2026-09/icon184x184.png
+MIRKLURK_APPLE_TOUCH_ICON_URL=/branding/2026-10/apple-touch-icon-180.png
 ```
 
-Compose passes these through as `MW_LOGO_URL`, `MW_LOGO_ICON_URL`, and
-`MW_FAVICON_URL`. Set both logo URLs together or leave both empty to retain
-MediaWiki defaults. The favicon is independently optional. Paths must be
+Compose passes these through as `MW_LOGO_URL`, `MW_LOGO_ICON_URL`,
+`MW_FAVICON_URL` and `MW_APPLE_TOUCH_ICON_URL`. Set both logo URLs together or leave both empty to retain
+MediaWiki defaults. The favicon and iOS home-screen icon are independently optional. Paths must be
 single-slash root-relative PNG paths with ASCII alphanumeric, underscore or
 hyphen segments, and dots only within the filename; external origins,
 queries, fragments and traversal are rejected by the runtime. Vector 2022
 uses the exact 256-pixel icon at 50 x 50 display size and retains its normal
 wiki title text. Legacy skins use the separate 128-pixel logo without
-cropping the original; the favicon uses the supplied 184-pixel PNG.
+cropping the original; the favicon uses the supplied 184-pixel PNG. iOS
+ignores `rel="icon"` for home-screen bookmarks, so the touch icon is emitted
+as `apple-touch-icon`; there is deliberately no web app manifest.
 
-Before acceptance, check anonymous HTTPS responses for all three PNGs
+Before acceptance, check anonymous HTTPS responses for all four PNGs
 (`image/png`), dimensions and hashes against the staged files, the public
-attribution, and the actual Vector/legacy logo and favicon HTML. Verify
+attribution, and the actual Vector/legacy logo, favicon and touch-icon HTML. Verify
 application health and unchanged upload/edit policy, existing page revisions,
 image records and database/backup container identities. Do not use a content
 publisher, upload API, installer or schema updater for a branding rollout.

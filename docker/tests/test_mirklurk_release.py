@@ -150,10 +150,23 @@ class MirklurkReleaseTests(unittest.TestCase):
         self.config["services"]["mirklurk"]["volumes"].pop(0)
         with self.assertRaisesRegex(release.ReleaseError, "volume set"):
             self.preflight()
+        self.config = copy.deepcopy(original)
+        self.config["services"]["mirklurk"]["environment"]["MW_UNREVIEWED"] = ""
+        with self.assertRaisesRegex(release.ReleaseError, "Runtime environment differs"):
+            self.preflight()
         self.config = original
         self.live["Image"] = "sha256:" + "0" * 64
         with self.assertRaisesRegex(release.ReleaseError, "neither expected"):
             self.preflight()
+
+    def test_allows_only_reviewed_introduced_environment_keys(self):
+        self.config["services"]["mirklurk"]["environment"]["MW_APPLE_TOUCH_ICON_URL"] = "/branding/x/icon.png"
+        self.preflight()
+        self.live["Config"]["Env"].append("MW_APPLE_TOUCH_ICON_URL=/branding/y/icon.png")
+        with self.assertRaisesRegex(release.ReleaseError, "Runtime environment differs"):
+            self.preflight()
+        self.live["Config"]["Env"][-1] = "MW_APPLE_TOUCH_ICON_URL=/branding/x/icon.png"
+        self.preflight()
 
     def deploy_mocks(self):
         self.stack.enter_context(patch.object(release, "CANONICAL", self.root))
