@@ -126,6 +126,11 @@ switch is hidden: the version switch shows only for a save whose version's
 rules differ from Latest's (an 0.8.1.5 save). The art data's version stamp
 reads 0.9.0.0; no art changes. This is browser code only; nothing new is
 uploaded.
+Since a38013f the wiki art data records the wiki's renamed, page-titled
+picture files (for example `Finish_Raft_sprite_(cropped).png`) as sources, and
+the wiki title list picks up its new pages (including `Version 0.9.0.0`, areas
+and terrain). Every bundled picture is byte-identical. This is browser code
+and data only; nothing new is uploaded.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (392 files) so
@@ -149,9 +154,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `3fb50b11c3701512b9ba49d08577521fe391a9df`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38553147260) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:3fb50b1`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:3fb50b1`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `a38013f49ac5b53aa2677c70c6f40537d65dd239`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38673001599) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:a38013f`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:a38013f`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -163,14 +168,15 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.83bf838d6c.js` | `83bf838d6c33f52aa5082ae57bd0eb1ce4d62bc9898500f5cf38a45d0f31afa9` |
-| `edit.864c7e95da.js` | `864c7e95dac63259c09027aa18d5cd87daf239565d2e1fbef35f22f25b954d9b` |
-| `sw.js` | `5f71a05298d4759258e3dffaa91786ed2d11ffc674a866fdaaa37e0383628b4d` |
+| `app.3f01c15e34.js` | `3f01c15e344e8da1208805e4103d71dfbea0a9632ec9b452a48405332583bf8f` |
+| `edit.cc2bd7f0d5.js` | `cc2bd7f0d5e449f2709a8fb83bf0f3cda8fd585036c688b40ff71c3ed7d103f7` |
+| `sw.js` | `8edf2a137aacf0210070b1118250d5e2bdd6ae43454fbc2e5aa80782adc761fd` |
 
-Stylesheets are `style.eac19037ec.css` (a comment changed) and
-`editor.b1df531e67.css` (unchanged); the service worker keeps 392 entries and
+Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
+unchanged); the service worker keeps 392 entries and
 lists both bundles and `assets/wiki/being_41.26af089dcc.png`, which is served
-as `image/png`. Both browser bundles contain `0.9.0.0` and
+as `image/png`. Both browser bundles contain
+`Finish_Raft_sprite_(cropped).png`. Both browser bundles contain `0.9.0.0` and
 `the game's Steam release`, and no longer `next_version_tester`. Both
 browser bundles contain `Magus Clay (boss)`. Both browser
 bundles contain `Game version rules`, The Terror's icon path
@@ -370,7 +376,33 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `5ce1c5fb8ed6d25034c696bfd385d42e7c69bf33`, tags
+Previous source: `3fb50b11c3701512b9ba49d08577521fe391a9df`, tags
+`mirklurk-map:3fb50b1` / `mirklurk-map-uploads:3fb50b1` (also tagged
+`rollback-3fb50b1-20261015-a38013f`). Preflight on
+2026-10-15 UTC observed exact running images
+`sha256:c9cb33608ece3580d3e15481355fe3dd66ead44f4edba9a51b97468b1c90332f` (web)
+and `sha256:4246a95e90a6f785e50321039b29a00317fdede00648a8223f346187ad4dea36`
+(uploads); retain and recheck these exact images before mutation.
+The 3fb50b1 -> a38013f release is
+[dantebarbieri/mirklurk-map#49](https://github.com/dantebarbieri/mirklurk-map/pull/49)
+(wiki titles for the 0.9.0.0 pages) and
+[dantebarbieri/mirklurk-map#50](https://github.com/dantebarbieri/mirklurk-map/pull/50)
+(wiki pictures looked up by page title). It changes `src/wikidata.json`,
+the `source` fields in `src/wikiart.json`, `src/wiki.ts`, `tools/wiki.ts`
+and tests. `server/`, the Dockerfile, `.dockerignore`, source
+`deploy/nginx.conf`, compose, the sharing code, `assets/` and
+`tools/smoke.sh` are unchanged (the service worker keeps 392 files), and the
+upload server imports none of the changed files, so the rebuilt uploads
+image behaves identically: no validation outcome, API route, quota,
+`/api/config` or stored format changes.
+`nginx/mirklurk-map.conf` changes only its source-SHA comment. No migration,
+config, secret or proxy change is required. Revert the pin and recreate only
+uploads, then web, from the retained exact 3fb50b1 images under the shared
+lock; never restore the uploads volume. The rollback has no format
+incompatibility; it only brings back the older wiki title list and picture
+source names.
+
+Rolling back further to `5ce1c5fb8ed6d25034c696bfd385d42e7c69bf33`, tags
 `mirklurk-map:5ce1c5f` / `mirklurk-map-uploads:5ce1c5f` (also tagged
 `rollback-5ce1c5f-20261014-3fb50b1`). Preflight on
 2026-10-14 UTC observed exact running images
