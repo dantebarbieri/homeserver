@@ -85,7 +85,10 @@ Redirection hosts (301): `audiobooks`, `abs` → `audiobookshelf`;
    Leave the folder watcher enabled so libro.fm downloads appear automatically.
 3. **Settings → API Keys → Add API Key** for Homepage
    (see `homepage/WIDGET_API_KEYS.md`), then `dcr homepage`.
-4. Install the Audiobookshelf app (iOS/Android) and log in with the server URL.
+4. Install a client and log in with the server URL. Android: the official app
+   on Google Play. iOS: the official app is TestFlight-only
+   (<https://testflight.apple.com/join/wiic7QIW>, usually full), so use a
+   third-party App Store client such as **AudioBooth** (open source) or Plappa.
 
 ### 6. Storyteller
 
@@ -96,7 +99,8 @@ Redirection hosts (301): `audiobooks`, `abs` → `audiobookshelf`;
      would import every ebook). Import pairs manually as below.
    - Readaloud location: **Storyteller internal folder** (lands in `/assets`).
    - Transcription: `whisper.cpp`, model `tiny` (try `small` if alignment is poor).
-3. Install the Storyteller app and log in with the server URL.
+3. Install **Storyteller Reader** (official, App Store / Google Play) and log
+   in with the server URL. Keep the app in the foreground while downloading.
 
 ### 7. libro.fm downloader
 
@@ -108,18 +112,48 @@ ffmpeg), then re-checks daily. To pull a new purchase immediately:
 dce librofm-downloader curl -s http://localhost:8080/update
 ```
 
+At `LOG_LEVEL: INFO` the downloader logs almost nothing about downloads
+(per-book messages are verbose-only), so check progress on disk instead:
+
+```bash
+find /data/shared/reading/audiobooks -type f | head
+dce librofm-downloader curl -s http://localhost:8080/history
+```
+
+If a new purchase doesn't appear, confirm it's in the downloader's copy of the
+library (`sudo grep -o '"title":"[^"]*"' /srv/docker/data/librofm-downloader/libro_library.json`)
+and re-run `/update` — libro.fm can take a few minutes to list new purchases.
+
 ## Making a readaloud
 
 1. Make sure the book exists in both Calibre (EPUB) and Audiobookshelf.
-2. Storyteller → **Add book → Import from server** → select the EPUB under
-   `/library/ebooks/<Author>/<Title (id)>/` **and** the audiobook folder under
-   `/library/audiobooks/<Author>/<Title>/` together so they import as one book.
-3. Start **Align**. Watch `dcl storyteller`; the first job builds/downloads
-   whisper.cpp. `nvidia-smi` on the host should show the whisper process.
+2. Storyteller → **Add book → Import from server** → select **only** the EPUB
+   under `/library/ebooks/<Author>/<Title (id)>/`.
+3. **Import from server** again → select **only** the audiobook under
+   `/library/audiobooks/<Author>/<Title>/`.
+4. In the library, select both "<Title>" entries → **Merge**.
+5. Start **Align**. Watch `dcl storyteller`; `nvidia-smi` on the host should
+   show `whisper-cli` while it transcribes.
+
+Why separately: selecting the EPUB and audiobook in one import adds only the
+EPUB, and the audiobook fails with `UNIQUE constraint failed: book.uuid`
+(upstream [#867](https://gitlab.com/storyteller-platform/storyteller/-/issues/867)).
+The UI just returns to the home page, so check `dcl storyteller` if a book
+seems missing.
+
+**Expected log errors:** after a merge or metadata edit, Storyteller tries to
+write metadata back into the source EPUB and logs
+`ERROR: Failed to write metadata to epub … EROFS: read-only file system …, skipping`.
+This is the read-only mount protecting Calibre's files (calibre-web's
+`metadata.db` stays authoritative). It is harmless — alignment continues and
+the readaloud is built in Storyteller's own folder.
 
 ## Validation: first-book end-to-end test (read-only mounts)
 
-Run this once before relying on the read-only setup.
+**Status: passed (2026-10-16)** with three libro.fm books — import (via the
+separate-import + merge workaround), GPU alignment, and readaloud playback with
+synced highlighting in Storyteller Reader all worked on the read-only mounts.
+Re-run this if Storyteller changes how it handles source files.
 
 ```bash
 EPUB='/data/shared/reading/ebooks/<Author>/<Title (id)>/<file>.epub'
@@ -135,17 +169,20 @@ sha256sum "$EPUB" "$AUDIO" >> /tmp/st-before
 4. Check for failures and that the source files are untouched:
 
 ```bash
-dcl -s 1h storyteller | grep -iE 'EROFS|read-only|EACCES|permission|error'
+docker compose logs --since 1h storyteller | grep -iE 'EROFS|read-only|EACCES|permission|error'
 stat -c '%i %h %s %Y %n' "$EPUB" "$AUDIO"; sha256sum "$EPUB" "$AUDIO"
 diff /tmp/st-before <(stat -c '%i %h %s %Y %n' "$EPUB" "$AUDIO"; sha256sum "$EPUB" "$AUDIO")
 ```
 
-**Pass** = import, alignment, and metadata edit all succeed in the UI, no
-read-only errors in logs, and the `diff` is empty. Nothing more to do.
+**Pass** = import, alignment, and metadata edit all succeed in the UI, the
+readaloud plays with synced highlighting, and the `diff` is empty. The
+"Failed to write metadata to epub … EROFS … skipping" errors are expected (see
+above); any *other* read-only error that stops a job is a failure.
 
 ## Fallback: writable import folder
 
-If anything in the test fails because the libraries are read-only, keep both
+If a job (import, alignment, readaloud build) actually fails because the
+libraries are read-only, keep both
 libraries read-only and import from `/import` instead
 (`${RAID}/shared/reading/storyteller/import`, already mounted read-write).
 Copy the EPUB (Storyteller may rewrite it) and hardlink the audio — it's the
@@ -161,8 +198,9 @@ cp "$SRC_EPUB" "$DEST/"
 cp -al "$SRC_AUDIO/." "$DEST/"   # hardlinks every audio file (and subfolders)
 ```
 
-Then in Storyteller, delete the failed book and **Import from server** →
-`/import/<Author> - <Title>/` (one folder = one book).
+Then in Storyteller, delete the failed book and import the EPUB and audio from
+`/import/<Author> - <Title>/` separately, then merge (see
+[Making a readaloud](#making-a-readaloud)).
 
 **Hardlink caveat:** a hardlink *is* the Audiobookshelf file. If Storyteller
 rewrote audio tags in place, the ABS copy would change too. After the metadata
