@@ -90,6 +90,16 @@ If you prefer a dedicated account, create a new user in
 
 ---
 
+## Audiobookshelf — `HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY`
+
+1. Open Audiobookshelf (e.g. `https://audiobookshelf.danteb.com`) as an admin.
+2. Go to **Settings → API Keys** and click **Add API Key**.
+3. Name it `homepage`, leave expiry empty, and pick a user with access to the
+   Audiobooks library.
+4. Copy the key (it is only shown once).
+
+---
+
 ## Radarr — `HOMEPAGE_VAR_RADARR_KEY`
 
 1. Open Radarr (e.g. `https://radarr.danteb.com`).
@@ -240,6 +250,7 @@ Grafana's Homepage widget uses the built-in admin credentials (same as login).
 | `HOMEPAGE_VAR_IMMICH_KEY` | Immich | API key |
 | `HOMEPAGE_VAR_KOMGA_USER` | Komga | Username |
 | `HOMEPAGE_VAR_KOMGA_PASS` | Komga | Password |
+| `HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY` | Audiobookshelf | API key |
 | `HOMEPAGE_VAR_RADARR_KEY` | Radarr | API key |
 | `HOMEPAGE_VAR_SONARR_KEY` | Sonarr | API key |
 | `HOMEPAGE_VAR_BAZARR_KEY` | Bazarr | API key |

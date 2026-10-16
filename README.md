@@ -6,7 +6,7 @@ Monorepo for my NixOS-based home server infrastructure. 50+ Docker containers, N
 
 | Category | Services |
 |----------|----------|
-| **Media** | Plex, Jellyfin, Komga, Komf, Suwayomi |
+| **Media** | Plex, Jellyfin, Komga, Komf, Suwayomi, Calibre-web, Audiobookshelf, Storyteller |
 | **Starr** | Radarr, Sonarr, Bazarr, Prowlarr, Jellyseerr, Tdarr, Recyclarr |
 | **Downloads** | qBittorrent (via Gluetun VPN), SABnzbd, FlareSolverr |
 | **Photos** | Immich |
