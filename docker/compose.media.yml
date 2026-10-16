@@ -1,5 +1,6 @@
 # Media consumption services
-# plex, jellyfin, komga, komf, suwayomi, suwayomi_postgres
+# plex, jellyfin, komga, komf, suwayomi, suwayomi_postgres, calibre-web,
+# audiobookshelf, storyteller, librofm-downloader
 
 services:
   plex:
@@ -175,6 +176,77 @@ services:
     volumes:
       - ${DATA}/calibre-web/config:/config
       - ${RAID}/shared/reading/ebooks:/books
+
+  audiobookshelf:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: audiobookshelf
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    user: "${UID}:${GID}"
+    environment:
+      TZ: ${TZ}
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/audiobookshelf/config:/config
+      - ${DATA}/audiobookshelf/metadata:/metadata
+      - ${RAID}/shared/reading/audiobooks:/audiobooks
+
+  # Readaloud builder: aligns a Calibre EPUB with an Audiobookshelf audiobook.
+  # Both libraries are mounted read-only so Calibre and ABS stay the owners of
+  # their files; see docs/AUDIOBOOKS.md for the import workflow.
+  storyteller:
+    extends:
+      file: compose.common.yml
+      service: gpu-service
+    container_name: storyteller
+    # cuda-12.9.0 is upstream's recommendation for CUDA 13.0.x drivers.
+    image: registry.gitlab.com/storyteller-platform/storyteller:latest-cuda-12.9.0
+    restart: unless-stopped
+    # Do not set user: — the entrypoint drops to PUID/PGID itself.
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+      STORYTELLER_SECRET_KEY: ${STORYTELLER_SECRET_KEY}
+      STORYTELLER_ASSETS_DIR: /assets
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/storyteller/data:/data
+      - ${RAID}/shared/reading/storyteller/assets:/assets
+      # Writable fallback import area (EPUB copy + hardlinked audio) for when
+      # in-place import from the read-only libraries is not enough.
+      - ${RAID}/shared/reading/storyteller/import:/import
+      - ${RAID}/shared/reading/ebooks:/library/ebooks:ro
+      - ${RAID}/shared/reading/audiobooks:/library/audiobooks:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Downloads new DRM-free purchases from libro.fm into the ABS library.
+  # Outbound-only; no web UI is exposed.
+  librofm-downloader:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: librofm-downloader
+    image: ghcr.io/burntcookie90/librofm-downloader:latest
+    user: "${UID}:${GID}"
+    environment:
+      LIBRO_FM_USERNAME: ${LIBRO_FM_USERNAME}
+      LIBRO_FM_PASSWORD: ${LIBRO_FM_PASSWORD}
+      FORMAT: M4B_CONVERT_FALLBACK
+      PATH_PATTERN: FIRST_AUTHOR/BOOK_TITLE
+      SYNC_INTERVAL: d
+      LOG_LEVEL: INFO
+      TZ: ${TZ}
+    volumes:
+      - ${DATA}/librofm-downloader:/data
+      - ${RAID}/shared/reading/audiobooks:/media
 
 networks:
   proxy:

@@ -82,6 +82,25 @@
             url: http://calibre-web:8083
             username: "{{HOMEPAGE_VAR_CALIBRE_USER}}"
             password: "{{HOMEPAGE_VAR_CALIBRE_PASS}}"
+    - Audiobookshelf:
+        icon: audiobookshelf.svg
+        href: https://audiobookshelf.danteb.com
+        description: Audiobooks
+        siteMonitor: https://audiobookshelf.danteb.com
+        server: my-docker
+        container: audiobookshelf
+        widget:
+          type: audiobookshelf
+          url: http://audiobookshelf:80
+          key: "{{HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY}}"
+          fields: ["books", "booksDuration"]
+    - Storyteller:
+        icon: storyteller.png
+        href: https://storyteller.danteb.com
+        description: Readaloud Books
+        siteMonitor: https://storyteller.danteb.com
+        server: my-docker
+        container: storyteller
     - RomM:
         icon: romm.svg
         href: https://romm.danteb.com
@@ -200,6 +219,11 @@
               - field: unread
                 label: Unread
                 format: number
+    - Libro.fm Downloader:
+        icon: mdi-book-music
+        description: Audiobook Purchases → Audiobookshelf
+        server: my-docker
+        container: librofm-downloader
     - SearXNG:
         icon: searxng.svg
         href: https://searxng.danteb.com
