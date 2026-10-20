@@ -119,6 +119,7 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 
 ### Custom Dockerfiles
 
+- `dockerfiles/convertx/` — extends upstream ConvertX with the optional packages, ImageMagick tweaks, and LibreOffice wrapper its conversions need
 - `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
 - `dockerfiles/bmc-monitor/` — BMC IP monitor (ipmitool + NPM API updater)
@@ -160,8 +161,8 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 | `dcs <svc>` | `dcs bazarr` | Interactive shell (tries bash, then sh) |
 | `dcl [-s <time>] <svcs...>` | `dcl -s 30m bazarr whisperasr` | Follow logs with optional --since |
 | `dcr [svcs...]` | `dcr bazarr whisperasr` | Restart/recreate services |
-| `dcu` | `dcu` | Quick update: git pull, pull/build/up, light prune |
-| `dcupdate` | `dcupdate` | Full update: down, git pull+push, pull/build/up, heavy prune |
+| `dcu` | `dcu` | Quick update: git pull, pull/build/up, light prune (a failed image build only holds back that service) |
+| `dcupdate` | `dcupdate` | Full update: git pull+push, pull/build, then down/up (skips the teardown if an image fails to build), heavy prune |
 
 ## NixOS (`nixos/`)
 

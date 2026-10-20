@@ -1,0 +1,4 @@
+  <!-- JPEG XL via libjxl; Debian's ImageMagick is built without a JXL coder. -->
+  <delegate decode="jxl" command="&apos;djxl&apos; &apos;%i&apos; &apos;%u.png&apos; &gt;/dev/null 2&gt;&amp;1 &amp;&amp; /bin/mv &apos;%u.png&apos; &apos;%o&apos;"/>
+  <delegate decode="png" encode="jxl" command="&apos;cjxl&apos; &apos;%i&apos; &apos;%o&apos; &gt;/dev/null 2&gt;&amp;1"/>
+</delegatemap>

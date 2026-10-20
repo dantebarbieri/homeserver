@@ -102,7 +102,7 @@ class HealthCleanupTests(unittest.TestCase):
         )
         self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
 
-    def test_update_preserves_fail_fast_sequence(self):
+    def test_update_sequence_and_build_isolation(self):
         harness = """
         flock() { echo LOCK; return "$LOCK_STATUS"; }
         git() { printf 'GIT:%s\\n' "$*"; return "$GIT_STATUS"; }
@@ -112,15 +112,23 @@ class HealthCleanupTests(unittest.TestCase):
         pull_attempts=0
         docker() {
           if [ "$1" = ps ]; then return 0; fi
-          printf 'DOCKER:%s\\n' "$*"
-          if [ "$*" = 'compose --parallel 4 pull --ignore-buildable' ]; then
-            pull_attempts=$((pull_attempts + 1))
-            if [ "$pull_attempts" -le "$PULL_FAILURES" ]; then return 1; fi
-          elif [ "$*" = 'compose build --pull' ]; then
-            return "$BUILD_STATUS"
-          elif [ "$*" = 'compose up -d --remove-orphans' ]; then
-            return "$DEPLOY_STATUS"
+          if [ "$*" = 'compose config --services' ]; then
+            printf 'DOCKER:%s\\n' "$*" >&2
+            printf '%s\\n' convertx homepage radarr
+            return 0
           fi
+          printf 'DOCKER:%s\\n' "$*"
+          case "$*" in
+            'compose --parallel 4 pull --ignore-buildable')
+              pull_attempts=$((pull_attempts + 1))
+              if [ "$pull_attempts" -le "$PULL_FAILURES" ]; then return 1; fi ;;
+            'compose build --pull')
+              return "$BUILD_STATUS" ;;
+            'compose build --pull '*)
+              case " $FAILING_BUILDS " in *" ${@: -1} "*) return 1 ;; esac ;;
+            'compose up -d --remove-orphans'*)
+              return "$DEPLOY_STATUS" ;;
+          esac
           return 0
         }
         """
@@ -138,7 +146,10 @@ class HealthCleanupTests(unittest.TestCase):
         cases = [
             {}, {"LOCK_STATUS": "1"}, {"GIT_STATUS": "1"}, {"CHOWN_STATUS": "1"},
             {"PULL_FAILURES": "1"}, {"PULL_FAILURES": "2"}, {"PULL_FAILURES": "3"},
-            {"BUILD_STATUS": "1"}, {"DEPLOY_STATUS": "1"},
+            {"BUILD_STATUS": "1"},
+            {"BUILD_STATUS": "1", "FAILING_BUILDS": "convertx"},
+            {"BUILD_STATUS": "1", "FAILING_BUILDS": "convertx", "DEPLOY_STATUS": "1"},
+            {"DEPLOY_STATUS": "1"},
         ]
         for overrides in cases:
             with self.subTest(overrides=overrides):
@@ -146,6 +157,7 @@ class HealthCleanupTests(unittest.TestCase):
                     ("LOCK_STATUS", "GIT_STATUS", "CHOWN_STATUS",
                      "PULL_FAILURES", "BUILD_STATUS", "DEPLOY_STATUS"), "0",
                 )
+                statuses["FAILING_BUILDS"] = ""
                 statuses.update(overrides)
                 with tempfile.TemporaryDirectory() as snapshots:
                     result = subprocess.run(
@@ -163,10 +175,9 @@ class HealthCleanupTests(unittest.TestCase):
                     statuses[key] != "0" for key in ("LOCK_STATUS", "GIT_STATUS", "CHOWN_STATUS")
                 )
                 exhausted = int(statuses["PULL_FAILURES"]) >= 3
-                failed = (
-                    failed_before_pull or exhausted
-                    or statuses["BUILD_STATUS"] != "0" or statuses["DEPLOY_STATUS"] != "0"
-                )
+                deploy_failed = statuses["DEPLOY_STATUS"] != "0"
+                isolated = statuses["FAILING_BUILDS"] != ""
+                failed = failed_before_pull or exhausted or deploy_failed or isolated
                 self.assertEqual(result.returncode, int(failed), result.stderr)
                 if statuses["LOCK_STATUS"] != "0":
                     self.assertNotIn("GIT:", result.stdout)
@@ -192,15 +203,27 @@ class HealthCleanupTests(unittest.TestCase):
                     self.assertEqual(sleeps, ["SLEEP:60", "SLEEP:120"][:attempts - 1])
                 if failed_before_pull or exhausted:
                     self.assertNotIn("DOCKER:compose build", result.stdout)
-                if failed_before_pull or exhausted or statuses["BUILD_STATUS"] != "0":
                     self.assertNotIn("DOCKER:compose up", result.stdout)
-                if failed:
-                    self.assertNotIn("DOCKER:image prune", result.stdout)
+                    continue
+                lines = result.stdout.splitlines()
+                if statuses["BUILD_STATUS"] != "0":
+                    for svc in ("convertx", "homepage", "radarr"):
+                        self.assertIn(f"DOCKER:compose build --pull {svc}", lines)
                 else:
-                    self.assertIn("DOCKER:compose build --pull", result.stdout)
-                    self.assertIn("DOCKER:compose up -d --remove-orphans", result.stdout)
-                    self.assertIn("DOCKER:compose up -d --force-recreate homepage", result.stdout)
-                    self.assertIn("DOCKER:network prune -f", result.stdout)
+                    self.assertNotIn("DOCKER:compose build --pull convertx", lines)
+                if isolated:
+                    # Everything except the broken build deploys; it keeps its old container.
+                    self.assertIn("DOCKER:compose up -d --remove-orphans homepage radarr", lines)
+                    self.assertNotIn("DOCKER:compose up -d --remove-orphans", lines)
+                    self.assertIn("convertx", result.stderr)
+                else:
+                    self.assertIn("DOCKER:compose up -d --remove-orphans", lines)
+                if deploy_failed:
+                    self.assertNotIn("DOCKER:image prune -f", lines)
+                else:
+                    self.assertIn("DOCKER:compose up -d --force-recreate homepage", lines)
+                    self.assertIn("DOCKER:image prune -f", lines)
+                    self.assertIn("DOCKER:network prune -f", lines)
 
     def test_scrub_monitor_state_and_error_paths(self):
         harness = """

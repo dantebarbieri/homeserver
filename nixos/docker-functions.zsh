@@ -85,6 +85,44 @@ dcr() (
   docker compose up -d --force-recreate "$@"
 )
 
+# Build local images without letting one broken Dockerfile hold back the rest
+# of the stack. If the combined build fails, rebuild one service at a time and
+# leave the ones that still fail in $failed_builds for the caller.
+_dc_build() {
+  failed_builds=()
+  docker compose build --pull && return 0
+
+  print -u2 "Image build failed; rebuilding services one at a time to isolate it."
+  local services svc
+  services=$(docker compose config --services) || return 1
+  for svc in ${(f)services}; do
+    docker compose build --pull "$svc" || failed_builds+=("$svc")
+  done
+}
+
+# `docker compose up -d` for every service except those in $failed_builds,
+# which keep running their previous container.
+_dc_up() {
+  if (( ${#failed_builds} == 0 )); then
+    docker compose up -d "$@"
+    return
+  fi
+
+  print -u2 "Image build failed for: ${failed_builds[*]}; deploying everything else."
+  local services
+  local -a deploy
+  services=$(docker compose config --services) || return 1
+  deploy=(${(f)services})
+  deploy=(${deploy:|failed_builds})
+  docker compose up -d "$@" "${deploy[@]}"
+}
+
+_dc_report_failed_builds() {
+  (( ${#failed_builds} == 0 )) && return 0
+  print -u2 "These services kept their previous image because it failed to build: ${failed_builds[*]}"
+  return 1
+}
+
 # Quick update — pull changes, rebuild only what changed, minimal downtime
 dcu() (
   cd /srv/docker/compose || return 1
@@ -92,29 +130,42 @@ dcu() (
   git pull --recurse-submodules || return 1
 
   docker compose pull --ignore-buildable || return 1
-  docker compose build --pull || return 1
-  docker compose up -d --remove-orphans || return 1
+  _dc_build || return 1
+  _dc_up --remove-orphans || return 1
 
   # Light cleanup — only dangling images and unused networks
   docker image prune -f
   docker network prune -f
+
+  _dc_report_failed_builds
 )
 
-# Full update — tear down, pull, rebuild, restart everything
+# Full update — pull, rebuild, then tear down and restart everything
 dcupdate() (
   cd /srv/docker/compose || return 1
-
-  docker compose down --remove-orphans || return 1
 
   git pull --recurse-submodules || return 1
   git push || return 1
 
+  # Fetch and build everything before tearing anything down, so a registry or
+  # build failure leaves the running stack untouched.
   docker compose pull --ignore-buildable || return 1
-  docker compose build --pull || return 1
-  docker compose up -d || return 1
+  _dc_build || return 1
+
+  if (( ${#failed_builds} )); then
+    # A teardown would also stop the services whose image failed to build, so
+    # fall back to an in-place update that leaves them on their old image.
+    print -u2 "Skipping the full teardown because an image failed to build."
+    _dc_up --remove-orphans || return 1
+  else
+    docker compose down --remove-orphans || return 1
+    docker compose up -d || return 1
+  fi
 
   # Heavy cleanup — unused images, networks, and build cache
   docker image prune -af
   docker network prune -f
   docker builder prune -af
+
+  _dc_report_failed_builds
 )

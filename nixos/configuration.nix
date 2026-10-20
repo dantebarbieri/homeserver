@@ -717,11 +717,41 @@ in
         sleep "$delay"
       done
 
-      docker compose build --pull
-      docker compose up -d --remove-orphans
+      # Locally built images are isolated from each other and from the rest of
+      # the stack. If one fails to build, every other service still deploys,
+      # the broken service keeps running its previous container, and the unit
+      # still fails at the end so ntfy-failure@ reports it. A failed combined
+      # build is retried per service to find the culprit.
+      failed_builds=()
+      if ! docker compose build --pull; then
+        echo "Image build failed; rebuilding services one at a time to isolate it." >&2
+        services=$(docker compose config --services)
+        for svc in $services; do
+          docker compose build --pull "$svc" || failed_builds+=("$svc")
+        done
+      fi
+
+      if [ "''${#failed_builds[@]}" -eq 0 ]; then
+        docker compose up -d --remove-orphans
+      else
+        echo "Image build failed for: ''${failed_builds[*]}; deploying everything else." >&2
+        deploy=()
+        for svc in $services; do
+          case " ''${failed_builds[*]} " in
+            *" $svc "*) ;;
+            *) deploy+=("$svc") ;;
+          esac
+        done
+        docker compose up -d --remove-orphans "''${deploy[@]}"
+      fi
       docker compose up -d --force-recreate homepage
       docker image prune -f
       docker network prune -f
+
+      if [ "''${#failed_builds[@]}" -ne 0 ]; then
+        echo "Update finished, but these services kept their previous image because it failed to build: ''${failed_builds[*]}" >&2
+        exit 1
+      fi
     '';
   };
 
