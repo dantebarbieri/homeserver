@@ -162,7 +162,11 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: ghcr.io/c4illin/convertx:latest
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile.convertx
+      pull: true
+    image: convertx-extra:latest
     container_name: convertx
     environment:
       JWT_SECRET: ${CONVERTX_JWT_SECRET}

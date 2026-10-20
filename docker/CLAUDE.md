@@ -23,6 +23,7 @@ All services should extend one of these:
 
 ## Custom Dockerfiles (`dockerfiles/`)
 
+- `dockerfiles/Dockerfile.convertx` — Adds ImageMagick's extra coders (SVG etc.) that upstream ConvertX omits
 - `dockerfiles/Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
 - `dockerfiles/Dockerfile.sveltekit` — Multi-stage Node 18 alpine build, parameterized via `ARG APP_NAME`
 - `dockerfiles/bmc-monitor/` — Alpine with ipmitool, curl, jq + `bmc-ip-monitor.sh` polling script
