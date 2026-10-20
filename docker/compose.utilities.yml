@@ -163,8 +163,7 @@ services:
       file: compose.common.yml
       service: common-service
     build:
-      context: .
-      dockerfile: dockerfiles/Dockerfile.convertx
+      context: dockerfiles/convertx
       pull: true
     image: convertx-extra:latest
     container_name: convertx
@@ -172,6 +171,12 @@ services:
       JWT_SECRET: ${CONVERTX_JWT_SECRET}
       HTTP_ALLOWED: "true"
       ACCOUNT_REGISTRATION: "false"
+      # Default is unlimited parallelism per job; cap it so a large batch can't
+      # exhaust RAM now that ImageMagick may use up to 4GiB per process.
+      MAX_CONVERT_PROCESS: "8"
+      # libaom/libvpx default to their slowest presets (AV1 takes minutes per
+      # second of video). Ignored, with a warning, by other encoders.
+      FFMPEG_OUTPUT_ARGS: "-cpu-used 6 -row-mt 1"
     volumes:
       - ${DATA}/convertx/data:/app/data
     networks:

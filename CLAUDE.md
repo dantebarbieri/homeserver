@@ -119,7 +119,7 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 
 ### Custom Dockerfiles
 
-- `dockerfiles/Dockerfile.convertx` — adds ImageMagick's extra coders (SVG etc.) that upstream ConvertX omits
+- `dockerfiles/convertx/` — extends upstream ConvertX with the optional packages, ImageMagick tweaks, and LibreOffice wrapper its conversions need
 - `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
 - `dockerfiles/bmc-monitor/` — BMC IP monitor (ipmitool + NPM API updater)
