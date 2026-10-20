@@ -699,9 +699,23 @@ in
       find "$SNAPSHOT_DIR" -name '*.tsv' -type f -mtime +14 -delete
 
       # Finish Git maintenance before chown traverses transient lock files.
+      before=$(git -c safe.directory=/srv/homeserver rev-parse HEAD)
       git -c safe.directory=/srv/homeserver \
           -c maintenance.autoDetach=false -c gc.autoDetach=false pull --ff-only
       chown -R danteb:docker .git
+      # The pull runs as root, so everything it creates is root-owned and a
+      # later manual `git pull` as danteb fails with "Permission denied".
+      # Hand back only what this pull changed, plus the directories holding
+      # it; the rest of the tree (e.g. files containers write) is untouched.
+      git -c safe.directory=/srv/homeserver diff --name-only -z "$before" HEAD |
+        while IFS= read -r -d "" path; do
+          while [ "$path" != . ]; do
+            if [ -e "$path" ] || [ -L "$path" ]; then
+              chown -h danteb:docker "$path"
+            fi
+            path=$(dirname "$path")
+          done
+        done
       cd docker
 
       for attempt in 1 2 3; do
