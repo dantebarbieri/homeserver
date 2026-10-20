@@ -105,8 +105,16 @@ class HealthCleanupTests(unittest.TestCase):
     def test_update_sequence_and_build_isolation(self):
         harness = """
         flock() { echo LOCK; return "$LOCK_STATUS"; }
-        git() { printf 'GIT:%s\\n' "$*"; return "$GIT_STATUS"; }
-        chown() { echo CHOWN; return "$CHOWN_STATUS"; }
+        git() {
+          case "$*" in
+            *' rev-parse HEAD') echo before-sha; return 0 ;;
+            *' diff --name-only -z before-sha HEAD')
+              printf '%s\\0' new/sub/file.txt existing.txt deleted.txt
+              return 0 ;;
+          esac
+          printf 'GIT:%s\\n' "$*"; return "$GIT_STATUS"
+        }
+        chown() { printf 'CHOWN:%s\\n' "$*"; return "$CHOWN_STATUS"; }
         cd() { echo CD; }
         sleep() { printf 'SLEEP:%s\\n' "$1"; }
         pull_attempts=0
@@ -160,8 +168,15 @@ class HealthCleanupTests(unittest.TestCase):
                 statuses["FAILING_BUILDS"] = ""
                 statuses.update(overrides)
                 with tempfile.TemporaryDirectory() as snapshots:
+                    # Work tree as the pull left it: one new nested file, one
+                    # updated file; deleted.txt was removed by the pull.
+                    tree = Path(snapshots) / "tree"
+                    (tree / "new" / "sub").mkdir(parents=True)
+                    (tree / "new" / "sub" / "file.txt").write_text("x")
+                    (tree / "existing.txt").write_text("x")
                     result = subprocess.run(
                         ["bash", "-euo", "pipefail", "-c", harness + script],
+                        cwd=tree,
                         env={
                             **os.environ,
                             "TEST_SNAPSHOT_DIR": snapshots,
@@ -190,9 +205,26 @@ class HealthCleanupTests(unittest.TestCase):
                 if statuses["GIT_STATUS"] != "0":
                     self.assertNotIn("CHOWN", result.stdout)
                 if failed_before_pull:
+                    self.assertNotIn("CHOWN:-h", result.stdout)
                     self.assertNotIn("CD", result.stdout)
                     self.assertNotIn("DOCKER:compose --parallel 4 pull", result.stdout)
                 else:
+                    # Only what the pull changed (and its directories) is handed
+                    # back, after the pull and before any Compose work.
+                    chowns = [
+                        line for line in result.stdout.splitlines() if line.startswith("CHOWN:")
+                    ]
+                    self.assertEqual(chowns, [
+                        "CHOWN:-R danteb:docker .git",
+                        "CHOWN:-h danteb:docker new/sub/file.txt",
+                        "CHOWN:-h danteb:docker new/sub",
+                        "CHOWN:-h danteb:docker new",
+                        "CHOWN:-h danteb:docker existing.txt",
+                    ])
+                    self.assertLess(
+                        result.stdout.index("pull --ff-only"), result.stdout.index("CHOWN:")
+                    )
+                    self.assertLess(result.stdout.index("CHOWN:-h"), result.stdout.index("CD"))
                     attempts = min(3, int(statuses["PULL_FAILURES"]) + 1)
                     self.assertEqual(
                         result.stdout.count("DOCKER:compose --parallel 4 pull"), attempts

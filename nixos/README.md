@@ -58,7 +58,10 @@ jitter). The corresponding oneshot service:
 1. Record running image digests for rollback in `/srv/docker/image-snapshots`.
 2. `git pull` from `/srv/homeserver`, with automatic Git maintenance kept in
    the foreground so its temporary lock files cannot race the subsequent
-   ownership repair.
+   ownership repair. The pull runs as root, so `.git` and every path the pull
+   changed (plus the directories containing it) are handed back to
+   `danteb:docker`; otherwise a later manual `git pull` fails with
+   "Permission denied".
 3. Pull non-buildable images with at most four parallel Compose operations,
    rebuild local images, reconcile containers,
    recreate Homepage, and prune unused images/networks.
