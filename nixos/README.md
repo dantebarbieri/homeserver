@@ -168,6 +168,38 @@ machine. `kickstart.nvim` already sets `vim.g.have_nerd_font = true`.
 sudo nixos-rebuild switch
 ```
 
+## Forgejo Actions host runner
+
+`services.forgejo-runner.instances.worldforge` runs the `worldforge-host:host`
+runner for WorldForge jobs that need `nix develop`. Docker-label jobs use the
+Compose runner in `docker/compose.git.yml` instead.
+
+| Item | Value |
+|------|-------|
+| Unit | `forgejo-runner-worldforge.service` |
+| User | static `forgejo-runner` (not `DynamicUser`; see `configuration.nix`) |
+| State / `$HOME` | `/var/lib/forgejo-runner/worldforge` |
+| Token file | `/var/lib/forgejo-runner-worldforge.token` (root, `0600`, raw runner token) |
+| Runner UUID | `server.connections.default.uuid` in `configuration.nix` |
+
+The UUID identifies the runner, like a username. The token is its password, and
+`forgejo-runner` rejects a `TOKEN=` prefix. Labels come from `configuration.nix`;
+the runner name (`homeserver-worldforge`) exists only in Forgejo.
+
+The runner previously used the retired `services.gitea-actions-runner` module
+(`gitea-runner-worldforge.service`, `/var/lib/gitea-runner/worldforge`).
+`forgejo-runner-worldforge-migrate.service` runs before the runner while the old
+`.runner` file exists. It writes that file's runner token to the token file,
+moves the old caches to the new state directory, and removes the old
+registration files. `forgejo-runner` refuses to start when a `.runner` file
+coexists with configured connections. The runner keeps its Forgejo identity
+without re-registration.
+
+```bash
+systemctl status forgejo-runner-worldforge
+journalctl -u forgejo-runner-worldforge-migrate -u forgejo-runner-worldforge -b
+```
+
 ## Local regression checks
 
 With Python 3, Bash, Nix, and a `nixpkgs` search-path entry available:

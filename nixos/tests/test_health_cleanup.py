@@ -42,6 +42,11 @@ class HealthCleanupTests(unittest.TestCase):
                   scrubFailure = c.systemd.services.mdadm-scrub.unitConfig.OnFailure;
                   scrubRestart = c.systemd.services.mdadm-scrub.restartIfChanged;
                   scrubScript = c.systemd.services.mdadm-scrub.script;
+                  runnerUnit = c.systemd.services.forgejo-runner-worldforge.serviceConfig;
+                  runnerMigrate = {
+                    inherit (c.systemd.services.forgejo-runner-worldforge-migrate)
+                      requiredBy before unitConfig;
+                  };
                 }
                 """,
             ],
@@ -69,6 +74,22 @@ class HealthCleanupTests(unittest.TestCase):
         for package in ("aerc", "khard", "khal", "vdirsyncer", "w3m"):
             self.assertNotIn(package, self.config["packages"])
         self.assertNotIn("khal list", self.config["shellInit"])
+
+    def test_forgejo_runner_static_user_and_migration(self):
+        unit = self.config["runnerUnit"]
+        self.assertFalse(unit["DynamicUser"])
+        self.assertEqual((unit["User"], unit["Group"]), ("forgejo-runner", "forgejo-runner"))
+        self.assertEqual(
+            unit["LoadCredential"],
+            ["server__connections__default__token_url:/var/lib/forgejo-runner-worldforge.token"],
+        )
+        migrate = self.config["runnerMigrate"]
+        for key in ("requiredBy", "before"):
+            self.assertEqual(migrate[key], ["forgejo-runner-worldforge.service"])
+        self.assertEqual(
+            migrate["unitConfig"]["ConditionPathExists"],
+            "/var/lib/gitea-runner/worldforge/.runner",
+        )
 
     def test_socket_reconciliation_follows_daemon_lifecycle(self):
         unit = self.config["socketConsumerUnit"]
