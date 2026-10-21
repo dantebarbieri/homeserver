@@ -292,6 +292,30 @@ The homeserver's normal daily build does not rebuild the wiki, perform schema
 migrations, or pull the external wiki checkout. Record both repository commits
 and the local image ID for each release. The existing generic deploy helper
 does not build this pinned frontend or advance its image.
+`mirklurk-release.py` also asserts the live MediaWiki version
+(`MEDIAWIKI_GENERATOR`). Update it in the same change as any base-version bump,
+or the daily sitemap refresh fails.
+
+### PHP2Shell emergency base release (2026-10-21)
+
+| Provenance | Immutable value |
+|------------|-----------------|
+| Wiki source ([mirklurk-wiki#68](https://github.com/dantebarbieri/mirklurk-wiki/pull/68) head; same tree squash-merged) | `62d19af31f8ba7952d91f65337c928df75e8c6af` |
+| Deployed / Compose-pinned image | `sha256:f17af065fcfa26d6391adba038b0a82f2e5438ae5fcc1cc13dfdcdc20c90feda`, tag `mirklurk-wiki:release-62d19af31f8b` |
+| Base | `mediawiki:1.43.11@sha256:ff4bcc4866b27594d0eb597d8a12e27acf6dc2fd43d2f813cfb69bf0ab2920ce`, PHP 8.3.36 |
+| Retained predecessor (vulnerable, PHP 8.3.33; never re-serve publicly) | `sha256:a1f303f573bcdeecce80992c6b5139e19bab07c6bed7b1eb02839b6e01a77b5a`, tag `mirklurk-wiki:release-81e73d29a21b` |
+
+This release fixed PHP2Shell (CVE-2026-109618, CVE-2026-109619), a pre-auth RCE
+and memory disclosure triggered by any `multipart/form-data` request. The origin
+is reachable without Cloudflare, so the edge WAF was not a sufficient mitigation.
+The only change from `81e73d2` is the base image. Core and bundled-extension
+schema/updater files were byte-identical, so no `update.php` ran. The deployment
+ran `preflight`, then the `deploy` steps by hand: the updater timer could not
+be paused without sudo, and its next run was 14 hours away. Those steps were a
+fresh SQL backup, recreating only `mirklurk` (healthy in 8 seconds), confirming
+other containers were unchanged, and public checks reporting MediaWiki 1.43.11
+on PHP 8.3.36. A pre-patch check found no sign of compromise: `docker diff`
+showed only expected files and the only processes were Apache.
 
 ### Native-upload runtime release
 

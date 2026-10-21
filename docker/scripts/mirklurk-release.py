@@ -30,6 +30,7 @@ SITEMAP = "/var/lib/mirklurk-sitemap"
 BACKUP_CONTROL = "/var/lib/mirklurk-backup"
 DATA = Path("/srv/docker/data/mirklurk")
 NS = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+MEDIAWIKI_GENERATOR = "MediaWiki 1.43.11"
 BRANDING_KEYS = ("MW_LOGO_URL", "MW_LOGO_ICON_URL", "MW_FAVICON_URL", "MW_APPLE_TOUCH_ICON_URL")
 # Optional runtime keys that a reviewed candidate may add before the live predecessor has them.
 INTRODUCED_ENV = {"MW_APPLE_TOUCH_ICON_URL"}
@@ -121,7 +122,7 @@ def siteinfo():
     general = data["query"]["general"]
     require(general["server"] == ORIGIN and general["scriptpath"] == ""
             and general["articlepath"] == "/w/$1"
-            and general["generator"] == "MediaWiki 1.43.9"
+            and general["generator"] == MEDIAWIKI_GENERATOR
             and "readonly" not in general, "Unexpected live origin, paths, version or read-only policy")
 
 
