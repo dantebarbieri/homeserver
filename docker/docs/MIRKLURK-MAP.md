@@ -138,6 +138,14 @@ costs 0.25, and the hood is named `Clay's Magus Hood`. 0.9.0.0 and 0.8.9.9
 saves now get a version switch; 0.9.0.1 and 0.9.0.2 saves get none. Item and
 game data and the wiki data are regenerated; no art changes. This is browser
 code and data only; nothing new is uploaded.
+Since 00b3872 Mirklurk 0.9.1.0 (Steam's current release) is **Latest**, with
+its own rules: it adds Flint (Large) (item 276, stacks to 5) and the Flint
+Dagger (item 277, durability 20), which is also a chopping tool (×1.2), so
+tree harvest costs and **Chop with** list it only under 0.9.1.0's rules.
+0.9.0.1 and 0.9.0.2 saves now get a version switch; 0.9.1.0 saves get none,
+and the editor offers and saves the two items only under Latest. Item and game
+data are regenerated and the art data's version stamp reads 0.9.1.0; no art
+changes. This is browser code and data only; nothing new is uploaded.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (392 files) so
@@ -161,9 +169,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `e499f3b09018991ca6ae6b35baf88ba23171e396`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/38947848978) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:e499f3b`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:e499f3b`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `00b3872fb36a5d1535a7d5e45a0e8bf9194cf677`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/39604242923) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:00b3872`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:00b3872`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -175,14 +183,15 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.51cedc2a06.js` | `51cedc2a062249ab6af0b6bf9f1208e1a3c133a04ba7aa4f09c32304b4e717a0` |
-| `edit.ffe0fe7506.js` | `ffe0fe75066e48664dd519712cf556864bfd3d99526832e6c69086a334ad3e31` |
-| `sw.js` | `e016abd290ee8d57e04fdfa0421b50eca7f9fffa6dd193fd447b7d39b6cf983f` |
+| `app.0881684c5d.js` | `0881684c5d9777e1871f128a4151cb0fec54b2956345edfb30dadd3782a97936` |
+| `edit.b921468877.js` | `b921468877b7fea726adb2b5deac111ecb5f8b9d85bdb1f6b0679f5690b4e15f` |
+| `sw.js` | `4c415f7f23588204c5b3ee844bc216041cb6b739ca367d9cee94025f63ce7fd9` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
 unchanged); the service worker keeps 392 entries and
 lists both bundles and `assets/wiki/being_41.26af089dcc.png`, which is served
-as `image/png`. Both browser bundles contain `0.9.0.2`, `0.9.0.1` and
+as `image/png`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
+`Flint Dagger`. Both browser bundles contain `0.9.0.2`, `0.9.0.1` and
 `Poison Arrow II`. Both browser bundles contain
 `Finish_Raft_sprite_(cropped).png`. Both browser bundles contain `0.9.0.0` and
 `the game's Steam release`, and no longer `next_version_tester`. Both
@@ -305,10 +314,15 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.46** and **fd2b:92df:1a5b:1::2e**, not
+`compose_proxy` addresses **192.168.128.33** and **fd2b:92df:1a5b:1::21**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
-uploads. Web nginx always overwrites `X-Upload-IP` with its validated client IP.
+uploads. The 2026-10-21 daily update recreated NPM, moving it from
+192.168.128.46 / fd2b:92df:1a5b:1::2e (which `mirklurk-map` itself then took)
+to these; until the 00b3872 release updated this file, web nginx saw every
+client as NPM, so all clients shared one quota bucket. A stale entry trusts
+whichever container takes that address next, so replace it; never add to it.
+Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
 `X-Forwarded-For` / `X-Real-IP` / `X-Upload-IP` cannot change them.
@@ -384,7 +398,38 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `a38013f49ac5b53aa2677c70c6f40537d65dd239`, tags
+Previous source: `e499f3b09018991ca6ae6b35baf88ba23171e396`, tags
+`mirklurk-map:e499f3b` / `mirklurk-map-uploads:e499f3b` (also tagged
+`rollback-e499f3b-20261021-00b3872`). Preflight on
+2026-10-21 UTC observed exact running images
+`sha256:206719fec71d58eb2a14995a5382d3ef3e8ae789fa64366f929fc36ce434c212` (web)
+and `sha256:6857667c8df14170aee0a1e88ecae3918edd6757687c37f87140842f0df70d49`
+(uploads); retain and recheck these exact images before mutation.
+The e499f3b -> 00b3872 release is
+[dantebarbieri/mirklurk-map#52](https://github.com/dantebarbieri/mirklurk-map/pull/52)
+(Mirklurk 0.9.1.0 is Latest with its own rules). It changes
+`src/version.ts`, `src/chop.ts`, `src/inspect.ts`, `src/view.ts`, a doc
+comment in `src/coins.ts`, regenerated `src/itemdata.ts` / `src/gamedata.ts`
+(items 276-277 only), the version stamp in `src/artdata.json` and
+`tools/dump_art.csx`, header comments elsewhere, tests and the README.
+`server/`, the Dockerfile, `.dockerignore`, source `deploy/nginx.conf`,
+compose, the sharing code, `assets/` and `tools/smoke.sh` are unchanged (the
+service worker keeps 392 files). Of what the upload server runs only comments
+change (`src/health.ts`, `src/rules.ts`, `src/weather.ts`); `src/armor.ts`,
+`src/chop.ts`, `src/itemdata.ts` and `src/version.ts` reach it only through
+type-only imports erased at runtime, so the rebuilt uploads image behaves
+identically: no validation outcome, API route, quota, `/api/config` or stored
+format changes. `nginx/mirklurk-map.conf` changes its source-SHA comment and,
+separately, its trusted NPM addresses (see NPM prerequisites). No migration,
+secret or NPM proxy-host change is required. Revert only the pin (keep the
+current NPM addresses in `nginx/mirklurk-map.conf`) and recreate only
+uploads, then web, from the retained exact e499f3b images under the shared
+lock; never restore the uploads volume. The rollback has no format
+incompatibility; it only brings back 0.9.0.2 as Latest with 0.9.0.1's rules,
+under which 0.9.1.0 saves are read without items 276-277 or the Flint
+Dagger's chopping bonus.
+
+Rolling back further to `a38013f49ac5b53aa2677c70c6f40537d65dd239`, tags
 `mirklurk-map:a38013f` / `mirklurk-map-uploads:a38013f` (also tagged
 `rollback-a38013f-20261016-e499f3b`). Preflight on
 2026-10-16 UTC observed exact running images
