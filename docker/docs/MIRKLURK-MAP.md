@@ -146,9 +146,15 @@ tree harvest costs and **Chop with** list it only under 0.9.1.0's rules.
 and the editor offers and saves the two items only under Latest. Item and game
 data are regenerated and the art data's version stamp reads 0.9.1.0; no art
 changes. This is browser code and data only; nothing new is uploaded.
+Since 5dbd86a the wiki data covers the 0.9.1.0 pages: Flint (Large) and the
+Flint Dagger (items 276-277) show their mirklurk.wiki pictures
+(`assets/wiki/item_276.a7eb5c2fd3.png`, `item_277.b27dd464e2.png`) and link
+to their pages, and the wiki title list adds `Version 0.9.0.2` and
+`Version 0.9.1.0`. No existing picture changes. This is browser code and data
+only; nothing new is uploaded.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
-page, scripts, stylesheets, manifest, icons and all bundled art (392 files) so
+page, scripts, stylesheets, manifest, icons and all bundled art (394 files) so
 local saves open offline.
 It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
 an online visit gets the newest release.
@@ -157,7 +163,7 @@ The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
 This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
-in either image; 73 manifest-listed game-art PNGs and 306 manifest-listed
+in either image; 73 manifest-listed game-art PNGs and 308 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
 six MirkMap icons drawn from the game's "Map of area" item and (since f7257fc)
 the journal's text copied from the game's `UI.ini`. The web image also
@@ -169,9 +175,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `00b3872fb36a5d1535a7d5e45a0e8bf9194cf677`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/39604242923) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:00b3872`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:00b3872`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `5dbd86a2b99ae28b538c4e191ed8d66789055a73`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/39624946639) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:5dbd86a`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:5dbd86a`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -183,14 +189,16 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.0881684c5d.js` | `0881684c5d9777e1871f128a4151cb0fec54b2956345edfb30dadd3782a97936` |
-| `edit.b921468877.js` | `b921468877b7fea726adb2b5deac111ecb5f8b9d85bdb1f6b0679f5690b4e15f` |
-| `sw.js` | `4c415f7f23588204c5b3ee844bc216041cb6b739ca367d9cee94025f63ce7fd9` |
+| `app.29492404c5.js` | `29492404c592a40169f450905bf3f63c66e961ca44713948db9713901519a811` |
+| `edit.9007285628.js` | `90072856289d7d3f8be43d42008d7a639c2eaa050bdd160c434d3007ed301e49` |
+| `sw.js` | `aa042d7ee66076f5d5e8e50cce21f0dd4d32de7ba9c3c21e48d1aa0ec03be6ef` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 392 entries and
-lists both bundles and `assets/wiki/being_41.26af089dcc.png`, which is served
-as `image/png`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
+unchanged); the service worker keeps 394 entries and
+lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
+`assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
+browser bundles contain `Flint_Dagger_icon_(cropped).png` and
+`Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
 `Flint Dagger`. Both browser bundles contain `0.9.0.2`, `0.9.0.1` and
 `Poison Arrow II`. Both browser bundles contain
 `Finish_Raft_sprite_(cropped).png`. Both browser bundles contain `0.9.0.0` and
@@ -398,7 +406,33 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `e499f3b09018991ca6ae6b35baf88ba23171e396`, tags
+Previous source: `00b3872fb36a5d1535a7d5e45a0e8bf9194cf677`, tags
+`mirklurk-map:00b3872` / `mirklurk-map-uploads:00b3872` (also tagged
+`rollback-00b3872-20261021-5dbd86a`). Preflight on
+2026-10-21 UTC observed exact running images
+`sha256:f1bc26dda44171aeef519db43ad38b7cdf041a42d80fcfd03f01387d8f1f87d4` (web)
+and `sha256:dd5828c24bd85cf1ae5d51ee1e255dc6990dd43d96dbc5c74f0cc02e20369cfa`
+(uploads); retain and recheck these exact images before mutation.
+The 00b3872 -> 5dbd86a release is
+[dantebarbieri/mirklurk-map#54](https://github.com/dantebarbieri/mirklurk-map/pull/54)
+(wiki data for the 0.9.1.0 pages) and the docs-only
+[dantebarbieri/mirklurk-map#53](https://github.com/dantebarbieri/mirklurk-map/pull/53)
+(`.github/skills/game-update/SKILL.md`, not copied into either image). It
+changes `src/wikidata.json`, `src/wikiart.json` and `tests/wiki_test.ts` and
+adds `assets/wiki/item_276.a7eb5c2fd3.png` and `item_277.b27dd464e2.png` (the
+service worker keeps 394 files). `server/`, the Dockerfile, `.dockerignore`,
+source `deploy/nginx.conf`, compose, the sharing code and `tools/smoke.sh` are
+unchanged, no existing asset changes, and the upload server imports none of
+the changed files, so the rebuilt uploads image behaves identically: no
+validation outcome, API route, quota, `/api/config` or stored format changes.
+`nginx/mirklurk-map.conf` changes only its source-SHA comment. No migration,
+config, secret or proxy change is required. Revert the pin and recreate only
+uploads, then web, from the retained exact 00b3872 images under the shared
+lock; never restore the uploads volume. The rollback has no format
+incompatibility; it only brings back Flint (Large) and the Flint Dagger
+without wiki pictures or page links.
+
+Rolling back further to `e499f3b09018991ca6ae6b35baf88ba23171e396`, tags
 `mirklurk-map:e499f3b` / `mirklurk-map-uploads:e499f3b` (also tagged
 `rollback-e499f3b-20261021-00b3872`). Preflight on
 2026-10-21 UTC observed exact running images
