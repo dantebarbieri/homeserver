@@ -2,14 +2,17 @@
 # Uncomment services as needed
 
 services:
+  # Only docker/scripts/mirklurk-release.py starts or recreates the wiki frontend
+  # (docs/MIRKLURK.md). The profile keeps the nightly updater, dcu, dcupdate and
+  # a bare dcr off it; the helper moves the local tag after its checks and backup.
+  # The image's own labels carry its mirklurk-wiki source revision.
   mirklurk:
     extends:
       file: compose.common.yml
       service: common-service
-    image: sha256:f17af065fcfa26d6391adba038b0a82f2e5438ae5fcc1cc13dfdcdc20c90feda
+    profiles: ["mirklurk-release"]
+    image: mirklurk-wiki:live
     pull_policy: never
-    labels:
-      org.opencontainers.image.revision: 62d19af31f8ba7952d91f65337c928df75e8c6af
     container_name: mirklurk
     environment:
       MW_SERVER_URL: ${MIRKLURK_SERVER_URL:-https://wiki.mirklurk.danteb.com}

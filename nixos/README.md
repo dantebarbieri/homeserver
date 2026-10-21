@@ -79,6 +79,12 @@ maintenance finishes before ownership repair. The entire job holds
 `/run/lock/homeserver-compose.lock`; manual Compose operations do not
 automatically honor that lock.
 
+The MirkLurk wiki frontend is in Compose profile `mirklurk-release`, so this
+job never starts or recreates it. `mirklurk-auto-update.timer` (04:15, ordered
+after this job) builds and deploys eligible MediaWiki base-image updates for it
+and alerts only on failure or a stall; see
+[MirkLurk wiki](../docker/docs/MIRKLURK.md#automatic-base-image-updates).
+
 A deploy key is auto-generated on first activation at
 `/root/.ssh/docker-compose-deploy` — add the public key to GitHub as a
 read-only deploy key.

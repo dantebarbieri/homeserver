@@ -77,7 +77,8 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 
 | Timer | Schedule | Purpose |
 |-------|----------|---------|
-| `docker-compose-update` | Daily 04:00 (±5m) | Pull monorepo, update containers |
+| `docker-compose-update` | Daily 04:00 (±5m) | Pull monorepo, update containers (never the `mirklurk-release` wiki frontend) |
+| `mirklurk-auto-update` | Daily 04:15, after the updater | Build/deploy eligible MediaWiki 1.43 base updates of the wiki; ntfy only on failure or stall |
 | `mirklurk-sitemap` | Daily 05:30 | Guarded native sitemap refresh + public freshness checks |
 | `mirklurk-snapshot` | Daily 03:15 | SQL + images/branding snapshot; briefly stops only the wiki |
 | `mirklurk-backup-check` | Hourly :45 | SQL/files backup freshness + free space/inodes -> ntfy |
@@ -86,7 +87,7 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 
 The root-owned `/var/lib/mirklurk-upload-deployment/hold` file gates both the
 service and timer for Docker updates, OS upgrades, offsite sync, wiki snapshots,
-and wiki backup checks. It survives a planned reboot without stopping the
+wiki backup checks and wiki auto-updates. It survives a planned reboot without stopping the
 existing SQL backup sidecar. See `docker/docs/MIRKLURK-UPLOADS.md` before creating
 or removing it; never clear another operator's hold or resume timers before
 coordinated deployment acceptance.

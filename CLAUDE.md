@@ -161,8 +161,8 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 | `dcs <svc>` | `dcs bazarr` | Interactive shell (tries bash, then sh) |
 | `dcl [-s <time>] <svcs...>` | `dcl -s 30m bazarr whisperasr` | Follow logs with optional --since |
 | `dcr [svcs...]` | `dcr bazarr whisperasr` | Restart/recreate services |
-| `dcu` | `dcu` | Quick update: git pull, pull/build/up, light prune (a failed image build only holds back that service) |
-| `dcupdate` | `dcupdate` | Full update: git pull+push, pull/build, then down/up (skips the teardown if an image fails to build), heavy prune |
+| `dcu` | `dcu` | Quick update: git pull, pull/build/up, light prune (a failed image build only holds back that service; never touches the `mirklurk-release` wiki frontend) |
+| `dcupdate` | `dcupdate` | Full update: git pull+push, pull/build, then down/up (skips the teardown if an image fails to build), heavy prune that keeps retained wiki images |
 
 ## NixOS (`nixos/`)
 
