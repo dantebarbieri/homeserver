@@ -39,6 +39,15 @@ class HealthCleanupTests(unittest.TestCase):
                   };
                   updateScript = c.systemd.services.docker-compose-update.script;
                   updateFailure = c.systemd.services.docker-compose-update.unitConfig.OnFailure;
+                  autoUpdateUnit = {
+                    inherit (c.systemd.services.mirklurk-auto-update)
+                      after requires unitConfig script;
+                    serviceType = c.systemd.services.mirklurk-auto-update.serviceConfig.Type;
+                  };
+                  autoUpdateTimer = {
+                    inherit (c.systemd.timers.mirklurk-auto-update) wantedBy timerConfig unitConfig;
+                  };
+                  tmpfiles = c.systemd.tmpfiles.rules;
                   scrubFailure = c.systemd.services.mdadm-scrub.unitConfig.OnFailure;
                   scrubRestart = c.systemd.services.mdadm-scrub.restartIfChanged;
                   scrubScript = c.systemd.services.mdadm-scrub.script;
@@ -101,6 +110,21 @@ class HealthCleanupTests(unittest.TestCase):
             unit["serviceConfig"]["WorkingDirectory"], "/srv/homeserver/docker"
         )
         self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
+
+    def test_wiki_auto_update_follows_the_updater_with_alerts_and_the_shared_hold(self):
+        unit, timer = self.config["autoUpdateUnit"], self.config["autoUpdateTimer"]
+        self.assertIn("docker-compose-update.service", unit["after"])
+        self.assertIn("docker.service", unit["requires"])
+        self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
+        for gated in (unit["unitConfig"], timer["unitConfig"]):
+            self.assertEqual(gated["ConditionPathExists"], "!/var/lib/mirklurk-upload-deployment/hold")
+        self.assertEqual(unit["serviceType"], "oneshot")
+        self.assertIn("/srv/homeserver/docker/scripts/mirklurk-release.py auto-update", unit["script"])
+        self.assertNotIn("--dry-run", unit["script"])
+        self.assertEqual(timer["timerConfig"]["OnCalendar"], "*-*-* 04:15:00")
+        self.assertTrue(timer["timerConfig"]["Persistent"])
+        self.assertIn("timers.target", timer["wantedBy"])
+        self.assertIn("d /var/lib/mirklurk-auto-update 2775 root docker - -", self.config["tmpfiles"])
 
     def test_update_sequence_and_build_isolation(self):
         harness = """

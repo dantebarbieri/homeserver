@@ -162,8 +162,9 @@ dcupdate() (
     docker compose up -d || return 1
   fi
 
-  # Heavy cleanup — unused images, networks, and build cache
-  docker image prune -af
+  # Heavy cleanup — unused images, networks, and build cache. Keep retained
+  # MirkLurk wiki releases: they are rollback/forensic images, not cache.
+  docker image prune -af --filter "label!=org.opencontainers.image.source=https://github.com/dantebarbieri/mirklurk-wiki"
   docker network prune -f
   docker builder prune -af
 

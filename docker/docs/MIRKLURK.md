@@ -9,17 +9,20 @@ live in [dantebarbieri/mirklurk-wiki](https://github.com/dantebarbieri/mirklurk-
 This repository owns only the homeserver's Compose, storage, backup, and
 Homepage integration. Do not duplicate `LocalSettings.php` or page content here.
 
-**Deployment is a separate, explicitly approved step.** Preparing this
-integration does not authorize DNS, certificate, reverse-proxy, or existing
-credential discovery or changes. Those remain under the operator's control.
+**Eligible MediaWiki base-image updates deploy unattended**, as the operator
+approved on 2026-10-21 (see [Automatic base-image updates](#automatic-base-image-updates)).
+**Every other deployment remains a separate, explicitly approved step.**
+Neither authorizes DNS, certificate, reverse-proxy, or existing credential
+discovery or changes. Those remain under the operator's control.
 
 ## Deployment contract
 
 | Item | Value |
 |------|-------|
-| External clone | `/srv/docker/mirklurk-wiki`, reviewed build source only |
-| Build | Operator builds `deploy/Dockerfile` once from the reviewed external release; no Compose build fallback |
-| App | `mirklurk`, Apache port 80, exact local `sha256` image ID in `compose.websites.yml`, `pull_policy: never` |
+| Build source | Automatic: a fresh clone of mirklurk-wiki `main` under `/var/lib/mirklurk-auto-update`, removed after the build. Manual: a clean temporary clone of the reviewed commit |
+| Build | `mirklurk-auto-update` (eligible base updates) or the operator (every other release) builds `deploy/Dockerfile` with OCI `source`/`revision` labels; no Compose build fallback |
+| App | `mirklurk`, Apache port 80, Compose profile `mirklurk-release`, local tag `mirklurk-wiki:live` moved only by `mirklurk-release.py`, `pull_policy: never` |
+| Release state | Tags `mirklurk-wiki:live`, `:previous` and `:auto-<12 hex>`; `/var/lib/mirklurk-auto-update/{status.json,history.jsonl,hold}` |
 | Public URL | `MIRKLURK_SERVER_URL`; current production is `https://mirklurk.wiki` (the initial-domain Compose fallback is not the live value) |
 | Proxy trust | `MIRKLURK_TRUSTED_PROXY_CIDRS`, verified proxy addresses only |
 | Database | `mirklurk-db:3306`, database/user `mirklurk`, named volume `compose_mirklurk-db` |
@@ -54,24 +57,28 @@ The existing production value is already correct and must remain unchanged
 for this release. Aligning the legacy setup defaults and Homepage consumers
 requires a separately reviewed follow-up, not this image-only rollout.
 
-The daily homeserver updater pulls `main`, but it cannot pull or rebuild the
-pinned wiki image. The authorized operator must build and verify that exact
-image locally before its homeserver pin is merged. Keep the image available;
-a missing image must fail rather than fall back to another release. Required
-`.env` values, directories, and secret files must also already exist. Do not
-deploy from an untracked production override or a feature-branch checkout:
-the next updater can remove those containers with `--remove-orphans`.
+The daily homeserver updater pulls `main`, but the `mirklurk` frontend sits in
+Compose profile `mirklurk-release`: neither that updater nor `dcu`, `dcupdate`
+or a bare `dcr` starts, recreates or removes it, so merging homeserver changes
+never activates a wiki image. The frontend runs whatever the local tag
+`mirklurk-wiki:live` names, and only `docker/scripts/mirklurk-release.py` moves
+that tag, after its checks and a fresh backup. `mirklurk-db` and
+`mirklurk-backup` stay on the generic updater. A missing tag fails rather than
+falling back to another release. Required `.env` values, directories, and
+secret files must also already exist. Do not deploy from an untracked
+production override or a feature-branch checkout.
 
-Use a reviewed, committed wiki release and record its exact commit. The
-external checkout belongs under `/srv/docker`, alongside the existing
-external-app pattern; it is not part of `${DATA}` and is not the live database.
-The homeserver updater does **not** pull this external repository.
+Every image is built from a committed wiki revision and records it in its
+`org.opencontainers.image.revision` label. Manual build checkouts belong under
+`/srv/docker`, alongside the existing external-app pattern; they are not part
+of `${DATA}` and are not the live database. The generic homeserver updater does
+**not** pull this external repository; `mirklurk-auto-update` clones it fresh.
 
-For a first installation on another host, or a later application release,
-build `deploy/Dockerfile` from that reviewed external checkout on the target
-host, verify the resulting image, and record its full local `sha256` image ID.
-Have a reviewed homeserver change pin that ID before starting the app. The
-current local image ID is not a registry artifact that a fresh host can pull.
+For a first installation on another host, build `deploy/Dockerfile` from a
+reviewed checkout on the target host with the OCI labels (see
+[Manual releases](#manual-releases)), verify it, and tag it
+`mirklurk-wiki:live` before starting the app. Later releases go through the
+helper. Local image IDs are not registry artifacts that a fresh host can pull.
 
 Create the wiki's own secret directory with mode `0700`. Individual secret
 files must be readable by the mounted app (Apache UID 33), database, or backup
@@ -282,19 +289,155 @@ after an in-wiki password change it is not the current credential.
 
 ## Controlled updates and domain moves
 
-Application and database versions are pinned; update them deliberately with
-a current backup, matching extension versions, the upstream MediaWiki update
-procedure, and health/content checks. Verify required extension files and
-configuration, including ParserFunctions, before pinning the new image's full
-immutable ID. Verify the loaded runtime during the wiki-only rollout before
-any separately authorized content publication.
-The homeserver's normal daily build does not rebuild the wiki, perform schema
-migrations, or pull the external wiki checkout. Record both repository commits
-and the local image ID for each release. The existing generic deploy helper
-does not build this pinned frontend or advance its image.
-`mirklurk-release.py` also asserts the live MediaWiki version
-(`MEDIAWIKI_GENERATOR`). Update it in the same change as any base-version bump,
-or the daily sitemap refresh fails.
+The database image stays digest-pinned in Compose and changes only through a
+reviewed homeserver PR. The frontend changes in exactly two ways, both through
+`mirklurk-release.py`: unattended base-image updates and manual releases.
+Neither runs schema migrations or publishes content. The helper reads the
+expected MediaWiki version from each image's `MEDIAWIKI_VERSION` (set by the
+official base), so a base bump needs no helper change; the daily sitemap
+refresh checks the running image's version the same way.
+
+### Automatic base-image updates
+
+Operator-approved policy (2026-10-21): when mirklurk-wiki `main` differs from
+the live revision **only** by the `deploy/Dockerfile` line
+`FROM mediawiki:1.43.N@sha256:…` (Dependabot patch or same-tag digest updates,
+auto-merged in that repository), the server builds and deploys it with no PR
+or approval. The `mirklurk-auto-update` timer runs nightly at 04:15, after the
+04:00 Docker updater, under the same deployment hold as the other wiki timers.
+Each run:
+
+1. Refuses to act if its own hold exists, if `mirklurk-wiki:live` names
+   anything but the running image, or if the running image lacks
+   source/revision labels. The first run tags the running image
+   `mirklurk-wiki:live`; nothing is recreated.
+2. Clones `main` fresh and compares it with the live revision. `deploy/` is
+   the image's whole input (the Dockerfile copies only from `deploy/`; a run
+   refuses otherwise). `main` is:
+   - **current** when `deploy/` is unchanged (content-only commits need no image);
+   - **eligible** when the only `deploy/` change is that `FROM` line, the tag
+     stays `1.43.*`, the version does not go down, and the live revision is an
+     ancestor of `main`;
+   - **blocked** otherwise.
+3. For an eligible `main`, waits until the `publication` and `docker-smoke`
+   checks pass on that exact commit, then builds it from the clean clone with
+   OCI labels as `mirklurk-wiki:auto-<12 hex>`. It refuses the image unless its
+   PHP is at least 8.3.36 (PHP2Shell), it is not on the never-serve list, its
+   `MEDIAWIKI_VERSION` matches the `FROM` tag, nothing is downgraded, and core
+   and extension schema/updater files are byte-identical to the live image.
+   Anything else needs `update.php` and therefore a manual release.
+4. Under the Compose lock: stops quietly if the
+   [upload deployment hold](MIRKLURK-UPLOADS.md) appeared while it was
+   building, reruns `preflight`, requires a fresh complete
+   snapshot (`check-backups`), takes the `--once` SQL dump, tags the old image
+   `mirklurk-wiki:previous`, moves `mirklurk-wiki:live`, recreates only
+   `mirklurk`, and checks readiness, public acceptance (including the new
+   MediaWiki version), the sitemap and every other container's identity.
+5. Appends the deployment to `/var/lib/mirklurk-auto-update/history.jsonl`,
+   writes the night's decision to `status.json`, and drops `auto-*` tags
+   beyond the newest three. It never removes `live`, `previous` or manually
+   created tags such as `release-*`.
+
+**ntfy fires only for breakage or a stall.** The unit fails, and
+`ntfy-failure@` reports it, when a build, preflight, backup, activation or
+acceptance fails; when the candidate needs `update.php` or would serve
+vulnerable PHP; when an eligible `main` has waited more than 3 days (for
+example CI never passed); when `main` has been blocked by changes needing a
+manual release for more than 7 days, counted from the first such commit on
+`main` (or from the live image's build when the live revision is not on
+`main`); and every night while the hold exists. Successful updates and quiet
+waiting send nothing.
+
+Inspect with `journalctl -u mirklurk-auto-update -n 80 --no-pager` and
+`cat /var/lib/mirklurk-auto-update/status.json`. A dry run decides, builds
+and preflights but never deploys or writes state; the docker-group user can
+run it:
+
+```bash
+z /srv/homeserver
+nix shell nixpkgs#python3 --command python3 docker/scripts/mirklurk-release.py auto-update --dry-run
+```
+
+### Manual releases
+
+Everything that is not eligible (other `deploy/` changes, MediaWiki minor or
+major upgrades, schema changes) remains a separate, explicitly approved
+release. Build the reviewed commit from a clean clone:
+
+```bash
+source=<reviewed full mirklurk-wiki commit>
+work=$(mktemp -d "/srv/docker/mirklurk-release-${source:0:8}.XXXXXX")
+git clone --quiet https://github.com/dantebarbieri/mirklurk-wiki.git "$work/source"
+git -C "$work/source" checkout --quiet --detach "$source"
+docker build --file "$work/source/deploy/Dockerfile" \
+  --label org.opencontainers.image.source=https://github.com/dantebarbieri/mirklurk-wiki \
+  --label org.opencontainers.image.revision="$source" \
+  --tag "mirklurk-wiki:release-${source:0:12}" "$work/source"
+image=$(docker image ls --no-trunc --quiet "mirklurk-wiki:release-${source:0:12}")
+previous=$(docker inspect --format '{{.Image}}' mirklurk)
+rm -rf "$work"
+```
+
+Then preflight and deploy from canonical `main`. No homeserver PR, pin change
+or updater pause is needed: merging cannot activate the frontend, and the
+helper holds the Compose lock while it works.
+
+```bash
+z /srv/homeserver
+nix shell nixpkgs#python3 --command python3 docker/scripts/mirklurk-release.py preflight \
+  --source "$source" --image "$image" --previous-image "$previous"
+nix shell nixpkgs#python3 --command python3 docker/scripts/mirklurk-release.py deploy \
+  --source "$source" --image "$image" --previous-image "$previous"
+```
+
+`deploy` fast-forwards clean canonical `main`, reruns preflight, checks
+backups, takes the `--once` dump, moves the tags, recreates only `mirklurk`,
+runs acceptance and refreshes the sitemap. A release whose image needs
+`update.php` instead follows an attended schema sequence with all writers
+stopped, as in [DiscussionTools schema release](#discussiontools-schema-release).
+
+### Failures, holds and recovery
+
+There is no automatic rollback. A failure before activation changes nothing,
+alerts, and retries the next night. Once activation starts,
+`mirklurk-auto-update` writes `/var/lib/mirklurk-auto-update/hold` (reason,
+source, image and predecessor); a failed or interrupted activation keeps it,
+adds the candidate's revision to `/var/lib/mirklurk-auto-update/rejected`, and
+every later run alerts without doing anything until an operator acts:
+
+1. Check `docker inspect mirklurk --format '{{.Image}} {{.State.Health.Status}}'`,
+   the public site and `journalctl -u mirklurk-auto-update`.
+2. Prefer a forward fix. To go back, run `recover`. With no arguments it
+   serves the predecessor recorded in the hold (not the movable
+   `mirklurk-wiki:previous` tag, so rerunning it after a partial failure is
+   safe); pass `--image` and `--source` to serve a different known image. It
+   works even when the current frontend is unhealthy or down, but still
+   refuses PHP older than 8.3.36, the never-serve list (`a1f303f5…`) and any
+   revision in `rejected`, so a PHP2Shell-vulnerable or failed runtime cannot
+   be served again. It recreates only `mirklurk`, runs acceptance and the
+   sitemap refresh, and adds the replaced image's revision to `rejected`:
+
+   ```bash
+   z /srv/homeserver
+   nix shell nixpkgs#python3 --command python3 docker/scripts/mirklurk-release.py recover
+   ```
+
+3. Once `mirklurk-wiki:live` names the running, healthy image, delete the hold
+   with `rm /var/lib/mirklurk-auto-update/hold` (the directory is group
+   `docker`; no sudo needed). The nightly run never rebuilds a rejected image
+   input: any `main` whose `deploy/` tree matches a rejected revision, even
+   after later content-only commits, counts as blocked (alerting after 7 days)
+   until `deploy/` changes again or a manual release ships. Delete the
+   revision's line from `rejected` to retry it.
+
+Never restore the database, reverse public redirects or overwrite community
+content as part of an image recovery.
+
+### Historical release records
+
+The records below predate unattended updates. Their Compose image-ID pins,
+updater pauses and pin-change PRs describe the procedure at the time; use the
+sections above for new releases.
 
 ### PHP2Shell emergency base release (2026-10-21)
 
@@ -316,6 +459,9 @@ fresh SQL backup, recreating only `mirklurk` (healthy in 8 seconds), confirming
 other containers were unchanged, and public checks reporting MediaWiki 1.43.11
 on PHP 8.3.36. A pre-patch check found no sign of compromise: `docker diff`
 showed only expected files and the only processes were Apache.
+On 2026-10-21 the unattended updater's build path, run against a fresh clone
+of `62d19af`, reproduced image ID `f17af065…` exactly; its schema/updater
+fingerprint also matched the 1.43.9 predecessor's.
 
 ### Native-upload runtime release
 

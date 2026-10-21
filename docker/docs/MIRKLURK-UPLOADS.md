@@ -181,7 +181,8 @@ The root-owned `/var/lib/mirklurk-upload-deployment/hold` file is a **deployment
 hold**, not MediaWiki's native read-only marker. While it exists, declarative
 `ConditionPathExists` guards prevent both the services and timers for
 `docker-compose-update`, `nixos-upgrade`, `rclone-offsite-daily`,
-`mirklurk-snapshot`, and `mirklurk-backup-check` from starting. It survives
+`mirklurk-snapshot`, `mirklurk-backup-check`, and `mirklurk-auto-update` from
+starting. It survives
 reboot, blocks persistent-timer catch-up, and prevents the scheduled OS upgrade
 from replacing the attended boot selection. It does not stop existing jobs,
 block arbitrary root/CLI commands, or pause the six-hour SQL sidecar.
@@ -198,11 +199,14 @@ flock -x -w 30 9
 state=/var/lib/mirklurk-upload-deployment
 test ! -e "$state"
 test ! -L "$state"
-systemctl stop docker-compose-update.timer nixos-upgrade.timer rclone-offsite-daily.timer
+systemctl stop docker-compose-update.timer nixos-upgrade.timer rclone-offsite-daily.timer mirklurk-auto-update.timer
 for name in docker-compose-update nixos-upgrade rclone-offsite-daily; do
   test "$(systemctl show "$name.service" -p LoadState --value)" = loaded
   test "$(systemctl show "$name.service" -p ActiveState --value)" = inactive
 done
+# The wiki auto-updater fails nightly by design while it needs attention; only a running job matters.
+test "$(systemctl show mirklurk-auto-update.service -p LoadState --value)" = loaded
+case "$(systemctl show mirklurk-auto-update.service -p ActiveState --value)" in inactive|failed) ;; *) false ;; esac
 mkdir -m 0700 "$state"
 umask 077
 printf '%s\n' 'Awaiting coordinated post-reboot wiki acceptance.' > "$state/hold"
@@ -219,7 +223,7 @@ sudo bootctl list --no-pager
 **not** activate those changes or restart the wiki now. Do not use `switch`.
 Keep the hold if the build/bootloader installation fails. Before reboot, verify
 build success, the intended default boot entry, the unchanged running generation,
-and all ten service/timer guards in the selected generation. A successful build
+and all twelve service/timer guards in the selected generation. A successful build
 without a correctly installed boot entry is insufficient. Retain the recorded
 previous generations and existing known-good wiki image; do not garbage-collect
 them during this window.
@@ -267,7 +271,7 @@ never a blind live switch to newer or older packages.
 
 After reconnecting, verify the booted/running generation, SSH/networking,
 Docker and storage, the original wiki/DB/SQL-backup health and image identities,
-and all five guarded timers/services loaded but inactive with the hold present.
+and all six guarded timers/services loaded but inactive with the hold present.
 Inspect failed units before proceeding. Do not remove the hold just because
 reboot succeeded. Baseline capture, offsite roundtrip, isolated restore and
 app-only rollout remain separate authorized steps below. Refresh any staged
@@ -275,10 +279,11 @@ helper's exact canonical-SHA guard after reviewed source changes; never bypass i
 
 Only after joint acceptance, verify that this is still the deployment's own
 hold, remove that **one file**, and start the snapshot/check/offsite timers,
-then the OS-upgrade and Docker-updater timers. Inspect actual next triggers
-and results; persistent timers may run immediately when resumed. Never delete
-another operator's hold, clear the entire directory, or resume the updater
-while another coordinated deployment is unfinished.
+then the OS-upgrade, Docker-updater and `mirklurk-auto-update` timers. Inspect
+actual next triggers and results; persistent timers may run immediately when
+resumed. A timer left stopped sends no alert, so confirm every one has a next
+trigger. Never delete another operator's hold, clear the entire directory, or
+resume the updater while another coordinated deployment is unfinished.
 
 ## Attended deployment sequence
 
