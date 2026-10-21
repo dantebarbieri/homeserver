@@ -451,7 +451,11 @@ sections above for new releases.
 This release fixed PHP2Shell (CVE-2026-109618, CVE-2026-109619), a pre-auth RCE
 and memory disclosure triggered by any `multipart/form-data` request. The origin
 is reachable without Cloudflare, so the edge WAF was not a sufficient mitigation.
-The only change from `81e73d2` is the base image. Core and bundled-extension
+Besides the base image, the release shipped one runtime change that had been
+merged but not yet deployed: mirklurk-wiki#63's `MirklurkSearch` title-infix suggester
+(`c55e619`: `deploy/mirklurk-search.php` and `$wgSearchType`). It needs no
+schema change or maintenance step, and its live suggestions work ("socks"
+suggests all four sock pages). Core and bundled-extension
 schema/updater files were byte-identical, so no `update.php` ran. The deployment
 ran `preflight`, then the `deploy` steps by hand: the updater timer could not
 be paused without sudo, and its next run was 14 hours away. Those steps were a
