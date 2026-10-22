@@ -58,8 +58,8 @@ class MapDeploymentTests(unittest.TestCase):
         config = (ROOT / "nginx/mirklurk-map.conf").read_text()
         trusted = [line.strip() for line in config.splitlines() if line.strip().startswith("set_real_ip_from")]
         self.assertEqual(trusted, [
-            "set_real_ip_from 192.168.128.33;",
-            "set_real_ip_from fd2b:92df:1a5b:1::21;",
+            "set_real_ip_from 192.168.128.15;",
+            "set_real_ip_from fd2b:92df:1a5b:1::f;",
         ])
         self.assertIn("proxy_set_header X-Upload-IP $remote_addr;", config)
         self.assertIn("error_log /dev/null;", config)

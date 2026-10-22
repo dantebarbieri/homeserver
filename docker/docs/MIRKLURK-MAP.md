@@ -157,6 +157,10 @@ Since 278950d Mirklurk 0.9.1.2 (Steam's current release) is **Latest**, with
 saves get no version switch, and the switch's Latest label reads
 `Latest (0.9.1.2)`. The art data's version stamp reads 0.9.1.2; no item, game, wiki or art data
 changes. This is browser code only; nothing new is uploaded.
+Since 5515978 the wiki title list adds the wiki's new `Version 0.9.1.2`,
+`Versions`, `Version history` and `Patch notes` pages, and the wiki data's
+verified date is refreshed. Every bundled picture is byte-identical. This is
+browser data only; nothing new is uploaded.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (394 files) so
@@ -180,9 +184,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `278950d9d8f53f0ae7034c13ae9a3953b7d25bfd`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/39787660400) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:278950d`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:278950d`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `5515978b423e278fbf6dde74d8c9e652a69faf5b`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/39810099511) passed `test` and `docker-smoke` |
+| Web | `mirklurk-map:5515978`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:5515978`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -194,14 +198,16 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.0eb96f8167.js` | `0eb96f81679312569f671aa44b6e459afc226a09186fffe031aeed9a4b368694` |
-| `edit.d1000afeaf.js` | `d1000afeafe8959285316dea504065488920af6d91974b4086ffc0c90ed5bbe3` |
-| `sw.js` | `dba3fc3c60f9f2ccd16893a117085b835b6e3f4f254c6037abe27dc4bb6b31c3` |
+| `app.41498da0c0.js` | `41498da0c0c8a155c4563594646f244b7f4c6a89e0f5b963f8b27d63b41c5045` |
+| `edit.7dec27c957.js` | `7dec27c95725459e30711e4cd66c3b24fdc148c6cfe84dc8c6b9a41d10069823` |
+| `sw.js` | `d6f78912d62a719bd8fe488f25fa224a7112f6aafad815f209696c1b1211ba73` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
 unchanged); the service worker keeps 394 entries and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
+browser bundles contain `Version 0.9.1.2`, `Version history` and
+`Patch notes`. Both
 browser bundles contain `latest:"0.9.1.2"` and no longer `latest:"0.9.1.0"`.
 Both browser bundles contain `Flint_Dagger_icon_(cropped).png` and
 `Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
@@ -328,13 +334,16 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.33** and **fd2b:92df:1a5b:1::21**, not
+`compose_proxy` addresses **192.168.128.15** and **fd2b:92df:1a5b:1::f**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
 192.168.128.46 / fd2b:92df:1a5b:1::2e (which `mirklurk-map` itself then took)
-to these; until the 00b3872 release updated this file, web nginx saw every
-client as NPM, so all clients shared one quota bucket. A stale entry trusts
+to 192.168.128.33 / fd2b:92df:1a5b:1::21; until the 00b3872 release updated
+this file, web nginx saw every client as NPM, so all clients shared one quota
+bucket. NPM was recreated again at 2026-10-22 13:47 UTC, moving to the current
+addresses, and `immich_server` then took 192.168.128.33 / ::21; the 5515978
+release replaced them. A stale entry trusts
 whichever container takes that address next, so replace it; never add to it.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
@@ -412,7 +421,31 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 
 ## Rollback
 
-Previous source: `5dbd86a2b99ae28b538c4e191ed8d66789055a73`, tags
+Previous source: `278950d9d8f53f0ae7034c13ae9a3953b7d25bfd`, tags
+`mirklurk-map:278950d` / `mirklurk-map-uploads:278950d` (also tagged
+`rollback-278950d-20261022-5515978`). Preflight on
+2026-10-22 UTC observed exact running images
+`sha256:39538968fdbb952dfd17ad20c13207df3c4a822f29523d9e661a1eb9b6461c31` (web)
+and `sha256:4f6a06401fbd1b8c56961decb8332a17975397237a64051254c12f692077b6ae`
+(uploads); retain and recheck these exact images before mutation.
+The 278950d -> 5515978 release is
+[dantebarbieri/mirklurk-map#56](https://github.com/dantebarbieri/mirklurk-map/pull/56)
+(wiki data for the 0.9.1.2 pages). It changes only `src/wikidata.json` (four
+new verified titles and the verified date) and the verified date in
+`src/wikiart.json`. `server/`, the Dockerfile, `.dockerignore`, source
+`deploy/nginx.conf`, compose, the sharing code, `assets/` and `tools/smoke.sh`
+are unchanged (the service worker keeps 394 files), and the upload server
+imports neither changed file, so the rebuilt uploads image behaves
+identically: no validation outcome, API route, quota, `/api/config` or stored
+format changes. `nginx/mirklurk-map.conf` changes its source-SHA comment and,
+separately, its trusted NPM addresses (see NPM prerequisites). No migration,
+secret or NPM proxy-host change is required. Revert only the pin (keep the
+current NPM addresses in `nginx/mirklurk-map.conf`) and recreate only
+uploads, then web, from the retained exact 278950d images under the shared
+lock; never restore the uploads volume. The rollback has no format
+incompatibility; it only brings back the older wiki title list.
+
+Rolling back further to `5dbd86a2b99ae28b538c4e191ed8d66789055a73`, tags
 `mirklurk-map:5dbd86a` / `mirklurk-map-uploads:5dbd86a` (also tagged
 `rollback-5dbd86a-20261022-278950d`). Preflight on
 2026-10-22 UTC observed exact running images
