@@ -67,14 +67,17 @@ jitter). The corresponding oneshot service:
    recreate Homepage, and prune unused images/networks.
 
 Failures stop the update and trigger the existing `ntfy-failure@` handler, with
-one exception: locally built images are isolated. If one fails to build, the
-job rebuilds services one at a time to find it, deploys everything else, leaves
-the broken service running its previous container, and then fails so ntfy
-still reports it.
-Image pulls get at most three attempts, with 60- and 120-second delays. An
-exhausted pull does not proceed with a partial deployment. Retries mitigate
-transient registry throttling; they cannot fix invalid credentials, missing
-images, or a sustained registry outage. Git uses `--ff-only`, and automatic
+two exceptions: pulled and locally built images are isolated per service. If
+the combined pull is exhausted, the job pulls services one at a time; if the
+combined build fails, it rebuilds services one at a time. Either way it deploys
+everything else, leaves each failing service running its previous container,
+and then fails so ntfy still reports it.
+Combined image pulls get at most three attempts, with 60- and 120-second
+delays, before the one-at-a-time fallback. Retries and the fallback mitigate
+transient registry throttling (ghcr.io has rejected the large immich CUDA image
+with `toomanyrequests` during the parallel pull); they cannot fix invalid
+credentials, missing images, or a sustained registry outage. Git uses
+`--ff-only`, and automatic
 maintenance finishes before ownership repair. The entire job holds
 `/run/lock/homeserver-compose.lock`; manual Compose operations do not
 automatically honor that lock.

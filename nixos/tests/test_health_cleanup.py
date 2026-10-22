@@ -154,6 +154,8 @@ class HealthCleanupTests(unittest.TestCase):
             'compose --parallel 4 pull --ignore-buildable')
               pull_attempts=$((pull_attempts + 1))
               if [ "$pull_attempts" -le "$PULL_FAILURES" ]; then return 1; fi ;;
+            'compose pull --ignore-buildable '*)
+              case " $FAILING_PULLS " in *" ${@: -1} "*) return 1 ;; esac ;;
             'compose build --pull')
               return "$BUILD_STATUS" ;;
             'compose build --pull '*)
@@ -178,6 +180,9 @@ class HealthCleanupTests(unittest.TestCase):
         cases = [
             {}, {"LOCK_STATUS": "1"}, {"GIT_STATUS": "1"}, {"CHOWN_STATUS": "1"},
             {"PULL_FAILURES": "1"}, {"PULL_FAILURES": "2"}, {"PULL_FAILURES": "3"},
+            {"PULL_FAILURES": "3", "FAILING_PULLS": "radarr"},
+            {"PULL_FAILURES": "3", "FAILING_PULLS": "radarr",
+             "BUILD_STATUS": "1", "FAILING_BUILDS": "convertx"},
             {"BUILD_STATUS": "1"},
             {"BUILD_STATUS": "1", "FAILING_BUILDS": "convertx"},
             {"BUILD_STATUS": "1", "FAILING_BUILDS": "convertx", "DEPLOY_STATUS": "1"},
@@ -190,6 +195,7 @@ class HealthCleanupTests(unittest.TestCase):
                      "PULL_FAILURES", "BUILD_STATUS", "DEPLOY_STATUS"), "0",
                 )
                 statuses["FAILING_BUILDS"] = ""
+                statuses["FAILING_PULLS"] = ""
                 statuses.update(overrides)
                 with tempfile.TemporaryDirectory() as snapshots:
                     # Work tree as the pull left it: one new nested file, one
@@ -215,8 +221,10 @@ class HealthCleanupTests(unittest.TestCase):
                 )
                 exhausted = int(statuses["PULL_FAILURES"]) >= 3
                 deploy_failed = statuses["DEPLOY_STATUS"] != "0"
-                isolated = statuses["FAILING_BUILDS"] != ""
-                failed = failed_before_pull or exhausted or deploy_failed or isolated
+                build_held = statuses["FAILING_BUILDS"].split()
+                pull_held = statuses["FAILING_PULLS"].split() if exhausted else []
+                held = pull_held + build_held
+                failed = failed_before_pull or deploy_failed or bool(held)
                 self.assertEqual(result.returncode, int(failed), result.stderr)
                 if statuses["LOCK_STATUS"] != "0":
                     self.assertNotIn("GIT:", result.stdout)
@@ -257,21 +265,43 @@ class HealthCleanupTests(unittest.TestCase):
                         line for line in result.stdout.splitlines() if line.startswith("SLEEP:")
                     ]
                     self.assertEqual(sleeps, ["SLEEP:60", "SLEEP:120"][:attempts - 1])
-                if failed_before_pull or exhausted:
+                if failed_before_pull:
                     self.assertNotIn("DOCKER:compose build", result.stdout)
                     self.assertNotIn("DOCKER:compose up", result.stdout)
                     continue
                 lines = result.stdout.splitlines()
+                # An exhausted combined pull falls back to one service at a
+                # time; a failing service is held back, never the whole stack.
+                for svc in ("convertx", "homepage", "radarr"):
+                    single_pull = f"DOCKER:compose pull --ignore-buildable {svc}"
+                    self.assertEqual(single_pull in lines, exhausted)
+                if exhausted:
+                    self.assertLess(
+                        result.stdout.rindex("DOCKER:compose --parallel 4 pull"),
+                        result.stdout.index("DOCKER:compose pull --ignore-buildable"),
+                    )
+                    self.assertLess(
+                        result.stdout.index("DOCKER:compose pull --ignore-buildable"),
+                        result.stdout.index("DOCKER:compose build --pull"),
+                    )
                 if statuses["BUILD_STATUS"] != "0":
                     for svc in ("convertx", "homepage", "radarr"):
                         self.assertIn(f"DOCKER:compose build --pull {svc}", lines)
                 else:
                     self.assertNotIn("DOCKER:compose build --pull convertx", lines)
-                if isolated:
-                    # Everything except the broken build deploys; it keeps its old container.
-                    self.assertIn("DOCKER:compose up -d --remove-orphans homepage radarr", lines)
+                if held:
+                    # Everything except the held services deploys; they keep their old containers.
+                    deployed = [s for s in ("convertx", "homepage", "radarr") if s not in held]
+                    self.assertIn(
+                        "DOCKER:compose up -d --remove-orphans " + " ".join(deployed), lines
+                    )
                     self.assertNotIn("DOCKER:compose up -d --remove-orphans", lines)
-                    self.assertIn("convertx", result.stderr)
+                    for svc in held:
+                        self.assertIn(svc, result.stderr)
+                    if pull_held and not deploy_failed:
+                        self.assertIn("failed to pull: " + " ".join(pull_held), result.stderr)
+                    if build_held and not deploy_failed:
+                        self.assertIn("failed to build: " + " ".join(build_held), result.stderr)
                 else:
                     self.assertIn("DOCKER:compose up -d --remove-orphans", lines)
                 if deploy_failed:

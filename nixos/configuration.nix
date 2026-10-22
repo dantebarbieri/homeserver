@@ -721,19 +721,34 @@ in
           done
         done
       cd docker
+      services=$(docker compose config --services)
 
+      pulled=no
       for attempt in 1 2 3; do
         if docker compose --parallel 4 pull --ignore-buildable; then
+          pulled=yes
           break
         fi
-        if [ "$attempt" -eq 3 ]; then
-          echo "Image pull failed after 3 attempts; refusing to build or deploy." >&2
-          exit 1
+        if [ "$attempt" -lt 3 ]; then
+          delay=$((attempt * 60))
+          echo "Image pull attempt $attempt failed; retrying in $delay seconds." >&2
+          sleep "$delay"
         fi
-        delay=$((attempt * 60))
-        echo "Image pull attempt $attempt failed; retrying in $delay seconds." >&2
-        sleep "$delay"
       done
+
+      # Pulled images are isolated like built ones below. A registry throttling
+      # one image (ghcr.io has answered the multi-GB immich CUDA layers with
+      # `toomanyrequests` on every parallel attempt) must not hold back every
+      # other update. Each service is retried alone, without parallel load; one
+      # that still fails keeps its current image and container, and the unit
+      # fails at the end so ntfy-failure@ reports it.
+      failed_pulls=()
+      if [ "$pulled" = no ]; then
+        echo "Image pull failed after 3 attempts; pulling services one at a time to isolate it." >&2
+        for svc in $services; do
+          docker compose pull --ignore-buildable "$svc" || failed_pulls+=("$svc")
+        done
+      fi
 
       # Locally built images are isolated from each other and from the rest of
       # the stack. If one fails to build, every other service still deploys,
@@ -743,19 +758,19 @@ in
       failed_builds=()
       if ! docker compose build --pull; then
         echo "Image build failed; rebuilding services one at a time to isolate it." >&2
-        services=$(docker compose config --services)
         for svc in $services; do
           docker compose build --pull "$svc" || failed_builds+=("$svc")
         done
       fi
 
-      if [ "''${#failed_builds[@]}" -eq 0 ]; then
+      held=("''${failed_pulls[@]}" "''${failed_builds[@]}")
+      if [ "''${#held[@]}" -eq 0 ]; then
         docker compose up -d --remove-orphans
       else
-        echo "Image build failed for: ''${failed_builds[*]}; deploying everything else." >&2
+        echo "Holding back ''${held[*]}; deploying everything else." >&2
         deploy=()
         for svc in $services; do
-          case " ''${failed_builds[*]} " in
+          case " ''${held[*]} " in
             *" $svc "*) ;;
             *) deploy+=("$svc") ;;
           esac
@@ -766,8 +781,13 @@ in
       docker image prune -f
       docker network prune -f
 
+      if [ "''${#failed_pulls[@]}" -ne 0 ]; then
+        echo "Update finished, but these services kept their previous image because it failed to pull: ''${failed_pulls[*]}" >&2
+      fi
       if [ "''${#failed_builds[@]}" -ne 0 ]; then
         echo "Update finished, but these services kept their previous image because it failed to build: ''${failed_builds[*]}" >&2
+      fi
+      if [ "''${#held[@]}" -ne 0 ]; then
         exit 1
       fi
     '';
