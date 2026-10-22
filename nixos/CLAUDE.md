@@ -88,7 +88,8 @@ system.activationScripts.name = lib.stringAfter [ "users" ] ''
 The root-owned `/var/lib/mirklurk-upload-deployment/hold` file gates both the
 service and timer for Docker updates, OS upgrades, offsite sync, wiki snapshots,
 wiki backup checks and wiki auto-updates. It survives a planned reboot without stopping the
-existing SQL backup sidecar. See `docker/docs/MIRKLURK-UPLOADS.md` before creating
+existing SQL backup sidecar. It is world-readable so non-root agents can check
+for it without `sudo`. See `docker/docs/MIRKLURK-UPLOADS.md` before creating
 or removing it; never clear another operator's hold or resume timers before
 coordinated deployment acceptance.
 

@@ -187,6 +187,12 @@ reboot, blocks persistent-timer catch-up, and prevents the scheduled OS upgrade
 from replacing the attended boot selection. It does not stop existing jobs,
 block arbitrary root/CLI commands, or pause the six-hour SQL sidecar.
 
+The hold directory and its files are deliberately world-readable (`0755`/`0644`)
+but root-writable only, so non-root agents (for example MirkMap and wiki sessions)
+can check `test -e /var/lib/mirklurk-upload-deployment/hold` and read the reason
+without `sudo`. Its contents are non-secret notes, Nix store paths and a git SHA.
+Only root may create or remove a hold.
+
 Only after the guard changes are merged and the coordinator has confirmed the
 exact clean canonical revision and no competing host writers, run this root
 preparation. It pauses timers but never kills services or changes containers.
@@ -207,8 +213,8 @@ done
 # The wiki auto-updater fails nightly by design while it needs attention; only a running job matters.
 test "$(systemctl show mirklurk-auto-update.service -p LoadState --value)" = loaded
 case "$(systemctl show mirklurk-auto-update.service -p ActiveState --value)" in inactive|failed) ;; *) false ;; esac
-mkdir -m 0700 "$state"
-umask 077
+mkdir -m 0755 "$state"
+umask 022
 printf '%s\n' 'Awaiting coordinated post-reboot wiki acceptance.' > "$state/hold"
 readlink -f /run/current-system > "$state/previous-active"
 readlink -f /nix/var/nix/profiles/system > "$state/previous-boot"
