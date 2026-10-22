@@ -125,6 +125,7 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertTrue(timer["timerConfig"]["Persistent"])
         self.assertIn("timers.target", timer["wantedBy"])
         self.assertIn("d /var/lib/mirklurk-auto-update 2775 root docker - -", self.config["tmpfiles"])
+        self.assertIn("d /var/lib/mirklurk-upload-deployment 0755 root root - -", self.config["tmpfiles"])
 
     def test_update_sequence_and_build_isolation(self):
         harness = """
