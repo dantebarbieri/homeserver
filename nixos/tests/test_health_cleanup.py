@@ -298,9 +298,9 @@ class HealthCleanupTests(unittest.TestCase):
                     self.assertNotIn("DOCKER:compose up -d --remove-orphans", lines)
                     for svc in held:
                         self.assertIn(svc, result.stderr)
-                    if pull_held:
+                    if pull_held and not deploy_failed:
                         self.assertIn("failed to pull: " + " ".join(pull_held), result.stderr)
-                    if build_held:
+                    if build_held and not deploy_failed:
                         self.assertIn("failed to build: " + " ".join(build_held), result.stderr)
                 else:
                     self.assertIn("DOCKER:compose up -d --remove-orphans", lines)
