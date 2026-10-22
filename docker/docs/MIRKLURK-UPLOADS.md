@@ -187,6 +187,14 @@ reboot, blocks persistent-timer catch-up, and prevents the scheduled OS upgrade
 from replacing the attended boot selection. It does not stop existing jobs,
 block arbitrary root/CLI commands, or pause the six-hour SQL sidecar.
 
+The hold directory is permanent (a NixOS tmpfiles rule keeps it `0755 root:root`),
+and it and its files are deliberately world-readable but root-writable only, so
+non-root agents (for example MirkMap and wiki sessions) can check
+`test -e /var/lib/mirklurk-upload-deployment/hold` and read the reason without
+`sudo`. Its contents are non-secret notes, Nix store paths and a git SHA. Only
+root may create or remove a hold. A previous deployment's records stay after its
+hold is removed; the next preparation moves them to `archive/<UTC timestamp>/`.
+
 Only after the guard changes are merged and the coordinator has confirmed the
 exact clean canonical revision and no competing host writers, run this root
 preparation. It pauses timers but never kills services or changes containers.
@@ -197,8 +205,11 @@ sudo bash -eu <<'SH'
 exec 9</run/lock/homeserver-compose.lock
 flock -x -w 30 9
 state=/var/lib/mirklurk-upload-deployment
-test ! -e "$state"
+umask 022
 test ! -L "$state"
+install -d -m 0755 -o root -g root "$state"
+test ! -e "$state/hold"
+test ! -L "$state/hold"
 systemctl stop docker-compose-update.timer nixos-upgrade.timer rclone-offsite-daily.timer mirklurk-auto-update.timer
 for name in docker-compose-update nixos-upgrade rclone-offsite-daily; do
   test "$(systemctl show "$name.service" -p LoadState --value)" = loaded
@@ -207,8 +218,10 @@ done
 # The wiki auto-updater fails nightly by design while it needs attention; only a running job matters.
 test "$(systemctl show mirklurk-auto-update.service -p LoadState --value)" = loaded
 case "$(systemctl show mirklurk-auto-update.service -p ActiveState --value)" in inactive|failed) ;; *) false ;; esac
-mkdir -m 0700 "$state"
-umask 077
+archive="$state/archive/$(date -u +%Y%m%dT%H%M%SZ)"
+for name in previous-active previous-boot source-revision; do
+  if [ -e "$state/$name" ]; then mkdir -p "$archive"; mv "$state/$name" "$archive/"; fi
+done
 printf '%s\n' 'Awaiting coordinated post-reboot wiki acceptance.' > "$state/hold"
 readlink -f /run/current-system > "$state/previous-active"
 readlink -f /nix/var/nix/profiles/system > "$state/previous-boot"

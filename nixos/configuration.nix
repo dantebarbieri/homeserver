@@ -832,7 +832,12 @@ in
   # unit builds mirklurk-wiki main and deploys it only when it differs from the
   # live revision by the MediaWiki 1.43 base line. It fails (ntfy) only for real
   # breakage or a stall, and holds itself after a failed activation.
-  systemd.tmpfiles.rules = [ "d /var/lib/mirklurk-auto-update 2775 root docker - -" ];
+  # The deployment-hold directory is permanent and world-readable so non-root
+  # agents can check for a hold; only root may create or remove `hold` itself.
+  systemd.tmpfiles.rules = [
+    "d /var/lib/mirklurk-auto-update 2775 root docker - -"
+    "d /var/lib/mirklurk-upload-deployment 0755 root root - -"
+  ];
 
   systemd.services.mirklurk-auto-update = {
     description = "Build and deploy eligible MirkLurk wiki base-image updates";
