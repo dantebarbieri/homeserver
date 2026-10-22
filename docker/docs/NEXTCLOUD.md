@@ -223,6 +223,17 @@ To adjust these, modify the environment variables in `compose.nextcloud.yml` and
 docker compose up -d nextcloud
 ```
 
+### PHP Hardening
+
+`docker/nextcloud/php-hardening.ini` is mounted read-only into both `nextcloud`
+and `nextcloud_cron` as `conf.d/zz-hardening.ini` (loaded last). It disables
+`session.upload_progress` (unused; Nextcloud shows upload progress client-side)
+and PHP 8.5 `fatal_error_backtraces`, the defense-in-depth settings from the
+PHP2Shell advisory (CVE-2026-109618/109619). Verify with:
+```bash
+docker exec nextcloud php -i | grep -E '^(session.upload_progress.enabled|fatal_error_backtraces) '
+```
+
 ## Maintenance
 
 ### Nextcloud OCC Command
