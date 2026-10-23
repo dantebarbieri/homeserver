@@ -18,11 +18,15 @@ ${RAID}/shared/reading/
 ├── ebooks/                 # Calibre library   (owner: calibre-web)      → storyteller:/library/ebooks:ro, bookbridge:/books:ro
 ├── audiobooks/             # Author/Title/...  (owner: ABS + librofm)    → storyteller:/library/audiobooks:ro
 └── storyteller/
-    ├── assets/             # Storyteller-managed files: readalouds, transcoded audio, covers → bookbridge:/storyteller/assets:ro
+    ├── assets/             # Intended Storyteller asset dir; currently unused (see below)
     └── import/             # Writable fallback import area (see below), normally empty
 ```
 
 Storyteller's database and scratch space live at `${DATA}/storyteller/data`.
+Storyteller currently ignores `STORYTELLER_ASSETS_DIR` and writes its assets
+(readalouds, transcoded audio, transcriptions, covers) to
+`${DATA}/storyteller/data/assets`, so that is what BookBridge mounts read-only
+at `/storyteller/assets`.
 Readalouds are read in the Storyteller app (iOS/Android/web reader); neither
 Audiobookshelf nor calibre-web can play media-overlay EPUBs, so they are not
 written back into either library.

@@ -252,7 +252,8 @@ services:
       - ${DATA}/bookbridge/data:/data
       - ${RAID}/shared/reading/ebooks:/books:ro
       # Storyteller transcript ingest; set "Storyteller Assets Path" to /storyteller in the UI.
-      - ${RAID}/shared/reading/storyteller/assets:/storyteller/assets:ro
+      # Storyteller ignores STORYTELLER_ASSETS_DIR and writes assets under its data dir.
+      - ${DATA}/storyteller/data/assets:/storyteller/assets:ro
 
   # Downloads new DRM-free purchases from libro.fm into the ABS library.
   # Outbound-only; no web UI is exposed.
