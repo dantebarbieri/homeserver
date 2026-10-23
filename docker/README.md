@@ -14,7 +14,7 @@ Docker Compose configuration for my home server, organized into logical service 
 ├── compose.gaming.yml      # Game servers (Minecraft, Hytale, Satisfactory)
 ├── compose.immich.yml      # Immich photo management stack
 ├── compose.matrix.yml      # Matrix communication stack (Synapse, Element, Coturn, LiveKit)
-├── compose.media.yml       # Media consumption (Plex, Jellyfin, ARM, Komga, Suwayomi, Calibre-web, Audiobookshelf, Storyteller)
+├── compose.media.yml       # Media consumption (Plex, Jellyfin, ARM, Komga, Suwayomi, Calibre-web, Audiobookshelf, Storyteller, BookBridge)
 ├── compose.nextcloud.yml   # Nextcloud cloud storage stack
 ├── compose.romm.yml        # RomM library and MariaDB
 ├── compose.searxng.yml     # SearXNG search engine stack
@@ -56,7 +56,7 @@ docker compose -f compose.gaming.yml up -d
 | **Gaming** | minecraft-server (vanilla Hardcore), matcha-minecraft-server (Fabric/Matcha), rlcraft-minecraft-server, satisfactory-server; hytale-server (opt-in profile) |
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
-| **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres, calibre-web, audiobookshelf, storyteller, librofm-downloader |
+| **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader |
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |
 | **RomM** | romm, romm-db |
 | **SearXNG** | searxng, searxng_redis |
@@ -104,7 +104,7 @@ See [TDARR.md](docs/TDARR.md) for the full Tdarr configuration guide (HEVC compr
 
 ## Audiobooks Setup
 
-See [AUDIOBOOKS.md](docs/AUDIOBOOKS.md) for Audiobookshelf, Storyteller readalouds, and the libro.fm downloader.
+See [AUDIOBOOKS.md](docs/AUDIOBOOKS.md) for Audiobookshelf, Storyteller readalouds, BookBridge progress sync (KOReader), and the libro.fm downloader.
 
 ## RomM Setup
 

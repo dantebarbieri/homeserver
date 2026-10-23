@@ -101,6 +101,13 @@
         siteMonitor: https://storyteller.danteb.com
         server: my-docker
         container: storyteller
+    - BookBridge:
+        icon: mdi-book-sync
+        href: https://bookbridge.danteb.com
+        description: Reading Progress Sync
+        siteMonitor: https://bookbridge.danteb.com
+        server: my-docker
+        container: bookbridge
     - RomM:
         icon: romm.svg
         href: https://romm.danteb.com

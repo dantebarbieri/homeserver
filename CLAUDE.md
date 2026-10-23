@@ -70,7 +70,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.git.yml` | forgejo, postgres |
 | `compose.immich.yml` | immich-server, immich-machine-learning, redis, postgres |
 | `compose.matrix.yml` | synapse, element, coturn, livekit, lk-jwt-service, postgres |
-| `compose.media.yml` | plex, jellyfin, anime-relations, komga, komf, suwayomi, calibre-web, audiobookshelf, storyteller, librofm-downloader, postgres |
+| `compose.media.yml` | plex, jellyfin, anime-relations, komga, komf, suwayomi, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader, postgres |
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.romm.yml` | romm, mariadb |
 | `compose.searxng.yml` | searxng, redis (valkey) |
@@ -102,6 +102,7 @@ The default rule is: **use the container/service name as the subdomain** (e.g., 
 | `git` | forgejo | The hosting concept matters, not the Gitea fork |
 | `immich` | immich_server | Project name, not the `_server` suffix |
 | `ipmi` | (BMC at 192.168.50.50) | Describes the protocol/interface |
+| `kosync` | bookbridge (port 5758) | KOReader sync protocol endpoint; dashboard stays at `bookbridge` |
 | `matrix` | synapse | Matrix is the protocol, Synapse is the implementation |
 | `tools` | it-tools | Short canonical name |
 | `travel` | travel-planner | Shortened |

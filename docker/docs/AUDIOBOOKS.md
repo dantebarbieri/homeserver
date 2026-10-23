@@ -1,4 +1,4 @@
-# Audiobooks — Audiobookshelf, Storyteller, libro.fm
+# Audiobooks — Audiobookshelf, Storyteller, BookBridge, libro.fm
 
 Services in `compose.media.yml`:
 
@@ -6,18 +6,19 @@ Services in `compose.media.yml`:
 |---------|-----|------|
 | `audiobookshelf` | `https://audiobookshelf.danteb.com` | Audiobook server + mobile apps (progress sync) |
 | `storyteller` | `https://storyteller.danteb.com` | Aligns an EPUB with its audiobook into a "readaloud" EPUB (text highlights while narration plays) |
+| `bookbridge` | `https://bookbridge.danteb.com` (dashboard), `https://kosync.danteb.com` (KOReader sync) | Progress-sync hub between KOReader, Audiobookshelf, and Storyteller (see [BookBridge](#bookbridge--koreader-progress-sync)) |
 | `librofm-downloader` | — (no web exposure) | Pulls new DRM-free libro.fm purchases into the Audiobookshelf library daily |
 
 ## Ownership model
 
-Each app owns its own files; Storyteller is a read-only consumer.
+Each app owns its own files; Storyteller and BookBridge are read-only consumers.
 
 ```
 ${RAID}/shared/reading/
-├── ebooks/                 # Calibre library   (owner: calibre-web)      → storyteller:/library/ebooks:ro
+├── ebooks/                 # Calibre library   (owner: calibre-web)      → storyteller:/library/ebooks:ro, bookbridge:/books:ro
 ├── audiobooks/             # Author/Title/...  (owner: ABS + librofm)    → storyteller:/library/audiobooks:ro
 └── storyteller/
-    ├── assets/             # Storyteller-managed files: readalouds, transcoded audio, covers
+    ├── assets/             # Storyteller-managed files: readalouds, transcoded audio, covers → bookbridge:/storyteller/assets:ro
     └── import/             # Writable fallback import area (see below), normally empty
 ```
 
@@ -209,6 +210,94 @@ edit, re-run the `sha256sum`/`stat` check against `$SRC_AUDIO`:
 - Checksum unchanged → safe (Storyteller didn't touch it, or replaced the
   file, which just breaks the link — link count drops to 1).
 - Checksum changed → use `cp -a` instead of `cp -al` for audio from then on.
+
+## BookBridge — KOReader progress sync
+
+[BookBridge](https://github.com/cporcellijr/bookbridge)
+([docs](https://cporcellijr.github.io/bookbridge/), formerly abs-kosync-bridge)
+is its own KOSync server: KOReader (e.g. on the jailbroken Kindle) pushes
+reading position to it, and it maps that position to/from Audiobookshelf
+listening progress and Storyteller. Calibre-web stays the ebook library;
+BookBridge only reads it.
+
+It runs in **split-port mode** (`KOSYNC_PORT=5758`):
+
+| Port | Host | Serves | Auth |
+|------|------|--------|------|
+| 5757 | `bookbridge.danteb.com` | Dashboard, Settings, matcher, admin API | BookBridge's own login (no Authelia — it has solid built-in multi-user auth) |
+| 5758 | `kosync.danteb.com` | KOSync protocol + Bridge Sync plugin routes only | KoSync username/password per reader. **Never** Authelia — KOReader can't do browser SSO |
+
+Data (`database.db` + `secret.key`, the key that encrypts every stored
+credential) lives in `${DATA}/bookbridge/data` — back them up together. The
+container runs as root (the image has no PUID support), so the library mounts
+are read-only.
+
+### 1. Directory and `.env`
+
+```bash
+sudo install -d -o 1000 -g 1000 /srv/docker/data/bookbridge/data
+```
+
+`BOOKBRIDGE_KOSYNC_TRUSTED_PROXIES` → `KOSYNC_TRUSTED_PROXIES`: NPM's own
+addresses on the proxy network, so the KoSync login lockout (5 bad passwords →
+1 minute) counts per device instead of per NPM. Get them with:
+
+```bash
+docker inspect -f '{{with index .NetworkSettings.Networks "compose_proxy"}}{{.IPAddress}},{{.GlobalIPv6Address}}{{end}}' nginxproxymanager
+```
+
+This prints the `proxy`-network pair; use it as-is (e.g. `BOOKBRIDGE_KOSYNC_TRUSTED_PROXIES='172.18.0.5,fd00:…::5'`).
+Leaving it empty is safe — every device just shares one lockout bucket. If NPM's
+IP changes after a recreate, update it (the fallback is the same shared bucket).
+
+### 2. Start
+
+```bash
+z /srv/homeserver/docker
+docker compose pull bookbridge
+docker compose up -d bookbridge homepage
+dcl bookbridge
+```
+
+### 3. Nginx Proxy Manager
+
+No host ports, firewall, or router changes. No Authelia rules.
+
+| Proxy host | Forward to | Options |
+|------------|-----------|---------|
+| `bookbridge.danteb.com` | `http://bookbridge:5757` | WebSockets on, Block Common Exploits on, SSL (Force SSL, HTTP/2) |
+| `kosync.danteb.com` | `http://bookbridge:5758` | WebSockets off, Block Common Exploits **off** (plugin uploads JSON sessions/highlights), SSL (Force SSL, HTTP/2), no access list (the Kindle syncs from anywhere) |
+
+### 4. First run (dashboard)
+
+1. Open `https://bookbridge.danteb.com`; the first visit creates the admin account.
+2. **Settings → Integrations** (server-wide), then **Save Settings** (the app restarts):
+   - **Audiobookshelf**: Enable, Server URL `http://audiobookshelf:80`.
+   - **KOReader / KoSync**: Enable, Hash Method `content`. Leave *Target KOSync URL*
+     empty (built-in server). *Trusted proxy addresses* comes from `.env`.
+   - **Storyteller**: Enable, API URL `http://storyteller:8001`.
+   - Leave Grimmory, BookOrbit, Kavita, CWA, BookFusion, Readest off.
+     Hardcover is optional.
+3. **Settings → System**: Storyteller Assets Path `/storyteller`.
+4. **Account → My Integrations** (per reader), using each card's **Test** button:
+   - Audiobookshelf: API token (ABS → Settings → API Keys) and Library ID (**Find IDs**).
+   - KOReader / KoSync: pick a username and password for the device.
+   - Storyteller: your Storyteller username/password.
+5. Create mappings via **Suggestions → Scan Library** or **Add / Update Book**.
+
+### 5. KOReader (Kindle)
+
+1. **Tools → Progress sync → Custom sync server**: `https://kosync.danteb.com`
+   (base URL only, no `/api` or `/koreader` suffix), then **Login** with the
+   KoSync credentials from My Integrations. **Register** only works for an
+   account that already exists in BookBridge.
+2. Optional: **My Account → Connect a KOReader device** offers the Bridge Sync
+   plugin (highlights/notes, reading stats, status sync). Unzip into
+   `koreader/plugins/`, restart KOReader, and set the same server URL and login
+   under **Tools → Bridge Sync**.
+
+"Unknown server error" on login means the URL or network path is wrong, not
+the password.
 
 ## Troubleshooting
 

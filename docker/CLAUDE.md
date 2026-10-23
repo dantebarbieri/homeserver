@@ -44,7 +44,7 @@ All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 - `docs/MATRIX-RTC.md` — LiveKit voice/video call integration
 - `docs/NEXTCLOUD.md` — PostgreSQL, Redis, cron, reverse proxy config
 - `docs/TDARR.md` — HEVC compression, library setup, Sonarr/Radarr integration
-- `docs/AUDIOBOOKS.md` — Audiobookshelf, Storyteller readalouds, libro.fm downloader
+- `docs/AUDIOBOOKS.md` — Audiobookshelf, Storyteller readalouds, BookBridge (KOReader progress sync), libro.fm downloader
 
 ## Conventions
 

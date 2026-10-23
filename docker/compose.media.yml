@@ -227,6 +227,33 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Progress-sync hub between KOReader (built-in KOSync server), Audiobookshelf
+  # and Storyteller. Split-port mode: 5757 = dashboard/API (bookbridge.danteb.com),
+  # 5758 = sync-only KOSync + Bridge Sync plugin routes (kosync.danteb.com).
+  # Integrations are configured in the web UI; see docs/AUDIOBOOKS.md.
+  bookbridge:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: bookbridge
+    image: ghcr.io/cporcellijr/bookbridge:latest
+    # Runs as root; the image has no PUID/PGID support. Library mounts are :ro.
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: INFO
+      KOSYNC_PORT: "5758"
+      # NPM's address(es) on the proxy network, so KOSync login rate limiting
+      # follows each device's X-Forwarded-For instead of NPM's IP.
+      KOSYNC_TRUSTED_PROXIES: ${BOOKBRIDGE_KOSYNC_TRUSTED_PROXIES:-}
+    networks:
+      - proxy
+    volumes:
+      # Holds database.db and secret.key (credential encryption key) — back up together.
+      - ${DATA}/bookbridge/data:/data
+      - ${RAID}/shared/reading/ebooks:/books:ro
+      # Storyteller transcript ingest; set "Storyteller Assets Path" to /storyteller in the UI.
+      - ${RAID}/shared/reading/storyteller/assets:/storyteller/assets:ro
+
   # Downloads new DRM-free purchases from libro.fm into the ABS library.
   # Outbound-only; no web UI is exposed.
   librofm-downloader:
