@@ -1,5 +1,5 @@
-# qbit_manage 4.13.0, revision 906af0f74818abaaa62f9f22e1e4e73ccb0d2bd5.
-FROM ghcr.io/stuffanthings/qbit_manage@sha256:ea04167f627e506b3691304f4c639a52c05584cc9aea4af7ec87d4ed1299e7f5
+# qbit_manage 4.14.0, revision e6b2ba0b735b96cb153ef874d176ca6d0fffbf49.
+FROM ghcr.io/stuffanthings/qbit_manage@sha256:0153204c727b8cd219c87cd22d5e5833e392436923577455e3c84ceb73835c7d
 
 ENV QBT_DRY_RUN=true
 
