@@ -1,5 +1,8 @@
 # Plex playback
 
+For music libraries, FLAC imports, and Plexamp on iPhone, Windows, and macOS,
+see [Music setup](MUSIC.md).
+
 ## Bazarr library refreshes
 
 Bazarr connects internally to `http://plex:32400` using manual/API-key

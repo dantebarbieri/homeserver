@@ -14,7 +14,7 @@
     - Plex:
         icon: plex.svg
         href: https://plex.danteb.com
-        description: Movies & TV
+        description: Movies, TV & Music
         siteMonitor: https://plex.danteb.com
         server: my-docker
         container: plex
@@ -143,6 +143,17 @@
           type: sonarr
           url: http://sonarr:8989
           key: "{{HOMEPAGE_VAR_SONARR_KEY}}"
+    - Lidarr:
+        icon: lidarr.svg
+        href: https://lidarr.danteb.com
+        description: Music Library
+        siteMonitor: https://lidarr.danteb.com
+        server: my-docker
+        container: lidarr
+        widget:
+          type: lidarr
+          url: http://lidarr:8686
+          key: "{{HOMEPAGE_VAR_LIDARR_KEY}}"
     - Bazarr:
         icon: bazarr.svg
         href: https://bazarr.danteb.com

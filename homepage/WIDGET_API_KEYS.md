@@ -118,6 +118,21 @@ If you prefer a dedicated account, create a new user in
 
 ---
 
+## Lidarr - `HOMEPAGE_VAR_LIDARR_KEY`
+
+1. Open Lidarr (`https://lidarr.danteb.com`).
+2. Go to **Settings > General > Security** and copy the **API Key**.
+3. Set `HOMEPAGE_VAR_LIDARR_KEY` in the server's `docker/.env`.
+4. Recreate Homepage from the main Compose entry point:
+   `docker compose up -d homepage`.
+
+The widget uses `http://lidarr:8686` on the shared proxy network. Keep Lidarr's
+authentication enabled; the widget authenticates with the API key.
+
+See [Music setup](../docker/docs/MUSIC.md) for the FLAC library and Plexamp.
+
+---
+
 ## Bazarr — `HOMEPAGE_VAR_BAZARR_KEY`
 
 1. Open Bazarr (e.g. `https://bazarr.danteb.com`).

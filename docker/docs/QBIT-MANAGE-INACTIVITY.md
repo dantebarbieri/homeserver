@@ -20,7 +20,8 @@ Do not bypass the version check or enable deletion just to clear startup errors.
 ## What the current policy previews
 
 Every 30 minutes, the manager previews category/tag updates, unregistered-torrent
-removal, no-hardlink tagging for the `radarr` and `sonarr` categories, and share-limit
+removal, no-hardlink tagging for the media categories (`movies`, `tv`,
+`anime-movies`, `anime-tv`, `indian-movies`, `indian-tv`, and `music`), and share-limit
 cleanup. **Dry-run remains enabled; these torrent actions are not applied.**
 
 The `noHL` cleanup group requires at least 14 days seeded, seven days inactive,
@@ -102,6 +103,42 @@ directory:
 Preserve the rest of that mapping and configuration. No `remote_dir` translation
 is needed because both applications already use `/data/torrents`. Keep torrent
 backup saving enabled and the existing 14-day recycle retention.
+
+## Category and no-hardlink mapping
+
+`cat:` must list **every** qBittorrent category with its real save path
+(qbit-manage assigns categories from save paths, and `cat_update_all: true`
+re-checks every torrent). `nohardlinks:` keys must be real category names too.
+The Starr apps use media-type categories, not app names, so the mapping is:
+
+```yaml
+cat:
+  movies: /data/torrents/movies
+  tv: /data/torrents/tv
+  anime-movies: /data/torrents/anime/movies
+  anime-tv: /data/torrents/anime/tv
+  indian-movies: /data/torrents/indian/movies
+  indian-tv: /data/torrents/indian/tv
+  music: /data/torrents/music
+  books: /data/torrents/ebooks
+  roms: /data/torrents/roms
+  prowlarr: /data/torrents/prowlarr
+  zim: /data/openclaw-zim
+nohardlinks:
+- movies
+- tv
+- anime-movies
+- anime-tv
+- indian-movies
+- indian-tv
+- music
+```
+
+Each category's qBittorrent save path must be distinct, so `prowlarr` saves to
+`prowlarr` rather than the `/data/torrents` root. Books, ROMs, Prowlarr manual
+grabs, and ZIMs are never hardlinked into a library, so they stay out of
+`nohardlinks` (they would always be tagged `noHL` and cleaned up). When adding
+a category in qBittorrent, add it here as well.
 
 Upstream validates share limits before directories: the old validator error
 masked the missing backup path. It also adds default fields/directories even
