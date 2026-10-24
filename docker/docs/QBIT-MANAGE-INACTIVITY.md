@@ -43,12 +43,16 @@ inactivity cleanup toggle.
 
 ## Pinned implementation
 
-`compose.downloads.yml` builds `qbit-manage-inactivity:4.13.0-1` from the exact
-upstream image deployed on September 20, 2026:
+`compose.downloads.yml` builds `qbit-manage-inactivity:4.14.0-1` from the exact
+upstream image below. It was bumped from 4.13.0 on October 24, 2026 because
+4.13.0's bundled `qbittorrent-api` refused to run against qBittorrent 5.2.4.
+When qBittorrent updates past what the pinned release supports, qbit-manage
+exits with "only compatible with ... or lower"; bump the pin and source hashes.
+Current pin:
 
-- Image manifest: `sha256:ea04167f627e506b3691304f4c639a52c05584cc9aea4af7ec87d4ed1299e7f5`
-- Upstream version: `4.13.0`
-- Source revision: `906af0f74818abaaa62f9f22e1e4e73ccb0d2bd5`
+- Image manifest: `sha256:0153204c727b8cd219c87cd22d5e5833e392436923577455e3c84ceb73835c7d`
+- Upstream version: `4.14.0`
+- Source revision: `e6b2ba0b735b96cb153ef874d176ca6d0fffbf49`
 
 The existing policy deliberately has no ratio cap and no maximum seeding time.
 Cleanup eligibility requires all of: at least 14 days seeded, at least seven days
@@ -167,7 +171,7 @@ The command above leaves the service's normal schedule and dry-run setting intac
 With Docker available, build without starting any service:
 
 ```bash
-docker build -t qbit-manage-inactivity:4.13.0-1 docker/dockerfiles/qbit-manage
+docker build -t qbit-manage-inactivity:4.14.0-1 docker/dockerfiles/qbit-manage
 docker compose --env-file docker/sample.env -f docker/compose.downloads.yml config --quiet
 ```
 
@@ -210,6 +214,6 @@ than silently changing seeding/deletion policy. Reverting the validator patch
 does not require undoing the correct torrent-backup path or read-only mount.
 
 Sources:
-- [Upstream validator](https://github.com/StuffAnThings/qbit_manage/blob/906af0f74818abaaa62f9f22e1e4e73ccb0d2bd5/modules/config.py#L1038-L1058)
-- [Runtime cleanup gates](https://github.com/StuffAnThings/qbit_manage/blob/906af0f74818abaaa62f9f22e1e4e73ccb0d2bd5/modules/core/share_limits.py#L733-L833)
+- [Upstream validator](https://github.com/StuffAnThings/qbit_manage/blob/e6b2ba0b735b96cb153ef874d176ca6d0fffbf49/modules/config.py#L1051-L1071)
+- [Runtime cleanup gates](https://github.com/StuffAnThings/qbit_manage/blob/e6b2ba0b735b96cb153ef874d176ca6d0fffbf49/modules/core/share_limits.py#L743-L843)
 - [Upstream inactivity minimum-seeding-time fix](https://github.com/StuffAnThings/qbit_manage/pull/1319)
