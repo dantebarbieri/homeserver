@@ -234,7 +234,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: qbit-manage-inactivity:4.13.0-1
+    image: qbit-manage-inactivity:4.14.0-2
     build:
       context: dockerfiles/qbit-manage
     container_name: qbit-manage
