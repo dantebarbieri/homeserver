@@ -118,6 +118,34 @@ If you prefer a dedicated account, create a new user in
 
 ---
 
+## Lidarr — `HOMEPAGE_VAR_LIDARR_KEY`
+
+1. Open Lidarr (e.g. `https://lidarr.danteb.com`).
+2. Go to **Settings → General**.
+3. Under *Security*, find the **API Key** field.
+4. Copy the key.
+
+---
+
+## Navidrome — `HOMEPAGE_VAR_NAVIDROME_USER` / `_TOKEN` / `_SALT`
+
+The widget uses Subsonic token auth, so the password itself is never stored.
+
+1. Pick (or create in **Settings → Users**) the Navidrome user the widget
+   should log in as; set `HOMEPAGE_VAR_NAVIDROME_USER` to its username.
+2. Generate a random salt and the token on any machine:
+
+   ```bash
+   SALT=$(openssl rand -hex 8)
+   printf '%s' "YOUR_PASSWORD$SALT" | md5sum | cut -d' ' -f1
+   ```
+
+3. Set `HOMEPAGE_VAR_NAVIDROME_SALT` to `$SALT` and
+   `HOMEPAGE_VAR_NAVIDROME_TOKEN` to the printed hash. Changing the user's
+   password invalidates the token.
+
+---
+
 ## Bazarr — `HOMEPAGE_VAR_BAZARR_KEY`
 
 1. Open Bazarr (e.g. `https://bazarr.danteb.com`).
@@ -253,6 +281,10 @@ Grafana's Homepage widget uses the built-in admin credentials (same as login).
 | `HOMEPAGE_VAR_AUDIOBOOKSHELF_KEY` | Audiobookshelf | API key |
 | `HOMEPAGE_VAR_RADARR_KEY` | Radarr | API key |
 | `HOMEPAGE_VAR_SONARR_KEY` | Sonarr | API key |
+| `HOMEPAGE_VAR_LIDARR_KEY` | Lidarr | API key |
+| `HOMEPAGE_VAR_NAVIDROME_USER` | Navidrome | Username |
+| `HOMEPAGE_VAR_NAVIDROME_TOKEN` | Navidrome | md5(password + salt) |
+| `HOMEPAGE_VAR_NAVIDROME_SALT` | Navidrome | Random salt |
 | `HOMEPAGE_VAR_BAZARR_KEY` | Bazarr | API key |
 | `HOMEPAGE_VAR_PROWLARR_KEY` | Prowlarr | API key |
 | `HOMEPAGE_VAR_SABNZBD_KEY` | SABnzbd | API key |

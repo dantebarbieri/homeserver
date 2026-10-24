@@ -35,6 +35,19 @@
           key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
           version: 2
           enableNowPlaying: true
+    - Navidrome:
+        icon: navidrome.svg
+        href: https://music.danteb.com
+        description: Music
+        siteMonitor: https://music.danteb.com
+        server: my-docker
+        container: navidrome
+        widget:
+          type: navidrome
+          url: http://navidrome:4533
+          user: "{{HOMEPAGE_VAR_NAVIDROME_USER}}"
+          token: "{{HOMEPAGE_VAR_NAVIDROME_TOKEN}}"
+          salt: "{{HOMEPAGE_VAR_NAVIDROME_SALT}}"
     - Seerr:
         icon: seerr.svg
         href: https://seerr.danteb.com
@@ -143,6 +156,17 @@
           type: sonarr
           url: http://sonarr:8989
           key: "{{HOMEPAGE_VAR_SONARR_KEY}}"
+    - Lidarr:
+        icon: lidarr.svg
+        href: https://lidarr.danteb.com
+        description: Music
+        siteMonitor: https://lidarr.danteb.com
+        server: my-docker
+        container: lidarr
+        widget:
+          type: lidarr
+          url: http://lidarr:8686
+          key: "{{HOMEPAGE_VAR_LIDARR_KEY}}"
     - Bazarr:
         icon: bazarr.svg
         href: https://bazarr.danteb.com

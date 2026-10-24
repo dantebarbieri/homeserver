@@ -1,5 +1,5 @@
 # Media consumption services
-# plex, jellyfin, komga, komf, suwayomi, suwayomi_postgres, calibre-web,
+# plex, jellyfin, navidrome, komga, komf, suwayomi, suwayomi_postgres, calibre-web,
 # audiobookshelf, storyteller, librofm-downloader
 
 services:
@@ -65,6 +65,29 @@ services:
       - /tmp/jellyfin:/config/transcodes
       - ${RAID}/shared/media:/data/media:ro
       - ${DATA}/jellyfin/webroot/list.txt:/jellyfin/jellyfin-web/list.txt:ro
+
+  # Subsonic-compatible music server (web UI + Symfonium/Feishin/Amperfy/etc.).
+  # Served at music.danteb.com. Built-in auth; no Authelia, or Subsonic clients
+  # cannot log in. Library is read-only — Lidarr owns the files. See docs/MUSIC.md.
+  navidrome:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: navidrome
+    image: deluan/navidrome:latest
+    user: "${UID}:${GID}"
+    environment:
+      TZ: ${TZ}
+      ND_MUSICFOLDER: /music
+      ND_DATAFOLDER: /data
+      ND_LOGLEVEL: info
+      ND_SCANNER_SCHEDULE: "@every 1h"
+      ND_ENABLESHARING: "true"
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/navidrome/data:/data
+      - ${RAID}/shared/media/music:/music:ro
 
   anime-relations:
     extends:

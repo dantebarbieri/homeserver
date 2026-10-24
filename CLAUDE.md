@@ -70,11 +70,11 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.git.yml` | forgejo, postgres |
 | `compose.immich.yml` | immich-server, immich-machine-learning, redis, postgres |
 | `compose.matrix.yml` | synapse, element, coturn, livekit, lk-jwt-service, postgres |
-| `compose.media.yml` | plex, jellyfin, anime-relations, komga, komf, suwayomi, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader, postgres |
+| `compose.media.yml` | plex, jellyfin, navidrome, anime-relations, komga, komf, suwayomi, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader, postgres |
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.romm.yml` | romm, mariadb |
 | `compose.searxng.yml` | searxng, redis (valkey) |
-| `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
+| `compose.starr.yml` | radarr, sonarr, lidarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
 | `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, snapotter, stirling-pdf, changedetection-io, sockpuppetbrowser |
 | `compose.websites.yml` | travel-planner, skyjo, skyjo_server, skyjo_postgres |
 
@@ -103,6 +103,7 @@ The default rule is: **use the container/service name as the subdomain** (e.g., 
 | `immich` | immich_server | Project name, not the `_server` suffix |
 | `ipmi` | (BMC at 192.168.50.50) | Describes the protocol/interface |
 | `kosync` | bookbridge (port 5758) | KOReader sync protocol endpoint; dashboard stays at `bookbridge` |
+| `music` | navidrome | The library matters; any Subsonic server could serve it |
 | `matrix` | synapse | Matrix is the protocol, Synapse is the implementation |
 | `tools` | it-tools | Short canonical name |
 | `travel` | travel-planner | Shortened |
