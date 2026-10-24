@@ -103,6 +103,9 @@ services:
       PUID: ${UID}
       PGID: ${GID}
       TZ: ${TZ}
+      # Without this, parts of Aurral (incl. its Plex library) fall back to
+      # /data/downloads/aurral, which Plex doesn't mount.
+      DOWNLOAD_FOLDER: /data/media/aurral
     networks:
       - proxy
       - starr
