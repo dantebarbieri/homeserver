@@ -1,0 +1,4 @@
+FROM ghcr.io/vuetorrent/vuetorrent-lsio-mod:latest AS vuetorrent
+FROM lscr.io/linuxserver/qbittorrent:latest
+
+COPY --from=vuetorrent /vuetorrent /vuetorrent

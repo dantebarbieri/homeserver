@@ -25,6 +25,7 @@ All services should extend one of these:
 
 - `dockerfiles/convertx/` — Extends upstream ConvertX: restores omitted optional packages (ImageMagick SVG coders, HEIC/AVIF encoders, LaTeX `soul`, Office metric fonts), adds ImageMagick JXL delegates and larger pixel-cache limits, and wraps `soffice` with a per-invocation profile so concurrent LibreOffice conversions don't collide
 - `dockerfiles/Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
+- `dockerfiles/Dockerfile.qbittorrent` — Bundles the official stable VueTorrent assets into LinuxServer qBittorrent; `build --pull` updates both through the normal update job
 - `dockerfiles/Dockerfile.sveltekit` — Multi-stage Node 18 alpine build, parameterized via `ARG APP_NAME`
 - `dockerfiles/bmc-monitor/` — Alpine with ipmitool, curl, jq + `bmc-ip-monitor.sh` polling script
 - `dockerfiles/port-sync/` — curlimages/curl + `port-sync.sh` qBittorrent VPN port sync script

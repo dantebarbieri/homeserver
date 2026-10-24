@@ -58,14 +58,16 @@ services:
     extends:
       file: compose.common.yml
       service: linuxserver-service
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: qbittorrent-vuetorrent
+    build:
+      context: dockerfiles
+      dockerfile: Dockerfile.qbittorrent
     container_name: qbittorrent-app
     network_mode: "container:vpn-netns"
     volumes:
       - ${DATA}/qbittorrent/config:/config
       - ${RAID}/shared/torrents:/data/torrents
       - ${OPENCLAW_V3_BASE:-/data/openclaw-v3}/zim:/data/openclaw-zim
-      - ${DATA}/qbittorrent/VueTorrent:/vuetorrent
       - ${DATA}/qbittorrent/iQbit/release:/iqbit
     depends_on:
       gluetun:

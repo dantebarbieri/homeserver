@@ -89,6 +89,25 @@ See [MATRIX.md](docs/MATRIX.md) for the full Matrix stack setup guide (Synapse, 
 
 See [MATRIX-RTC.md](docs/MATRIX-RTC.md) for adding voice/video call support via LiveKit (MatrixRTC).
 
+## qBittorrent Web UI
+
+qBittorrent bundles the latest stable [VueTorrent](https://github.com/VueTorrent/VueTorrent)
+from its official `ghcr.io/vuetorrent/vuetorrent-lsio-mod:latest` image into the
+LinuxServer qBittorrent image. In qBittorrent's Web UI settings, enable the
+alternative Web UI and set its location to `/vuetorrent`.
+
+The daily 04:00 update job and `dcu`/`dcupdate` use `docker compose build --pull`,
+which refreshes both upstream images. A VueTorrent release changes the built
+qBittorrent image, so Compose recreates it even if qBittorrent itself has not
+changed. Failed builds leave the running container on its previous image and
+are reported through the existing update failure handling. No extra timer,
+startup download, or optional VueTorrent backend is needed.
+
+The former `${DATA}/qbittorrent/VueTorrent` checkout is no longer mounted; any
+existing copy is preserved on disk. For rollback, pin the VueTorrent `FROM` tag
+in `dockerfiles/Dockerfile.qbittorrent` to a known-good release (for example,
+`2.36.1`). The `/config` and torrent-data mounts are unchanged.
+
 ## Game Servers
 
 See [MINECRAFT.md](docs/MINECRAFT.md) for the separate Hardcore, Matcha and RLCraft
