@@ -1,16 +1,18 @@
 # Services dashboard with Docker status monitoring
 # https://gethomepage.dev/configs/services/
 #
-# Each service has:
+# Web apps have:
 #   - siteMonitor: checks if the web UI is reachable (green/red dot)
 #   - server/container: shows Docker container running status + stats
 #   - widget (where supported): shows live service-specific data
+# Backend cards use Docker status without linking to API-only endpoints.
+# Tab assignment and display order are defined in settings.yaml.
 #
 # Widget API keys are placeholders — replace {{HOMEPAGE_VAR_*}} values
 # by setting environment variables on the homepage container, or edit
 # the keys inline after obtaining them from each service's settings.
 
-- Media:
+- Watch & Request:
     - Plex:
         icon: plex.svg
         href: https://plex.danteb.com
@@ -46,18 +48,8 @@
           type: seerr
           url: http://seerr:5055
           key: "{{HOMEPAGE_VAR_SEERR_KEY}}"
-    - Immich:
-        icon: immich.svg
-        href: https://immich.danteb.com
-        description: Photos
-        siteMonitor: https://immich.danteb.com
-        server: my-docker
-        container: immich_server
-        widget:
-          type: immich
-          url: http://immich_server:2283
-          key: "{{HOMEPAGE_VAR_IMMICH_KEY}}"
-          version: 2
+
+- Read & Listen:
     - Komga:
         icon: komga.svg
         href: https://komga.danteb.com
@@ -108,19 +100,33 @@
         siteMonitor: https://bookbridge.danteb.com
         server: my-docker
         container: bookbridge
-    - RomM:
-        icon: romm.svg
-        href: https://romm.danteb.com
-        description: ROM Library
-        siteMonitor: https://romm.danteb.com
+    - Suwayomi:
+        icon: suwayomi.svg
+        href: https://suwayomi.danteb.com
+        description: Manga & WebToons
+        siteMonitor: https://suwayomi.danteb.com
         server: my-docker
-        container: romm
+        container: suwayomi
         widget:
-          type: romm
-          url: http://romm:8080
-          fields: ["platforms", "totalRoms", "saves", "states"]
+            type: customapi
+            url: http://suwayomi-widget:8080/stats
+            username: "{{HOMEPAGE_VAR_SUWAYOMI_USER}}"
+            password: "{{HOMEPAGE_VAR_SUWAYOMI_PASS}}"
+            mappings:
+              - field: download
+                label: Downloaded
+                format: number
+              - field: nondownload
+                label: Not Downloaded
+                format: number
+              - field: read
+                label: Read
+                format: number
+              - field: unread
+                label: Unread
+                format: number
 
-- Media Management:
+- Media Automation:
     - Radarr:
         icon: radarr.svg
         href: https://radarr.danteb.com
@@ -187,6 +193,13 @@
           type: tdarr
           url: http://tdarr:8265
           key: "{{HOMEPAGE_VAR_TDARR_KEY}}"
+    - Soularr:
+        icon: lidarr.svg
+        href: https://soularr.danteb.com
+        description: Lidarr → Soulseek
+        siteMonitor: https://soularr.danteb.com
+        server: my-docker
+        container: soularr
 
 - Downloads:
     - qBittorrent:
@@ -213,13 +226,6 @@
           url: http://slskd:5030
           key: "{{HOMEPAGE_VAR_SLSKD_KEY}}"
           fields: ["slskStatus", "downloads", "uploads", "sharedFiles"]
-    - Soularr:
-        icon: lidarr.svg
-        href: https://soularr.danteb.com
-        description: Lidarr → Soulseek
-        siteMonitor: https://soularr.danteb.com
-        server: my-docker
-        container: soularr
     - SABnzbd:
         icon: sabnzbd.svg
         href: https://sabnzbd.danteb.com
@@ -231,36 +237,8 @@
           type: sabnzbd
           url: http://sabnzbd:8080
           key: "{{HOMEPAGE_VAR_SABNZBD_KEY}}"
-    - Suwayomi:
-        icon: suwayomi.svg
-        href: https://suwayomi.danteb.com
-        description: Manga & WebToons
-        siteMonitor: https://suwayomi.danteb.com
-        server: my-docker
-        container: suwayomi
-        widget:
-            type: customapi
-            url: http://suwayomi-widget:8080/stats
-            username: "{{HOMEPAGE_VAR_SUWAYOMI_USER}}"
-            password: "{{HOMEPAGE_VAR_SUWAYOMI_PASS}}"
-            mappings:
-              - field: download
-                label: Downloaded
-                format: number
-              - field: nondownload
-                label: Not Downloaded
-                format: number
-              - field: read
-                label: Read
-                format: number
-              - field: unread
-                label: Unread
-                format: number
-    - Libro.fm Downloader:
-        icon: mdi-book-music
-        description: Audiobook Purchases → Audiobookshelf
-        server: my-docker
-        container: librofm-downloader
+
+- Search & Tools:
     - SearXNG:
         icon: searxng.svg
         href: https://searxng.danteb.com
@@ -268,8 +246,36 @@
         siteMonitor: https://searxng.danteb.com
         server: my-docker
         container: searxng
+    - IT-Tools:
+        icon: it-tools.svg
+        href: https://tools.danteb.com
+        description: Developer & Sysadmin Utilities
+        siteMonitor: https://tools.danteb.com
+        server: my-docker
+        container: it-tools
+    - ConvertX:
+        icon: convertx.webp
+        href: https://convertx.danteb.com
+        description: File Format Conversion
+        siteMonitor: https://convertx.danteb.com
+        server: my-docker
+        container: convertx
+    - Stirling PDF:
+        icon: stirling-pdf.svg
+        href: https://stirling-pdf.danteb.com
+        description: PDF Tools & OCR
+        siteMonitor: https://stirling-pdf.danteb.com
+        server: my-docker
+        container: stirling-pdf
+    - SnapOtter:
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons/webp/snapotter.webp
+        href: https://snapotter.danteb.com
+        description: Image Processing & AI Tools
+        siteMonitor: https://snapotter.danteb.com
+        server: my-docker
+        container: snapotter
 
-- Network & Communication:
+- Network & Access:
     - Nginx Proxy Manager:
         icon: nginx-proxy-manager.svg
         href: https://nginx-proxy-manager.danteb.com
@@ -282,27 +288,18 @@
           url: http://nginxproxymanager:81
           username: "{{HOMEPAGE_VAR_NPM_USER}}"
           password: "{{HOMEPAGE_VAR_NPM_PASS}}"
-    - Element:
-        icon: element.svg
-        href: https://element.danteb.com
-        description: Matrix Chat & Calls
-        siteMonitor: https://element.danteb.com
+    - AdGuard Home:
+        icon: adguard-home.svg
+        href: https://adguardhome.danteb.com
+        description: Network-wide DNS Ad Blocker
+        siteMonitor: https://adguardhome.danteb.com
         server: my-docker
-        container: element
-    - Synapse:
-        icon: matrix-synapse-light.svg
-        href: https://matrix.danteb.com
-        description: Matrix Homeserver
-        siteMonitor: https://matrix.danteb.com
-        server: my-docker
-        container: synapse
-    - LiveKit:
-        icon: matrix-light.svg
-        href: https://livekit.danteb.com
-        description: MatrixRTC Backend
-        siteMonitor: https://livekit.danteb.com
-        server: my-docker
-        container: livekit
+        container: adguardhome
+        widget:
+          type: adguard
+          url: http://adguardhome:80
+          username: "{{HOMEPAGE_VAR_ADGUARD_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_ADGUARD_PASSWORD}}"
     - Authelia:
         icon: authelia.svg
         href: https://authelia.danteb.com
@@ -318,7 +315,7 @@
         server: my-docker
         container: wg-easy
 
-- Utilities:
+- Monitoring:
     - Grafana:
         icon: grafana.svg
         href: https://grafana.danteb.com
@@ -331,6 +328,26 @@
           url: http://grafana:3000
           username: "{{HOMEPAGE_VAR_GRAFANA_USER}}"
           password: "{{HOMEPAGE_VAR_GRAFANA_PASS}}"
+    - Uptime Kuma:
+        icon: uptime-kuma.svg
+        href: https://uptime.danteb.com
+        description: Uptime Monitoring
+        siteMonitor: https://uptime.danteb.com
+        server: my-docker
+        container: uptime-kuma
+        widget:
+          type: uptimekuma
+          url: http://uptime-kuma:3001
+          slug: "{{HOMEPAGE_VAR_KUMA_SLUG}}"
+    - Dashdot:
+        icon: dashdot.webp
+        href: https://dashdot.danteb.com
+        description: Server Monitoring
+        siteMonitor: https://dashdot.danteb.com
+        server: my-docker
+        container: dashdot
+
+- Files & Photos:
     - Nextcloud:
         icon: nextcloud.svg
         href: https://cloud.danteb.com
@@ -343,29 +360,18 @@
           url: http://nextcloud:80
           username: "{{HOMEPAGE_VAR_NEXTCLOUD_USER}}"
           password: "{{HOMEPAGE_VAR_NEXTCLOUD_PASS}}"
-    - AdGuard Home:
-        icon: adguard-home.svg
-        href: https://adguardhome.danteb.com
-        description: Network-wide DNS Ad Blocker
-        siteMonitor: https://adguardhome.danteb.com
+    - Immich:
+        icon: immich.svg
+        href: https://immich.danteb.com
+        description: Photos
+        siteMonitor: https://immich.danteb.com
         server: my-docker
-        container: adguardhome
+        container: immich_server
         widget:
-          type: adguard
-          url: http://adguardhome:80
-          username: "{{HOMEPAGE_VAR_ADGUARD_USERNAME}}"
-          password: "{{HOMEPAGE_VAR_ADGUARD_PASSWORD}}"
-    - Uptime Kuma:
-        icon: uptime-kuma.svg
-        href: https://uptime.danteb.com
-        description: Uptime Monitoring
-        siteMonitor: https://uptime.danteb.com
-        server: my-docker
-        container: uptime-kuma
-        widget:
-          type: uptimekuma
-          url: http://uptime-kuma:3001
-          slug: "{{HOMEPAGE_VAR_KUMA_SLUG}}"
+          type: immich
+          url: http://immich_server:2283
+          key: "{{HOMEPAGE_VAR_IMMICH_KEY}}"
+          version: 2
     - Syncthing:
         icon: syncthing.svg
         href: https://syncthing.danteb.com
@@ -373,13 +379,8 @@
         siteMonitor: https://syncthing.danteb.com
         server: my-docker
         container: syncthing
-    - CouchDB:
-        icon: couchdb.svg
-        href: https://couchdb.danteb.com/_utils/
-        description: Obsidian LiveSync Backend
-        siteMonitor: https://couchdb.danteb.com/_up
-        server: my-docker
-        container: couchdb
+
+- Personal & Communication:
     - Changedetection:
         icon: mdi-magnify-scan
         href: https://cd.danteb.com
@@ -405,41 +406,15 @@
         siteMonitor: https://ntfy.danteb.com
         server: my-docker
         container: ntfy
-    - Dashdot:
-        icon: dashdot.webp
-        href: https://dashdot.danteb.com
-        description: Server Monitoring
-        siteMonitor: https://dashdot.danteb.com
+    - Element:
+        icon: element.svg
+        href: https://element.danteb.com
+        description: Matrix Chat & Calls
+        siteMonitor: https://element.danteb.com
         server: my-docker
-        container: dashdot
-    - IT-Tools:
-        icon: it-tools.svg
-        href: https://tools.danteb.com
-        description: Developer & Sysadmin Utilities
-        siteMonitor: https://tools.danteb.com
-        server: my-docker
-        container: it-tools
-    - ConvertX:
-        icon: convertx.webp
-        href: https://convertx.danteb.com
-        description: File Format Conversion
-        siteMonitor: https://convertx.danteb.com
-        server: my-docker
-        container: convertx
-    - SnapOtter:
-        icon: https://cdn.jsdelivr.net/gh/selfhst/icons/webp/snapotter.webp
-        href: https://snapotter.danteb.com
-        description: Image Processing & AI Tools
-        siteMonitor: https://snapotter.danteb.com
-        server: my-docker
-        container: snapotter
-    - Stirling PDF:
-        icon: stirling-pdf.svg
-        href: https://stirling-pdf.danteb.com
-        description: PDF Tools & OCR
-        siteMonitor: https://stirling-pdf.danteb.com
-        server: my-docker
-        container: stirling-pdf
+        container: element
+
+- Development:
     - Code Server:
         icon: vscode.webp
         href: https://code.danteb.com
@@ -454,13 +429,6 @@
         siteMonitor: https://git.danteb.com
         server: my-docker
         container: forgejo
-- AI:
-    - Whisper ASR:
-        icon: openai-light.svg
-        description: Speech Recognition
-        server: my-docker
-        container: whisperasr
-
 - Game Servers:
     - Hardcore Minecraft:
         icon: minecraft.svg
@@ -502,46 +470,339 @@
         server: my-docker
         container: satisfactory-server
 
-    - Custom Services:
-        - MirkLurk Wiki:
-            icon: mdi-book-open-page-variant
-            href: https://mirklurk.wiki
-            description: Community game reference
-            siteMonitor: https://mirklurk.wiki
-            server: my-docker
-            container: mirklurk
-        - Mirklurk World Viewer:
-            icon: mdi-map-search
-            href: https://map.mirklurk.danteb.com
-            description: Browser-only world map
-            siteMonitor: https://map.mirklurk.danteb.com
-            server: my-docker
-            container: mirklurk-map
-        - Travel Planner:
-            icon: mdi-airplane
-            href: https://travel.danteb.com
-            description: Trip Planning
-            siteMonitor: https://travel.danteb.com
-            server: my-docker
-            container: travel-planner
-        - Recipe:
-            icon: mdi-silverware-fork-knife
-            href: https://recipe.danteb.com
-            description: Recipe Collection
-            siteMonitor: https://recipe.danteb.com
-            server: my-docker
-            container: recipe
-        - Skyjo:
-            icon: mdi-cards-playing
-            href: https://skyjo.danteb.com
-            description: Card Game
-            siteMonitor: https://skyjo.danteb.com
-            server: my-docker
-            container: skyjo
-        - Sorry:
-            icon: mdi-checkerboard
-            href: https://sorry.danteb.com
-            description: Board Game
-            siteMonitor: https://sorry.danteb.com
-            server: my-docker
-            container: sorry
+- Plan & Cook:
+    - Travel Planner:
+        icon: mdi-airplane
+        href: https://travel.danteb.com
+        description: Trip Planning
+        siteMonitor: https://travel.danteb.com
+        server: my-docker
+        container: travel-planner
+    - Recipe:
+        icon: mdi-silverware-fork-knife
+        href: https://recipe.danteb.com
+        description: Recipe Collection
+        siteMonitor: https://recipe.danteb.com
+        server: my-docker
+        container: recipe
+
+- Games & Guides:
+    - Skyjo:
+        icon: mdi-cards-playing
+        href: https://skyjo.danteb.com
+        description: Card Game
+        siteMonitor: https://skyjo.danteb.com
+        server: my-docker
+        container: skyjo
+    - Sorry:
+        icon: mdi-checkerboard
+        href: https://sorry.danteb.com
+        description: Board Game
+        siteMonitor: https://sorry.danteb.com
+        server: my-docker
+        container: sorry
+    - RomM:
+        icon: romm.svg
+        href: https://romm.danteb.com
+        description: ROM Library
+        siteMonitor: https://romm.danteb.com
+        server: my-docker
+        container: romm
+        widget:
+          type: romm
+          url: http://romm:8080
+          fields: ["platforms", "totalRoms", "saves", "states"]
+    - MirkLurk Wiki:
+        icon: mdi-book-open-page-variant
+        href: https://mirklurk.wiki
+        description: Community game reference
+        siteMonitor: https://mirklurk.wiki
+        server: my-docker
+        container: mirklurk
+    - Mirklurk World Viewer:
+        icon: mdi-map-search
+        href: https://map.mirklurk.danteb.com
+        description: Browser-only world map
+        siteMonitor: https://map.mirklurk.danteb.com
+        server: my-docker
+        container: mirklurk-map
+
+- Media Helpers:
+    - Whisper ASR:
+        icon: openai-light.svg
+        description: Powers Bazarr - speech-to-text subtitles
+        server: my-docker
+        container: whisperasr
+    - Recyclarr:
+        icon: mdi-sync
+        description: Supports Radarr & Sonarr - quality profile sync
+        server: my-docker
+        container: recyclarr
+    - Komf:
+        icon: mdi-book-cog
+        description: Supports Komga - comic & manga metadata
+        server: my-docker
+        container: komf
+    - Libro.fm Downloader:
+        icon: mdi-book-music
+        description: Feeds Audiobookshelf - purchased audiobooks
+        server: my-docker
+        container: librofm-downloader
+    - FlareSolverr:
+        icon: mdi-cloud-check
+        description: Supports Prowlarr & Suwayomi - Cloudflare challenges
+        server: my-docker
+        container: flaresolverr
+    - Suwayomi Widget:
+        icon: mdi-chart-box
+        description: Powers Homepage - Suwayomi statistics
+        server: my-docker
+        container: suwayomi-widget
+    - Immich Machine Learning:
+        icon: mdi-image-search
+        description: Powers Immich - photo search & recognition
+        server: my-docker
+        container: immich_machine_learning
+    - Anime Relations:
+        icon: mdi-animation
+        description: Anime relation metadata API - consumer not documented
+        server: my-docker
+        container: anime-relations
+    - qbit-manage:
+        icon: mdi-download-network
+        description: Supports qBittorrent - optional profile, dry-run mode
+        server: my-docker
+        container: qbit-manage
+
+- Communication & Sync:
+    - Synapse:
+        icon: matrix-synapse-light.svg
+        description: Powers Element & Matrix clients - messaging
+        server: my-docker
+        container: synapse
+    - LiveKit:
+        icon: matrix-light.svg
+        description: Powers Element calls - real-time media
+        server: my-docker
+        container: livekit
+    - LiveKit JWT Service:
+        icon: mdi-key
+        description: Supports Element calls - LiveKit authorization
+        server: my-docker
+        container: lk-jwt-service
+    - Coturn:
+        icon: mdi-phone-voip
+        description: Supports Matrix calls - NAT traversal & relay
+        server: my-docker
+        container: coturn
+    - Nextcloud Cron:
+        icon: mdi-calendar-sync
+        description: Supports Nextcloud - scheduled background jobs
+        server: my-docker
+        container: nextcloud_cron
+    - CouchDB:
+        icon: couchdb.svg
+        href: https://couchdb.danteb.com/_utils/
+        description: Powers Obsidian LiveSync - note synchronization
+        siteMonitor: https://couchdb.danteb.com/_up
+        server: my-docker
+        container: couchdb
+    - Sockpuppetbrowser:
+        icon: mdi-web
+        description: Powers Changedetection - browser-based page checks
+        server: my-docker
+        container: sockpuppetbrowser
+
+- Monitoring Pipeline:
+    - Prometheus:
+        icon: mdi-chart-line
+        description: Powers Grafana - metrics storage & queries
+        server: my-docker
+        container: prometheus
+    - Loki:
+        icon: mdi-text-box-search
+        description: Powers Grafana - log storage & queries
+        server: my-docker
+        container: loki
+    - Alloy:
+        icon: mdi-text-box-multiple
+        description: Feeds Loki & Grafana - container log collection
+        server: my-docker
+        container: alloy
+    - Node Exporter:
+        icon: mdi-server
+        description: Feeds Prometheus & Grafana - host metrics
+        server: my-docker
+        container: node-exporter
+    - cAdvisor:
+        icon: mdi-chart-box
+        description: Feeds Prometheus & Grafana - container metrics
+        server: my-docker
+        container: cadvisor
+
+- Network Helpers:
+    - ddclient:
+        icon: mdi-dns
+        description: Supports danteb.com apps - dynamic DNS updates
+        server: my-docker
+        container: ddclient
+    - BMC IP Monitor:
+        icon: mdi-server-network
+        description: Supports IPMI & Nginx Proxy Manager - BMC address sync
+        server: my-docker
+        container: bmc-ip-monitor
+    - Endlessh:
+        icon: mdi-shield
+        description: Supports host protection - SSH tarpit
+        server: my-docker
+        container: endlessh
+    - qBittorrent Network Namespace:
+        icon: mdi-lan
+        description: Supports qBittorrent - shared VPN network namespace
+        server: my-docker
+        container: vpn-netns
+    - qBittorrent VPN:
+        icon: mdi-vpn
+        description: Protects qBittorrent - Gluetun VPN tunnel
+        server: my-docker
+        container: gluetun
+    - qBittorrent Port Sync:
+        icon: mdi-sync
+        description: Supports qBittorrent - VPN forwarded port sync
+        server: my-docker
+        # No explicit container_name; the main Compose project is named "compose".
+        container: compose-qbit-port-sync-1
+    - qBittorrent Network Watcher:
+        icon: mdi-lan-check
+        description: Supports qBittorrent - VPN namespace recovery
+        server: my-docker
+        container: vpn-netns-watcher
+    - slskd Network Namespace:
+        icon: mdi-lan
+        description: Supports slskd - shared VPN network namespace
+        server: my-docker
+        container: slskd-netns
+    - slskd VPN:
+        icon: mdi-vpn
+        description: Protects slskd - Gluetun VPN tunnel
+        server: my-docker
+        container: gluetun-slskd
+    - slskd Port Sync:
+        icon: mdi-sync
+        description: Supports slskd - VPN forwarded port sync
+        server: my-docker
+        container: slskd-port-sync
+    - slskd Network Watcher:
+        icon: mdi-lan-check
+        description: Supports slskd - VPN namespace recovery
+        server: my-docker
+        container: slskd-netns-watcher
+
+- Website & Development Backends:
+    - Skyjo Server:
+        icon: mdi-cards-playing
+        description: Powers Skyjo - game API & multiplayer
+        server: my-docker
+        container: skyjo_server
+    - Sorry Server:
+        icon: mdi-checkerboard
+        description: Powers Sorry - game API & multiplayer
+        server: my-docker
+        container: sorry_server
+    - MirkLurk Wiki Backup:
+        icon: mdi-backup-restore
+        description: Protects MirkLurk Wiki - scheduled database backups
+        server: my-docker
+        container: mirklurk-backup
+    - Mirklurk Map Sharing:
+        icon: mdi-map-marker
+        description: Powers Mirklurk World Viewer - optional map sharing
+        server: my-docker
+        container: mirklurk-map-uploads
+    - Forgejo Runner:
+        icon: mdi-play-box
+        description: Powers Forgejo Actions - workflow execution
+        server: my-docker
+        container: forgejo_runner
+    - Forgejo Runner Docker:
+        icon: mdi-docker
+        description: Supports Forgejo Runner - isolated job containers
+        server: my-docker
+        container: forgejo_runner_dind
+    - TCAD MCP:
+        icon: mdi-home-search
+        description: Powers MCP clients - TCAD property data tools
+        server: my-docker
+        container: mcp-tcad
+    - MCP Identity Provider:
+        icon: mdi-account-key
+        description: Supports TCAD MCP clients - OAuth sign-in via Authelia
+        server: my-docker
+        container: mcp-idp
+
+- Databases & Caches:
+    - Authelia PostgreSQL:
+        icon: mdi-database
+        description: Powers Authelia - authentication storage
+        server: my-docker
+        container: authelia_postgres
+    - Authelia Redis:
+        icon: mdi-memory
+        description: Powers Authelia - session storage
+        server: my-docker
+        container: authelia_redis
+    - Immich PostgreSQL:
+        icon: mdi-database
+        description: Powers Immich - photo metadata & search data
+        server: my-docker
+        container: immich_postgres
+    - Immich Redis:
+        icon: mdi-memory
+        description: Powers Immich - background job queue
+        server: my-docker
+        container: immich_redis
+    - Nextcloud PostgreSQL:
+        icon: mdi-database
+        description: Powers Nextcloud - application data
+        server: my-docker
+        container: nextcloud_postgres
+    - Nextcloud Redis:
+        icon: mdi-memory
+        description: Powers Nextcloud - caching & file locking
+        server: my-docker
+        container: nextcloud_redis
+    - Synapse PostgreSQL:
+        icon: mdi-database
+        description: Powers Synapse & Element - Matrix message storage
+        server: my-docker
+        container: synapse_postgres
+    - Suwayomi PostgreSQL:
+        icon: mdi-database
+        description: Powers Suwayomi - library & reading progress
+        server: my-docker
+        container: suwayomi_postgres
+    - Forgejo PostgreSQL:
+        icon: mdi-database
+        description: Powers Forgejo - application data
+        server: my-docker
+        container: forgejo_postgres
+    - RomM MariaDB:
+        icon: mdi-database
+        description: Powers RomM - ROM library metadata
+        server: my-docker
+        container: romm-db
+    - SearXNG Valkey:
+        icon: mdi-memory
+        description: Powers SearXNG - rate limiting & cache
+        server: my-docker
+        container: searxng_redis
+    - MirkLurk Wiki MariaDB:
+        icon: mdi-database
+        description: Powers MirkLurk Wiki - pages & revisions
+        server: my-docker
+        container: mirklurk-db
+    - Skyjo PostgreSQL:
+        icon: mdi-database
+        description: Powers Skyjo Server - persistent game data
+        server: my-docker
+        container: skyjo_postgres

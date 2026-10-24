@@ -29,14 +29,14 @@ This file provides guidance to Claude Code when working with the `homepage/` dir
 
 ### Checklist
 
-1. Place in the correct category group (Media, Media Management, Downloads, etc.)
-2. Use `https://service.danteb.com` for public `href` and `siteMonitor` — the subdomain should match the NPM proxy host (see [Subdomain Naming Convention](../CLAUDE.md#subdomain-naming-convention) in the root CLAUDE.md)
+1. List the service once in the appropriate Apps, Manage, or Backends category (see `README.md`).
+2. For web interfaces, use `https://service.danteb.com` for public `href` and `siteMonitor` — the subdomain should match the NPM proxy host (see [Subdomain Naming Convention](../CLAUDE.md#subdomain-naming-convention) in the root CLAUDE.md). For backends, normally omit both fields and describe which apps they power; do not expose private APIs just for the dashboard.
 3. Use `http://container-name:port` for widget `url` (internal Docker network)
 4. `server` is always `my-docker`
 5. `container` must match the Docker container name exactly
 6. Add the corresponding `HOMEPAGE_VAR_*` to **three places**: `docker/sample.env`, the server's `.env`, **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly listed there — `.env` alone is not enough)
 7. Document how to obtain the API key in `WIDGET_API_KEYS.md`
-8. Add the category to `settings.yaml` `layout` if it's new
+8. Add the category to `settings.yaml` `layout` if it's new, including an explicit `tab` so it does not repeat on every tab. Service and bookmark groups must have distinct names.
 
 ## Environment Variable Convention
 
@@ -58,4 +58,8 @@ These are set as Docker environment variables in `docker/compose.dashboards.yml`
 
 ## Service Categories
 
-Groups are defined in `settings.yaml` under `layout`. Each has `style`, `columns`, and `icon`. Current groups: Media, Media Management, Downloads, Network & Communication, Utilities, Game Servers.
+Groups are defined in `settings.yaml` under `layout`. Each has `tab`, `style`,
+`columns`, and `icon`. Tabs are Apps (default), Manage, and Backends; the complete
+category list and placement rules are documented in `README.md`. Apps and Manage
+use three-column rows, Backends uses four-column rows, and Databases & Caches is
+initially collapsed. Search is an info widget in `widgets.yaml`.

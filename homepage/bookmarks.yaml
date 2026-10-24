@@ -1,12 +1,11 @@
 # Bookmarks — external links and local-only management pages
 # https://gethomepage.dev/configs/bookmarks/
 
-- Developer:
+- Hardware & External Links:
     - GitHub:
         - icon: si-github
           href: https://github.com/dantebarbieri/HomeServer
 
-- Management:
     - IPMI (BMC):
         - icon: mdi-server
           href: https://ipmi.danteb.com

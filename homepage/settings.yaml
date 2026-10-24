@@ -10,38 +10,108 @@ color: zinc
 headerStyle: clean
 statusStyle: dot
 
-# Use SearXNG as the search provider
-search:
-  provider: custom
-  url: https://searxng.danteb.com/search?q=
+useEqualHeights: true
 
-# Layout controls column count and ordering per group
+# Every group has a tab so services and bookmarks appear only once.
 layout:
-  Media:
+  Watch & Request:
+    tab: Apps
     style: row
     columns: 3
     icon: mdi-multimedia
-  Media Management:
+  Read & Listen:
+    tab: Apps
+    style: row
+    columns: 3
+    icon: mdi-book-open-page-variant
+  Files & Photos:
+    tab: Apps
+    style: row
+    columns: 3
+    icon: mdi-folder-image
+  Personal & Communication:
+    tab: Apps
+    style: row
+    columns: 3
+    icon: mdi-message
+  Search & Tools:
+    tab: Apps
+    style: row
+    columns: 3
+    icon: mdi-toolbox
+  Plan & Cook:
+    tab: Apps
+    style: row
+    columns: 3
+    icon: mdi-calendar
+  Games & Guides:
+    tab: Apps
+    style: row
+    columns: 3
+    icon: mdi-controller
+  Game Servers:
+    tab: Apps
+    style: row
+    columns: 3
+    icon: mdi-gamepad-variant
+  Media Automation:
+    tab: Manage
     style: row
     columns: 3
     icon: mdi-movie-edit
   Downloads:
+    tab: Manage
     style: row
-    columns: 2
+    columns: 3
     icon: mdi-download
-  Network & Communication:
+  Network & Access:
+    tab: Manage
     style: row
     columns: 3
     icon: mdi-network
-  Utilities:
+  Monitoring:
+    tab: Manage
     style: row
     columns: 3
-    icon: mdi-toolbox
-  AI:
+    icon: mdi-chart-line
+  Development:
+    tab: Manage
     style: row
-    columns: 2
-    icon: mdi-robot
-  Game Servers:
+    columns: 3
+    icon: mdi-code-tags
+  Hardware & External Links:
+    tab: Manage
     style: row
-    columns: 2
-    icon: mdi-gamepad-variant
+    columns: 3
+    icon: mdi-server
+  Media Helpers:
+    tab: Backends
+    style: row
+    columns: 4
+    icon: mdi-cog
+  Communication & Sync:
+    tab: Backends
+    style: row
+    columns: 4
+    icon: mdi-sync
+  Monitoring Pipeline:
+    tab: Backends
+    style: row
+    columns: 4
+    icon: mdi-chart-timeline-variant
+  Network Helpers:
+    tab: Backends
+    style: row
+    columns: 4
+    icon: mdi-lan
+  Website & Development Backends:
+    tab: Backends
+    style: row
+    columns: 4
+    icon: mdi-server-network
+  Databases & Caches:
+    tab: Backends
+    style: row
+    columns: 4
+    icon: mdi-database
+    initiallyCollapsed: true

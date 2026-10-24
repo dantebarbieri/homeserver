@@ -1,6 +1,11 @@
 # Top-level page widgets
 # https://gethomepage.dev/widgets/
 
+- search:
+    provider: custom
+    url: https://searxng.danteb.com/search?q=
+    target: _blank
+
 - datetime:
     text_size: xl
     format:
