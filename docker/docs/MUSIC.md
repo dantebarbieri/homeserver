@@ -357,7 +357,9 @@ like Lidarr. It has its own users, so NPM has no Authelia in front of it
 
 1. `docker compose up -d aurral homepage`
 2. NPM proxy host `aurral.danteb.com` → `http://aurral:3001` (TLS,
-   WebSockets, Block Common Exploits). No Authelia.
+   WebSockets, Block Common Exploits). Until the admin account exists, anyone
+   reaching it can claim admin, so keep the Authelia advanced config (and an
+   Authelia rule) on the host during onboarding, then remove both.
 3. Open it, create the admin account, then **Settings > Lidarr**: URL
    `http://lidarr:8686`, Lidarr API key, root folder `/data/media/music`,
    profile **Lossless Preferred**, **Search on add** on. Do **not** use
