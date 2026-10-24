@@ -346,6 +346,32 @@ Check `docker logs slskd-port-sync` shows the forwarded port applied and the
 slskd UI shows connected. Soularr logs each search; Lidarr's history shows the
 imports.
 
+## Requests (Aurral)
+
+[Aurral](https://docs.aurral.org/) is the Seerr equivalent for music:
+search MusicBrainz, then **Download album** / **Monitor** sends the request
+to Lidarr (which still owns quality, downloading, and importing). Aurral reads
+Lidarr's files at the same paths, so it mounts `${RAID}/shared` at `/data`
+like Lidarr. It has its own users, so NPM has no Authelia in front of it
+(same as Seerr).
+
+1. `docker compose up -d aurral homepage`
+2. NPM proxy host `aurral.danteb.com` → `http://aurral:3001` (TLS,
+   WebSockets, Block Common Exploits). No Authelia.
+3. Open it, create the admin account, then **Settings > Lidarr**: URL
+   `http://lidarr:8686`, Lidarr API key, root folder `/data/media/music`,
+   profile **Lossless Preferred**, **Search on add** on. Do **not** use
+   **Apply recommended settings** (it rewrites Lidarr's profile/naming).
+4. **Downloads Folder** (Aurral's own single-track/flow downloads):
+   `/data/media/aurral`.
+5. Optional: Lidarr **Settings > Connect > Webhook**
+   `http://aurral:3001/api/webhooks/lidarr`, On Import only, header
+   `X-Api-Key` = Aurral's key from **Settings > System**, so requesters see
+   when albums are available.
+
+Leave Lidarr's **Tag Audio Files** off: retagging writes into files that are
+hardlinked to seeding torrents. Aurral then matches artists by name.
+
 ## Acceptance checks
 
 - Lidarr requires login through NPM; its Homepage widget and optional Prowlarr

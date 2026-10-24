@@ -46,6 +46,13 @@
           type: seerr
           url: http://seerr:5055
           key: "{{HOMEPAGE_VAR_SEERR_KEY}}"
+    - Aurral:
+        icon: mdi-music-box-multiple
+        href: https://aurral.danteb.com
+        description: Request Music
+        siteMonitor: https://aurral.danteb.com
+        server: my-docker
+        container: aurral
     - Immich:
         icon: immich.svg
         href: https://immich.danteb.com
