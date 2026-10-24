@@ -366,10 +366,34 @@ like Lidarr. It has its own users, so NPM has no Authelia in front of it
    **Apply recommended settings** (it rewrites Lidarr's profile/naming).
 4. **Downloads Folder** (Aurral's own single-track/flow downloads):
    `/data/media/aurral`.
-5. Optional: Lidarr **Settings > Connect > Webhook**
-   `http://aurral:3001/api/webhooks/lidarr`, On Import only, header
+5. Lidarr **Settings > Connect > Webhook** named `Aurral`:
+   `http://aurral:3001/api/webhooks/lidarr`, On Release Import only, header
    `X-Api-Key` = Aurral's key from **Settings > System**, so requesters see
    when albums are available.
+6. **Settings > Download clients > slskd**: `http://slskd:5030`, the slskd
+   API key (same one Soularr uses), priority 10, **Clean up after runs off**
+   (it would clear completed transfers Soularr still needs). slskd reports
+   `/data/soulseek/downloads`, which Aurral sees at the same path, so no path
+   mapping is needed. This is only for single tracks and playlist/flow tracks
+   (Lidarr is album-only); those land in `/data/media/aurral`, outside
+   Lidarr. Don't add SABnzbd/qBittorrent: album downloads already go through
+   Lidarr, and a second path would only duplicate them.
+7. **Settings > Playback > Plex**: **Connect Plex account** (approve the
+   plex.tv popup), Server URL `http://plex:32400`, leave **Plex Aurral
+   Library path** blank (Plex mounts the same `/data/media` path), set
+   **Include tracks from an existing library** to **Music** so playlists reuse
+   Lidarr's files, then **Sync to Plex now**. This creates an **Aurral** music
+   library in Plex for flows/playlists, which then show up in Plexamp. If the
+   library dropdown only shows *None*, save first and reopen, or set it with
+   `POST /api/settings` `{"integrations":{"plex":{"mainLibrarySectionId":"8"}}}`.
+
+Aurral's recommended Lidarr settings (Davo's community guide) are worse for
+this library: its **Aurral - HQ** profile allows only MP3-320 + 16-bit FLAC
+(no 24-bit/ALAC/V0) and requires a custom-format score of 1, which rejects
+plain "Artist - Album (Year) FLAC" releases. Its FLAC size caps reject
+hi-res, its naming uses underscores, and its Compilation/Remix secondary types
+bloat the wanted list. Keep **Lossless Preferred**, our naming, and the
+Standard/Soundtracks metadata profiles.
 
 Leave Lidarr's **Tag Audio Files** off: retagging writes into files that are
 hardlinked to seeding torrents. Aurral then matches artists by name.
