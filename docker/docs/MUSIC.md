@@ -323,11 +323,24 @@ itself), so hardlinks aren't needed here.
    with: Lidarr `host_url = http://lidarr:8686`, `download_dir =
    /data/soulseek/downloads`; Slskd `host_url = http://slskd:5030`,
    `download_dir = /downloads`, `api_key` = `SLSKD_API_KEY`;
-   `allowed_filetypes = flac 24/192,flac 24/96,flac 24/48,flac 16/44.1,flac,mp3 320`;
-   `search_source = missing`; `ignore_failed_users = True`;
-   `search_retry_wait_hours = 24`. Then `docker compose up -d soularr homepage`.
-5. NPM proxy hosts (TLS, WebSockets): `slskd.danteb.com` → `http://slskd:5030`
-   (no Authelia) and `soularr.danteb.com` → `http://soularr:8265` (Authelia).
+   `allowed_filetypes = flac 24/192,flac 24/96,flac 24/48,flac 16/44.1,flac,alac,mp3 320,mp3`;
+   `skip_region_check = True`; `search_source = missing`;
+   `ignore_failed_users = True`; `search_retry_wait_hours = 24`;
+   `use_extension_whitelist = True` with `extensions_whitelist = lrc,cue,log,jpg,png`.
+   Keep it mode 600.
+5. Add `soularr.danteb.com` to the `group:dev` two-factor rule in Authelia's
+   `access_control` (the default policy is `deny`) and restart Authelia.
+6. NPM proxy hosts (TLS, WebSockets): `slskd.danteb.com` → `http://slskd:5030`
+   (no Authelia) and `soularr.danteb.com` → `http://soularr:8265` with the
+   Authelia advanced config used by `dashdot.danteb.com`
+   (`authelia-location.conf` + a `location /` including
+   `authelia-authrequest.conf`). Add Authelia **before** the first request:
+   Soularr's unauthenticated `/api/config` returns `config.ini` including both
+   API keys. Confirm `https://soularr.danteb.com/` answers 302 to Authelia.
+   Then `docker compose up -d soularr homepage`.
+
+`SLSKD_REMOTE_CONFIGURATION` must stay `true`: `slskd-port-sync` sets the
+listen port with `PATCH /api/v0/options`, which slskd rejects (403) otherwise.
 
 Check `docker logs slskd-port-sync` shows the forwarded port applied and the
 slskd UI shows connected. Soularr logs each search; Lidarr's history shows the
