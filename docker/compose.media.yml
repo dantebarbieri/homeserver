@@ -20,8 +20,8 @@ services:
       - "32413:32413/udp"
       - "32414:32414/udp"
     environment:
-      PLEX_UID: ${HOST_UID:-${UID}}
-      PLEX_GID: ${HOST_GID:-${GID}}
+      PLEX_UID: ${HOST_UID}
+      PLEX_GID: ${HOST_GID}
       TZ: ${TZ}
       PLEX_CLAIM: ${PLEX_CLAIM}
       ADVERTISE_IP: ${ADVERTISE_IP}
@@ -51,7 +51,7 @@ services:
       pull: true
     image: jellyfin-finity:latest
     restart: unless-stopped
-    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
+    user: "${HOST_UID}:${HOST_GID}"
     environment:
       TZ: ${TZ}
       NVIDIA_VISIBLE_DEVICES: all
@@ -83,7 +83,7 @@ services:
       service: common-service
     container_name: komga
     image: gotson/komga:latest
-    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
+    user: "${HOST_UID}:${HOST_GID}"
     environment:
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=85
       TZ: ${TZ}
@@ -100,7 +100,7 @@ services:
       service: common-service
     container_name: komf
     image: sndxr/komf:latest
-    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
+    user: "${HOST_UID}:${HOST_GID}"
     environment:
       JAVA_TOOL_OPTIONS: -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:ShenandoahGCHeuristics=compact -XX:ShenandoahGuaranteedGCInterval=3600000 -XX:TrimNativeHeapInterval=3600000
       KOMF_LOG_LEVEL: INFO
@@ -116,7 +116,7 @@ services:
     container_name: suwayomi
     image: ghcr.io/suwayomi/suwayomi-server:stable
     restart: on-failure:3
-    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
+    user: "${HOST_UID}:${HOST_GID}"
     environment:
       TZ: ${TZ}
       FLARESOLVERR_ENABLED: true
@@ -183,7 +183,7 @@ services:
       service: common-service
     container_name: audiobookshelf
     image: ghcr.io/advplyr/audiobookshelf:latest
-    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
+    user: "${HOST_UID}:${HOST_GID}"
     environment:
       TZ: ${TZ}
     networks:
@@ -206,8 +206,8 @@ services:
     restart: unless-stopped
     # Do not set user: — the entrypoint drops to PUID/PGID itself.
     environment:
-      PUID: ${HOST_UID:-${UID}}
-      PGID: ${HOST_GID:-${GID}}
+      PUID: ${HOST_UID}
+      PGID: ${HOST_GID}
       TZ: ${TZ}
       STORYTELLER_SECRET_KEY: ${STORYTELLER_SECRET_KEY}
       STORYTELLER_ASSETS_DIR: /assets
@@ -263,7 +263,7 @@ services:
       service: common-service
     container_name: librofm-downloader
     image: ghcr.io/burntcookie90/librofm-downloader:latest
-    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
+    user: "${HOST_UID}:${HOST_GID}"
     environment:
       LIBRO_FM_USERNAME: ${LIBRO_FM_USERNAME}
       LIBRO_FM_PASSWORD: ${LIBRO_FM_PASSWORD}

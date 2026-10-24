@@ -9,8 +9,8 @@ services:
     container_name: recyclarr
     image: ghcr.io/recyclarr/recyclarr:8
     environment:
-      PUID: ${HOST_UID:-${UID}}
-      PGID: ${HOST_GID:-${GID}}
+      PUID: ${HOST_UID}
+      PGID: ${HOST_GID}
       TZ: ${TZ}
     networks:
       - starr
@@ -100,8 +100,8 @@ services:
     image: ghcr.io/lklynet/aurral:latest
     container_name: aurral
     environment:
-      PUID: ${HOST_UID:-${UID}}
-      PGID: ${HOST_GID:-${GID}}
+      PUID: ${HOST_UID}
+      PGID: ${HOST_GID}
       TZ: ${TZ}
       # Without this, parts of Aurral (incl. its Plex library) fall back to
       # /data/downloads/aurral, which Plex doesn't mount.
@@ -142,7 +142,7 @@ services:
     image: mrusse08/soularr:latest
     container_name: soularr
     hostname: soularr
-    user: ${HOST_UID:-${UID}}:${HOST_GID:-${GID}}
+    user: ${HOST_UID}:${HOST_GID}
     environment:
       TZ: ${TZ}
       SCRIPT_INTERVAL: 300
@@ -169,8 +169,8 @@ services:
         max-file: "3"
     cpus: 12
     environment:
-      PUID: ${HOST_UID:-${UID}}
-      PGID: ${HOST_GID:-${GID}}
+      PUID: ${HOST_UID}
+      PGID: ${HOST_GID}
       TZ: ${TZ}
       UMASK_SET: "002"
       serverIP: 0.0.0.0

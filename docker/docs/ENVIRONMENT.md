@@ -101,10 +101,16 @@ unprotected copies. Keep the verified pre-migration backup until satisfied;
 include it only in encrypted backups. Choose retention deliberately rather
 than accumulating copies forever. The script does not delete backups.
 
-For rollback, stop overlapping updates and restore the desired private backup
+For a same-key-layout rollback, stop overlapping updates and restore the private backup
 to a mode-`600` temporary file alongside `docker/.env`, preserving ownership,
 then rename it over `.env`. Do not print the contents or restart services just
 to roll back formatting. A backup's old layout can be reconciled again later.
+
+A pre-rename backup still has `UID`/`GID`: do not restore it against strict
+`HOST_UID`/`HOST_GID` Compose references. Reintroduce the compatible rollout
+references first, or prepare a restored candidate with the new key names
+locally without exposing its values. Code and environment must agree before
+any future container recreation.
 
 This workflow does not restart containers, change container identities,
 move credentials to file secrets, or provide encrypted storage. Those are

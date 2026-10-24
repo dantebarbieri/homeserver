@@ -158,8 +158,8 @@ services:
       - "7778:7777/udp"
       - "8888:8888/tcp"
     environment:
-      PUID: ${HOST_UID:-${UID}}
-      PGID: ${HOST_GID:-${GID}}
+      PUID: ${HOST_UID}
+      PGID: ${HOST_GID}
       MAXPLAYERS: 4
       STEAMBETA: false
     volumes:

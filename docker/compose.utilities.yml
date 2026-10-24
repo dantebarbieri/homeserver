@@ -23,8 +23,8 @@ services:
     container_name: syncthing
     hostname: syncthing
     environment:
-      - PUID=${HOST_UID:-${UID}}
-      - PGID=${HOST_GID:-${GID}}
+      - PUID=${HOST_UID}
+      - PGID=${HOST_GID}
     volumes:
       - ${DATA}/syncthing:/var/syncthing
     ports:

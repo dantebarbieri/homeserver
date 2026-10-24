@@ -131,14 +131,10 @@ class ParserTests(unittest.TestCase):
         references = set()
         for path in directory.glob("*.yml"):
             references.update(migration.re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)", path.read_text(encoding="utf-8")))
-        self.assertEqual(references - keys - migration.HOST_ID_RENAMES.keys(), set())
+        self.assertEqual(references - keys, set())
         self.assertNotIn("UID", keys)
         self.assertNotIn("GID", keys)
-        for path in directory.glob("*.yml"):
-            text = path.read_text(encoding="utf-8")
-            for old, new in migration.HOST_ID_RENAMES.items():
-                # While rolling out, legacy references may only be nested fallbacks.
-                self.assertEqual(text.count("${" + old + "}"), text.count("${" + new + ":-${" + old + "}}"))
+        self.assertEqual(references & migration.HOST_ID_RENAMES.keys(), set())
 
 
 @unittest.skipUnless(os.name == "posix", "Server file ownership and permission semantics")
