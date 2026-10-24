@@ -18,6 +18,7 @@ import tempfile
 Assignment = namedtuple("Assignment", "key start end")
 KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 PREFIX = re.compile(r"[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*")
+HOST_ID_RENAMES = {"UID": "HOST_UID", "GID": "HOST_GID"}
 
 
 class ReconcileError(Exception):
@@ -74,9 +75,25 @@ def assignments(text):
     return result
 
 
-def render(template, original, allowed_new):
+def active_renames(existing, requested):
+    result = {}
+    for old, new in requested.items():
+        if old in existing:
+            if new in existing:
+                raise ReconcileError(f"Both {old} and {new} exist; resolve locally before migrating")
+            result[old] = new
+        elif new not in existing:
+            raise ReconcileError(f"Neither {old} nor {new} exists; cannot preserve its value")
+    return result
+
+
+def render(template, original, allowed_new, renames=None):
+    renames = renames or {}
     desired = assignments(template)
-    existing = assignments(original)
+    original_entries = assignments(original)
+    existing = {renames.get(key, key): entry for key, entry in original_entries.items()}
+    if len(existing) != len(original_entries):
+        raise ReconcileError("Renaming would overwrite an existing key")
     unknown = existing.keys() - desired.keys()
     missing = desired.keys() - existing.keys()
     if unknown:
@@ -127,21 +144,28 @@ def compose(directory, env_file, probe=False):
         raise ReconcileError("Unexpected Compose response; contents withheld") from None
 
 
-def verify_values(before, after, new):
-    if set(after) != set(before) | new:
+def verify_values(before, after, new, renames=None):
+    renames = renames or {}
+    expected = {renames.get(key, key): value for key, value in before.items()}
+    if len(expected) != len(before):
+        raise ReconcileError("Renaming would overwrite an effective value")
+    if set(after) != set(expected) | new:
         raise ReconcileError("Compose environment key set changed unexpectedly")
-    changed = {key for key in before if before[key] != after[key]}
+    changed = {key for key in expected if expected[key] != after[key]}
     if changed:
         raise ReconcileError("Effective values changed for: " + ", ".join(sorted(changed)))
 
 
-def expected_model(before, old_values, new_values, added):
+def expected_model(before, old_values, new_values, added, renames=None):
+    renames = renames or {}
     expected = json.loads(json.dumps(before))
     for service in expected["services"].values():
         environment = service.get("environment", {})
-        # Account only for additive keys in services importing the entire .env.
+        # Only whole-file imports inherit additions and renamed host settings.
         if old_values and all(key in environment and environment[key] == value for key, value in old_values.items()):
-            environment.update({key: new_values[key] for key in added})
+            for old in renames:
+                del environment[old]
+            environment.update({key: new_values[key] for key in added | set(renames.values())})
     return expected
 
 
@@ -222,18 +246,21 @@ def reconcile(args):
         print("Template-only: " + (", ".join(sorted(desired.keys() - existing.keys())) or "(none)"))
         if args.inventory:
             return
-        replacement, added = render(template, original_text, set(args.allow_new))
+        renames = active_renames(existing, HOST_ID_RENAMES if args.rename_host_ids else {})
+        if renames:
+            print("Renaming: " + ", ".join(f"{old} -> {new}" for old, new in renames.items()))
+        replacement, added = render(template, original_text, set(args.allow_new), renames)
         content = replacement.encode("utf-8")
         # Even dry runs keep all resolved configuration exclusively in memory.
         with candidate_file(directory, content, metadata) as candidate:
             old_values = compose(directory, source, probe=True)
             new_values = compose(directory, candidate, probe=True)
-            verify_values(old_values, new_values, added)
+            verify_values(old_values, new_values, added, renames)
             before = compose(directory, source)
             preview = compose(directory, candidate)
             if preview != before:
                 raise ReconcileError("Resolved Compose settings would change; replacement refused")
-            expected = expected_model(before, old_values, new_values, added)
+            expected = expected_model(before, old_values, new_values, added, renames)
             if not unchanged(source, original, metadata):
                 raise ReconcileError("Production .env changed concurrently; replacement refused")
             if not args.apply:
@@ -273,6 +300,8 @@ def main():
     mode.add_argument("--apply", action="store_true", help="Back up and atomically replace .env")
     parser.add_argument("--allow-new", action="append", default=[], metavar="KEY",
                         help="Explicitly accept this missing key's template value")
+    parser.add_argument("--rename-host-ids", action="store_true",
+                        help="Preserve UID/GID values as HOST_UID/HOST_GID; reject collisions")
     args = parser.parse_args()
     if any(not KEY.fullmatch(key) for key in args.allow_new):
         parser.error("--allow-new accepts variable names, never values")

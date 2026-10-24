@@ -98,7 +98,7 @@ services:
     image: *mirklurk-mariadb
     container_name: mirklurk-backup
     init: true
-    user: "${UID}:${GID}"
+    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
     entrypoint: ["bash", "/opt/mirklurk-backup.sh"]
     command: []
     read_only: true

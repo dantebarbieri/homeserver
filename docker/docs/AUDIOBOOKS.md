@@ -36,7 +36,7 @@ written back into either library.
 ### 1. Directories (on the server)
 
 Bind-mount sources that don't exist are created by Docker as root. Create them
-first as the `${UID}:${GID}` user from `.env`:
+first as the `${HOST_UID}:${HOST_GID}` user from `.env`:
 
 ```bash
 sudo install -d -o 1000 -g 1000 \

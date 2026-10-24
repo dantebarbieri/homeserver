@@ -115,7 +115,7 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 
 - `${DATA}` — persistent service config/data (e.g., `/srv/docker/data`)
 - `${RAID}` — bulk storage (media, torrents, photos)
-- `${UID}` / `${GID}` / `${TZ}` — permissions and timezone
+- `${HOST_UID}` / `${HOST_GID}` / `${TZ}` — permissions and timezone
 - Authelia secrets use Docker secrets (files under `${DATA}/authelia/secrets/`)
 
 ### Custom Dockerfiles

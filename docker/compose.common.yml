@@ -32,8 +32,8 @@ services:
         max-size: "10m"
         max-file: "3"
     environment:
-      PUID: ${UID}
-      PGID: ${GID}
+      PUID: ${HOST_UID:-${UID}}
+      PGID: ${HOST_GID:-${GID}}
       TZ: ${TZ}
 
   # Template for LinuxServer.io images (qbittorrent, ddclient)
@@ -46,6 +46,6 @@ services:
         max-size: "10m"
         max-file: "3"
     environment:
-      PUID: ${UID}
-      PGID: ${GID}
+      PUID: ${HOST_UID:-${UID}}
+      PGID: ${HOST_GID:-${GID}}
       TZ: ${TZ}

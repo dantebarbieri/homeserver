@@ -145,7 +145,7 @@ services:
     image: slskd/slskd:latest
     container_name: slskd
     network_mode: "container:slskd-netns"
-    user: ${UID}:${GID}
+    user: ${HOST_UID:-${UID}}:${HOST_GID:-${GID}}
     environment:
       TZ: ${TZ}
       SLSKD_UMASK: "002"
@@ -224,8 +224,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_HTML: ${LOG_HTML:-false}
       CAPTCHA_SOLVER: ${CAPTCHA_SOLVER:-none}
-      PUID: ${UID}
-      PGID: ${GID}
+      PUID: ${HOST_UID:-${UID}}
+      PGID: ${HOST_GID:-${GID}}
       TZ: ${TZ}
     networks:
       - flaresolverr

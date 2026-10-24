@@ -9,8 +9,8 @@ services:
     container_name: forgejo
     image: codeberg.org/forgejo/forgejo:15
     environment:
-      USER_UID: ${UID}
-      USER_GID: ${GID}
+      USER_UID: ${HOST_UID:-${UID}}
+      USER_GID: ${HOST_GID:-${GID}}
       FORGEJO__database__DB_TYPE: postgres
       FORGEJO__database__HOST: forgejo_postgres:5432
       FORGEJO__database__NAME: forgejo
@@ -83,11 +83,11 @@ services:
       service: common-service
     container_name: forgejo_runner
     image: data.forgejo.org/forgejo/runner:12
-    # Run as the host owner of ${DATA} (uid:gid = ${UID}:${GID} = 1000:1000
+    # Run as the host owner of ${DATA} (uid:gid = ${HOST_UID}:${HOST_GID}
     # on HomeServer) so the bind-mounted /data is writable without sudo on
     # the host. Upstream's example uses 1001:1001; we deviate to match the
     # HomeServer-wide convention used by every other service.
-    user: "${UID}:${GID}"
+    user: "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}"
     depends_on:
       forgejo_runner_dind:
         condition: service_started

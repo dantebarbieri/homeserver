@@ -57,6 +57,28 @@ class ParserTests(unittest.TestCase):
         with self.assertRaisesRegex(migration.ReconcileError, "Production-only"):
             migration.render("A=''\n", "A=one\nLEGACY=two\n", set())
 
+    def test_host_id_rename_preserves_literals_without_defaulting(self):
+        original = "UID='1234'\nGID=5678\nA='private$token'\n"
+        template = "HOST_UID=1000\nHOST_GID=1000\nA=''\n"
+        renames = migration.active_renames(migration.assignments(original), migration.HOST_ID_RENAMES)
+        result, added = migration.render(template, original, set(), renames)
+        self.assertEqual(result, "HOST_UID='1234'\nHOST_GID=5678\nA='private$token'\n")
+        self.assertEqual(added, set())
+        migration.verify_values(
+            {"UID": "1234", "GID": "5678", "A": "token"},
+            {"HOST_UID": "1234", "HOST_GID": "5678", "A": "token"},
+            set(), renames,
+        )
+
+    def test_host_id_collisions_and_missing_values_are_refused(self):
+        for text in ("UID=1\nHOST_UID=1\nGID=2\n", "UID=1\nGID=2\nHOST_GID=3\n", "UID=1\n"):
+            with self.subTest(keys=list(migration.assignments(text))), \
+                    self.assertRaises(migration.ReconcileError):
+                migration.active_renames(migration.assignments(text), migration.HOST_ID_RENAMES)
+        self.assertEqual(
+            migration.active_renames({"HOST_UID": "1", "HOST_GID": "2"}, migration.HOST_ID_RENAMES), {},
+        )
+
     def test_unsupported_syntax_and_duplicates_fail_without_values(self):
         for text in ("A=private\nA=private\n", "INVALID private\n", "A='private\n", "A='private' trailing\n"):
             with self.subTest(case=text[:2]), self.assertRaises(migration.ReconcileError) as error:
@@ -81,6 +103,21 @@ class ParserTests(unittest.TestCase):
         self.assertNotIn("NEW", after["services"]["narrow"]["environment"])
         self.assertNotIn("NEW", before["services"]["whole"]["environment"])
 
+    def test_only_whole_file_imports_rename_host_settings(self):
+        before = {"services": {
+            "whole": {"environment": {"UID": "1234", "GID": "5678", "A": "token"}},
+            "narrow": {"environment": {"PUID": "1234", "PGID": "5678"}, "user": "1234:5678"},
+        }}
+        after = migration.expected_model(
+            before, {"UID": "1234", "GID": "5678", "A": "token"},
+            {"HOST_UID": "1234", "HOST_GID": "5678", "A": "token"}, set(), migration.HOST_ID_RENAMES,
+        )
+        self.assertEqual(
+            after["services"]["whole"]["environment"],
+            {"HOST_UID": "1234", "HOST_GID": "5678", "A": "token"},
+        )
+        self.assertEqual(before["services"]["narrow"], after["services"]["narrow"])
+
     def test_compose_failure_diagnostics_never_escape(self):
         result = subprocess.CompletedProcess([], 1, stdout="private", stderr="private")
         with patch.object(migration.subprocess, "run", return_value=result), \
@@ -94,7 +131,14 @@ class ParserTests(unittest.TestCase):
         references = set()
         for path in directory.glob("*.yml"):
             references.update(migration.re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)", path.read_text(encoding="utf-8")))
-        self.assertEqual(references - keys, set())
+        self.assertEqual(references - keys - migration.HOST_ID_RENAMES.keys(), set())
+        self.assertNotIn("UID", keys)
+        self.assertNotIn("GID", keys)
+        for path in directory.glob("*.yml"):
+            text = path.read_text(encoding="utf-8")
+            for old, new in migration.HOST_ID_RENAMES.items():
+                # While rolling out, legacy references may only be nested fallbacks.
+                self.assertEqual(text.count("${" + old + "}"), text.count("${" + new + ":-${" + old + "}}"))
 
 
 @unittest.skipUnless(os.name == "posix", "Server file ownership and permission semantics")
@@ -112,7 +156,7 @@ class MigrationTests(unittest.TestCase):
         (self.directory / "sample.env").write_text("# canonical\nB=''\nA=''\n")
         self.args = argparse.Namespace(
             directory=self.directory, template=None, backup_dir=self.root / "backups",
-            inventory=False, apply=False, allow_new=[],
+            inventory=False, apply=False, allow_new=[], rename_host_ids=False,
         )
         self.model = {"services": {"probe": {"environment": {"A": "unchanged$value", "B": ""}}}}
 
@@ -219,6 +263,40 @@ class MigrationTests(unittest.TestCase):
         after = migration.compose(self.directory, self.source, probe=True)
         migration.verify_values(before, after, {"LOG_LEVEL"})
         self.assertEqual(list(migration.assignments(self.source.read_text())), ["EMPTY", "MULTI", "DOUBLE", "A", "LOG_LEVEL"])
+
+    @unittest.skipUnless(os.environ.get("RUN_COMPOSE_ENV_TESTS") == "1", "Opt-in real Compose integration")
+    def test_real_compose_host_id_rollout_preserves_container_identity(self):
+        self.source.write_text("UID='1234'\nGID=5678\nA='literal$ # token'\n")
+        (self.directory / "sample.env").write_text("# canonical\nHOST_UID=1000\nHOST_GID=1000\nA=''\n")
+        configuration = {
+            "name": "env-reconcile-test",
+            "services": {
+                "whole": {"image": "busybox", "env_file": [".env"]},
+                "narrow": {
+                    "image": "busybox",
+                    "user": "${HOST_UID:-${UID}}:${HOST_GID:-${GID}}",
+                    "environment": {"PUID": "${HOST_UID:-${UID}}", "PGID": "${HOST_GID:-${GID}}"},
+                },
+            },
+        }
+        compose_file = self.directory / "docker-compose.yml"
+        compose_file.write_text(json.dumps(configuration))
+        before = migration.compose(self.directory, self.source)
+        self.args.rename_host_ids = True
+        self.args.apply = True
+        self.run_migration()
+        after = migration.compose(self.directory, self.source)
+        self.assertEqual(after["services"]["narrow"], before["services"]["narrow"])
+        environment = after["services"]["whole"]["environment"]
+        self.assertEqual((environment["HOST_UID"], environment["HOST_GID"]), ("1234", "5678"))
+        self.assertNotIn("UID", environment)
+        self.assertNotIn("GID", environment)
+        # Remove the rollout fallback only after both new names are installed.
+        compose_file.write_text(
+            json.dumps(configuration).replace("${HOST_UID:-${UID}}", "${HOST_UID}")
+            .replace("${HOST_GID:-${GID}}", "${HOST_GID}")
+        )
+        self.assertEqual(migration.compose(self.directory, self.source), after)
 
 
 if __name__ == "__main__":

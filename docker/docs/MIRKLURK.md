@@ -31,7 +31,7 @@ discovery or changes. Those remain under the operator's control.
 | Sitemap | `${DATA}/mirklurk/sitemap` -> `/var/lib/mirklurk-sitemap` (UID/GID 33, mode 0755 or inherited-setgid 2755) |
 | Backup control | `${DATA}/mirklurk/backup-control` -> `/var/lib/mirklurk-backup` (read-only in app; native `$wgReadOnlyFile` is `read-only`) |
 | Secrets | `${DATA}/mirklurk/secrets` -> individual `/run/secrets/` files |
-| Local SQL dumps | `${DATA}/mirklurk/backups`, owned by `${UID}:${GID}` |
+| Local SQL dumps | `${DATA}/mirklurk/backups`, owned by `${HOST_UID}:${HOST_GID}` |
 | Complete snapshots | `${DATA}/mirklurk/backups/snapshots/{daily,weekly}/mirklurk-<UTC timestamp>.tar.gz` |
 
 The app joins the existing `proxy` network and the dedicated `mirklurk`
