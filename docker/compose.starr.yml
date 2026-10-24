@@ -1,5 +1,5 @@
 # Starr apps and media management
-# radarr, sonarr, lidarr, bazarr, prowlarr, recyclarr, seerr, soularr, tdarr
+# radarr, sonarr, lidarr, bazarr, prowlarr, recyclarr, seerr, aurral, soularr, tdarr
 
 services:
   recyclarr:
@@ -90,6 +90,25 @@ services:
       - starr
     volumes:
       - ${DATA}/seerr/config:/config
+
+  # Seerr-style music requests and discovery. Album/artist requests go to
+  # Lidarr; it reads Lidarr's files at the same /data paths. See docs/MUSIC.md.
+  aurral:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/lklynet/aurral:latest
+    container_name: aurral
+    environment:
+      PUID: ${UID}
+      PGID: ${GID}
+      TZ: ${TZ}
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - ${DATA}/aurral/config:/config
+      - ${RAID}/shared:/data
 
   prowlarr:
     extends:
