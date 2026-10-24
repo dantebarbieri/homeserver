@@ -1,5 +1,5 @@
 # Starr apps and media management
-# radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, tdarr
+# radarr, sonarr, lidarr, bazarr, prowlarr, recyclarr, seerr, tdarr
 
 services:
   recyclarr:
@@ -44,6 +44,22 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/sonarr/config:/config
+      - ${RAID}/shared:/data
+
+  lidarr:
+    extends:
+      file: compose.common.yml
+      service: hotio-service
+    container_name: lidarr
+    image: ghcr.io/hotio/lidarr:latest
+    environment:
+      UMASK: "002"
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA}/lidarr/config:/config
       - ${RAID}/shared:/data
 
   bazarr:
