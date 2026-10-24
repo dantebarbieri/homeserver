@@ -65,7 +65,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
 | `compose.dashboards.yml` | homepage, dashdot |
-| `compose.downloads.yml` | vpn-netns, gluetun, qbittorrent, sabnzbd, flaresolverr, qbit-manage |
+| `compose.downloads.yml` | vpn-netns, gluetun, qbittorrent, slskd-netns, gluetun-slskd, slskd, sabnzbd, flaresolverr, qbit-manage |
 | `compose.gaming.yml` | minecraft, rlcraft, hytale, satisfactory |
 | `compose.git.yml` | forgejo, postgres |
 | `compose.immich.yml` | immich-server, immich-machine-learning, redis, postgres |
@@ -74,7 +74,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.romm.yml` | romm, mariadb |
 | `compose.searxng.yml` | searxng, redis (valkey) |
-| `compose.starr.yml` | radarr, sonarr, bazarr, prowlarr, seerr, tdarr, recyclarr |
+| `compose.starr.yml` | radarr, sonarr, lidarr, bazarr, prowlarr, seerr, soularr, tdarr, recyclarr |
 | `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, snapotter, stirling-pdf, changedetection-io, sockpuppetbrowser |
 | `compose.websites.yml` | travel-planner, skyjo, skyjo_server, skyjo_postgres |
 
@@ -83,7 +83,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 - **`proxy` network** — shared by all services with a web UI behind Nginx Proxy Manager. IPv6 enabled, defined in `docker-compose.yml`. Each category file redeclares it for standalone compatibility. Do not put non-web services on this network.
 - **`ddns` network** — IPv6-enabled network for ddclient DDNS operations (defined in `compose.core.yml`).
 - **Internal networks** — purpose-specific (e.g., `authelia`, `immich`, `starr`, `komics`). Web-facing services join both `proxy` + internal; pure backends (DBs, caches) join only internal.
-- **VPN namespace** — `vpn-netns` (pause container) → `gluetun` → `qbittorrent` share one network via `network_mode: "container:vpn-netns"`. The pause container joins `proxy` with alias `qbittorrent`.
+- **VPN namespace** — `vpn-netns` (pause container) → `gluetun` → `qbittorrent` share one network via `network_mode: "container:vpn-netns"`. The pause container joins `proxy` with alias `qbittorrent`. `slskd-netns` → `gluetun-slskd` → `slskd` is a second, identical stack (ProtonVPN forwards one port per tunnel).
 - **Game servers** — direct host port mapping, no networks defined.
 - **No-network services** (endlessh) — fall through to Docker's default bridge. Note: ddclient uses the dedicated `ddns` network for IPv6.
 - Cross-stack communication uses shared internal networks (e.g., `flaresolverr`) rather than putting non-proxied services on `proxy`.

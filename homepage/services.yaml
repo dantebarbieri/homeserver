@@ -201,6 +201,25 @@
           url: http://qbittorrent:8080
           username: "{{HOMEPAGE_VAR_QBIT_USER}}"
           password: "{{HOMEPAGE_VAR_QBIT_PASS}}"
+    - slskd:
+        icon: slskd.svg
+        href: https://slskd.danteb.com
+        description: Soulseek
+        siteMonitor: https://slskd.danteb.com
+        server: my-docker
+        container: slskd
+        widget:
+          type: slskd
+          url: http://slskd:5030
+          key: "{{HOMEPAGE_VAR_SLSKD_KEY}}"
+          fields: ["slskStatus", "downloads", "uploads", "sharedFiles"]
+    - Soularr:
+        icon: lidarr.svg
+        href: https://soularr.danteb.com
+        description: Lidarr → Soulseek
+        siteMonitor: https://soularr.danteb.com
+        server: my-docker
+        container: soularr
     - SABnzbd:
         icon: sabnzbd.svg
         href: https://sabnzbd.danteb.com

@@ -133,6 +133,16 @@ See [Music setup](../docker/docs/MUSIC.md) for the FLAC library and Plexamp.
 
 ---
 
+## slskd - `HOMEPAGE_VAR_SLSKD_KEY`
+
+No separate variable: `compose.dashboards.yml` passes slskd's primary API key
+(`SLSKD_API_KEY` in `docker/.env`, 16-255 characters, e.g.
+`openssl rand -base64 48`) through as `HOMEPAGE_VAR_SLSKD_KEY`. Set it, then
+recreate slskd and Homepage: `docker compose up -d slskd homepage`. The widget
+uses `http://slskd:5030` (the `slskd` alias on `slskd-netns`).
+
+---
+
 ## Bazarr — `HOMEPAGE_VAR_BAZARR_KEY`
 
 1. Open Bazarr (e.g. `https://bazarr.danteb.com`).

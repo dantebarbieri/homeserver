@@ -1,5 +1,5 @@
 # Starr apps and media management
-# radarr, sonarr, lidarr, bazarr, prowlarr, recyclarr, seerr, tdarr
+# radarr, sonarr, lidarr, bazarr, prowlarr, recyclarr, seerr, soularr, tdarr
 
 services:
   recyclarr:
@@ -99,12 +99,39 @@ services:
     image: ghcr.io/hotio/prowlarr:latest
     environment:
       UMASK: "002"
+      # FlareSolverr's Chromium solves Cloudflare challenges over IPv4, and
+      # cf_clearance is bound to the solving IP. Prowlarr (on the IPv6 proxy
+      # network) would replay that cookie over IPv6 and get 403 "blocked by
+      # CloudFlare Protection". Keep Prowlarr's outbound traffic on IPv4.
+      DOTNET_SYSTEM_NET_DISABLEIPV6: "1"
     networks:
       - proxy
       - starr
       - flaresolverr
     volumes:
       - ${DATA}/prowlarr/config:/config
+
+  # Feeds Lidarr's wanted albums to slskd (Soulseek) and triggers the import.
+  # Config (API keys) lives in ${DATA}/soularr/config.ini; see docs/MUSIC.md.
+  soularr:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: mrusse08/soularr:latest
+    container_name: soularr
+    hostname: soularr
+    user: ${UID}:${GID}
+    environment:
+      TZ: ${TZ}
+      SCRIPT_INTERVAL: 300
+      WEBUI_ENABLED: "true"
+      WEBUI_PORT: 8265
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - ${DATA}/soularr:/data
+      - ${RAID}/shared/soulseek/downloads:/downloads
 
   tdarr:
     extends:
