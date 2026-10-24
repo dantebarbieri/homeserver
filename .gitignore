@@ -4,6 +4,7 @@ production-configs/*
 
 # Secrets and environment
 .env
+.env.*
 docker/.env
 recyclarr-configs/secrets.yml
 
