@@ -99,6 +99,11 @@ services:
     image: ghcr.io/hotio/prowlarr:latest
     environment:
       UMASK: "002"
+      # FlareSolverr's Chromium solves Cloudflare challenges over IPv4, and
+      # cf_clearance is bound to the solving IP. Prowlarr (on the IPv6 proxy
+      # network) would replay that cookie over IPv6 and get 403 "blocked by
+      # CloudFlare Protection". Keep Prowlarr's outbound traffic on IPv4.
+      DOTNET_SYSTEM_NET_DISABLEIPV6: "1"
     networks:
       - proxy
       - starr
