@@ -1,5 +1,6 @@
 # Download services
-# VPN stack (vpn-netns, gluetun, qbittorrent, qbit-port-sync), sabnzbd, flaresolverr
+# VPN stacks (vpn-netns/gluetun/qbittorrent/qbit-port-sync and
+# slskd-netns/gluetun-slskd/slskd/slskd-port-sync), sabnzbd, flaresolverr
 
 services:
   vpn-netns:
@@ -108,6 +109,96 @@ services:
       qbittorrent:
         condition: service_healthy
 
+  # Soulseek stack: a second ProtonVPN WireGuard tunnel, separate from
+  # qBittorrent's, because Proton forwards exactly one port per tunnel and
+  # qBittorrent owns the first one. slskd-port-sync pushes this tunnel's
+  # forwarded port into slskd so peers can connect in. Web UI/API on 5030 via
+  # the `slskd` alias on slskd-netns. Soularr (compose.starr.yml) drives it.
+  slskd-netns:
+    image: registry.k8s.io/pause:3.10.2
+    container_name: slskd-netns
+    networks:
+      proxy:
+        aliases:
+          - slskd
+    restart: always
+
+  gluetun-slskd:
+    extends:
+      service: gluetun
+    container_name: gluetun-slskd
+    network_mode: "container:slskd-netns"
+    environment:
+      WIREGUARD_PRIVATE_KEY: ${SLSKD_WG_PRIVATE_KEY}
+      WIREGUARD_ADDRESSES: ${SLSKD_WG_ADDRESS}
+      FIREWALL_INPUT_PORTS: 5030
+    volumes: !override
+      - ${DATA}/gluetun-slskd:/gluetun
+      - gluetun-slskd-tmp:/tmp/gluetun
+    depends_on: !override
+      - slskd-netns
+
+  slskd:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: slskd/slskd:latest
+    container_name: slskd
+    network_mode: "container:slskd-netns"
+    user: ${UID}:${GID}
+    environment:
+      TZ: ${TZ}
+      SLSKD_UMASK: "002"
+      SLSKD_SLSK_USERNAME: ${SLSKD_SLSK_USERNAME}
+      SLSKD_SLSK_PASSWORD: ${SLSKD_SLSK_PASSWORD}
+      SLSKD_USERNAME: ${SLSKD_WEB_USERNAME}
+      SLSKD_PASSWORD: ${SLSKD_WEB_PASSWORD}
+      SLSKD_JWT_KEY: ${SLSKD_JWT_KEY}
+      SLSKD_API_KEY: ${SLSKD_API_KEY}
+      SLSKD_REMOTE_CONFIGURATION: "false"
+      # Same /data/soulseek path Lidarr sees via ${RAID}/shared:/data, on the
+      # same filesystem as the music root, so imports are instant moves.
+      SLSKD_DOWNLOADS_DIR: /data/soulseek/downloads
+      SLSKD_INCOMPLETE_DIR: /data/soulseek/incomplete
+      # Share the library back (read-only); many peers ignore non-sharers.
+      SLSKD_SHARED_DIR: "[Music]/music"
+      SLSKD_SHARE_CACHE_RETENTION: "1440"
+    volumes:
+      - ${DATA}/slskd:/app
+      - ${RAID}/shared/soulseek:/data/soulseek
+      - ${RAID}/shared/media/music:/music:ro
+    depends_on:
+      gluetun-slskd:
+        condition: service_healthy
+      slskd-netns:
+        condition: service_started
+    restart: always
+
+  slskd-port-sync:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: slskd-port-sync
+    build:
+      context: dockerfiles/slskd-port-sync
+    container_name: slskd-port-sync
+    network_mode: "container:slskd-netns"
+    environment:
+      SLSKD_API_KEY: ${SLSKD_API_KEY}
+      SLSKD_HOST: 127.0.0.1:5030
+      PORT_FILE: /tmp/gluetun/forwarded_port
+      CHECK_INTERVAL: 60
+      NTFY_URL: https://ntfy.danteb.com
+      NTFY_TOPIC: homeserver-alerts
+    volumes:
+      - gluetun-slskd-tmp:/tmp/gluetun:ro
+    depends_on:
+      gluetun-slskd:
+        condition: service_healthy
+      slskd-netns:
+        condition: service_started
+      slskd:
+        condition: service_started
   sabnzbd:
     extends:
       file: compose.common.yml
@@ -203,8 +294,21 @@ services:
       vpn-netns:
         condition: service_started
 
+  slskd-netns-watcher:
+    extends:
+      service: vpn-netns-watcher
+    container_name: slskd-netns-watcher
+    environment:
+      NETNS_CONTAINER: slskd-netns
+      NETNS_SERVICE: slskd-netns
+      SIBLING_SERVICES: gluetun-slskd slskd slskd-port-sync
+    depends_on: !override
+      slskd-netns:
+        condition: service_started
+
 volumes:
   gluetun-tmp:
+  gluetun-slskd-tmp:
 
 networks:
   proxy:

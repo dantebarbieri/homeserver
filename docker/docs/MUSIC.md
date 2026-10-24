@@ -247,6 +247,92 @@ docker compose up -d homepage
 The new Media Management tile uses `http://lidarr:8686` internally for its
 widget and `https://lidarr.danteb.com` for the browser/monitor.
 
+## Current production configuration
+
+The setup steps above describe the initial rollout; production has since moved
+on. These are configured in the apps (not in this repo):
+
+| Setting | Value |
+|---------|-------|
+| Quality profile | `Lossless Preferred`: Lossless group + `MP3 320/V0` fallback, cutoff Lossless, upgrades on. Used by all artists and the Spotify import list (`FLAC Only` is unused) |
+| Metadata profiles | `Standard` (Album, EP, Single), `Soundtracks` (Soundtrack/Compilation, for Studio Ghibli) |
+| Renaming | On: `{Album Title} ({Release Year})/{track:00} - {Track Title}`, multi-disc `{medium:0}-{track:00}`, artist folder `{Artist Name}`. Renames keep hardlinks (same inode) |
+| Import list | Spotify playlists: monitor specific album, no new albums |
+| Connect | Plex Media Server (`plex:32400`), *Update Library* on import. Plex's own change detection misses Lidarr imports |
+| Indexers | NZBgeek, The Pirate Bay, 1337x, kickasstorrents, Internet Archive. Torrent minimum seeders `2` (music is thinly seeded) |
+| Prowlarr app sync | Lidarr app is `Add and Remove Only` so the per-indexer seeder override survives syncs; add new indexers in Lidarr by hand or let Prowlarr add them |
+
+Prowlarr runs with `DOTNET_SYSTEM_NET_DISABLEIPV6=1`: FlareSolverr solves
+Cloudflare over IPv4 and `cf_clearance` is bound to that IP, so Prowlarr must
+replay it over IPv4 too (over IPv6 it gets 403 "blocked by CloudFlare").
+
+Lidarr's MusicBrainz titles for Japanese releases (e.g. Ghibli soundtracks)
+are in Japanese while indexers use English, so automatic search rarely matches.
+Grab those manually and import with **Wanted > Manual Import**, choosing the
+release whose track count matches the files.
+
+## Soulseek (slskd + Soularr)
+
+Soulseek has far more lossless music, especially niche and Japanese releases,
+than public trackers. Two containers add it:
+
+| Container | Address | Role |
+|-----------|---------|------|
+| `slskd` | `https://slskd.danteb.com` / `http://slskd:5030` | Soulseek client; built-in login (no Authelia) |
+| `soularr` | `https://soularr.danteb.com` / `http://soularr:8265` | Every 5 min, searches slskd for Lidarr's missing albums, downloads the best match, and tells Lidarr to import it. Web UI has no auth, so NPM uses Authelia |
+
+slskd runs inside its own VPN stack in `compose.downloads.yml`:
+`slskd-netns` (pause container, `slskd` alias on `proxy`) → `gluetun-slskd`
+(a **second** ProtonVPN WireGuard tunnel) → `slskd` + `slskd-port-sync`.
+ProtonVPN forwards one port per tunnel and qBittorrent owns the first one, so
+slskd gets its own tunnel; `slskd-port-sync` pushes the forwarded port into
+slskd's listen port (re-applied after restarts) and alerts via ntfy if it
+disappears. `slskd-netns-watcher` recreates the stack if the pause container
+is replaced. No host ports, firewall, or router changes.
+
+| Host path | slskd | Lidarr | Soularr |
+|-----------|-------|--------|---------|
+| `/data/shared/soulseek/downloads` | `/data/soulseek/downloads` | `/data/soulseek/downloads` | `/downloads` |
+| `/data/shared/soulseek/incomplete` | `/data/soulseek/incomplete` | — | — |
+| `/data/shared/media/music` | `/music` (read-only share) | `/data/media/music` | — |
+| `/srv/docker/data/slskd` | `/app` | — | — |
+| `/srv/docker/data/soularr` | — | — | `/data` (`config.ini`) |
+
+Downloads sit on the same filesystem as the library, so Lidarr's import is an
+instant move. Nothing seeds from the download folder (slskd shares the library
+itself), so hardlinks aren't needed here.
+
+### Setup
+
+1. In ProtonVPN, create a second WireGuard config with **NAT-PMP (port
+   forwarding)** on; put its key and address in `.env` as
+   `SLSKD_WG_PRIVATE_KEY` / `SLSKD_WG_ADDRESS`.
+2. Fill the other `SLSKD_*` variables in `.env` (see `sample.env`). The
+   Soulseek account is registered on first login if the username is free.
+3. Create directories and start the stack:
+
+   ```bash
+   install -d -m 2775 -o danteb -g docker /data/shared/soulseek/{downloads,incomplete} \
+     /srv/docker/data/slskd /srv/docker/data/soularr
+   z /srv/homeserver/docker
+   docker compose up -d --build slskd-netns gluetun-slskd slskd slskd-port-sync slskd-netns-watcher
+   ```
+
+4. Write `/srv/docker/data/soularr/config.ini` from the
+   [Soularr example](https://github.com/mrusse/soularr#configure-your-config-file)
+   with: Lidarr `host_url = http://lidarr:8686`, `download_dir =
+   /data/soulseek/downloads`; Slskd `host_url = http://slskd:5030`,
+   `download_dir = /downloads`, `api_key` = `SLSKD_API_KEY`;
+   `allowed_filetypes = flac 24/192,flac 24/96,flac 24/48,flac 16/44.1,flac,mp3 320`;
+   `search_source = missing`; `ignore_failed_users = True`;
+   `search_retry_wait_hours = 24`. Then `docker compose up -d soularr homepage`.
+5. NPM proxy hosts (TLS, WebSockets): `slskd.danteb.com` → `http://slskd:5030`
+   (no Authelia) and `soularr.danteb.com` → `http://soularr:8265` (Authelia).
+
+Check `docker logs slskd-port-sync` shows the forwarded port applied and the
+slskd UI shows connected. Soularr logs each search; Lidarr's history shows the
+imports.
+
 ## Acceptance checks
 
 - Lidarr requires login through NPM; its Homepage widget and optional Prowlarr
