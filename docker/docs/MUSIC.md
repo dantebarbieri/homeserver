@@ -383,7 +383,11 @@ like Lidarr. It has its own users, so NPM has no Authelia in front of it
    Library path** blank (Plex mounts the same `/data/media` path), set
    **Include tracks from an existing library** to **Music** so playlists reuse
    Lidarr's files, then **Sync to Plex now**. This creates an **Aurral** music
-   library in Plex for flows/playlists, which then show up in Plexamp. If the
+   library in Plex (at `/data/media/aurral`; the compose file sets
+   `DOWNLOAD_FOLDER` so Aurral doesn't fall back to `/data/downloads/aurral`,
+   which Plex can't see) for flows/playlists, which then show up in Plexamp.
+   Use **Music** as the main Plexamp library; **Aurral** only holds
+   Aurral-only single tracks/flows. If the
    library dropdown only shows *None*, save first and reopen, or set it with
    `POST /api/settings` `{"integrations":{"plex":{"mainLibrarySectionId":"8"}}}`.
 
@@ -397,6 +401,11 @@ Standard/Soundtracks metadata profiles.
 
 Leave Lidarr's **Tag Audio Files** off: retagging writes into files that are
 hardlinked to seeding torrents. Aurral then matches artists by name.
+
+Plex picks up new music via Lidarr's Plex Connect (partial scan on import) and
+Plex's own filesystem watcher. As a backstop, Plex **Settings > Library >
+Scan my library periodically** is on (hourly), since a manual import was once
+missed by both.
 
 ## Acceptance checks
 
