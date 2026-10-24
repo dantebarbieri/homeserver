@@ -3,6 +3,11 @@ FROM ghcr.io/stuffanthings/qbit_manage@sha256:0153204c727b8cd219c87cd22d5e5833e3
 
 ENV QBT_DRY_RUN=true
 
+# qbit_manage gates on qbittorrent-api's max supported qBittorrent version;
+# 2026.10.1 (same pin as upstream develop) adds qBittorrent 5.3.0.
+RUN pip install --no-cache-dir --no-deps qbittorrent-api==2026.10.1 \
+    && python3 -c "from qbittorrentapi import Version; assert Version.is_app_version_supported('v5.3.0')"
+
 COPY patch_inactivity_policy.py /usr/local/libexec/qbit-manage-policy/
 COPY tests /usr/local/libexec/qbit-manage-policy/tests/
 
