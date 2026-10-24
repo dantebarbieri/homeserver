@@ -155,7 +155,9 @@ services:
       SLSKD_PASSWORD: ${SLSKD_WEB_PASSWORD}
       SLSKD_JWT_KEY: ${SLSKD_JWT_KEY}
       SLSKD_API_KEY: ${SLSKD_API_KEY}
-      SLSKD_REMOTE_CONFIGURATION: "false"
+      # Required: slskd-port-sync PATCHes the listen port through the options API,
+      # which returns 403 when remote configuration is disabled.
+      SLSKD_REMOTE_CONFIGURATION: "true"
       # Same /data/soulseek path Lidarr sees via ${RAID}/shared:/data, on the
       # same filesystem as the music root, so imports are instant moves.
       SLSKD_DOWNLOADS_DIR: /data/soulseek/downloads
