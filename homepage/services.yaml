@@ -9,8 +9,8 @@
 # Tab assignment and display order are defined in settings.yaml.
 #
 # Widget API keys are placeholders — replace {{HOMEPAGE_VAR_*}} values
-# by setting environment variables on the homepage container, or edit
-# the keys inline after obtaining them from each service's settings.
+# through docker/.env and the homepage container's explicit environment.
+# Never put real credentials in this tracked file.
 
 - Watch & Request:
     - Plex:
@@ -49,7 +49,7 @@
           url: http://seerr:5055
           key: "{{HOMEPAGE_VAR_SEERR_KEY}}"
     - Aurral:
-        icon: mdi-music-box-multiple
+        icon: aurral.svg
         href: https://aurral.danteb.com
         description: Request Music
         siteMonitor: https://aurral.danteb.com
@@ -386,10 +386,29 @@
         siteMonitor: https://syncthing.danteb.com
         server: my-docker
         container: syncthing
+        widget:
+          type: customapi
+          url: http://syncthing:8384/rest/db/completion
+          refreshInterval: 30000
+          headers:
+            X-API-Key: "{{HOMEPAGE_VAR_SYNCTHING_KEY}}"
+          mappings:
+            - field: completion
+              label: Synced
+              format: percent
+            - field: globalItems
+              label: Items
+              format: number
+            - field: needItems
+              label: Pending
+              format: number
+            - field: needBytes
+              label: Remaining
+              format: bytes
 
 - Personal & Communication:
     - Changedetection:
-        icon: mdi-magnify-scan
+        icon: changedetection.svg
         href: https://cd.danteb.com
         description: URL Change Watcher
         siteMonitor: https://cd.danteb.com
@@ -436,6 +455,11 @@
         siteMonitor: https://git.danteb.com
         server: my-docker
         container: forgejo
+        widget:
+          type: gitea
+          url: http://forgejo:3000
+          key: "{{HOMEPAGE_VAR_FORGEJO_KEY}}"
+          fields: ["repositories", "notifications", "issues", "pulls"]
 - Game Servers:
     - Hardcore Minecraft:
         icon: minecraft.svg
@@ -520,12 +544,29 @@
           url: http://romm:8080
           fields: ["platforms", "totalRoms", "saves", "states"]
     - MirkLurk Wiki:
-        icon: mdi-book-open-page-variant
+        icon: https://mirklurk.wiki/branding/2026-09/icon184x184.png
         href: https://mirklurk.wiki
         description: Community game reference
         siteMonitor: https://mirklurk.wiki
         server: my-docker
         container: mirklurk
+        widget:
+          type: customapi
+          url: http://mirklurk:80/api.php?action=query&meta=siteinfo&siprop=statistics&format=json
+          refreshInterval: 60000
+          mappings:
+            - field: query.statistics.articles
+              label: Articles
+              format: number
+            - field: query.statistics.images
+              label: Files
+              format: number
+            - field: query.statistics.edits
+              label: Edits
+              format: number
+            - field: query.statistics.activeusers
+              label: Active Users
+              format: number
     - Mirklurk World Viewer:
         icon: mdi-map-search
         href: https://map.mirklurk.danteb.com
@@ -541,7 +582,7 @@
         server: my-docker
         container: whisperasr
     - Recyclarr:
-        icon: mdi-sync
+        icon: recyclarr.svg
         description: Supports Radarr & Sonarr - quality profile sync
         server: my-docker
         container: recyclarr
@@ -556,7 +597,7 @@
         server: my-docker
         container: librofm-downloader
     - FlareSolverr:
-        icon: mdi-cloud-check
+        icon: flaresolverr.svg
         description: Supports Prowlarr & Suwayomi - Cloudflare challenges
         server: my-docker
         container: flaresolverr
@@ -566,7 +607,7 @@
         server: my-docker
         container: suwayomi-widget
     - Immich Machine Learning:
-        icon: mdi-image-search
+        icon: immich.svg
         description: Powers Immich - photo search & recognition
         server: my-docker
         container: immich_machine_learning
@@ -622,22 +663,22 @@
 
 - Monitoring Pipeline:
     - Prometheus:
-        icon: mdi-chart-line
+        icon: prometheus.svg
         description: Powers Grafana - metrics storage & queries
         server: my-docker
         container: prometheus
     - Loki:
-        icon: mdi-text-box-search
+        icon: loki.svg
         description: Powers Grafana - log storage & queries
         server: my-docker
         container: loki
     - Alloy:
-        icon: mdi-text-box-multiple
+        icon: alloy.svg
         description: Feeds Loki & Grafana - container log collection
         server: my-docker
         container: alloy
     - Node Exporter:
-        icon: mdi-server
+        icon: prometheus.svg
         description: Feeds Prometheus & Grafana - host metrics
         server: my-docker
         container: node-exporter
@@ -649,7 +690,7 @@
 
 - Network Helpers:
     - ddclient:
-        icon: mdi-dns
+        icon: ddclient.svg
         description: Supports danteb.com apps - dynamic DNS updates
         server: my-docker
         container: ddclient
@@ -669,7 +710,7 @@
         server: my-docker
         container: vpn-netns
     - qBittorrent VPN:
-        icon: mdi-vpn
+        icon: gluetun.svg
         description: Protects qBittorrent - Gluetun VPN tunnel
         server: my-docker
         container: gluetun
@@ -690,7 +731,7 @@
         server: my-docker
         container: slskd-netns
     - slskd VPN:
-        icon: mdi-vpn
+        icon: gluetun.svg
         description: Protects slskd - Gluetun VPN tunnel
         server: my-docker
         container: gluetun-slskd
@@ -749,67 +790,67 @@
 
 - Databases & Caches:
     - Authelia PostgreSQL:
-        icon: mdi-database
+        icon: postgresql.svg
         description: Powers Authelia - authentication storage
         server: my-docker
         container: authelia_postgres
     - Authelia Redis:
-        icon: mdi-memory
+        icon: redis.svg
         description: Powers Authelia - session storage
         server: my-docker
         container: authelia_redis
     - Immich PostgreSQL:
-        icon: mdi-database
+        icon: postgresql.svg
         description: Powers Immich - photo metadata & search data
         server: my-docker
         container: immich_postgres
     - Immich Redis:
-        icon: mdi-memory
+        icon: redis.svg
         description: Powers Immich - background job queue
         server: my-docker
         container: immich_redis
     - Nextcloud PostgreSQL:
-        icon: mdi-database
+        icon: postgresql.svg
         description: Powers Nextcloud - application data
         server: my-docker
         container: nextcloud_postgres
     - Nextcloud Redis:
-        icon: mdi-memory
+        icon: redis.svg
         description: Powers Nextcloud - caching & file locking
         server: my-docker
         container: nextcloud_redis
     - Synapse PostgreSQL:
-        icon: mdi-database
+        icon: postgresql.svg
         description: Powers Synapse & Element - Matrix message storage
         server: my-docker
         container: synapse_postgres
     - Suwayomi PostgreSQL:
-        icon: mdi-database
+        icon: postgresql.svg
         description: Powers Suwayomi - library & reading progress
         server: my-docker
         container: suwayomi_postgres
     - Forgejo PostgreSQL:
-        icon: mdi-database
+        icon: postgresql.svg
         description: Powers Forgejo - application data
         server: my-docker
         container: forgejo_postgres
     - RomM MariaDB:
-        icon: mdi-database
+        icon: mariadb.svg
         description: Powers RomM - ROM library metadata
         server: my-docker
         container: romm-db
     - SearXNG Valkey:
-        icon: mdi-memory
+        icon: valkey.svg
         description: Powers SearXNG - rate limiting & cache
         server: my-docker
         container: searxng_redis
     - MirkLurk Wiki MariaDB:
-        icon: mdi-database
+        icon: mariadb.svg
         description: Powers MirkLurk Wiki - pages & revisions
         server: my-docker
         container: mirklurk-db
     - Skyjo PostgreSQL:
-        icon: mdi-database
+        icon: postgresql.svg
         description: Powers Skyjo Server - persistent game data
         server: my-docker
         container: skyjo_postgres

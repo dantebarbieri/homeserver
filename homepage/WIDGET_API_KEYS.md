@@ -293,3 +293,61 @@ Grafana's Homepage widget uses the built-in admin credentials (same as login).
 | `HOMEPAGE_VAR_KUMA_SLUG` | Uptime Kuma | Status page slug |
 | `HOMEPAGE_VAR_GRAFANA_USER` | Grafana | Username (admin) |
 | `HOMEPAGE_VAR_GRAFANA_PASS` | Grafana | Password |
+| `HOMEPAGE_VAR_FORGEJO_KEY` | Forgejo | Read-only API token |
+| `HOMEPAGE_VAR_SYNCTHING_KEY` | Syncthing | GUI API key (full control) |
+
+---
+
+## Forgejo - `HOMEPAGE_VAR_FORGEJO_KEY`
+
+1. Open `https://git.danteb.com` and go to **Settings > Applications**.
+2. Generate a token named `homepage` with **read-only** access to
+   `repository`, `issue`, and `notification` (`read:repository`, `read:issue`,
+   and `read:notification`).
+3. Put the token in `HOMEPAGE_VAR_FORGEJO_KEY` in the server's `docker/.env`.
+4. Recreate Homepage with `docker compose up -d homepage` from the main
+   Compose entry point.
+
+Homepage's [Gitea widget](https://gethomepage.dev/widgets/services/gitea/)
+uses Forgejo's compatible `/api/v1` endpoints on `http://forgejo:3000`.
+Counts reflect the token account's visibility and notifications; they are not
+necessarily instance-wide totals. An administrator token is not required.
+
+---
+
+## Syncthing - `HOMEPAGE_VAR_SYNCTHING_KEY`
+
+1. Open `https://syncthing.danteb.com`.
+2. Go to **Actions > Settings > General** and copy the **API Key**.
+3. Set `HOMEPAGE_VAR_SYNCTHING_KEY` in the server's `docker/.env`.
+4. Recreate Homepage with `docker compose up -d homepage` from the main
+   Compose entry point.
+
+The `customapi` widget sends the key in the `X-API-Key` header to
+`http://syncthing:8384/rest/db/completion`. This
+[documented endpoint](https://docs.syncthing.net/rest/db-completion-get.html)
+aggregates all folders on the **local server** when no folder or device is
+specified. Synced is a percentage from 0 to 100, Items includes files and
+directories, and Pending/Remaining show items/bytes the server still needs.
+This does not measure completion on every remote device.
+
+Syncthing's API key grants full API control, even though this widget only sends
+GET requests. Keep it secret, keep GUI authentication enabled, and do not expose
+a new port or bypass NPM authentication. If GUI HTTPS is enabled internally,
+use the matching HTTPS URL and a certificate trusted by Homepage rather than
+disabling certificate verification.
+
+---
+
+## MirkLurk Wiki - no credentials
+
+The `customapi` widget reads MediaWiki's public, read-only
+[`siteinfo` statistics](https://www.mediawiki.org/wiki/API:Siteinfo) through
+`http://mirklurk:80/api.php` once a minute. It displays content articles,
+uploaded files, edits, and active users (MediaWiki's recent-activity window,
+not currently online users). Article counts differ from total pages, which
+also include redirects, talk pages, and other namespaces. MediaWiki may cache
+these statistics.
+
+No API key, bot password, database credentials, adapter, or extra network is
+needed. The icon references the wiki's existing approved branding asset.

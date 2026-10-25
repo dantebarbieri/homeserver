@@ -79,14 +79,42 @@ docker compose up -d homepage
 Many services show live data (movie counts, download speeds, etc.) via widgets.
 These require API keys from each service's settings page.
 
-Uncomment and set the `HOMEPAGE_VAR_*` environment variables in
-`compose.dashboards.yml`, or edit the keys directly in `services.yaml`.
+Set the `HOMEPAGE_VAR_*` values in the server's `docker/.env` and recreate
+Homepage from the main Compose entry point. `compose.dashboards.yml` explicitly
+passes these variables into the container; do not put real keys in the tracked
+YAML files.
 
 👉 **[Widget API Keys Guide](WIDGET_API_KEYS.md)** — step-by-step instructions
 for obtaining every token.
 
 See the [Homepage widget docs](https://gethomepage.dev/widgets/services/) for
 details on each service's widget configuration.
+
+### Native and custom coverage
+
+Prefer native widgets where available. Forgejo uses Homepage's compatible
+`gitea` widget. Syncthing uses `customapi` for local, all-folder sync completion,
+item counts, and remaining bytes; MirkLurk Wiki uses it for public MediaWiki
+statistics. Both call documented JSON APIs over the existing proxy network,
+without new published ports or adapter services. Suwayomi keeps its existing
+authenticated adapter because its UI_LOGIN authentication needs a login flow.
+
+New authenticated widgets need `HOMEPAGE_VAR_FORGEJO_KEY` and
+`HOMEPAGE_VAR_SYNCTHING_KEY`; setup and permission details are in the
+[key guide](WIDGET_API_KEYS.md). Missing credentials produce widget errors until
+configured. Existing widget credentials and Suwayomi's adapter are unchanged.
+
+Not every service needs a widget. Static tools, browser-only apps, and helpers
+without a useful documented API retain Docker status (and site monitoring for
+web apps). Do not scrape authenticated pages, disable authentication, or expose
+databases just to fill a card. WireGuard's widget is deferred until the running
+wg-easy major version is confirmed: Homepage uses different authentication for
+pre-v15 and v15+, and the Compose image is currently `latest`.
+
+Service-specific icons use verified Dashboard Icons filenames where available,
+including infrastructure and database backends. Custom apps and helpers without
+an available logo keep descriptive Material Design icons; MirkLurk Wiki uses
+its existing approved branding rather than a generic book icon.
 
 ## Features vs Homer
 
