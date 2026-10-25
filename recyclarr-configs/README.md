@@ -75,7 +75,7 @@ The local **English Anime Audio** format accepts:
 
 Bare `Dubbed`, `Dual Audio`, `Multi Audio`, `English`, and English-subtitle
 labels are insufficient. Contradictory sub-only, Japanese-only, non-English
-dub, no-English-audio, and English-commentary labels are rejected even
+dub, no/non/not/without-English-audio, and English-commentary labels are rejected even
 when an English marker or an allowlisted group is present.
 
 This is deliberately conservative release-title matching, **not inspection

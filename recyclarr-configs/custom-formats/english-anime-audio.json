@@ -18,7 +18,7 @@
       "negate": true,
       "required": true,
       "fields": {
-        "value": "(?i)\\bno[ ._-]*(?:english|eng)[ ._-]*(?:dub(?:bed)?|audio)\\b|\\b(?:japanese|jpn|ja|french|fre|fra|german|ger|deu|spanish|spa|italian|ita|russian|rus|portuguese|por|korean|kor|chinese|chi|zho)[ ._-]*(?:dub(?:bed)?|audio)[ ._-]*only\\b|\\b(?:french|fre|fra|german|ger|deu|spanish|spa|italian|ita|russian|rus|portuguese|por)[ ._-]*dub(?:bed)?\\b|\\bsub(?:s|bed)?[ ._-]*only\\b|\\[(?:JA|JPN|Japanese)\\]|\\b(?:english|eng)[ ._-]+(?:audio[ ._-]+)?commentary\\b"
+        "value": "(?i)\\b(?:no|non|not|without)[ ._-]*(?:(?:english|eng)[ ._-]*(?:dub(?:bed)?|audio)|(?:dub(?:bed)?|audio)[ ._-]*(?:english|eng))\\b|\\b(?:japanese|jpn|ja|french|fre|fra|german|ger|deu|spanish|spa|italian|ita|russian|rus|portuguese|por|korean|kor|chinese|chi|zho)[ ._-]*(?:dub(?:bed)?|audio)[ ._-]*only\\b|\\b(?:french|fre|fra|german|ger|deu|spanish|spa|italian|ita|russian|rus|portuguese|por)[ ._-]*dub(?:bed)?\\b|\\bsub(?:s|bed)?[ ._-]*only\\b|\\[(?:JA|JPN|Japanese)\\]|\\b(?:english|eng)[ ._-]+(?:audio[ ._-]+)?commentary\\b"
       }
     }
   ]

@@ -32,5 +32,16 @@
   {"title": "Sonic.X.S01E01.1080p.[English Dub][French Dub]-Example", "matches": false},
   {"title": "Pokemon.S01E01.1080p.[English Dub][JA]-Example", "matches": false},
   {"title": "Sonic.X.S01E01.1080p.[English Audio Commentary]-Example", "matches": false},
-  {"title": "[NotGolumpa] Pokemon - 001 [1080p]", "matches": false}
+  {"title": "[NotGolumpa] Pokemon - 001 [1080p]", "matches": false},
+  {"title": "Pokemon.S01E01.1080p.[Non-English Dub]-Example", "matches": false},
+  {"title": "Sonic.X.S01E01.1080p.[Not English Audio]-Example", "matches": false},
+  {"title": "Pokemon.S01E01.1080p.[Without English Audio]-Example", "matches": false},
+  {"title": "[Golumpa] Pokemon - 001 [1080p] [Non-English Dub]", "matches": false},
+  {"title": "[Golumpa] Sonic X - 001 [1080p] [Not English Audio]", "matches": false},
+  {"title": "[Golumpa] Pokemon - 001 [1080p] [Without English Audio]", "matches": false},
+  {"title": "Sonic.X.S01E01.1080p.[JA+EN][NON_ENG_DUB]-Example", "matches": false},
+  {"title": "Pokemon.S01E01.1080p.[English Dub][not.eng.audio]-Example", "matches": false},
+  {"title": "Sonic.X.S01E01.1080p.[English Anime Audio][Without-ENG-Dubbed]-Example", "matches": false},
+  {"title": "Pokemon.S01E01.1080p.[English Dub][Not Audio English]-Example", "matches": false},
+  {"title": "Sonic.X.S01E01.1080p.[JA+EN][Without Dub Eng]-Example", "matches": false}
 ]
