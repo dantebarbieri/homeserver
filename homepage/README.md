@@ -41,8 +41,9 @@ Backend descriptions name the apps or integrations they power and their role.
 Anime Relations is explicitly marked as having an undocumented consumer rather
 than guessing which app uses its API.
 Backend cards normally have no `href` or `siteMonitor`: API roots are not web
-interfaces, and monitoring uses the existing Docker socket without exposing
-private services or joining their networks. CouchDB retains its useful admin link.
+interfaces. Docker status and inventory widgets use the existing Docker socket
+without exposing private services or joining their networks. CouchDB retains
+its useful admin link.
 
 Docker status reports container state and health where a healthcheck exists;
 it does not prove end-to-end application availability. The disabled Hytale
@@ -104,17 +105,56 @@ New authenticated widgets need `HOMEPAGE_VAR_FORGEJO_KEY` and
 [key guide](WIDGET_API_KEYS.md). Missing credentials produce widget errors until
 configured. Existing widget credentials and Suwayomi's adapter are unchanged.
 
-Not every service needs a widget. Static tools, browser-only apps, and helpers
-without a useful documented API retain Docker status (and site monitoring for
-web apps). Do not scrape authenticated pages, disable authentication, or expose
-databases just to fill a card. WireGuard's widget is deferred until the running
-wg-easy major version is confirmed: Homepage uses different authentication for
-pre-v15 and v15+, and the Compose image is currently `latest`.
+Every service now has a widget. Existing native/API widgets keep their
+application statistics. The other cards, including all backends, use the shared
+`&container-info` widget: **App / Build**, **Container Up**, **State**, and
+**Health**. The list layout leaves room for build identifiers on narrow cards.
+Do not scrape authenticated pages, disable authentication, or expose databases
+just to fill a card.
+
+### Container inventory
+
+`homepage-inventory` serves a narrowly filtered JSON API on the existing internal
+`homepage-widgets` network. It has no published ports, NPM host, `proxy` network,
+or additional application credentials. It only returns the four display fields,
+never Docker environment variables, mounts, labels, healthcheck output, logs,
+or complete inspection responses. Containers must belong to Compose project
+`compose`. Only GET is accepted; this is not a general-purpose Docker proxy.
+
+Version sources are deliberately explicit. Verified application image labels
+and database/NPM image version variables supply application versions. WireGuard
+reads the installed package's `release.version` (v14), **not** its unrelated
+`package.json` version. Satisfactory reads its installed Steam build ID.
+Application-owned Git revisions appear as `Build <revision>`. Otherwise the
+widget says `Image <ID>`, an immutable image identity, **not an application
+version**. In particular, inherited Ubuntu, Node, Nginx, and Deno versions must
+not masquerade as Storyteller, Komf, Whisper, or MirkMap versions. Hytale's image
+version is explicitly labeled **Wrapper**, not the game version.
+
+Uptime is time since the container started, not a promise about application
+availability or a process's age. A running container without a healthcheck says
+**No check**, not healthy. A stopped container says **Not running**, has no live
+uptime, and retains its actual Docker state; Hytale stays disabled and is not
+started by this feature. Missing containers and Docker/version-source failures
+are visible widget errors, not invented healthy or zero-valued responses.
+Widgets refresh every 30 seconds; successful inventory results are cached for
+10 seconds, without serving stale data after a failed refresh.
+
+The adapter runs as the unprivileged `node` user with `DOCKER_GID` as a
+supplementary group, a read-only root filesystem, and dropped capabilities.
+Its Docker socket mount is `:ro`, but **a read-only socket mount is not a
+Docker API authorization boundary**: the adapter is a trusted socket consumer,
+like Homepage itself. Keep it internal, and never expose its socket or raw
+Docker inspection data to browsers. Its only archive reads are fixed version
+files for WireGuard and Satisfactory; no arbitrary file paths or exec endpoints
+are offered.
 
 Service-specific icons use verified Dashboard Icons filenames where available,
 including infrastructure and database backends. Custom apps and helpers without
-an available logo keep descriptive Material Design icons; MirkLurk Wiki uses
-its existing approved branding rather than a generic book icon.
+an available logo keep descriptive Material Design icons. BookBridge uses its
+own icon, Soularr/qbit-manage/cAdvisor use selfh.st assets, and both MirkLurk
+cards use their existing approved branding. Games & Guides starts with RomM,
+MirkLurk Wiki, and the World Viewer, followed by Skyjo and Sorry.
 
 ## Features vs Homer
 

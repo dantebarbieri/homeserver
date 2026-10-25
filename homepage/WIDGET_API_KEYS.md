@@ -5,6 +5,13 @@ Step-by-step instructions for obtaining every `HOMEPAGE_VAR_*` token in
 [service widget](https://gethomepage.dev/widgets/services/) so the dashboard can
 display live stats.
 
+The version/uptime/health inventory widgets need **no new application
+credentials**. They use `homepage-inventory` on the internal
+`homepage-widgets` network. Existing native/API widget credentials below are
+unchanged. The adapter uses the existing `DOCKER_GID` setting for socket access;
+see [Container inventory](README.md#container-inventory) for its trust boundary
+and the distinction between an app version, image/build identity, and health.
+
 > **Tip:** After obtaining a key, paste it into your `.env` file next to the
 > matching variable and restart Homepage (`docker compose up -d homepage`).
 

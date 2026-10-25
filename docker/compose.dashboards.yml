@@ -1,5 +1,5 @@
 # Dashboard and monitoring services
-# homepage, suwayomi-widget, dashdot, uptime-kuma
+# homepage, homepage-inventory, suwayomi-widget, dashdot, uptime-kuma
 
 services:
   homepage:
@@ -61,6 +61,33 @@ services:
     volumes:
       - ${HOMEPAGE_CONFIG_PATH}:/app/config
       - /var/run/docker.sock:/var/run/docker.sock
+
+  homepage-inventory:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: homepage-inventory:latest
+    build:
+      context: ./dockerfiles/homepage-inventory
+      pull: true
+    container_name: homepage-inventory
+    group_add:
+      - "${DOCKER_GID}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - homepage-widgets
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz',{signal:AbortSignal.timeout(8000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   suwayomi-widget:
     extends:
