@@ -124,7 +124,7 @@ Metrics are
 | App | Metrics and scope |
 |-----|-------------------|
 | Aurral | Distinct available songs/albums and their album artists; album-request history entries from the last 30 days. Requests are not a lifetime total or the live Lidarr queue. Unavailable files and duplicate formats do not inflate song counts. |
-| Storyteller | Books with non-missing audiobook assets; non-missing aligned readalouds; available audiobook duration in hours/minutes; number of audio assets with unknown duration, excluded from that total. |
+| Storyteller | Books with non-missing audiobook assets; non-missing aligned readalouds; available audiobook duration, returned in seconds and displayed with Homepage's official Audiobookshelf duration formatter (e.g. `3d12h`). Missing Duration counts available audio assets with null duration metadata, excluded from the total; it is not a processing-job count. |
 | BookBridge | Active, pending and processing books; Issues combines failed and unrecognized/null sync statuses. These are sync/processing states, not reading/finished states. |
 | Vaultwarden | Active login items, all active vault items, and trash. Includes personal/organization items once each across users; never reads encrypted names or contents. |
 | ntfy | Distinct topics represented in unexpired published cached messages, cached message count, and unexpired scheduled/unpublished messages. These are **not** subscription counts, connected subscribers, or all subscribable topics: ntfy accepts arbitrary topic names, and a topic disappears from this count when its cache expires. |

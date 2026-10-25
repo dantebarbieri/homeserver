@@ -137,10 +137,10 @@
               label: Readalouds
               format: text
             - field: duration
-              label: Audio Length
-              format: text
+              label: Duration
+              format: duration
             - field: untimed
-              label: Unknown Length
+              label: Missing Duration
               format: text
     - BookBridge:
         icon: https://bookbridge.danteb.com/static/icon.png

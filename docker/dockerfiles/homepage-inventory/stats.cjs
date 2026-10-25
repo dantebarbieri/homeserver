@@ -14,12 +14,6 @@ function count(value) {
   return value.toLocaleString("en-US");
 }
 
-function duration(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) throw new Error("Invalid aggregate duration");
-  const minutes = Math.floor(seconds / 60);
-  return `${Math.floor(minutes / 60).toLocaleString("en-US")}h ${minutes % 60}m`;
-}
-
 function collectStats(db, name) {
   const item = (label, value) => [label, count(value)];
   let result;
@@ -60,13 +54,15 @@ function collectStats(db, name) {
             (typeof(duration) NOT IN ('real', 'integer') OR duration < 0) THEN 1 END) AS invalid
         FROM audiobook WHERE missing = 0
       `).get();
-      if (audio.invalid) throw new Error("Invalid audiobook duration");
+      if (audio.invalid || !Number.isFinite(audio.seconds) || audio.seconds < 0) {
+        throw new Error("Invalid audiobook duration");
+      }
       const readaloud = db.prepare(`
         SELECT COUNT(DISTINCT book_uuid) AS count FROM readaloud WHERE missing = 0 AND status = 'ALIGNED'
       `).get();
       result = [
         item("audiobooks", audio.books), item("readalouds", readaloud.count),
-        ["duration", duration(audio.seconds)],
+        ["duration", audio.seconds],
         item("untimed", audio.assets - audio.timed),
       ];
       break;
@@ -131,4 +127,4 @@ function readStats(name) {
   return readDatabaseStats(databaseFiles[name], name);
 }
 
-module.exports = { collectStats, databaseFiles, duration, readDatabaseStats, readStats };
+module.exports = { collectStats, databaseFiles, readDatabaseStats, readStats };

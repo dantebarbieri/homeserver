@@ -4,7 +4,7 @@ const { DatabaseSync } = require("node:sqlite");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { collectStats, duration, readDatabaseStats, readStats } = require("./stats.cjs");
+const { collectStats, readDatabaseStats, readStats } = require("./stats.cjs");
 
 function fixture(t, schema) {
   const db = new DatabaseSync(":memory:");
@@ -33,7 +33,7 @@ test("Aurral counts available songs once, excludes missing files, and shows reta
   });
 });
 
-test("Storyteller separates catalogue books, available audio and completed readalouds; duration is seconds", (t) => {
+test("Storyteller returns duration in seconds and counts missing duration independently of processing", (t) => {
   const db = fixture(t, `
     CREATE TABLE book (uuid TEXT);
     CREATE TABLE audiobook (book_uuid TEXT, missing INTEGER, duration REAL);
@@ -43,10 +43,12 @@ test("Storyteller separates catalogue books, available audio and completed reada
     INSERT INTO readaloud VALUES ('one',0,'ALIGNED'), ('two',0,'PROCESSING'), ('missing',1,'ALIGNED');
   `);
   assert.deepEqual(collectStats(db, "storyteller"), {
-    audiobooks: "2", readalouds: "1", duration: "1h 2m", untimed: "0",
+    audiobooks: "2", readalouds: "1", duration: 3722, untimed: "0",
   });
   db.exec("INSERT INTO audiobook VALUES ('unknown-length',0,NULL)");
-  assert.equal(collectStats(db, "storyteller").untimed, "1");
+  assert.deepEqual(collectStats(db, "storyteller"), {
+    audiobooks: "3", readalouds: "1", duration: 3722, untimed: "1",
+  });
   db.exec("INSERT INTO audiobook VALUES ('invalid-length',0,-100)");
   assert.throws(() => collectStats(db, "storyteller"), /Invalid audiobook duration/);
   db.exec("DELETE FROM audiobook WHERE duration < 0; INSERT INTO audiobook VALUES ('invalid-length',0,'corrupt')");
@@ -101,14 +103,20 @@ test("empty valid databases give real zeros, but missing schemas and sources fai
   assert.throws(() => readStats("toString"), /Unsupported/);
 });
 
-test("duration formatting handles zero, minutes and long libraries without rounding up", () => {
-  assert.equal(duration(0), "0h 0m");
-  assert.equal(duration(59.9), "0h 0m");
-  assert.equal(duration(60), "0h 1m");
-  assert.equal(duration(3600 * 1234 + 60 * 59 + 59.9), "1,234h 59m");
-  for (const invalid of [-1, Infinity, NaN, null, "60"]) {
-    assert.throws(() => duration(invalid), /Invalid aggregate duration/);
+test("Storyteller preserves numeric seconds for Homepage's native duration formatter", (t) => {
+  const db = fixture(t, `
+    CREATE TABLE audiobook (book_uuid TEXT, missing INTEGER, duration REAL);
+    CREATE TABLE readaloud (book_uuid TEXT, missing INTEGER, status TEXT);
+  `);
+  const insert = db.prepare("INSERT INTO audiobook VALUES ('audio',0,?)");
+  for (const seconds of [0, 59.9, 60, 3661.5, 84 * 3600 + 12 * 60, 3600 * 1234 + 60 * 59 + 59.9]) {
+    db.exec("DELETE FROM audiobook");
+    insert.run(seconds);
+    assert.equal(collectStats(db, "storyteller").duration, seconds);
   }
+  db.exec("DELETE FROM audiobook");
+  insert.run(Infinity);
+  assert.throws(() => collectStats(db, "storyteller"), /Invalid audiobook duration/);
 });
 
 test("read-only collection sees live uncheckpointed WAL updates and never creates a missing database", async (t) => {
