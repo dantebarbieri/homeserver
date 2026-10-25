@@ -22,3 +22,8 @@ COPY tests /usr/local/libexec/qbit-manage-policy/tests/
 RUN python3 /usr/local/libexec/qbit-manage-policy/patch_inactivity_policy.py /app \
     && PYTHONDONTWRITEBYTECODE=1 QBIT_MANAGE_SOURCE_ROOT=/app QBIT_MANAGE_REQUIRE_PATCHED=1 \
        python3 -m unittest discover -s /usr/local/libexec/qbit-manage-policy/tests -v
+
+# Runs after the policy tests, which verify the unmodified share_limits.py hash.
+COPY patch_share_limits_mode.py /usr/local/libexec/qbit-manage-policy/
+RUN python3 /usr/local/libexec/qbit-manage-policy/patch_share_limits_mode.py /app \
+    && cd /app && python3 -c "from modules.core.share_limits import _parse_api_version as p; assert p('2.15.3') >= (2, 15, 3) > p('2.15.2')"
