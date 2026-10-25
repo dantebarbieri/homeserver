@@ -139,9 +139,6 @@
             - field: duration
               label: Duration
               format: duration
-            - field: untimed
-              label: Missing Duration
-              format: text
     - BookBridge:
         icon: https://bookbridge.danteb.com/static/icon.png
         href: https://bookbridge.danteb.com
