@@ -1,85 +1,176 @@
 # Recyclarr Configs
 
-Personal [Recyclarr](https://github.com/recyclarr/recyclarr) configuration for syncing TRaSH Guides quality profiles and custom formats to Sonarr and Radarr.
+Resolution-based Sonarr and Radarr profiles, using TRaSH Guides custom formats
+and a local English-anime-audio requirement. Recyclarr is pinned to **8.8.0**
+in `docker/compose.starr.yml` and the validation workflow.
 
-## Repository Structure
+## Files
 
-```
-.
-├── recyclarr.yml          # Main configuration (quality profiles, custom formats, etc.)
-├── settings.yml           # Instance connection settings (URLs, API key references)
-├── secrets.yml.example    # Template for secrets — copy to secrets.yml and fill in
-├── configs/               # Additional split config files (optional)
-├── includes/              # Reusable YAML fragments (optional)
-└── README.md
-```
+| Path | Purpose |
+|---|---|
+| `recyclarr.yml` | Instances, includes, size limits, and media naming |
+| `settings.yml` | Local custom-format providers alongside the official guides |
+| `includes/{sonarr,radarr}/quality-profiles.yml` | Quality ordering and upgrade policy |
+| `includes/{sonarr,radarr}/custom-formats.yml` | Guide formats, scores, and eligibility |
+| `custom-formats/english-anime-audio.json` | Shared release-title matcher, registered separately for each app |
+| `secrets.yml.example` | Connection template; real `secrets.yml` is never committed |
+| `tests/` | Schema, scoring, source-ordering, and title-matching regression checks |
 
-## Setup
+## Requester-facing profiles
 
-1. Clone this repo.
-2. Copy the secrets template and fill in your API keys:
-   ```sh
-   cp secrets.yml.example secrets.yml
-   # Edit secrets.yml with your actual API keys and instance URLs
-   ```
-3. Deploy the config files to your Recyclarr config directory on your server (typically `~/.config/recyclarr/` or the Docker volume mount).
+Each app has **30 profiles**: five exact resolutions and five "At most"
+resolutions, each with standard, Anime, and Anime (Dub) variants.
 
-## Secrets
+- Exact: `SD - 480p`, `SD - 576p`, `HD - 720p`, `HD - 1080p`, `4K UHD - 2160p`.
+- Upper bounds: `At most 480p`, `At most 576p`, `At most 720p`,
+  `At most 1080p`, `At most 2160p`.
+- Append ` Anime` or ` Anime (Dub)` for the anime variants.
 
-`secrets.yml` is gitignored and must never be committed. It contains API keys and instance URLs. See `secrets.yml.example` for the expected structure.
+Names are preserved so existing series, movies, and request-service mappings
+keep using the same profiles. Requesters choose resolution and language
+policy, not source quality.
 
-On this server the file is `/srv/homeserver/recyclarr-configs/secrets.yml`,
-also mounted as `/config/secrets.yml` in the Recyclarr container. Keep it mode
-`600`, owned by the container's UID 1000. The template uses the internal Docker
-URLs `http://sonarr:8989` and `http://radarr:7878`; replace only the API-key
-placeholders with values from each application's **Settings > General**.
-Dummy keys allow configuration parsing but cannot authenticate a sync.
-Deploy the committed custom-format configuration before a full sync: an older
-configuration with `reset_unmatched_scores` can clear a manually applied score.
+### Source quality and upgrades
 
-## Dolby Vision playback compatibility
+Standard profiles rank **remux > Blu-ray encode > WEB-DL/WEBRip > HDTV**
+within each resolution, where those qualities exist. "At most" profiles
+rank resolution first, then source. DVD/SDTV are lower-priority fallbacks
+only in "At most" profiles.
 
-The standard `4K UHD - 2160p` and `At most 2160p` profiles in both apps assign
-TRaSH's **DV (w/o HDR fallback)** custom format its default **-10000** score.
-This penalizes DV-only WEB releases while retaining the existing preference
-for Dolby Vision releases that also advertise HDR fallback. It does not
-change anime scoring or modify already-downloaded files.
+Anime groups Blu-ray encodes with remuxes and WEB with HDTV; anime release
+tiers choose within those groups. This lets a preferred anime encode beat
+an inferior remux while still preferring Blu-ray over WEB at the same
+resolution. Sonarr uses `anime-sonarr` scores; Radarr uses `anime-radarr`.
 
-This is release-title/source matching, not an inspection of the video's Dolby
-Vision profile, so it is a prevention layer rather than a playback guarantee.
-In particular, a Dolby Vision Profile 5 file has no HDR10-compatible base
-layer and may need a separate, properly tone-mapped compatibility version.
-See [Plex playback](../docker/docs/PLEX.md) for that distinction.
+Upgrades remain enabled through the highest allowed source/group.
+The custom-format cutoff is 10000 for standard/regular anime and 40000
+for dubbed anime. These are headroom thresholds, not targets that must be
+downloaded. They keep genuine improvements eligible rather than stopping
+when the English-audio marker first matches. Equivalent releases are not
+upgrades merely because a cutoff has not been reached.
 
-## AI-Assisted Development
+Remux preference can substantially increase disk use and bandwidth.
+Existing guide size limits still apply. Quality priority takes precedence
+over custom-format score: a higher source can replace a lower source with
+a larger tier score, provided the candidate still meets the minimum score.
 
-This repo is intentionally small so that AI coding tools (Claude Code, Copilot, etc.) can load the full context. When making changes:
+### English anime dubs are required, not just preferred
 
-- **recyclarr.yml** is the main file you'll iterate on — quality profiles, custom format assignments, and score overrides all live here.
-- **settings.yml** rarely changes unless you add/remove instances.
-- Refer to the [TRaSH Guides](https://trash-guides.info/) and [Recyclarr Wiki](https://recyclarr.dev/) for valid custom format Trash IDs and configuration options.
+Anime (Dub) accepts English-only or English-containing dual-audio releases
+on equal terms. Quality and release tiers choose between eligible releases.
+It does **not** fall back to Japanese-only releases while waiting for a dub.
+Subtitles may still be present; the requirement concerns spoken audio.
 
-## Deployment
+The local **English Anime Audio** format accepts:
 
-The recyclarr container runs via the [homeserver-docker](https://github.com/dantebarbieri/homeserver-docker) repo, with config mounted at `${DATA}/recyclarr/config:/config`.
+- Explicit `English Dub`, `Eng Dub`, `Dub Eng`, or `English Audio` labels.
+- Explicit paired audio-language tags such as `[JA+EN]`, `[EN+JA]`, or
+  `[Japanese+English]`, including the naming scheme's audio-language tags.
+- `FuniDub` and the bracketed/suffixed `Golumpa` release group.
+  [Golumpa's FuniDub releases](https://amenzb.moe/release-groups/golumpa?page=3)
+  provide the initial verified group convention; this is not a general
+  allowlist of every group in TRaSH's Dubs Only format.
+- The format's own `[English Anime Audio]` rename marker, so eligibility
+  survives renaming when the original English-audio title text is lost.
 
-After editing configs locally, sync them to the server and run recyclarr:
+Bare `Dubbed`, `Dual Audio`, `Multi Audio`, `English`, and English-subtitle
+labels are insufficient. Contradictory sub-only, Japanese-only, non-English
+dub, no-English-audio, and English-commentary labels are rejected even
+when an English marker or an allowlisted group is present.
+
+This is deliberately conservative release-title matching, **not inspection
+of audio tracks before downloading**. Mislabeled releases remain possible;
+legitimate unlabelled dubs can be rejected. Add support for a new convention
+only with English-audio evidence and positive/negative title cases.
+`tests/english-audio-cases.json` uses representative Pokemon/Sonic X titles,
+not a claim that any particular indexed release has been verified.
+
+| Dub policy | Score |
+|---|---:|
+| English Anime Audio | +20000 |
+| Minimum accepted format score | 20000 |
+| Generic Dubs Only / Anime Dual Audio | 0 |
+| Hard unwanted formats (LQ, raws, AV1, etc.) | -100000 |
+| Upgrade-until format score | 40000 |
+
+One English eligibility marker is assigned once per profile. All other
+positive scores combined must remain below 20000; the tests check this
+against current guide data. Thus even a worst-case sum cannot qualify a
+sub-only release, finish upgrades, or cancel a hard rejection. Recyclarr
+keeps the **first** assignment for duplicate CF/profile pairs, so duplicates
+are forbidden by the regression checks rather than used as overrides.
+
+Regular Anime retains the guide's dub-only penalty and neutral dual-audio
+score. Anime profiles do not use generic LanguageSpecification-based
+language penalties because they can misidentify dual-audio releases.
+
+### 4K SDR and Dolby Vision
+
+4K SDR is allowed in both apps. Standard UHD profiles retain positive HDR
+preferences and **DV (w/o HDR fallback) = -10000**, but do not demand HDR.
+This avoids rejecting legitimate SDR masters, including animation.
+
+DV protection is title/source matching, not inspection of the video's
+Dolby Vision profile. A Profile 5 file has no HDR10-compatible base layer
+and may need a properly tone-mapped version for incompatible clients.
+See [Plex playback](../docker/docs/PLEX.md).
+
+## Validation without production access
+
+From the monorepo root:
 
 ```sh
-# 1. Copy configs to the server's recyclarr config directory
-rsync -av --exclude='.git' --exclude='secrets.yml.example' \
-  recyclarr.yml settings.yml includes/ \
-  user@server:$DATA/recyclarr/config/
-
-# 2. Run recyclarr sync (from the docker repo directory on the server)
-docker compose -f compose.starr.yml run --rm recyclarr sync
+uv run --no-project --with-requirements recyclarr-configs/tests/requirements.txt \
+  python -B -m unittest discover -s recyclarr-configs/tests -v
+uv run --no-project --with-requirements recyclarr-configs/tests/requirements.txt \
+  yamllint -c recyclarr-configs/.yamllint.yml recyclarr-configs/
 ```
 
-Or to only sync one service:
+The tests download public guide data and the pinned Recyclarr schemas.
+They need internet access but no API keys or Sonarr/Radarr connection.
+CI also exercises the matcher with .NET's regex engine and loads both
+providers with the pinned Recyclarr image in a temporary directory using
+dummy secrets. It never runs a production sync.
+
+## Deployment is a separate, approved operation
+
+The container mounts `${DATA}/recyclarr/config` as `/config`; it does **not**
+mount this tracked directory. A Git pull alone does not deploy these
+profile files. Keep the real secrets at
+`${DATA}/recyclarr/config/secrets.yml`, mode `600`, owned by the configured
+container UID. Use the internal URLs `http://sonarr:8989` and
+`http://radarr:7878`, not localhost. No secrets belong in this repository.
+
+After approval, first back up the deployed configuration (including the
+previous `settings.yml`, includes, and private secrets) and the apps'
+existing profiles. Copy **all four** tracked config components together;
+the English requirement cannot work without the local provider file:
 
 ```sh
-docker compose -f compose.starr.yml run --rm recyclarr sync sonarr
-docker compose -f compose.starr.yml run --rm recyclarr sync radarr
+# Run from the monorepo root on the workstation.
+# Use the server's actual DATA path if it differs from /srv/docker/data.
+rsync -av \
+  recyclarr-configs/recyclarr.yml recyclarr-configs/settings.yml \
+  recyclarr-configs/includes recyclarr-configs/custom-formats \
+  user@server:/srv/docker/data/recyclarr/config/
 ```
 
-> **Note:** `secrets.yml` must be managed on the server directly — never committed to this repo.
+Source directory names have no trailing slash so `includes/` and
+`custom-formats/` are preserved under the destination. This copies no
+secrets, runtime state, or test files.
+
+Then, on the server, use the **main Compose entry point**:
+
+```sh
+z /srv/homeserver/docker
+docker compose run --rm recyclarr sync --preview
+# Review source ordering, thresholds, local format, and proposed changes.
+# Only after approving that preview:
+docker compose run --rm recyclarr sync
+```
+
+Review particularly any pending WEB-to-Blu-ray/remux upgrades and the Dub
+minimum score. Sync updates profiles and naming settings; it does not
+immediately replace every existing sub-only file. Previously downloaded
+files remain until a qualifying upgrade is found; use targeted searches
+after approval if a specific existing series needs replacement.

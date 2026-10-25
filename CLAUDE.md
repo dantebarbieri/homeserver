@@ -198,9 +198,9 @@ are preserved. Do not recreate the NixOS integration without an explicit request
 ## Recyclarr (`recyclarr-configs/`)
 
 TRaSH Guides quality profiles synced to Sonarr/Radarr. See `recyclarr-configs/CLAUDE.md` for full details. Key points:
-- 11 quality profiles per app (resolution tiers + anime + restrictive upper-bound)
+- 30 quality profiles per app (five exact + five upper-bound resolutions, each with standard/Anime/Anime Dub variants)
 - YAML anchors deduplicate custom format profile lists
-- Language CFs intentionally excluded from anime profiles (Sonarr/Radarr misidentifies dual-audio)
+- Generic language CFs excluded from anime; Dub profiles require a local English-audio format with regression-checked score thresholds
 - `secrets.yml` is gitignored — managed on server directly
 
 ```bash

@@ -9,9 +9,8 @@ custom_formats:
   # Language — standard (non-anime) profiles only
   # Anime profiles do NOT use Language CFs because Sonarr/Radarr's language
   # detection (LanguageSpecification) is unreliable for anime — it often
-  # misidentifies dual-audio releases as single-language. Anime-specific
-  # CFs (Dubs Only, Anime Dual Audio, quality tiers) handle language
-  # preference via release-title matching instead.
+  # misidentifies dual-audio releases as single-language.
+  # Dub profiles require the local English Anime Audio format instead.
   # ==========================================================================
   - trash_ids:
       - d6e9318c875905d6cfb5bee961afcea9 # Language Not Original
@@ -46,15 +45,11 @@ custom_formats:
       - 9edaeee9ea3bcd585da9b7c0ac3fc54f # Anime Web Tier 04 (Official Subs)
       - 22d953bbe897857b517928f3652b8dd3 # Anime Web Tier 05 (FanSubs)
       - a786fbc0eae05afe3bb51aee3c83a9d4 # Anime Web Tier 06 (FanSubs)
-      - b0fdc5897f68c9a68c70c25169f77447 # Anime LQ Groups
       - c259005cbaeb5ab44c06eddb4751e70c # v0
       - 5f400539421b8fcf71d51e6384434573 # v1
       - 3df5e6dfef4b09bb6002f732bed5b774 # v2
       - db92c27ba606996b146b57fbe6d09186 # v3
       - d4e5e842fad129a3c097bdb2d20d31a0 # v4
-      - 06b6542a47037d1e33b15aa3677c2365 # Anime Raws
-      - 9172b2f683f6223e3a1846427b417a3d # VOSTFR
-      - b23eae459cc960816f2d6ba84af45055 # Dubs Only
 
       # Anime Streaming Services
       - 60f6d50cbd3cfc3e9a8c00e3a30c3114 # VRV
@@ -146,63 +141,112 @@ custom_formats:
     assign_scores_to: *anime_profiles_score0
 
   # ==========================================================================
-  # Anime (Dub) overrides — prefer English dubs
-  # Language: Not English is intentionally NOT used here because Radarr's
-  # LanguageSpecification misdetects dual-audio anime as single-language.
-  # Instead, we rely on positive scoring: Dubs Only (+10000) and Anime
-  # Dual Audio (+5000) strongly prefer English content, while releases
-  # without English score much lower and lose to upgrades naturally.
+  # Language eligibility and hard rejections are separate from quality tiers.
+  # Each CF/profile pair is assigned once: Recyclarr keeps the first score.
   # ==========================================================================
 
-  # Prefer Dubs Only releases for dub profiles
+  # Regular anime retains the guide's dub-only penalty.
   - trash_ids:
       - b23eae459cc960816f2d6ba84af45055 # Dubs Only
     assign_scores_to:
+      - name: SD - 480p Anime
+      - name: SD - 576p Anime
+      - name: HD - 720p Anime
+      - name: HD - 1080p Anime
+      - name: 4K UHD - 2160p Anime
+      - name: At most 480p Anime
+      - name: At most 576p Anime
+      - name: At most 720p Anime
+      - name: At most 1080p Anime
+      - name: At most 2160p Anime
       - name: SD - 480p Anime (Dub)
-        score: 10000
+        score: 0
       - name: SD - 576p Anime (Dub)
-        score: 10000
+        score: 0
       - name: HD - 720p Anime (Dub)
-        score: 10000
+        score: 0
       - name: HD - 1080p Anime (Dub)
-        score: 10000
+        score: 0
       - name: 4K UHD - 2160p Anime (Dub)
-        score: 10000
+        score: 0
       - name: At most 480p Anime (Dub)
-        score: 10000
+        score: 0
       - name: At most 576p Anime (Dub)
-        score: 10000
+        score: 0
       - name: At most 720p Anime (Dub)
-        score: 10000
+        score: 0
       - name: At most 1080p Anime (Dub)
-        score: 10000
+        score: 0
       - name: At most 2160p Anime (Dub)
-        score: 10000
+        score: 0
 
-  # Prefer Anime Dual Audio for dub profiles (includes English dub track)
+  # One English-audio marker is required to reach the Dub minimum of 20000.
   - trash_ids:
-      - 4a3b087eea2ce012fcc1ce319259a3be # Anime Dual Audio
+      - homeserver-english-anime-audio # English Anime Audio
     assign_scores_to:
       - name: SD - 480p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: SD - 576p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: HD - 720p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: HD - 1080p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: 4K UHD - 2160p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: At most 480p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: At most 576p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: At most 720p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: At most 1080p Anime (Dub)
-        score: 5000
+        score: 20000
       - name: At most 2160p Anime (Dub)
-        score: 5000
+        score: 20000
+
+  - trash_ids:
+      - b0fdc5897f68c9a68c70c25169f77447 # Anime LQ Groups
+      - 06b6542a47037d1e33b15aa3677c2365 # Anime Raws
+      - 9172b2f683f6223e3a1846427b417a3d # VOSTFR
+      - cae4ca30163749b891686f95532519bd # AV1
+      - ed38b889b31be83fda192888e2286d83 # BR-DISK
+      - 90a6f9a284dff5103f6346090e6280c8 # LQ
+      - e204b80c87be9497a8a6eaff48f72905 # LQ (Release Title)
+      - 0a3f082873eb454bde444150b70253cc # Extras
+      - b8cd450cbfa689c0259a01d9e29ba3d6 # 3D
+      - bfd8eb01832d646a0a89c4deb46f8564 # Upscaled
+    assign_scores_to:
+      - name: SD - 480p Anime
+      - name: SD - 576p Anime
+      - name: HD - 720p Anime
+      - name: HD - 1080p Anime
+      - name: 4K UHD - 2160p Anime
+      - name: At most 480p Anime
+      - name: At most 576p Anime
+      - name: At most 720p Anime
+      - name: At most 1080p Anime
+      - name: At most 2160p Anime
+      - name: SD - 480p Anime (Dub)
+        score: -100000
+      - name: SD - 576p Anime (Dub)
+        score: -100000
+      - name: HD - 720p Anime (Dub)
+        score: -100000
+      - name: HD - 1080p Anime (Dub)
+        score: -100000
+      - name: 4K UHD - 2160p Anime (Dub)
+        score: -100000
+      - name: At most 480p Anime (Dub)
+        score: -100000
+      - name: At most 576p Anime (Dub)
+        score: -100000
+      - name: At most 720p Anime (Dub)
+        score: -100000
+      - name: At most 1080p Anime (Dub)
+        score: -100000
+      - name: At most 2160p Anime (Dub)
+        score: -100000
 
   # ==========================================================================
   # Non-4K profiles — Movie Versions, HQ, Misc, Unwanted, Streaming

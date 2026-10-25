@@ -1,63 +1,57 @@
-# CLAUDE.md
+# Recyclarr configuration guidance
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This directory contains the homeserver's tracked Recyclarr configuration.
+See `README.md` for policy, matching limitations, validation, and the
+separate approved deployment procedure.
 
-## What This Repo Is
+## Layout
 
-Personal [Recyclarr](https://github.com/recyclarr/recyclarr) configuration that syncs [TRaSH Guides](https://trash-guides.info/) quality profiles and custom formats to Sonarr and Radarr.
+- `recyclarr.yml`: instances, size definitions, includes, and naming.
+- `includes/{sonarr,radarr}/quality-profiles.yml`: 30 profiles per app.
+- `includes/{sonarr,radarr}/custom-formats.yml`: format assignments and scores.
+- `settings.yml`: local providers registered separately for each service.
+- `custom-formats/english-anime-audio.json`: shared title-only English-audio
+  matcher, additive to official guide resources.
+- `tests/`: schema, source-order, scoring-invariant, and matcher checks.
+- `secrets.yml.example`: dummy connection template. Real secrets are private.
 
-## Key Files
+## Policy
 
-- `recyclarr.yml` — Entry point. Defines Sonarr/Radarr instances, quality definitions, media naming, and `include` directives.
-- `includes/sonarr/quality-profiles.yml` — All Sonarr quality profile definitions.
-- `includes/sonarr/custom-formats.yml` — All Sonarr custom format assignments (uses YAML anchors for profile lists).
-- `includes/radarr/quality-profiles.yml` — All Radarr quality profile definitions.
-- `includes/radarr/custom-formats.yml` — All Radarr custom format assignments (uses YAML anchors for profile lists).
-- `settings.yml` — Instance connection settings. Rarely changes.
-- `secrets.yml` — Gitignored. Contains API keys and URLs. Copy from `secrets.yml.example` to create.
+Keep requester-facing names unchanged: five exact resolutions, five upper
+bounds, each with standard, Anime, and Anime (Dub) variants.
 
-## Configuration Structure
+Standard profiles prefer remux > Blu-ray > WEB > HDTV within a resolution.
+Anime groups Blu-ray encodes with remuxes, and WEB with HDTV, so anime
+release tiers decide within groups. Higher resolution takes precedence
+in upper-bound profiles. Use `anime-sonarr` for Sonarr and `anime-radarr`
+for Radarr. Allow 4K SDR; retain standard UHD HDR preferences and the
+DV-without-HDR-fallback penalty.
 
-`recyclarr.yml` defines two instances (`sonarr.series` and `radarr.movie`), each with:
-- `base_url` / `api_key` — Instance connection (via `!secret` tags resolved from `secrets.yml`)
-- `quality_definition` — Quality size limits (`series` or `movie`)
-- `include` — References to files in `includes/` for quality profiles and custom formats
-- `media_naming` — Naming scheme references
+Anime (Dub) requires the local English-audio marker: +20000, minimum 20000,
+upgrade cutoff 40000. Generic Dubs Only and Anime Dual Audio are zero in
+Dub profiles, not language guarantees. Hard unwanted formats score -100000
+there. Regular Anime retains the guide's dub-only penalty.
 
-Include files use recyclarr's simplified structure (no service type or instance name).
-YAML anchors (`&name` / `*name`) are used in custom format files to deduplicate repeated `assign_scores_to` profile lists.
+Do not use duplicate CF/profile assignments as overrides: Recyclarr keeps
+the first score. Keep every non-English-marker positive score combined
+below the Dub minimum, the maximum eligible score below its upgrade
+cutoff, and hard rejections below the minimum even with all positives.
+The tests enforce these bounds against current guide scores.
 
-## Profiles Defined
+English-audio detection must fail closed on ambiguous titles. Do not
+accept generic dual/dub labels or English subtitles as proof of English
+audio. Add positive and negative cases for matcher changes. The JSON
+regex must work in .NET, not just Python. Preserve its own rename marker
+and explicit audio-language pairs to avoid losing eligibility on rename.
 
-11 profiles in each app (Sonarr and Radarr):
+## Validation and deployment
 
-| Profile | Purpose |
-|---|---|
-| `480p`, `576p`, `720p`, `1080p`, `2160p` | Standard resolution tiers |
-| `720p or 1080p`, `1080p or 2160p` | Multi-resolution |
-| `anime-sonarr` / `anime-radarr` | Anime with BD/Web tier scoring |
-| `at-most-480p`, `at-most-720p`, `at-most-1080p` | Restrictive upper-bound profiles |
+Use the commands in `README.md`; tests need public guide/schema downloads
+but must never read real secrets or contact production apps. Keep the
+Recyclarr image version aligned in Compose and CI.
 
-## Anime Language Strategy
-
-Language CFs (`Language: Not Original`, `Language: Not English`) are **only assigned to standard (non-anime) profiles**. They are intentionally excluded from all anime profiles because Sonarr/Radarr's `LanguageSpecification` is unreliable for anime—it frequently misidentifies dual-audio releases as single-language.
-
-Anime profiles rely on anime-specific CFs for language preference instead:
-- **Regular Anime**: `Dubs Only` (−10000) penalizes dub-only releases; `Anime Raws` (−10000) penalizes raw releases. Quality tiers naturally prefer Japanese fansub groups.
-- **Anime (Dub)**: `Dubs Only` (+10000 override) and `Anime Dual Audio` (+5000 override) strongly prefer English content. Releases without English score much lower and lose to upgrades.
-
-## Deployment
-
-```sh
-rsync -av --exclude='.git' --exclude='secrets.yml.example' \
-  recyclarr.yml settings.yml includes/ \
-  user@server:/path/to/recyclarr/config/
-```
-
-`secrets.yml` must be managed on the server directly — never synced from this repo.
-
-## References
-
-- [TRaSH Guides](https://trash-guides.info/) — Source for valid `trash_ids` and recommended scores
-- [Recyclarr Wiki](https://recyclarr.dev/wiki/) — Config schema and options reference
-- [Config Schema](https://raw.githubusercontent.com/recyclarr/recyclarr/master/schemas/config-schema.json) — Referenced in `recyclarr.yml` for validation
+The live container mounts `${DATA}/recyclarr/config`, not this directory.
+Deployment requires the entry point, settings, includes, and custom
+formats together. Never sync secrets from Git. Do not run a live sync
+or deploy merely because a config change was requested; preview and
+deployment are separate approval steps.

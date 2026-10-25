@@ -2,27 +2,68 @@ name: Validate Recyclarr Config
 
 on:
   push:
-    paths: ['recyclarr-configs/**']
+    paths:
+      - recyclarr-configs/**
+      - docker/compose.starr.yml
+      - .github/workflows/recyclarr-validate.yml
   pull_request:
-    paths: ['recyclarr-configs/**']
+    paths:
+      - recyclarr-configs/**
+      - docker/compose.starr.yml
+      - .github/workflows/recyclarr-validate.yml
+
+permissions:
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
 
       - name: Lint YAML syntax
         run: |
-          pip install --quiet yamllint
-          yamllint -c recyclarr-configs/.yamllint.yml recyclarr-configs/
+          uv run --no-project --with-requirements recyclarr-configs/tests/requirements.txt \
+            yamllint -c recyclarr-configs/.yamllint.yml recyclarr-configs/ \
+            .github/workflows/recyclarr-validate.yml
 
-      - name: Validate recyclarr config
+      - name: Check schemas, source ordering, score bounds, and dub eligibility
         run: |
-          # Provide dummy secrets so recyclarr can resolve !secret tags
-          cp recyclarr-configs/secrets.yml.example recyclarr-configs/secrets.yml
+          uv run --no-project --with-requirements recyclarr-configs/tests/requirements.txt \
+            python -B -m unittest discover -s recyclarr-configs/tests -v
+
+      - name: Exercise the English-audio matcher with the .NET regex engine
+        shell: pwsh
+        run: |
+          $format = Get-Content recyclarr-configs/custom-formats/english-anime-audio.json -Raw | ConvertFrom-Json
+          $cases = Get-Content recyclarr-configs/tests/english-audio-cases.json -Raw | ConvertFrom-Json
+          foreach ($case in $cases) {
+            $matches = @($format.specifications | ForEach-Object {
+              [regex]::IsMatch($case.title, $_.fields.value) -ne $_.negate
+            })
+            if (($matches -notcontains $false) -ne $case.matches) {
+              throw "Unexpected English-audio match: $($case.title)"
+            }
+          }
+
+      - name: Load configuration and local custom formats with Recyclarr
+        run: |
+          config_dir="$(mktemp -d)"
+          trap 'rm -rf "$config_dir"' EXIT
+          cp recyclarr-configs/{recyclarr.yml,settings.yml,secrets.yml.example} "$config_dir/"
+          cp -r recyclarr-configs/{includes,custom-formats} "$config_dir/"
+          mv "$config_dir/secrets.yml.example" "$config_dir/secrets.yml"
           docker run --rm \
             --user "$(id -u):$(id -g)" \
-            -v ${{ github.workspace }}/recyclarr-configs:/config \
-            ghcr.io/recyclarr/recyclarr:latest \
+            -v "$config_dir:/config" \
+            ghcr.io/recyclarr/recyclarr:8.8.0 \
             config list local
+          for service in sonarr radarr; do
+            docker run --rm \
+              --user "$(id -u):$(id -g)" \
+              -v "$config_dir:/config" \
+              ghcr.io/recyclarr/recyclarr:8.8.0 \
+              list custom-formats "$service" --raw | grep -F homeserver-english-anime-audio
+          done
