@@ -2,38 +2,42 @@
 
 ## Unattended operation and qBittorrent compatibility
 
-qbit-manage runs unattended in dry-run mode. It was paused from early October
+qbit-manage runs unattended in **live mode** (dry-run disabled October 24,
+2026). It was paused from early October
 2026 while its stable release did not support qBittorrent 5.2.4. On October 24,
 2026 the owner chose to keep qBittorrent on `:latest` for security updates and
 have qbit-manage follow it by installing the newest `qbittorrent-api` on each
 nightly build (see [Pinned implementation](#pinned-implementation)), so the
 opt-in Compose profile was removed and `qbit-manage` was restored to
 `vpn-netns-watcher`'s `SIBLING_SERVICES`.
-Do not bypass the version check or enable deletion just to clear startup errors.
+Do not bypass the version check just to clear startup errors.
 
-## What the current policy previews
+## What the current policy does
 
-Every 30 minutes, the manager previews category/tag updates, unregistered-torrent
-removal, no-hardlink tagging for the media categories (`movies`, `tv`,
-`anime-movies`, `anime-tv`, `indian-movies`, `indian-tv`, and `music`), and share-limit
-cleanup. **Dry-run remains enabled; these torrent actions are not applied.**
+Every 30 minutes, the manager applies category/tag updates, no-hardlink tagging
+for the media categories (`movies`, `tv`, `anime-movies`, `anime-tv`,
+`indian-movies`, `indian-tv`, and `music`), and share-limit cleanup.
+Unregistered-torrent removal is disabled (`QBT_REM_UNREGISTERED: false`): every
+tracker in use is public, and that path bypasses the cleanup gates below.
 
-The `noHL` cleanup group requires at least 14 days seeded, seven days inactive,
-and two reported seeders, with no ratio requirement. Other torrents default to
-no cleanup. Missing hardlinks are a storage signal, not proof that an item has
-been watched or imported successfully. Reported seeder counts are not a guarantee
-that a torrent can be downloaded again.
+The `noHL` cleanup group requires at least 14 days seeded and seven days
+inactive, with no ratio requirement and no minimum seeder count
+(`min_num_seeds: 0`). A seeder minimum was dropped because all trackers are
+public and stopped torrents never announce, so they report 0 seeders and would
+never qualify. Other torrents (hardlinked ones, which cost no extra disk) seed
+indefinitely; qBittorrent has no global share limits and the Starr apps' "remove
+completed downloads" therefore never fires, so this group is the only torrent
+cleanup. Missing hardlinks are a storage signal, not proof that an item has been
+imported successfully: a failed import also lacks hardlinks, so resolve stuck
+imports within the 14-day window.
 
-Unregistered-torrent removal is a separate path and does not inherit those three
-gates. The current settings permit incomplete torrents, use a ten-minute grace
-setting, and cap removals at ten per tracker per run. The recycle bin retains
-removed data and saved `.torrent` metadata for 14 days; after that they can be
-permanently deleted. Some share-limit actions also resume paused torrents.
+The recycle bin retains removed data and saved `.torrent` metadata for 14 days;
+after that they are permanently deleted. Some share-limit actions also resume
+paused torrents.
 
-Before a first real-mode run, review actual dry-run candidates and separately
-decide whether to enable unregistered removal. Prefer leaving that removal path
-off initially rather than treating `QBT_DRY_RUN=false` as only the conservative
-inactivity cleanup toggle.
+Before going live, the dry-run tagged 8 `noHL` torrents. The first live runs
+recycle the stopped, superseded anime packs (about 193 GB) whose series are in
+the library from other releases.
 
 ## Pinned implementation
 
@@ -47,8 +51,8 @@ the newest `qbittorrent-api` from PyPI on every build (an `ADD` of the PyPI
 metadata invalidates that layer when a release is published). The nightly
 `docker compose build --pull` therefore follows qBittorrent automatically,
 normally a few days after each qBittorrent release. During that lag qbit-manage
-logs "only compatible with ... or lower" and skips its runs (it is dry-run
-only). If the newest library breaks the build, the previous image keeps running.
+logs "only compatible with ... or lower" and skips its runs (no torrent
+actions). If the newest library breaks the build, the previous image keeps running.
 Bumping the qbit_manage pin itself (and the patch source hashes) stays manual.
 Current pin:
 
@@ -59,8 +63,8 @@ Current pin:
   2026.10.0, which stops at qBittorrent 5.2.4)
 
 The existing policy deliberately has no ratio cap and no maximum seeding time.
-Cleanup eligibility requires all of: at least 14 days seeded, at least seven days
-inactive, and at least two seeders. The private configuration remains in
+Cleanup eligibility requires both: at least 14 days seeded and at least seven
+days inactive. The private configuration remains in
 `${DATA}/qbit-manage/config/config.yml`; it is not copied into this image or repo.
 
 ## Narrow patch and safety
@@ -79,10 +83,12 @@ finite/global maximum seeding times and missing/nonpositive inactivity limits do
 not qualify for the exception. Existing upstream inactivity rounding to minutes
 is unchanged.
 
-**Dry-run remains true** in Compose and is also the derived image's default.
-Do not add a `commands.dry_run: false` override to the private configuration:
-upstream configuration commands can override environment settings. Do not disable
-dry-run to test this repair. Eligibility is only a preview while dry-run is active.
+**Dry-run is disabled in Compose** (`QBT_DRY_RUN: false`); the derived image
+still defaults to dry-run, so removing the Compose setting falls back to safe
+previews. Keep the dry-run toggle in Compose rather than adding a
+`commands.dry_run` override to the private configuration: upstream
+configuration commands can override environment settings. To preview a change,
+set `QBT_DRY_RUN: true` (or use the one-shot dry-run command below) first.
 
 The build checks full SHA-256 hashes of upstream configuration, conversion and
 runtime source before applying the single replacement. Any unexpected source or
@@ -168,7 +174,8 @@ docker compose exec -T -e QBT_RUN=true -e QBT_DRY_RUN=true \
 
 `QBT_RUN=false` in the normal container environment overrides the CLI `--run`
 flag; omitting the exec-time override starts another scheduler instead of exiting.
-The command above leaves the service's normal schedule and dry-run setting intact.
+The command above leaves the service's normal schedule intact and previews
+without applying anything.
 
 ## Local validation
 
@@ -213,8 +220,8 @@ patch when upstream supports the exact inactivity-only policy. Do not bypass a
 hash failure by weakening the check.
 
 Rollback means reverting the Compose image/build selection to the pinned upstream
-base, keeping dry-run enabled. That restores the known validation failure rather
-than silently changing seeding/deletion policy. Reverting the validator patch
+base and setting `QBT_DRY_RUN: true`. That restores the known validation failure
+rather than silently changing seeding/deletion policy. Reverting the validator patch
 does not require undoing the correct torrent-backup path or read-only mount.
 
 Sources:
