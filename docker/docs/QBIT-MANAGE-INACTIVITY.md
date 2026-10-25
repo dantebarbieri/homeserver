@@ -1,20 +1,14 @@
 # qbit-manage inactivity-only cleanup policy
 
-## Paused pending upstream compatibility
+## Unattended operation and qBittorrent compatibility
 
-The manager is deliberately stopped: its stable upstream API dependency does
-not support the deployed qBittorrent 5.2.4. The owner chose to wait for a stable
-release instead of backporting the dependency fix or using `develop`.
-
-The `qbit-manage` Compose profile prevents the nightly updater from starting the
-failed container again. It is also excluded from `vpn-netns-watcher`'s
-`SIBLING_SERVICES`, so a VPN namespace repair cannot restart it indirectly.
-Keep `COMPOSE_PROFILES` unset in `.env`. qBittorrent itself remains running.
-
-Before re-enabling, review a stable upstream image with 5.2.4 support, update the
-pin and policy tests as described below, and run a complete dry-run. Restore
-`qbit-manage` to the watcher's sibling list and recreate the watcher. Remove the
-opt-in profile when returning it to ordinary unattended operation.
+qbit-manage runs unattended in dry-run mode. It was paused from early October
+2026 while its stable release did not support qBittorrent 5.2.4. On October 24,
+2026 the owner chose to keep qBittorrent on `:latest` for security updates and
+have qbit-manage follow it by installing the newest `qbittorrent-api` on each
+nightly build (see [Pinned implementation](#pinned-implementation)), so the
+opt-in Compose profile was removed and `qbit-manage` was restored to
+`vpn-netns-watcher`'s `SIBLING_SERVICES`.
 Do not bypass the version check or enable deletion just to clear startup errors.
 
 ## What the current policy previews
@@ -43,19 +37,26 @@ inactivity cleanup toggle.
 
 ## Pinned implementation
 
-`compose.downloads.yml` builds `qbit-manage-inactivity:4.14.0-2` from the exact
+`compose.downloads.yml` builds `qbit-manage-inactivity:4.14.0-3` from the exact
 upstream image below. It was bumped from 4.13.0 on October 24, 2026 because
 4.13.0's bundled `qbittorrent-api` refused to run against qBittorrent 5.2.4.
-When qBittorrent updates past what the pinned release supports, qbit-manage
-exits with "only compatible with ... or lower"; bump the pin and source hashes.
+
+qBittorrent stays on `:latest` for security updates. qbit_manage's only
+compatibility gate is its bundled `qbittorrent-api`, so the Dockerfile installs
+the newest `qbittorrent-api` from PyPI on every build (an `ADD` of the PyPI
+metadata invalidates that layer when a release is published). The nightly
+`docker compose build --pull` therefore follows qBittorrent automatically,
+normally a few days after each qBittorrent release. During that lag qbit-manage
+logs "only compatible with ... or lower" and skips its runs (it is dry-run
+only). If the newest library breaks the build, the previous image keeps running.
+Bumping the qbit_manage pin itself (and the patch source hashes) stays manual.
 Current pin:
 
 - Image manifest: `sha256:0153204c727b8cd219c87cd22d5e5833e392436923577455e3c84ceb73835c7d`
 - Upstream version: `4.14.0`
 - Source revision: `e6b2ba0b735b96cb153ef874d176ca6d0fffbf49`
-- `qbittorrent-api` override: `2026.10.1` (upstream 4.14.0 bundles 2026.10.0,
-  which stops at qBittorrent 5.2.4; qBittorrent is on `:latest` and is now
-  5.3.0). Drop the override once a qbit_manage release pins 2026.10.1 or newer.
+- `qbittorrent-api`: newest PyPI release at build time (upstream 4.14.0 bundles
+  2026.10.0, which stops at qBittorrent 5.2.4)
 
 The existing policy deliberately has no ratio cap and no maximum seeding time.
 Cleanup eligibility requires all of: at least 14 days seeded, at least seven days
@@ -174,7 +175,7 @@ The command above leaves the service's normal schedule and dry-run setting intac
 With Docker available, build without starting any service:
 
 ```bash
-docker build -t qbit-manage-inactivity:4.14.0-2 docker/dockerfiles/qbit-manage
+docker build -t qbit-manage-inactivity:4.14.0-3 docker/dockerfiles/qbit-manage
 docker compose --env-file docker/sample.env -f docker/compose.downloads.yml config --quiet
 ```
 
