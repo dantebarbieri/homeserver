@@ -818,6 +818,14 @@
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/containers/qbit-manage
+    - Lidarr Maintenance:
+        icon: lidarr.svg
+        description: Supports Lidarr - unattended queue fixes
+        server: my-docker
+        container: lidarr-maint
+        widget:
+          <<: *container-info
+          url: http://homepage-inventory:8080/containers/lidarr-maint
 
 - Communication & Sync:
     - Synapse:
