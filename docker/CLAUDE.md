@@ -23,7 +23,7 @@ All services should extend one of these:
 
 ## Custom Dockerfiles (`dockerfiles/`)
 
-- `dockerfiles/homepage-inventory/` — Internal, GET-only container version/uptime/conditional-health adapter, plus five fixed read-only SQLite aggregate routes. Scopes containers to project `compose`; never expose it, raw Docker responses, or database contents publicly. Database directory mounts and the Docker socket make it a trusted process; see `homepage/README.md` for scope and access boundaries.
+- `dockerfiles/homepage-inventory/` — Internal GET-only compact widget adapter: two fallback tiles or 2-4 application metrics from fixed SQLite queries, aggregate-only PostgreSQL views, local metrics and deployed capability catalogs. `scripts/setup-homepage-widgets.sh` provisions restricted roles and generated collector credentials. `snapotter-widget` uses the same image inside SnapOtter's namespace to reach loopback-only PostgreSQL; no database port is exposed. The Docker socket and SQLite mounts still make the main adapter trusted; see `homepage/README.md`.
 - `dockerfiles/convertx/` — Extends upstream ConvertX: restores omitted optional packages (ImageMagick SVG coders, HEIC/AVIF encoders, LaTeX `soul`, Office metric fonts), adds ImageMagick JXL delegates and larger pixel-cache limits, and wraps `soffice` with a per-invocation profile so concurrent LibreOffice conversions don't collide
 - `dockerfiles/Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
 - `dockerfiles/Dockerfile.qbittorrent` — Bundles the official stable VueTorrent assets into LinuxServer qBittorrent; `build --pull` updates both through the normal update job

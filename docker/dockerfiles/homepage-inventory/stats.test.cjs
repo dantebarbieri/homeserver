@@ -13,9 +13,7 @@ function fixture(t, schema) {
   return db;
 }
 
-const values = (items) => Object.fromEntries(items.map(({ label, value }) => [label, value]));
-
-test("Aurral counts available songs once, excludes missing files, and distinguishes requests from track jobs", (t) => {
+test("Aurral counts available songs once, excludes missing files, and shows retained requests", (t) => {
   const db = fixture(t, `
     CREATE TABLE library_media_files (track_id INTEGER, album_id INTEGER, available INTEGER);
     CREATE TABLE library_albums (id INTEGER, artist_id INTEGER);
@@ -30,8 +28,8 @@ test("Aurral counts available songs once, excludes missing files, and distinguis
   insert.run("album_requested", Date.now());
   insert.run("album_requested", Date.now() - 31 * 86400000);
   insert.run("artist_added", Date.now());
-  assert.deepEqual(values(collectStats(db, "aurral")), {
-    Songs: "2", Albums: "2", Artists: "1", "Album Requests (30d)": "1", "Active Download Jobs": "3",
+  assert.deepEqual(collectStats(db, "aurral"), {
+    songs: "2", albums: "2", artists: "1", requests: "1",
   });
 });
 
@@ -44,11 +42,11 @@ test("Storyteller separates catalogue books, available audio and completed reada
     INSERT INTO audiobook VALUES ('one',0,3661.5), ('two',0,60.5), ('missing',1,999999);
     INSERT INTO readaloud VALUES ('one',0,'ALIGNED'), ('two',0,'PROCESSING'), ('missing',1,'ALIGNED');
   `);
-  assert.deepEqual(values(collectStats(db, "storyteller")), {
-    Books: "3", Audiobooks: "2", Readalouds: "1", "Audio Duration": "1h 2m",
+  assert.deepEqual(collectStats(db, "storyteller"), {
+    audiobooks: "2", readalouds: "1", duration: "1h 2m", untimed: "0",
   });
   db.exec("INSERT INTO audiobook VALUES ('unknown-length',0,NULL)");
-  assert.equal(values(collectStats(db, "storyteller"))["Audio Without Duration"], "1");
+  assert.equal(collectStats(db, "storyteller").untimed, "1");
   db.exec("INSERT INTO audiobook VALUES ('invalid-length',0,-100)");
   assert.throws(() => collectStats(db, "storyteller"), /Invalid audiobook duration/);
   db.exec("DELETE FROM audiobook WHERE duration < 0; INSERT INTO audiobook VALUES ('invalid-length',0,'corrupt')");
@@ -64,8 +62,8 @@ test("BookBridge reports instance-wide sync/processing status, not reading progr
       (NULL,NULL,'private title');
   `);
   const result = collectStats(db, "bookbridge");
-  assert.deepEqual(values(result), {
-    Books: "7", Active: "1", Pending: "1", Processing: "1", Failed: "2", "Other Status": "2",
+  assert.deepEqual(result, {
+    active: "1", pending: "1", processing: "1", issues: "4",
   });
   assert.ok(!JSON.stringify(result).includes("private"));
 });
@@ -77,8 +75,8 @@ test("Vaultwarden distinguishes active logins from all items and excludes trash 
       (1,NULL,'secret','secret'), (1,'2026-01-01','secret','secret'),
       (2,NULL,'secret','secret'), (3,NULL,'secret','secret'), (4,NULL,'secret','secret');
   `);
-  assert.deepEqual(values(collectStats(db, "vaultwarden")), {
-    Logins: "2", "Vault Items": "5", "Secure Notes": "1", Cards: "1", Trash: "1",
+  assert.deepEqual(collectStats(db, "vaultwarden"), {
+    logins: "2", items: "5", trash: "1",
   });
 });
 
@@ -89,14 +87,14 @@ test("ntfy counts only unexpired cache topics/messages and separates unpublished
       ('private-b',unixepoch()+3600,1), ('expired',unixepoch()-1,1),
       ('scheduled',unixepoch()+3600,0), ('expired-schedule',unixepoch()-1,0);
   `);
-  assert.deepEqual(values(collectStats(db, "ntfy")), {
-    "Cached Topics": "2", "Cached Messages": "3", "Scheduled Messages": "1",
+  assert.deepEqual(collectStats(db, "ntfy"), {
+    topics: "2", messages: "3", scheduled: "1",
   });
 });
 
 test("empty valid databases give real zeros, but missing schemas and sources fail explicitly", (t) => {
   const db = fixture(t, "CREATE TABLE ciphers (atype INTEGER, deleted_at TEXT)");
-  assert.equal(values(collectStats(db, "vaultwarden")).Logins, "0");
+  assert.equal(collectStats(db, "vaultwarden").logins, "0");
   assert.throws(() => collectStats(db, "ntfy"));
   assert.throws(() => collectStats(db, "unknown"), /Unsupported/);
   assert.throws(() => readStats("../../etc/shadow"), /Unsupported/);
@@ -128,9 +126,9 @@ test("read-only collection sees live uncheckpointed WAL updates and never create
     INSERT INTO ciphers VALUES (1,NULL);
   `);
   assert.ok((await fs.stat(filename + "-wal")).size > 0);
-  assert.equal(values(readDatabaseStats(filename, "vaultwarden")).Logins, "1");
+  assert.equal(readDatabaseStats(filename, "vaultwarden").logins, "1");
   writer.exec("INSERT INTO ciphers VALUES (1,NULL)");
-  assert.equal(values(readDatabaseStats(filename, "vaultwarden")).Logins, "2");
+  assert.equal(readDatabaseStats(filename, "vaultwarden").logins, "2");
   const missing = path.join(directory, "missing.db");
   assert.throws(() => readDatabaseStats(missing, "vaultwarden"));
   await assert.rejects(fs.access(missing), { code: "ENOENT" });

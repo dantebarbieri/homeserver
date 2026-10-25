@@ -6,6 +6,7 @@ const databaseFiles = Object.freeze({
   bookbridge: "/stats/bookbridge/database.db",
   vaultwarden: "/stats/vaultwarden/db.sqlite3",
   ntfy: "/stats/ntfy/cache.db",
+  convertx: "/stats/convertx/mydb.sqlite",
 });
 
 function count(value) {
@@ -20,8 +21,18 @@ function duration(seconds) {
 }
 
 function collectStats(db, name) {
-  const item = (label, value) => ({ label, value: count(value) });
+  const item = (label, value) => [label, count(value)];
+  let result;
   switch (name) {
+    case "convertx": {
+      const files = db.prepare(`
+        SELECT COUNT(CASE WHEN status = 'Done' THEN 1 END) AS completed,
+          COUNT(CASE WHEN status != 'Done' THEN 1 END) AS other FROM file_names
+      `).get();
+      const jobs = db.prepare("SELECT COUNT(*) AS count FROM jobs").get();
+      result = [item("completed", files.completed), item("other", files.other), item("jobs", jobs.count)];
+      break;
+    }
     case "aurral": {
       const library = db.prepare(`
         SELECT COUNT(DISTINCT track_id) AS songs, COUNT(DISTINCT album_id) AS albums
@@ -35,17 +46,13 @@ function collectStats(db, name) {
         SELECT COUNT(*) AS count FROM aurral_history
         WHERE kind = 'album_requested' AND created_at >= ?
       `).get(Date.now() - 30 * 86400000);
-      const jobs = db.prepare(`
-        SELECT COUNT(*) AS count FROM playlist_download_jobs
-        WHERE status NOT IN ('done', 'failed', 'cancelled', 'blocked')
-      `).get();
-      return [
-        item("Songs", library.songs), item("Albums", library.albums), item("Artists", artists.count),
-        item("Album Requests (30d)", requests.count), item("Active Download Jobs", jobs.count),
+      result = [
+        item("songs", library.songs), item("albums", library.albums),
+        item("artists", artists.count), item("requests", requests.count),
       ];
+      break;
     }
     case "storyteller": {
-      const books = db.prepare("SELECT COUNT(*) AS count FROM book").get();
       const audio = db.prepare(`
         SELECT COUNT(DISTINCT book_uuid) AS books, COUNT(*) AS assets, COUNT(duration) AS timed,
           COALESCE(SUM(duration), 0) AS seconds,
@@ -57,16 +64,16 @@ function collectStats(db, name) {
       const readaloud = db.prepare(`
         SELECT COUNT(DISTINCT book_uuid) AS count FROM readaloud WHERE missing = 0 AND status = 'ALIGNED'
       `).get();
-      return [
-        item("Books", books.count), item("Audiobooks", audio.books), item("Readalouds", readaloud.count),
-        { label: "Audio Duration", value: duration(audio.seconds) },
-        ...(audio.timed < audio.assets ? [item("Audio Without Duration", audio.assets - audio.timed)] : []),
+      result = [
+        item("audiobooks", audio.books), item("readalouds", readaloud.count),
+        ["duration", duration(audio.seconds)],
+        item("untimed", audio.assets - audio.timed),
       ];
+      break;
     }
     case "bookbridge": {
       const books = db.prepare(`
-        SELECT COUNT(*) AS total,
-          COUNT(CASE WHEN status = 'active' THEN 1 END) AS active,
+        SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) AS active,
           COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending,
           COUNT(CASE WHEN status = 'processing' THEN 1 END) AS processing,
           COUNT(CASE WHEN status IN ('failed_retry_later', 'failed_permanent') THEN 1 END) AS failed,
@@ -74,24 +81,22 @@ function collectStats(db, name) {
             ('active', 'pending', 'processing', 'failed_retry_later', 'failed_permanent') THEN 1 END) AS other
         FROM books
       `).get();
-      return [
-        item("Books", books.total), item("Active", books.active), item("Pending", books.pending),
-        item("Processing", books.processing), item("Failed", books.failed),
-        ...(books.other ? [item("Other Status", books.other)] : []),
+      result = [
+        item("active", books.active), item("pending", books.pending),
+        item("processing", books.processing), item("issues", books.failed + books.other),
       ];
+      break;
     }
     case "vaultwarden": {
       const vault = db.prepare(`
         SELECT COUNT(CASE WHEN deleted_at IS NULL THEN 1 END) AS items,
           COUNT(CASE WHEN deleted_at IS NULL AND atype = 1 THEN 1 END) AS logins,
-          COUNT(CASE WHEN deleted_at IS NULL AND atype = 2 THEN 1 END) AS notes,
-          COUNT(CASE WHEN deleted_at IS NULL AND atype = 3 THEN 1 END) AS cards,
           COUNT(CASE WHEN deleted_at IS NOT NULL THEN 1 END) AS trash FROM ciphers
       `).get();
-      return [
-        item("Logins", vault.logins), item("Vault Items", vault.items), item("Secure Notes", vault.notes),
-        item("Cards", vault.cards), item("Trash", vault.trash),
+      result = [
+        item("logins", vault.logins), item("items", vault.items), item("trash", vault.trash),
       ];
+      break;
     }
     case "ntfy": {
       const cache = db.prepare(`
@@ -100,14 +105,15 @@ function collectStats(db, name) {
           COUNT(CASE WHEN published = 0 THEN 1 END) AS scheduled
         FROM messages WHERE expires > unixepoch()
       `).get();
-      return [
-        item("Cached Topics", cache.topics), item("Cached Messages", cache.messages),
-        item("Scheduled Messages", cache.scheduled),
+      result = [
+        item("topics", cache.topics), item("messages", cache.messages), item("scheduled", cache.scheduled),
       ];
+      break;
     }
     default:
       throw new Error("Unsupported statistics source");
   }
+  return Object.fromEntries(result);
 }
 
 function readDatabaseStats(filename, name) {

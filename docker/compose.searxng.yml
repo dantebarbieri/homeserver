@@ -26,6 +26,7 @@ services:
     networks:
       - proxy
       - searxng
+      - homepage-widgets
     volumes:
       - ${DATA}/searxng/config:/etc/searxng:rw
     environment:
@@ -46,6 +47,8 @@ services:
 networks:
   proxy:
   searxng:
+  homepage-widgets:
+    internal: true
 
 volumes:
   valkey-data:

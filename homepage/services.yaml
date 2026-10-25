@@ -4,7 +4,7 @@
 # Web apps have:
 #   - siteMonitor: checks if the web UI is reachable (green/red dot)
 #   - server/container: shows Docker container running status + stats
-#   - widget: service-specific data or container version, uptime & health
+#   - widget: 2-4 metric tiles, or two version/uptime fallback tiles
 # Backend cards use Docker status without linking to API-only endpoints.
 # Tab assignment and display order are defined in settings.yaml.
 #
@@ -55,16 +55,32 @@
         siteMonitor: https://aurral.danteb.com
         server: my-docker
         container: aurral
-        widget: &container-info
-          type: customapi
+        widget:
+          <<: &container-info
+            type: customapi
+            refreshInterval: 30000
+            display: block
+            mappings:
+              - field: version
+                label: App / Build
+                format: text
+              - field: uptime
+                label: Uptime
+                format: text
           url: http://homepage-inventory:8080/stats/aurral
-          refreshInterval: 30000
-          display: dynamic-list
           mappings:
-            items: items
-            name: label
-            label: value
-            format: text
+            - field: songs
+              label: Songs
+              format: text
+            - field: albums
+              label: Albums
+              format: text
+            - field: artists
+              label: Artists
+              format: text
+            - field: requests
+              label: Requests (30d)
+              format: text
 
 - Read & Listen:
     - Komga:
@@ -113,6 +129,19 @@
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/stats/storyteller
+          mappings:
+            - field: audiobooks
+              label: Audiobooks
+              format: text
+            - field: readalouds
+              label: Readalouds
+              format: text
+            - field: duration
+              label: Audio Length
+              format: text
+            - field: untimed
+              label: Unknown Length
+              format: text
     - BookBridge:
         icon: https://bookbridge.danteb.com/static/icon.png
         href: https://bookbridge.danteb.com
@@ -123,6 +152,19 @@
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/stats/bookbridge
+          mappings:
+            - field: active
+              label: Active
+              format: text
+            - field: pending
+              label: Pending
+              format: text
+            - field: processing
+              label: Processing
+              format: text
+            - field: issues
+              label: Issues
+              format: text
     - Suwayomi:
         icon: suwayomi.svg
         href: https://suwayomi.danteb.com
@@ -274,7 +316,11 @@
         container: searxng
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/searxng
+          url: http://homepage-inventory:8080/stats/searxng
+          mappings:
+            - { field: engines, label: Engines, format: text }
+            - { field: calls, label: Engine Calls, format: text }
+            - { field: latency, label: Engine Latency, format: text }
     - IT-Tools:
         icon: it-tools.svg
         href: https://tools.danteb.com
@@ -284,7 +330,10 @@
         container: it-tools
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/it-tools
+          url: http://homepage-inventory:8080/stats/it-tools
+          mappings:
+            - { field: tools, label: Tools, format: text }
+            - { field: categories, label: Categories, format: text }
     - ConvertX:
         icon: convertx.webp
         href: https://convertx.danteb.com
@@ -294,7 +343,12 @@
         container: convertx
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/convertx
+          url: http://homepage-inventory:8080/stats/convertx
+          mappings:
+            - { field: converters, label: Converters, format: text }
+            - { field: completed, label: Done Files, format: text }
+            - { field: other, label: Issues, format: text }
+            - { field: jobs, label: Saved Jobs, format: text }
     - Stirling PDF:
         icon: stirling-pdf.svg
         href: https://stirling-pdf.danteb.com
@@ -304,7 +358,10 @@
         container: stirling-pdf
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/stirling-pdf
+          url: http://homepage-inventory:8080/stats/stirling-pdf
+          mappings:
+            - { field: actions, label: PDF Actions, format: text }
+            - { field: categories, label: Categories, format: text }
     - SnapOtter:
         icon: https://cdn.jsdelivr.net/gh/selfhst/icons/webp/snapotter.webp
         href: https://snapotter.danteb.com
@@ -314,7 +371,12 @@
         container: snapotter
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/snapotter
+          url: http://homepage-inventory:8080/stats/snapotter
+          mappings:
+            - { field: queued, label: Queued, format: text }
+            - { field: running, label: Running, format: text }
+            - { field: completed, label: Done (24h), format: text }
+            - { field: failed, label: Failed (24h), format: text }
 
 - Network & Access:
     - Nginx Proxy Manager:
@@ -350,7 +412,12 @@
         container: authelia
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/authelia
+          url: http://homepage-inventory:8080/stats/authelia
+          mappings:
+            - { field: successful, label: Auth OK (24h), format: text }
+            - { field: failed, label: Failed (24h), format: text }
+            - { field: totp, label: TOTP Setups, format: text }
+            - { field: passkeys, label: Passkeys, format: text }
     - WireGuard:
         icon: wireguard.svg
         href: https://wireguard.danteb.com
@@ -360,7 +427,10 @@
         container: wg-easy
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/wg-easy
+          url: http://homepage-inventory:8080/stats/wg-easy
+          mappings:
+            - { field: peers, label: Peers, format: text }
+            - { field: enabled, label: Enabled, format: text }
 
 - Monitoring:
     - Grafana:
@@ -471,6 +541,16 @@
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/stats/vaultwarden
+          mappings:
+            - field: logins
+              label: Logins
+              format: text
+            - field: items
+              label: Items
+              format: text
+            - field: trash
+              label: Trash
+              format: text
     - ntfy:
         icon: ntfy.svg
         href: https://ntfy.danteb.com
@@ -481,6 +561,16 @@
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/stats/ntfy
+          mappings:
+            - field: topics
+              label: Cached Topics
+              format: text
+            - field: messages
+              label: Cached Messages
+              format: text
+            - field: scheduled
+              label: Scheduled
+              format: text
     - Element:
         icon: element.svg
         href: https://element.danteb.com
@@ -490,7 +580,11 @@
         container: element
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/element
+          url: http://homepage-inventory:8080/stats/element
+          mappings:
+            - { field: users, label: Users, format: text }
+            - { field: rooms, label: Known Rooms, format: text }
+            - { field: active, label: Active (24h), format: text }
 
 - Development:
     - Code Server:
@@ -733,7 +827,11 @@
         container: synapse
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/synapse
+          url: http://homepage-inventory:8080/stats/synapse
+          mappings:
+            - { field: users, label: Users, format: text }
+            - { field: rooms, label: Known Rooms, format: text }
+            - { field: active, label: Active (24h), format: text }
     - LiveKit:
         icon: matrix-light.svg
         description: Powers Element calls - real-time media
@@ -788,12 +886,20 @@
 - Monitoring Pipeline:
     - Homepage Inventory:
         icon: docker.svg
-        description: Powers Homepage - versions, container uptime & health
+        description: Powers Homepage - compact app statistics & inventory
         server: my-docker
         container: homepage-inventory
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/containers/homepage-inventory
+    - SnapOtter Widget:
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons/webp/snapotter.webp
+        description: Powers Homepage - aggregate-only SnapOtter job statistics
+        server: my-docker
+        container: snapotter-widget
+        widget:
+          <<: *container-info
+          url: http://homepage-inventory:8080/containers/snapotter-widget
     - Prometheus:
         icon: prometheus.svg
         description: Powers Grafana - metrics storage & queries

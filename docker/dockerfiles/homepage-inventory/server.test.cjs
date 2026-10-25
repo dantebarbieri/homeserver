@@ -50,23 +50,23 @@ async function fixture(t, options = {}) {
   return { request: (url, init) => fetch(`http://127.0.0.1:${server.address().port}${url}`, init), calls, errors };
 }
 
-test("returns version and uptime rows without redundant state or unconfigured health", async (t) => {
+test("returns exactly two fallback tile values without state or health", async (t) => {
   const { request, calls } = await fixture(t);
   const response = await request("/containers/it-tools");
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(await response.json(), {
-    items: [{ label: "App / Build", value: "Image aaaaaaaaaaaa" }, { label: "Container Up", value: "2d 1h" }],
+    version: "Image aaaaaaaaaaaa", uptime: "2d 1h",
   });
   assert.deepEqual(calls, ["/containers/it-tools/json", `/images/${id}/json`]);
 });
 
-test("shows healthy, unhealthy, and starting only when Docker reports them", () => {
+test("health remains on the service card rather than taking up a metric tile", () => {
   for (const status of ["healthy", "unhealthy", "starting"]) {
     const value = copy(container);
     value.Config.Healthcheck = { Test: ["CMD", "true"] };
     value.State.Health = { Status: status, Log: [{ Output: "do-not-return" }] };
-    assert.deepEqual(containerInfo(value, "1.2.3", now).items.at(-1), { label: "Health", value: status });
+    assert.deepEqual(containerInfo(value, "1.2.3", now), { version: "1.2.3", uptime: "2d 1h" });
   }
 });
 
@@ -75,10 +75,7 @@ test("stopped Hytale does not retain stale healthy status or claim uptime", () =
   value.Config.Healthcheck = { Test: ["CMD", "true"] };
   value.State = { Running: false, Status: "exited", Health: { Status: "healthy" } };
   assert.deepEqual(containerInfo(value, "Wrapper 1.1.0", now), {
-    items: [
-      { label: "App / Build", value: "Wrapper 1.1.0" }, { label: "Container Up", value: "-" },
-      { label: "Health", value: "Not running" },
-    ],
+    version: "Wrapper 1.1.0", uptime: "-",
   });
 });
 
@@ -86,7 +83,7 @@ test("formats seconds, minutes and hours without claiming application uptime", (
   for (const [seconds, expected] of [[0, "0s"], [35, "35s"], [90, "1m"], [7500, "2h 5m"]]) {
     const value = copy(container);
     value.State.StartedAt = new Date(now - seconds * 1000).toISOString();
-    assert.equal(containerInfo(value, "1", now).items[1].value, expected);
+    assert.equal(containerInfo(value, "1", now).uptime, expected);
   }
 });
 
@@ -147,14 +144,14 @@ test("reads WireGuard's release, not its unrelated package version", async (t) =
     assert.equal(options.binary, true);
     return tar("package.json", '{"version":"1.0.1","release":{"version":"14"}}');
   } });
-  assert.equal((await (await request("/containers/wg-easy")).json()).items[0].value, "v14");
+  assert.equal((await (await request("/containers/wg-easy")).json()).version, "v14");
   assert.deepEqual(calls, ["/containers/wg-easy/json", "/containers/wg-easy/archive?path=%2Fapp%2Fpackage.json"]);
 });
 
 test("reads the installed Satisfactory Steam build, not the image's Ubuntu version", async (t) => {
   const { request } = await fixture(t, { requestDocker: async (url) => url.endsWith("/json")
     ? copy(container) : tar("appmanifest_1690800.acf", '"AppState"\n{\n "buildid" "24656085"\n}\n') });
-  assert.equal((await (await request("/containers/satisfactory-server")).json()).items[0].value, "Steam build 24656085");
+  assert.equal((await (await request("/containers/satisfactory-server")).json()).version, "Steam build 24656085");
 });
 
 test("does not provide arbitrary Docker, file, query-string, or mutation endpoints", async (t) => {
@@ -205,30 +202,30 @@ test("healthcheck verifies socket access without returning Docker details", asyn
   assert.deepEqual(calls, ["/version"]);
 });
 
-test("omits disabled healthchecks, including stale state from a previously enabled check", () => {
+test("omits all health metadata regardless of whether a check is enabled or disabled", () => {
   for (const check of [undefined, { Test: [] }, { Test: ["NONE"] }]) {
     const value = copy(container);
     value.Config.Healthcheck = check;
     value.State.Health = { Status: "healthy" };
-    assert.equal(containerInfo(value, "1", now).items.length, 2);
+    assert.deepEqual(Object.keys(containerInfo(value, "1", now)), ["version", "uptime"]);
   }
   const value = copy(container);
   value.Config.Healthcheck = { Test: ["CMD", "true"] };
-  assert.throws(() => containerInfo(value, "1", now), /Invalid healthcheck state/);
+  assert.deepEqual(containerInfo(value, "1", now), { version: "1", uptime: "2d 1h" });
 });
 
-test("application metrics precede inventory and are cached separately from metadata", async (t) => {
+test("application tiles contain only metrics and are cached separately from fallback metadata", async (t) => {
   let queries = 0;
   const { request } = await fixture(t, { requestStats: (name) => {
     assert.equal(name, "aurral");
     queries++;
-    return [{ label: "Songs", value: "123" }];
+    return { songs: "123" };
   } });
-  assert.equal((await (await request("/containers/aurral")).json()).items.length, 2);
+  assert.deepEqual(Object.keys(await (await request("/containers/aurral")).json()), ["version", "uptime"]);
   for (let i = 0; i < 2; i++) {
     const response = await request("/stats/aurral");
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).items[0], { label: "Songs", value: "123" });
+    assert.deepEqual(await response.json(), { songs: "123" });
   }
   assert.equal(queries, 1);
 });
@@ -257,7 +254,7 @@ test("expired statistics never become fake zeros, stale success or raw database 
     now: () => clock,
     requestStats: () => {
       if (fail) throw new Error("/private/database: secret contents");
-      return [{ label: "Logins", value: "12" }];
+      return { logins: "12" };
     },
   });
   assert.equal((await request("/stats/vaultwarden")).status, 200);

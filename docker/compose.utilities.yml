@@ -144,6 +144,7 @@ services:
     container_name: it-tools
     networks:
       - proxy
+      - homepage-widgets
 
   code-server:
     extends:
@@ -181,6 +182,7 @@ services:
       - ${DATA}/convertx/data:/app/data
     networks:
       - proxy
+      - homepage-widgets
 
   snapotter:
     extends:
@@ -193,6 +195,7 @@ services:
       - ${DATA}/snapotter/data:/data
     networks:
       - proxy
+      - homepage-widgets
 
   stirling-pdf:
     extends:
@@ -209,6 +212,7 @@ services:
       - ${DATA}/stirling-pdf/pipeline:/pipeline
     networks:
       - proxy
+      - homepage-widgets
 
   changedetection-io:
     extends:
@@ -247,3 +251,5 @@ volumes:
 networks:
   proxy:
   changedetection:
+  homepage-widgets:
+    internal: true

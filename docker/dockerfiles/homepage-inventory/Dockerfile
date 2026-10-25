@@ -1,12 +1,14 @@
 FROM node:24-alpine AS test
 WORKDIR /app
-COPY --chown=node:node server.cjs server.test.cjs stats.cjs stats.test.cjs ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY --chown=node:node *.cjs ./
 USER node
-RUN node --test server.test.cjs stats.test.cjs
+RUN node --test *.test.cjs
 
 FROM node:24-alpine
 WORKDIR /app
-COPY --from=test --chown=node:node /app/server.cjs /app/stats.cjs ./
+COPY --from=test --chown=node:node /app ./
 USER node
 EXPOSE 8080
 CMD ["node", "server.cjs"]

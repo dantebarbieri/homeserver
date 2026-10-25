@@ -1,5 +1,5 @@
 # Dashboard and monitoring services
-# homepage, homepage-inventory, suwayomi-widget, dashdot, uptime-kuma
+# homepage, homepage-inventory, snapotter-widget, suwayomi-widget, dashdot, uptime-kuma
 
 services:
   homepage:
@@ -71,6 +71,9 @@ services:
       context: ./dockerfiles/homepage-inventory
       pull: true
     container_name: homepage-inventory
+    environment:
+      WIDGET_DB_PASSWORD: ${HOMEPAGE_WIDGET_DB_PASSWORD:?Run scripts/setup-homepage-widgets.sh first}
+      SEARXNG_METRICS_PASSWORD: ${HOMEPAGE_SEARXNG_METRICS_PASSWORD:?Run scripts/setup-homepage-widgets.sh first}
     group_add:
       - "${DOCKER_GID}"
     volumes:
@@ -80,8 +83,11 @@ services:
       - ${DATA}/bookbridge/data:/stats/bookbridge:ro
       - vw-data:/stats/vaultwarden:ro
       - ${DATA}/ntfy/cache:/stats/ntfy:ro
+      - ${DATA}/convertx/data:/stats/convertx:ro
     networks:
       - homepage-widgets
+      - matrix
+      - authelia
     read_only: true
     cap_drop:
       - ALL
@@ -93,6 +99,32 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+
+  snapotter-widget:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: homepage-inventory:latest
+    pull_policy: never
+    container_name: snapotter-widget
+    command: ["node", "postgres.cjs"]
+    network_mode: "service:snapotter"
+    depends_on:
+      snapotter:
+        condition: service_started
+        restart: true
+    environment:
+      WIDGET_DB_PASSWORD: ${HOMEPAGE_WIDGET_DB_PASSWORD:?Run scripts/setup-homepage-widgets.sh first}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8089/healthz',{signal:AbortSignal.timeout(8000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   suwayomi-widget:
     extends:
@@ -160,6 +192,8 @@ networks:
   homepage-widgets:
     internal: true
   suwayomi:
+  matrix:
+  authelia:
 
 volumes:
   vw-data:

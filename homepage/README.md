@@ -106,30 +106,67 @@ New authenticated widgets need `HOMEPAGE_VAR_FORGEJO_KEY` and
 configured. Existing widget credentials and Suwayomi's adapter are unchanged.
 
 Every service now has a widget. Existing native/API widgets keep their
-application statistics. Five additional apps use read-only aggregate statistics
-below. The remaining cards, including all backends, use the shared
-`&container-info` widget: **App / Build**, **Container Up**, and **Health** only
-when a healthcheck is configured. State is already on the card, so it is not
-repeated. Dynamic lists omit inapplicable rows and leave room for build IDs.
+application statistics. Additional apps use the aggregates below. Custom widgets
+use Homepage's native **block** layout with **2-4 metric tiles**, not tall lists.
+Application widgets show only application data, without build, uptime or health.
+The remaining cards use the shared `&container-info` widget with just
+**App / Build** and **Uptime**. Docker state/health remain on the service card.
 Do not scrape authenticated pages, disable authentication, or expose databases
 over the network just to fill a card.
 
 ### Read-only application statistics
 
-The existing internal adapter also serves five fixed `/stats/<app>` routes.
-No new `.env` credentials or application admin tokens are needed. Metrics are
+The internal adapter serves fixed `/stats/<app>` routes. The setup script
+generates its own restricted credentials; no application admin tokens are needed.
+Metrics are
 **instance-wide**, not scoped to the Homepage viewer's account:
 
 | App | Metrics and scope |
 |-----|-------------------|
-| Aurral | Distinct available songs/albums and their album artists; album-request events retained in Aurral history from the last 30 days; active track download jobs (pending, downloading, cancellation requested). Requests are not a lifetime total or the live Lidarr request queue. Unavailable files and duplicate file formats do not inflate song counts. |
-| Storyteller | Catalogue books; distinct books with non-missing audiobook assets; non-missing aligned readalouds; summed available audiobook duration, converted from seconds to hours/minutes. If any assets lack duration, a separate row says how many are excluded from that duration. |
-| BookBridge | Books by sync/processing status: active, pending, processing, and failed (retry-later or permanent); unrecognized statuses appear only as an aggregate Other Status count. These are not reading/finished statuses. |
-| Vaultwarden | Active login items, all active vault items, secure notes, cards, and trash. Active category counts exclude trash. Includes personal and organization items once each, across all users; never reads encrypted item names or contents. |
+| Aurral | Distinct available songs/albums and their album artists; album-request history entries from the last 30 days. Requests are not a lifetime total or the live Lidarr queue. Unavailable files and duplicate formats do not inflate song counts. |
+| Storyteller | Books with non-missing audiobook assets; non-missing aligned readalouds; available audiobook duration in hours/minutes; number of audio assets with unknown duration, excluded from that total. |
+| BookBridge | Active, pending and processing books; Issues combines failed and unrecognized/null sync statuses. These are sync/processing states, not reading/finished states. |
+| Vaultwarden | Active login items, all active vault items, and trash. Includes personal/organization items once each across users; never reads encrypted names or contents. |
 | ntfy | Distinct topics represented in unexpired published cached messages, cached message count, and unexpired scheduled/unpublished messages. These are **not** subscription counts, connected subscribers, or all subscribable topics: ntfy accepts arbitrary topic names, and a topic disappears from this count when its cache expires. |
+| ConvertX | Registered converter engines in the installed application; retained successful file-result rows; non-success results (Issues); retained job rows. History can be deleted, and one conversion can produce several file-result rows: these are not lifetime conversion totals. |
+| IT-Tools | Tools and categories from the deployed frontend's registration catalog. It executes tools in the browser, so there is no server-side usage count. The catalog is parsed as data, never executed by the collector. |
+| Stirling PDF | File-accepting document actions and their categories in the deployed OpenAPI schema. Excludes administrative APIs. These are API action capabilities, not unique UI-tool counts or completed conversions; no external analytics is enabled. |
+| SearXNG | Enabled engines; engine request calls since the metrics process started; unweighted mean of available per-engine response-time averages. One search fans out to several engines, so calls are **not search counts** and engine latency is not end-to-end search latency. Counters reset on restart; absent timing samples display No samples, not zero milliseconds. |
+| SnapOtter | Queued/running jobs; retained completed/failed jobs with completion timestamps in the last 24 hours. Uses an aggregate-only PostgreSQL view; no administrator token or job details. |
+| WireGuard | Configured peers and enabled peers from `wg0.json`. Enabled does **not** imply a recent handshake; traffic/live connection data needs authenticated v14 API access. No keys, addresses or peer names leave the adapter. |
+| Element / Synapse | Non-deactivated, non-guest local users; all known room records; distinct users in Synapse's daily-visit tracking during the last 24 hours. These are homeserver metrics, not Element browser sessions or message contents. |
+| Authelia | Successful/failed authentication-log events in the last 24 hours, TOTP configurations, and registered WebAuthn credentials. Authentication attempts are not distinct users. No usernames, IPs, authentication secrets or log records are returned. |
+
+Hytale remains disabled. Satisfactory's server denies passwordless client login;
+without a client credential it keeps its compact build/uptime fallback rather
+than reporting invented player counts. No game server is restarted by this work.
+
+Before the first expanded-widget deployment, run
+`docker build -t homepage-inventory:latest docker/dockerfiles/homepage-inventory`, then
+`bash docker/scripts/setup-homepage-widgets.sh` from the repository root (or pass
+the candidate image tag as its first argument). It preserves existing `.env`
+values and SearXNG YAML comments, adds generated `HOMEPAGE_WIDGET_DB_PASSWORD`
+and `HOMEPAGE_SEARXNG_METRICS_PASSWORD`, and configures views in the three databases.
+It preserves an existing SearXNG metrics password and refuses to enable metrics
+if collection was explicitly disabled. Only access to already-collected local
+engine metrics is enabled, using password-protected `/metrics`; no search text
+or new usage analytics is recorded. Recreate SearXNG to load that password.
+
+The `homepage_widget` PostgreSQL identity can select only the single aggregate
+view in each database. It has no base-table privileges, schema creation rights,
+superuser capabilities, or role inheritance, and defaults to read-only
+transactions with a two-second statement timeout. The runtime explicitly uses
+read-only transactions too. The setup refuses to overwrite unrelated roles or
+schemas with that name. Application accounts/credentials are unchanged.
+The main collector joins the existing `matrix` and `authelia` networks to reach
+those views. SnapOtter's embedded PostgreSQL remains **loopback-only**:
+`snapotter-widget` shares its network namespace and serves only aggregates on
+port 8089, with no host port or proxy host. Recreate the companion with SnapOtter
+when its network namespace changes; Compose's dependency restart wiring covers
+explicit Compose updates.
 
 The adapter has read-only directory mounts for Aurral `/config`, Storyteller and
-BookBridge `/data`, ntfy's cache, and the existing `vw-data` named volume.
+BookBridge `/data`, ConvertX `/app/data`, ntfy's cache, and the existing `vw-data` named volume.
 Directory mounts keep SQLite's live database, WAL, and SHM files together;
 `immutable=1` is deliberately not used because it ignores live WAL changes.
 Connections are read-only, query-only, short-lived transactions with a one-second
@@ -141,7 +178,7 @@ read other files in those mounts, including sensitive application data. It does
 not decrypt Vaultwarden data, but read-only mounting is not field-level access
 control. Keep the collector internal and keep access to Homepage appropriately
 restricted for instance-wide counts. Responses contain only display labels and
-aggregate counts/durations plus inventory rows, never titles, usernames,
+aggregate counts/durations or two fallback values, never titles, usernames,
 topic names, vault contents, credentials, or raw database errors. Query/schema
 failures are visible widget errors, never silently substituted zero counts.
 Apps without a useful supported metric keep the simplified inventory widget.
@@ -149,8 +186,8 @@ Apps without a useful supported metric keep the simplified inventory widget.
 ### Container inventory
 
 `homepage-inventory` serves a narrowly filtered JSON API on the existing internal
-`homepage-widgets` network. It has no published ports, NPM host, `proxy` network,
-or additional application credentials. Container routes only return display rows,
+`homepage-widgets` network. It has no published ports, NPM host, or `proxy` network.
+Container routes only return `version` and `uptime`,
 never Docker environment variables, mounts, labels, healthcheck output, logs,
 or complete inspection responses. Containers must belong to Compose project
 `compose`. Only GET is accepted; this is not a general-purpose Docker proxy.
@@ -166,11 +203,9 @@ not masquerade as Storyteller, Komf, Whisper, or MirkMap versions. Hytale's imag
 version is explicitly labeled **Wrapper**, not the game version.
 
 Uptime is time since the container started, not a promise about application
-availability or a process's age. A container without a configured healthcheck
-has **no Health row**, including when a check is explicitly disabled with `NONE`.
-A stopped container with a check says **Not running** and has no live uptime;
-Hytale stays disabled and is not
-started by this feature. Missing containers and Docker/version-source failures
+availability or a process's age. No widget repeats Docker state or health.
+A stopped container has no live uptime; Hytale stays disabled.
+Missing containers and Docker/version-source failures
 are visible widget errors, not invented healthy or zero-valued responses.
 Widgets refresh every 30 seconds; successful inventory results are cached for
 10 seconds, without serving stale data after a failed refresh.
@@ -180,8 +215,9 @@ supplementary group, a read-only root filesystem, and dropped capabilities.
 Its Docker socket mount is `:ro`, but **a read-only socket mount is not a
 Docker API authorization boundary**: the adapter is a trusted socket consumer,
 like Homepage itself. Keep it internal, and never expose its socket or raw
-Docker inspection data to browsers. Its only archive reads are fixed version
-files for WireGuard and Satisfactory; no arbitrary file paths or exec endpoints
+Docker inspection data to browsers. Archive reads are fixed version files for
+WireGuard/Satisfactory, the filtered WireGuard peer configuration, and ConvertX's
+converter registry; no arbitrary file paths or exec endpoints
 are offered.
 
 Service-specific icons use verified Dashboard Icons filenames where available,

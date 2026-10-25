@@ -1,6 +1,6 @@
 const http = require("node:http");
 const path = require("node:path");
-const { databaseFiles, readStats } = require("./stats.cjs");
+const { applicationStats, statsNames } = require("./app-stats.cjs");
 
 const appVersionLabels = new Set([
   "adguardhome", "audiobookshelf", "aurral", "authelia", "bazarr", "bookbridge",
@@ -141,17 +141,7 @@ function containerInfo(container, version, now) {
     const minutes = Math.floor(seconds % 3600 / 60);
     uptime = days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : minutes ? `${minutes}m` : `${seconds}s`;
   }
-  const items = [{ label: "App / Build", value: version }, { label: "Container Up", value: uptime }];
-  const check = container.Config?.Healthcheck?.Test;
-  const hasHealthcheck = Array.isArray(check) && check.length > 0 && check[0] !== "NONE";
-  if (hasHealthcheck) {
-    const health = state.Running ? state.Health?.Status : "Not running";
-    if (!["healthy", "unhealthy", "starting", "Not running"].includes(health)) {
-      throw new InventoryError("Invalid healthcheck state");
-    }
-    items.push({ label: "Health", value: health });
-  }
-  return { items };
+  return { version, uptime };
 }
 
 function createServer({
@@ -160,11 +150,15 @@ function createServer({
   requestDocker = (requestPath, options) => dockerRequest(socketPath, requestPath, options),
   now = Date.now,
   cacheMs = 10000,
-  requestStats = readStats,
+  requestStats,
   logError = console.error,
 } = {}) {
   const cache = new Map();
   const pending = new Map();
+  const readContainerFile = async (name, filename) => archiveText(
+    await requestDocker(`/containers/${name}/archive?path=${encodeURIComponent(filename)}`, { binary: true }),
+    path.posix.basename(filename),
+  );
   async function inventory(name, withStats) {
     const key = `${withStats ? "stats" : "containers"}/${name}`;
     const cached = cache.get(key);
@@ -175,33 +169,35 @@ function createServer({
         if (container.Config?.Labels?.["com.docker.compose.project"] !== project) {
           throw new InventoryError("Container is outside the dashboard project", 404);
         }
-        if (!/^sha256:[a-f0-9]{64}$/.test(container.Image || "")) throw new InventoryError("Invalid image identity");
-        const source = versionFiles[name];
-        let version;
-        if (source) {
-          const archive = await requestDocker(
-            `/containers/${name}/archive?path=${encodeURIComponent(source.path)}`, { binary: true },
-          );
-          let value;
-          try {
-            value = source.parse(archiveText(archive, path.posix.basename(source.path)));
-          } catch (error) {
-            if (error instanceof InventoryError) throw error;
-            throw new InventoryError("Invalid application version file");
-          }
-          if (!validVersion(value)) throw new InventoryError("Application version missing from file");
-          version = source.prefix + value;
-        } else {
-          const image = await requestDocker(`/images/${container.Image}/json`);
-          version = imageVersion(name, image);
-        }
-        const value = containerInfo(container, version, now());
+        let value;
         if (withStats) {
           try {
-            value.items.unshift(...await requestStats(name));
+            value = requestStats ? await requestStats(name) : await applicationStats(name, { readContainerFile });
           } catch {
             throw new InventoryError(`Application statistics unavailable: ${name}`);
           }
+        } else {
+          if (!/^sha256:[a-f0-9]{64}$/.test(container.Image || "")) throw new InventoryError("Invalid image identity");
+          const source = versionFiles[name];
+          let version;
+          if (source) {
+            const archive = await requestDocker(
+              `/containers/${name}/archive?path=${encodeURIComponent(source.path)}`, { binary: true },
+            );
+            let parsed;
+            try {
+              parsed = source.parse(archiveText(archive, path.posix.basename(source.path)));
+            } catch (error) {
+              if (error instanceof InventoryError) throw error;
+              throw new InventoryError("Invalid application version file");
+            }
+            if (!validVersion(parsed)) throw new InventoryError("Application version missing from file");
+            version = source.prefix + parsed;
+          } else {
+            const image = await requestDocker(`/images/${container.Image}/json`);
+            version = imageVersion(name, image);
+          }
+          value = containerInfo(container, version, now());
         }
         if (cache.size >= 256) cache.clear();
         cache.set(key, { at: now(), value });
@@ -218,7 +214,7 @@ function createServer({
     };
     const match = /^\/(containers|stats)\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/.exec(request.url);
     if (!match && request.url !== "/healthz") return send(404, { error: "Not found" });
-    if (match?.[1] === "stats" && !Object.hasOwn(databaseFiles, match[2])) {
+    if (match?.[1] === "stats" && !statsNames.has(match[2])) {
       return send(404, { error: "Not found" });
     }
     if (request.method !== "GET") {
