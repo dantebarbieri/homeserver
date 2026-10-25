@@ -57,22 +57,14 @@
         container: aurral
         widget: &container-info
           type: customapi
-          url: http://homepage-inventory:8080/containers/aurral
+          url: http://homepage-inventory:8080/stats/aurral
           refreshInterval: 30000
-          display: list
+          display: dynamic-list
           mappings:
-            - field: version
-              label: App / Build
-              format: text
-            - field: uptime
-              label: Container Up
-              format: text
-            - field: state
-              label: State
-              format: text
-            - field: health
-              label: Health
-              format: text
+            items: items
+            name: label
+            label: value
+            format: text
 
 - Read & Listen:
     - Komga:
@@ -120,7 +112,7 @@
         container: storyteller
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/storyteller
+          url: http://homepage-inventory:8080/stats/storyteller
     - BookBridge:
         icon: https://bookbridge.danteb.com/static/icon.png
         href: https://bookbridge.danteb.com
@@ -130,7 +122,7 @@
         container: bookbridge
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/bookbridge
+          url: http://homepage-inventory:8080/stats/bookbridge
     - Suwayomi:
         icon: suwayomi.svg
         href: https://suwayomi.danteb.com
@@ -478,7 +470,7 @@
         container: vaultwarden
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/vaultwarden
+          url: http://homepage-inventory:8080/stats/vaultwarden
     - ntfy:
         icon: ntfy.svg
         href: https://ntfy.danteb.com
@@ -488,7 +480,7 @@
         container: ntfy
         widget:
           <<: *container-info
-          url: http://homepage-inventory:8080/containers/ntfy
+          url: http://homepage-inventory:8080/stats/ntfy
     - Element:
         icon: element.svg
         href: https://element.danteb.com

@@ -106,17 +106,51 @@ New authenticated widgets need `HOMEPAGE_VAR_FORGEJO_KEY` and
 configured. Existing widget credentials and Suwayomi's adapter are unchanged.
 
 Every service now has a widget. Existing native/API widgets keep their
-application statistics. The other cards, including all backends, use the shared
-`&container-info` widget: **App / Build**, **Container Up**, **State**, and
-**Health**. The list layout leaves room for build identifiers on narrow cards.
+application statistics. Five additional apps use read-only aggregate statistics
+below. The remaining cards, including all backends, use the shared
+`&container-info` widget: **App / Build**, **Container Up**, and **Health** only
+when a healthcheck is configured. State is already on the card, so it is not
+repeated. Dynamic lists omit inapplicable rows and leave room for build IDs.
 Do not scrape authenticated pages, disable authentication, or expose databases
-just to fill a card.
+over the network just to fill a card.
+
+### Read-only application statistics
+
+The existing internal adapter also serves five fixed `/stats/<app>` routes.
+No new `.env` credentials or application admin tokens are needed. Metrics are
+**instance-wide**, not scoped to the Homepage viewer's account:
+
+| App | Metrics and scope |
+|-----|-------------------|
+| Aurral | Distinct available songs/albums and their album artists; album-request events retained in Aurral history from the last 30 days; active track download jobs (pending, downloading, cancellation requested). Requests are not a lifetime total or the live Lidarr request queue. Unavailable files and duplicate file formats do not inflate song counts. |
+| Storyteller | Catalogue books; distinct books with non-missing audiobook assets; non-missing aligned readalouds; summed available audiobook duration, converted from seconds to hours/minutes. If any assets lack duration, a separate row says how many are excluded from that duration. |
+| BookBridge | Books by sync/processing status: active, pending, processing, and failed (retry-later or permanent); unrecognized statuses appear only as an aggregate Other Status count. These are not reading/finished statuses. |
+| Vaultwarden | Active login items, all active vault items, secure notes, cards, and trash. Active category counts exclude trash. Includes personal and organization items once each, across all users; never reads encrypted item names or contents. |
+| ntfy | Distinct topics represented in unexpired published cached messages, cached message count, and unexpired scheduled/unpublished messages. These are **not** subscription counts, connected subscribers, or all subscribable topics: ntfy accepts arbitrary topic names, and a topic disappears from this count when its cache expires. |
+
+The adapter has read-only directory mounts for Aurral `/config`, Storyteller and
+BookBridge `/data`, ntfy's cache, and the existing `vw-data` named volume.
+Directory mounts keep SQLite's live database, WAL, and SHM files together;
+`immutable=1` is deliberately not used because it ignores live WAL changes.
+Connections are read-only, query-only, short-lived transactions with a one-second
+busy timeout. Only fixed aggregate SQL is executed. No database filenames, SQL,
+filters, or file contents are accepted from HTTP callers.
+
+**Trust boundary:** directory access necessarily allows this trusted process to
+read other files in those mounts, including sensitive application data. It does
+not decrypt Vaultwarden data, but read-only mounting is not field-level access
+control. Keep the collector internal and keep access to Homepage appropriately
+restricted for instance-wide counts. Responses contain only display labels and
+aggregate counts/durations plus inventory rows, never titles, usernames,
+topic names, vault contents, credentials, or raw database errors. Query/schema
+failures are visible widget errors, never silently substituted zero counts.
+Apps without a useful supported metric keep the simplified inventory widget.
 
 ### Container inventory
 
 `homepage-inventory` serves a narrowly filtered JSON API on the existing internal
 `homepage-widgets` network. It has no published ports, NPM host, `proxy` network,
-or additional application credentials. It only returns the four display fields,
+or additional application credentials. Container routes only return display rows,
 never Docker environment variables, mounts, labels, healthcheck output, logs,
 or complete inspection responses. Containers must belong to Compose project
 `compose`. Only GET is accepted; this is not a general-purpose Docker proxy.
@@ -132,9 +166,10 @@ not masquerade as Storyteller, Komf, Whisper, or MirkMap versions. Hytale's imag
 version is explicitly labeled **Wrapper**, not the game version.
 
 Uptime is time since the container started, not a promise about application
-availability or a process's age. A running container without a healthcheck says
-**No check**, not healthy. A stopped container says **Not running**, has no live
-uptime, and retains its actual Docker state; Hytale stays disabled and is not
+availability or a process's age. A container without a configured healthcheck
+has **no Health row**, including when a check is explicitly disabled with `NONE`.
+A stopped container with a check says **Not running** and has no live uptime;
+Hytale stays disabled and is not
 started by this feature. Missing containers and Docker/version-source failures
 are visible widget errors, not invented healthy or zero-valued responses.
 Widgets refresh every 30 seconds; successful inventory results are cached for

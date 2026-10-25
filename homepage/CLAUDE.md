@@ -37,7 +37,7 @@ This file provides guidance to Claude Code when working with the `homepage/` dir
 6. Add the corresponding `HOMEPAGE_VAR_*` to **three places**: `docker/sample.env`, the server's `.env`, **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly listed there — `.env` alone is not enough)
 7. Document how to obtain the API key in `WIDGET_API_KEYS.md`
 8. Add the category to `settings.yaml` `layout` if it's new, including an explicit `tab` so it does not repeat on every tab. Service and bookmark groups must have distinct names.
-9. If there is no useful native/API widget, use `widget: { <<: *container-info, url: http://homepage-inventory:8080/containers/<container-name> }`. The anchor is defined on Aurral. Keep it before its aliases. See `README.md` for version-source and health semantics; new trusted app-version sources belong in the adapter with regression coverage, not hardcoded dashboard versions.
+9. If there is no useful native/API widget, use `widget: { <<: *container-info, url: http://homepage-inventory:8080/containers/<container-name> }`. The dynamic-list anchor is defined on Aurral, which overrides its URL with `/stats/aurral`; keep it before its aliases and always override the URL. The adapter has five fixed read-only aggregate routes; see `README.md` for their scope, database trust boundary, version sources, and conditional Health row. Do not reintroduce redundant State or "No check" rows. New statistics/version sources need regression coverage, not hardcoded dashboard values.
 
 ## Environment Variable Convention
 

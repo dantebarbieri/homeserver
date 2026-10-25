@@ -1,0 +1,137 @@
+const assert = require("node:assert/strict");
+const { test } = require("node:test");
+const { DatabaseSync } = require("node:sqlite");
+const fs = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
+const { collectStats, duration, readDatabaseStats, readStats } = require("./stats.cjs");
+
+function fixture(t, schema) {
+  const db = new DatabaseSync(":memory:");
+  db.exec(schema);
+  t.after(() => db.close());
+  return db;
+}
+
+const values = (items) => Object.fromEntries(items.map(({ label, value }) => [label, value]));
+
+test("Aurral counts available songs once, excludes missing files, and distinguishes requests from track jobs", (t) => {
+  const db = fixture(t, `
+    CREATE TABLE library_media_files (track_id INTEGER, album_id INTEGER, available INTEGER);
+    CREATE TABLE library_albums (id INTEGER, artist_id INTEGER);
+    CREATE TABLE aurral_history (kind TEXT, created_at INTEGER);
+    CREATE TABLE playlist_download_jobs (status TEXT);
+    INSERT INTO library_albums VALUES (1, 8), (2, 8), (3, 9);
+    INSERT INTO library_media_files VALUES (10,1,1), (10,1,1), (11,2,1), (12,3,0);
+    INSERT INTO playlist_download_jobs VALUES ('pending'), ('downloading'), ('cancel_requested'),
+      ('done'), ('failed'), ('cancelled'), ('blocked');
+  `);
+  const insert = db.prepare("INSERT INTO aurral_history VALUES (?, ?)");
+  insert.run("album_requested", Date.now());
+  insert.run("album_requested", Date.now() - 31 * 86400000);
+  insert.run("artist_added", Date.now());
+  assert.deepEqual(values(collectStats(db, "aurral")), {
+    Songs: "2", Albums: "2", Artists: "1", "Album Requests (30d)": "1", "Active Download Jobs": "3",
+  });
+});
+
+test("Storyteller separates catalogue books, available audio and completed readalouds; duration is seconds", (t) => {
+  const db = fixture(t, `
+    CREATE TABLE book (uuid TEXT);
+    CREATE TABLE audiobook (book_uuid TEXT, missing INTEGER, duration REAL);
+    CREATE TABLE readaloud (book_uuid TEXT, missing INTEGER, status TEXT);
+    INSERT INTO book VALUES ('one'), ('two'), ('ebook-only');
+    INSERT INTO audiobook VALUES ('one',0,3661.5), ('two',0,60.5), ('missing',1,999999);
+    INSERT INTO readaloud VALUES ('one',0,'ALIGNED'), ('two',0,'PROCESSING'), ('missing',1,'ALIGNED');
+  `);
+  assert.deepEqual(values(collectStats(db, "storyteller")), {
+    Books: "3", Audiobooks: "2", Readalouds: "1", "Audio Duration": "1h 2m",
+  });
+  db.exec("INSERT INTO audiobook VALUES ('unknown-length',0,NULL)");
+  assert.equal(values(collectStats(db, "storyteller"))["Audio Without Duration"], "1");
+  db.exec("INSERT INTO audiobook VALUES ('invalid-length',0,-100)");
+  assert.throws(() => collectStats(db, "storyteller"), /Invalid audiobook duration/);
+  db.exec("DELETE FROM audiobook WHERE duration < 0; INSERT INTO audiobook VALUES ('invalid-length',0,'corrupt')");
+  assert.throws(() => collectStats(db, "storyteller"), /Invalid audiobook duration/);
+});
+
+test("BookBridge reports instance-wide sync/processing status, not reading progress or owners", (t) => {
+  const db = fixture(t, `
+    CREATE TABLE books (status TEXT, user_id INTEGER, abs_title TEXT);
+    INSERT INTO books VALUES ('active',1,'private title'), ('pending',2,'private title'),
+      ('processing',2,'private title'), ('failed_retry_later',1,'private title'),
+      ('failed_permanent',1,'private title'), ('private unknown status',1,'private title'),
+      (NULL,NULL,'private title');
+  `);
+  const result = collectStats(db, "bookbridge");
+  assert.deepEqual(values(result), {
+    Books: "7", Active: "1", Pending: "1", Processing: "1", Failed: "2", "Other Status": "2",
+  });
+  assert.ok(!JSON.stringify(result).includes("private"));
+});
+
+test("Vaultwarden distinguishes active logins from all items and excludes trash from category counts", (t) => {
+  const db = fixture(t, `
+    CREATE TABLE ciphers (atype INTEGER, deleted_at TEXT, name TEXT, data TEXT);
+    INSERT INTO ciphers VALUES (1,NULL,'encrypted private name','encrypted private data'),
+      (1,NULL,'secret','secret'), (1,'2026-01-01','secret','secret'),
+      (2,NULL,'secret','secret'), (3,NULL,'secret','secret'), (4,NULL,'secret','secret');
+  `);
+  assert.deepEqual(values(collectStats(db, "vaultwarden")), {
+    Logins: "2", "Vault Items": "5", "Secure Notes": "1", Cards: "1", Trash: "1",
+  });
+});
+
+test("ntfy counts only unexpired cache topics/messages and separates unpublished scheduled messages", (t) => {
+  const db = fixture(t, `
+    CREATE TABLE messages (topic TEXT, expires INTEGER, published INTEGER);
+    INSERT INTO messages VALUES ('private-a',unixepoch()+3600,1), ('private-a',unixepoch()+3600,1),
+      ('private-b',unixepoch()+3600,1), ('expired',unixepoch()-1,1),
+      ('scheduled',unixepoch()+3600,0), ('expired-schedule',unixepoch()-1,0);
+  `);
+  assert.deepEqual(values(collectStats(db, "ntfy")), {
+    "Cached Topics": "2", "Cached Messages": "3", "Scheduled Messages": "1",
+  });
+});
+
+test("empty valid databases give real zeros, but missing schemas and sources fail explicitly", (t) => {
+  const db = fixture(t, "CREATE TABLE ciphers (atype INTEGER, deleted_at TEXT)");
+  assert.equal(values(collectStats(db, "vaultwarden")).Logins, "0");
+  assert.throws(() => collectStats(db, "ntfy"));
+  assert.throws(() => collectStats(db, "unknown"), /Unsupported/);
+  assert.throws(() => readStats("../../etc/shadow"), /Unsupported/);
+  assert.throws(() => readStats("toString"), /Unsupported/);
+});
+
+test("duration formatting handles zero, minutes and long libraries without rounding up", () => {
+  assert.equal(duration(0), "0h 0m");
+  assert.equal(duration(59.9), "0h 0m");
+  assert.equal(duration(60), "0h 1m");
+  assert.equal(duration(3600 * 1234 + 60 * 59 + 59.9), "1,234h 59m");
+  for (const invalid of [-1, Infinity, NaN, null, "60"]) {
+    assert.throws(() => duration(invalid), /Invalid aggregate duration/);
+  }
+});
+
+test("read-only collection sees live uncheckpointed WAL updates and never creates a missing database", async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "homepage-stats-"));
+  const filename = path.join(directory, "vault.db");
+  const writer = new DatabaseSync(filename);
+  t.after(async () => {
+    writer.close();
+    await fs.rm(directory, { recursive: true });
+  });
+  writer.exec(`
+    PRAGMA journal_mode=WAL;
+    PRAGMA wal_autocheckpoint=0;
+    CREATE TABLE ciphers (atype INTEGER, deleted_at TEXT);
+    INSERT INTO ciphers VALUES (1,NULL);
+  `);
+  assert.ok((await fs.stat(filename + "-wal")).size > 0);
+  assert.equal(values(readDatabaseStats(filename, "vaultwarden")).Logins, "1");
+  writer.exec("INSERT INTO ciphers VALUES (1,NULL)");
+  assert.equal(values(readDatabaseStats(filename, "vaultwarden")).Logins, "2");
+  const missing = path.join(directory, "missing.db");
+  assert.throws(() => readDatabaseStats(missing, "vaultwarden"));
+  await assert.rejects(fs.access(missing), { code: "ENOENT" });
+});

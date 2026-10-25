@@ -50,13 +50,13 @@ async function fixture(t, options = {}) {
   return { request: (url, init) => fetch(`http://127.0.0.1:${server.address().port}${url}`, init), calls, errors };
 }
 
-test("returns only version, container uptime, state and explicit unconfigured health", async (t) => {
+test("returns version and uptime rows without redundant state or unconfigured health", async (t) => {
   const { request, calls } = await fixture(t);
   const response = await request("/containers/it-tools");
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(await response.json(), {
-    version: "Image aaaaaaaaaaaa", uptime: "2d 1h", state: "running", health: "No check",
+    items: [{ label: "App / Build", value: "Image aaaaaaaaaaaa" }, { label: "Container Up", value: "2d 1h" }],
   });
   assert.deepEqual(calls, ["/containers/it-tools/json", `/images/${id}/json`]);
 });
@@ -64,16 +64,21 @@ test("returns only version, container uptime, state and explicit unconfigured he
 test("shows healthy, unhealthy, and starting only when Docker reports them", () => {
   for (const status of ["healthy", "unhealthy", "starting"]) {
     const value = copy(container);
+    value.Config.Healthcheck = { Test: ["CMD", "true"] };
     value.State.Health = { Status: status, Log: [{ Output: "do-not-return" }] };
-    assert.equal(containerInfo(value, "1.2.3", now).health, status);
+    assert.deepEqual(containerInfo(value, "1.2.3", now).items.at(-1), { label: "Health", value: status });
   }
 });
 
 test("stopped Hytale does not retain stale healthy status or claim uptime", () => {
   const value = copy(container);
+  value.Config.Healthcheck = { Test: ["CMD", "true"] };
   value.State = { Running: false, Status: "exited", Health: { Status: "healthy" } };
   assert.deepEqual(containerInfo(value, "Wrapper 1.1.0", now), {
-    version: "Wrapper 1.1.0", uptime: "-", state: "exited", health: "Not running",
+    items: [
+      { label: "App / Build", value: "Wrapper 1.1.0" }, { label: "Container Up", value: "-" },
+      { label: "Health", value: "Not running" },
+    ],
   });
 });
 
@@ -81,7 +86,7 @@ test("formats seconds, minutes and hours without claiming application uptime", (
   for (const [seconds, expected] of [[0, "0s"], [35, "35s"], [90, "1m"], [7500, "2h 5m"]]) {
     const value = copy(container);
     value.State.StartedAt = new Date(now - seconds * 1000).toISOString();
-    assert.equal(containerInfo(value, "1", now).uptime, expected);
+    assert.equal(containerInfo(value, "1", now).items[1].value, expected);
   }
 });
 
@@ -142,14 +147,14 @@ test("reads WireGuard's release, not its unrelated package version", async (t) =
     assert.equal(options.binary, true);
     return tar("package.json", '{"version":"1.0.1","release":{"version":"14"}}');
   } });
-  assert.equal((await (await request("/containers/wg-easy")).json()).version, "v14");
+  assert.equal((await (await request("/containers/wg-easy")).json()).items[0].value, "v14");
   assert.deepEqual(calls, ["/containers/wg-easy/json", "/containers/wg-easy/archive?path=%2Fapp%2Fpackage.json"]);
 });
 
 test("reads the installed Satisfactory Steam build, not the image's Ubuntu version", async (t) => {
   const { request } = await fixture(t, { requestDocker: async (url) => url.endsWith("/json")
     ? copy(container) : tar("appmanifest_1690800.acf", '"AppState"\n{\n "buildid" "24656085"\n}\n') });
-  assert.equal((await (await request("/containers/satisfactory-server")).json()).version, "Steam build 24656085");
+  assert.equal((await (await request("/containers/satisfactory-server")).json()).items[0].value, "Steam build 24656085");
 });
 
 test("does not provide arbitrary Docker, file, query-string, or mutation endpoints", async (t) => {
@@ -198,6 +203,70 @@ test("healthcheck verifies socket access without returning Docker details", asyn
   const { request, calls } = await fixture(t);
   assert.deepEqual(await (await request("/healthz")).json(), { status: "ok" });
   assert.deepEqual(calls, ["/version"]);
+});
+
+test("omits disabled healthchecks, including stale state from a previously enabled check", () => {
+  for (const check of [undefined, { Test: [] }, { Test: ["NONE"] }]) {
+    const value = copy(container);
+    value.Config.Healthcheck = check;
+    value.State.Health = { Status: "healthy" };
+    assert.equal(containerInfo(value, "1", now).items.length, 2);
+  }
+  const value = copy(container);
+  value.Config.Healthcheck = { Test: ["CMD", "true"] };
+  assert.throws(() => containerInfo(value, "1", now), /Invalid healthcheck state/);
+});
+
+test("application metrics precede inventory and are cached separately from metadata", async (t) => {
+  let queries = 0;
+  const { request } = await fixture(t, { requestStats: (name) => {
+    assert.equal(name, "aurral");
+    queries++;
+    return [{ label: "Songs", value: "123" }];
+  } });
+  assert.equal((await (await request("/containers/aurral")).json()).items.length, 2);
+  for (let i = 0; i < 2; i++) {
+    const response = await request("/stats/aurral");
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).items[0], { label: "Songs", value: "123" });
+  }
+  assert.equal(queries, 1);
+});
+
+test("statistics routes are fixed, GET-only and project-scoped", async (t) => {
+  let queries = 0;
+  const value = copy(container);
+  value.Config.Labels["com.docker.compose.project"] = "unrelated";
+  const { request, calls } = await fixture(t, {
+    requestStats: () => { queries++; return []; },
+    requestDocker: async () => value,
+  });
+  for (const url of ["/stats/toString", "/stats/unknown", "/stats/aurral?sql=SELECT", "/stats/aurral/elsewhere"]) {
+    assert.equal((await request(url)).status, 404);
+  }
+  assert.equal((await request("/stats/aurral", { method: "POST" })).status, 405);
+  assert.equal((await request("/stats/aurral")).status, 404);
+  assert.equal(queries, 0);
+  assert.equal(calls.length, 0);
+});
+
+test("expired statistics never become fake zeros, stale success or raw database errors", async (t) => {
+  let clock = now;
+  let fail = false;
+  const { request, errors } = await fixture(t, {
+    now: () => clock,
+    requestStats: () => {
+      if (fail) throw new Error("/private/database: secret contents");
+      return [{ label: "Logins", value: "12" }];
+    },
+  });
+  assert.equal((await request("/stats/vaultwarden")).status, 200);
+  fail = true;
+  clock += 10001;
+  const response = await request("/stats/vaultwarden");
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: "Application statistics unavailable: vaultwarden" });
+  assert.deepEqual(errors, ["Application statistics unavailable: vaultwarden"]);
 });
 
 test("rejects invalid states, future start times, and malformed version files", () => {

@@ -75,6 +75,11 @@ services:
       - "${DOCKER_GID}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${DATA}/aurral/config:/stats/aurral:ro
+      - ${DATA}/storyteller/data:/stats/storyteller:ro
+      - ${DATA}/bookbridge/data:/stats/bookbridge:ro
+      - vw-data:/stats/vaultwarden:ro
+      - ${DATA}/ntfy/cache:/stats/ntfy:ro
     networks:
       - homepage-widgets
     read_only: true
@@ -155,3 +160,6 @@ networks:
   homepage-widgets:
     internal: true
   suwayomi:
+
+volumes:
+  vw-data:

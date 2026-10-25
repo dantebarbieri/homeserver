@@ -23,7 +23,7 @@ All services should extend one of these:
 
 ## Custom Dockerfiles (`dockerfiles/`)
 
-- `dockerfiles/homepage-inventory/` — Internal, GET-only container version/uptime/health adapter. Filters Docker inspection data to four display fields and scopes requests to project `compose`; never expose it or raw Docker responses publicly. See `homepage/README.md`.
+- `dockerfiles/homepage-inventory/` — Internal, GET-only container version/uptime/conditional-health adapter, plus five fixed read-only SQLite aggregate routes. Scopes containers to project `compose`; never expose it, raw Docker responses, or database contents publicly. Database directory mounts and the Docker socket make it a trusted process; see `homepage/README.md` for scope and access boundaries.
 - `dockerfiles/convertx/` — Extends upstream ConvertX: restores omitted optional packages (ImageMagick SVG coders, HEIC/AVIF encoders, LaTeX `soul`, Office metric fonts), adds ImageMagick JXL delegates and larger pixel-cache limits, and wraps `soffice` with a per-invocation profile so concurrent LibreOffice conversions don't collide
 - `dockerfiles/Dockerfile.jellyfin` — Injects Finity theme CSS/JS into `index.html` via sed
 - `dockerfiles/Dockerfile.qbittorrent` — Bundles the official stable VueTorrent assets into LinuxServer qBittorrent; `build --pull` updates both through the normal update job

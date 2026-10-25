@@ -1,5 +1,6 @@
 const http = require("node:http");
 const path = require("node:path");
+const { databaseFiles, readStats } = require("./stats.cjs");
 
 const appVersionLabels = new Set([
   "adguardhome", "audiobookshelf", "aurral", "authelia", "bazarr", "bookbridge",
@@ -140,11 +141,17 @@ function containerInfo(container, version, now) {
     const minutes = Math.floor(seconds % 3600 / 60);
     uptime = days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : minutes ? `${minutes}m` : `${seconds}s`;
   }
-  const health = state.Running ? state.Health?.Status || "No check" : "Not running";
-  if (!["healthy", "unhealthy", "starting", "No check", "Not running"].includes(health)) {
-    throw new InventoryError("Invalid healthcheck state");
+  const items = [{ label: "App / Build", value: version }, { label: "Container Up", value: uptime }];
+  const check = container.Config?.Healthcheck?.Test;
+  const hasHealthcheck = Array.isArray(check) && check.length > 0 && check[0] !== "NONE";
+  if (hasHealthcheck) {
+    const health = state.Running ? state.Health?.Status : "Not running";
+    if (!["healthy", "unhealthy", "starting", "Not running"].includes(health)) {
+      throw new InventoryError("Invalid healthcheck state");
+    }
+    items.push({ label: "Health", value: health });
   }
-  return { version, uptime, state: state.Status, health };
+  return { items };
 }
 
 function createServer({
@@ -153,15 +160,17 @@ function createServer({
   requestDocker = (requestPath, options) => dockerRequest(socketPath, requestPath, options),
   now = Date.now,
   cacheMs = 10000,
+  requestStats = readStats,
   logError = console.error,
 } = {}) {
   const cache = new Map();
   const pending = new Map();
-  async function inventory(name) {
-    const cached = cache.get(name);
+  async function inventory(name, withStats) {
+    const key = `${withStats ? "stats" : "containers"}/${name}`;
+    const cached = cache.get(key);
     if (cached && now() - cached.at < cacheMs) return cached.value;
-    if (!pending.has(name)) {
-      pending.set(name, (async () => {
+    if (!pending.has(key)) {
+      pending.set(key, (async () => {
         const container = await requestDocker(`/containers/${name}/json`);
         if (container.Config?.Labels?.["com.docker.compose.project"] !== project) {
           throw new InventoryError("Container is outside the dashboard project", 404);
@@ -187,12 +196,19 @@ function createServer({
           version = imageVersion(name, image);
         }
         const value = containerInfo(container, version, now());
+        if (withStats) {
+          try {
+            value.items.unshift(...await requestStats(name));
+          } catch {
+            throw new InventoryError(`Application statistics unavailable: ${name}`);
+          }
+        }
         if (cache.size >= 256) cache.clear();
-        cache.set(name, { at: now(), value });
+        cache.set(key, { at: now(), value });
         return value;
-      })().finally(() => pending.delete(name)));
+      })().finally(() => pending.delete(key)));
     }
-    return pending.get(name);
+    return pending.get(key);
   }
 
   return http.createServer(async (request, response) => {
@@ -200,8 +216,11 @@ function createServer({
       response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       response.end(JSON.stringify(value));
     };
-    const match = /^\/containers\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/.exec(request.url);
+    const match = /^\/(containers|stats)\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/.exec(request.url);
     if (!match && request.url !== "/healthz") return send(404, { error: "Not found" });
+    if (match?.[1] === "stats" && !Object.hasOwn(databaseFiles, match[2])) {
+      return send(404, { error: "Not found" });
+    }
     if (request.method !== "GET") {
       response.setHeader("Allow", "GET");
       return send(405, { error: "Method not allowed" });
@@ -211,7 +230,7 @@ function createServer({
         await requestDocker("/version");
         return send(200, { status: "ok" });
       }
-      send(200, await inventory(match[1]));
+      send(200, await inventory(match[2], match[1] === "stats"));
     } catch (error) {
       const message = error instanceof InventoryError ? error.message : "Unexpected inventory failure";
       logError(message);
