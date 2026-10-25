@@ -41,7 +41,7 @@ the library from other releases.
 
 ## Pinned implementation
 
-`compose.downloads.yml` builds `qbit-manage-inactivity:4.14.0-3` from the exact
+`compose.downloads.yml` builds `qbit-manage-inactivity:4.14.0-4` from the exact
 upstream image below. It was bumped from 4.13.0 on October 24, 2026 because
 4.13.0's bundled `qbittorrent-api` refused to run against qBittorrent 5.2.4.
 
@@ -54,6 +54,17 @@ normally a few days after each qBittorrent release. During that lag qbit-manage
 logs "only compatible with ... or lower" and skips its runs (no torrent
 actions). If the newest library breaks the build, the previous image keeps running.
 Bumping the qbit_manage pin itself (and the patch source hashes) stays manual.
+
+Caveat: a newer `qbittorrent-api` only clears qbit_manage's version gate; it
+cannot fix qbit_manage code that the new qBittorrent API breaks. qBittorrent
+5.3.0 (Web API 2.15.3) made `shareLimitsMode` required on `setShareLimits`, and
+4.14.0 failed every share-limit run with "Missing required parameters:
+shareLimitsMode". `patch_share_limits_mode.py` backports the upstream fix
+([#1437](https://github.com/StuffAnThings/qbit_manage/pull/1437), commit
+`5b15de5`), hash-verifying both the 4.14.0 input and an output byte-identical to
+upstream. Delete it (and its Dockerfile step) when bumping to a release that
+includes the fix. After qBittorrent updates, check the log for `ERROR`
+lines.
 Current pin:
 
 - Image manifest: `sha256:0153204c727b8cd219c87cd22d5e5833e392436923577455e3c84ceb73835c7d`
@@ -78,7 +89,8 @@ max_ratio == -1 AND max_seeding_time == -1 AND max_last_active > 0
 ```
 
 No runtime cleanup, duration conversion, seed-count, tagging or deletion code is
-changed. Other validation errors remain errors. In particular, zero/global ratios,
+changed by this patch (the separate `shareLimitsMode` backport above only adds
+an API parameter). Other validation errors remain errors. In particular, zero/global ratios,
 finite/global maximum seeding times and missing/nonpositive inactivity limits do
 not qualify for the exception. Existing upstream inactivity rounding to minutes
 is unchanged.
@@ -182,7 +194,7 @@ without applying anything.
 With Docker available, build without starting any service:
 
 ```bash
-docker build -t qbit-manage-inactivity:4.14.0-3 docker/dockerfiles/qbit-manage
+docker build -t qbit-manage-inactivity:4.14.0-4 docker/dockerfiles/qbit-manage
 docker compose --env-file docker/sample.env -f docker/compose.downloads.yml config --quiet
 ```
 
