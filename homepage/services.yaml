@@ -577,7 +577,7 @@
         container: anime-relations
     - qbit-manage:
         icon: mdi-download-network
-        description: Supports qBittorrent - optional profile, dry-run mode
+        description: Supports qBittorrent - dry-run mode
         server: my-docker
         container: qbit-manage
 

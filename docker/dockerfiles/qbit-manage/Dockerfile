@@ -3,10 +3,18 @@ FROM ghcr.io/stuffanthings/qbit_manage@sha256:0153204c727b8cd219c87cd22d5e5833e3
 
 ENV QBT_DRY_RUN=true
 
-# qbit_manage gates on qbittorrent-api's max supported qBittorrent version;
-# 2026.10.1 (same pin as upstream develop) adds qBittorrent 5.3.0.
-RUN pip install --no-cache-dir --no-deps qbittorrent-api==2026.10.1 \
-    && python3 -c "from qbittorrentapi import Version; assert Version.is_app_version_supported('v5.3.0')"
+# qbit_manage refuses qBittorrent versions newer than its bundled qbittorrent-api
+# knows about, while qBittorrent itself tracks :latest. Install the newest
+# qbittorrent-api on every build so the nightly `docker compose build --pull`
+# follows qBittorrent. ADD of the PyPI metadata busts the layer cache only when
+# a new release is published. If anything below fails, the build fails and the
+# previous image keeps running.
+ADD https://pypi.org/pypi/qbittorrent-api/json /tmp/qbittorrent-api.json
+RUN bundled="$(python3 -c 'from qbittorrentapi import Version; print(Version.latest_supported_app_version())')" \
+    && pip install --no-cache-dir --upgrade qbittorrent-api \
+    && rm /tmp/qbittorrent-api.json \
+    && cd /app && python3 -c "import modules.qbittorrent" \
+    && python3 -c "from qbittorrentapi import Version; import sys; print('qbittorrent-api supports up to', Version.latest_supported_app_version()); sys.exit(not Version.is_app_version_supported('$bundled'))"
 
 COPY patch_inactivity_policy.py /usr/local/libexec/qbit-manage-policy/
 COPY tests /usr/local/libexec/qbit-manage-policy/tests/

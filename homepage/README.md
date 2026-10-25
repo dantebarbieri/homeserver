@@ -45,8 +45,8 @@ interfaces, and monitoring uses the existing Docker socket without exposing
 private services or joining their networks. CouchDB retains its useful admin link.
 
 Docker status reports container state and health where a healthcheck exists;
-it does not prove end-to-end application availability. The optional qbit-manage
-profile and disabled Hytale server are labeled so absence is not mistaken for
+it does not prove end-to-end application availability. The disabled Hytale
+server is labeled so absence is not mistaken for
 an unexpected outage. Homepage itself is not listed on its own dashboard.
 The qBittorrent port-sync card uses Compose's generated container name
 `compose-qbit-port-sync-1` because that service has no explicit `container_name`.
