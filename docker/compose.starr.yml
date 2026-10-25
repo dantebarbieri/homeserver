@@ -1,5 +1,5 @@
 # Starr apps and media management
-# radarr, sonarr, lidarr, bazarr, prowlarr, recyclarr, seerr, aurral, soularr, tdarr
+# radarr, sonarr, lidarr, lidarr-maint, bazarr, prowlarr, recyclarr, seerr, aurral, soularr, tdarr
 
 services:
   recyclarr:
@@ -154,6 +154,37 @@ services:
     volumes:
       - ${DATA}/soularr:/data
       - ${RAID}/shared/soulseek/downloads:/downloads
+
+  # Unattended Lidarr queue fixer: imports edition mismatches, blocklists bad or
+  # dead releases, periodic missing search; ntfy for anything it can't fix.
+  # On proxy only to reach qBittorrent (vpn-netns has no other network).
+  # See docs/MUSIC.md ("Queue maintenance").
+  lidarr-maint:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: lidarr-maint
+    build:
+      context: dockerfiles/lidarr-maint
+    container_name: lidarr-maint
+    user: ${HOST_UID}:${HOST_GID}
+    environment:
+      TZ: ${TZ}
+      INTERVAL: 1800
+      QBIT_USER: ${HOMEPAGE_VAR_QBIT_USER}
+      QBIT_PASS: ${HOMEPAGE_VAR_QBIT_PASS}
+      NTFY_URL: https://ntfy.danteb.com
+      NTFY_TOPIC: homeserver-alerts
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - ${DATA}/lidarr/config/config.xml:/lidarr/config.xml:ro
+      - ${DATA}/lidarr-maint:/state
+      # Same /data paths as Lidarr; read-only because Lidarr does the imports.
+      - ${RAID}/shared:/data:ro
+    depends_on:
+      - lidarr
 
   tdarr:
     extends:

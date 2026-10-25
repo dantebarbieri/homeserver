@@ -269,7 +269,36 @@ replay it over IPv4 too (over IPv6 it gets 403 "blocked by CloudFlare").
 Lidarr's MusicBrainz titles for Japanese releases (e.g. Ghibli soundtracks)
 are in Japanese while indexers use English, so automatic search rarely matches.
 Grab those manually and import with **Wanted > Manual Import**, choosing the
-release whose track count matches the files.
+release whose track count matches the files. `lidarr-maint` (below) does this
+automatically when the files are already in Lidarr's queue.
+
+## Queue maintenance (`lidarr-maint`)
+
+`lidarr-maint` (`compose.starr.yml`, built from `dockerfiles/lidarr-maint/`)
+checks Lidarr's queue every 30 minutes and fixes the common stuck cases:
+
+| Stuck pattern | Fix |
+|---------------|-----|
+| Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents to keep hardlinks, move for usenet). Never switches the edition of an album that already has files, since that unlinks them |
+| Single/EP grabbed for an album (<=4 files for an 8+ track album) | Blocklist + re-search |
+| Failed download | Blocklist + re-search |
+| Torrent below 5% with no seeds for 24 h (`music` category) | Blocklist + re-search |
+| "Not grabbed by Lidarr" entries | Remove from the queue (download kept) |
+| Missing albums | `MissingAlbumSearch` at most every 6 h |
+
+Anything else, such as partial edition matches, archives, or an album grabbed
+under the wrong album, is posted once to ntfy (`homeserver-alerts`) as
+"Lidarr: needs attention". A failing run alerts at high priority, and repeats of
+the same error at most every 6 hours. The container reads Lidarr's API key from
+its `config.xml` (read-only), so key rotations need no change. It uses the
+`HOMEPAGE_VAR_QBIT_*` credentials and keeps its state in
+`${DATA}/lidarr-maint`. It mounts `/data` read-only because Lidarr itself
+performs the imports.
+
+```bash
+docker logs -f lidarr-maint                                   # what it did
+docker compose run --rm -e DRY=1 -e ONCE=1 lidarr-maint       # preview one run
+```
 
 ## Soulseek (slskd + Soularr)
 
