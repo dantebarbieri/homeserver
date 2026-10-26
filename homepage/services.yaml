@@ -831,6 +831,14 @@
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/containers/radarr-maint
+    - Sonarr Maintenance:
+        icon: sonarr.svg
+        description: Supports Sonarr - unattended queue fixes
+        server: my-docker
+        container: sonarr-maint
+        widget:
+          <<: *container-info
+          url: http://homepage-inventory:8080/containers/sonarr-maint
 
 - Communication & Sync:
     - Synapse:
