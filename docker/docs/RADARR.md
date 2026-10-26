@@ -2,7 +2,7 @@
 
 ## Queue maintenance (`radarr-maint`)
 
-`radarr-maint` (`compose.starr.yml`, built from `dockerfiles/radarr-maint/`)
+`radarr-maint` (`compose.starr.yml`, built from the shared `dockerfiles/arr-maint/` image (common engine in `arr_maint.py`, Radarr rules in `radarr.py`))
 checks Radarr's queue every 30 minutes. It only acts on items that have been
 stuck for at least 20 minutes (`GRACE_MINUTES`), so Radarr's own import and
 failure handling gets the first try.
@@ -13,8 +13,9 @@ failure handling gets the first try.
 | Downloaded the same release that is already in the library | Blocklist and remove |
 | Every file rejected as "not an upgrade", for example an AI upscale with a negative custom format score | Blocklist and remove |
 | Failed download | Blocklist and remove (Radarr searches again) |
-| Torrent below 5% with no seeds for 24 h (Radarr's qBittorrent categories) | Blocklist and remove |
+| Dead torrent: no connected seeds for 24 h (`STALL_HOURS`) and either below 5%, including stuck on "downloading metadata", or partly done with availability below 1 and no activity for 24 h (Radarr's qBittorrent categories) | Blocklist and remove |
 | "Not grabbed by Radarr" entries | Remove from the queue (the download is kept) |
+| Torrent with no movie match whose files were already imported by hand (hardlink count > 1) | Remove from the queue (the download is kept and keeps seeding) |
 | Missing monitored movies | `MissingMoviesSearch` at most every 24 h (`MISSING_SEARCH_HOURS`) |
 
 Anything else, such as files that match a different movie or more than one
@@ -25,7 +26,7 @@ help: Radarr blocklists them and grabs another release on its own.
 
 The container reads Radarr's API key from its `config.xml` (read-only), uses the
 `HOMEPAGE_VAR_QBIT_*` credentials, and keeps its state in `${DATA}/radarr-maint`.
-It does not mount `/data`; Radarr performs the imports.
+It mounts `/data` read-only to check hardlinks; Radarr performs the imports.
 
 ```bash
 docker logs -f radarr-maint                                                  # what it did

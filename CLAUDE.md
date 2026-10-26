@@ -123,6 +123,7 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 - `dockerfiles/convertx/` — extends upstream ConvertX with the optional packages, ImageMagick tweaks, and LibreOffice wrapper its conversions need
 - `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
+- `dockerfiles/arr-maint/` — queue auto-fixers for Lidarr, Radarr and Sonarr: one image, a shared engine plus per-app rules, selected by `APP`
 - `dockerfiles/bmc-monitor/` — BMC IP monitor (ipmitool + NPM API updater)
 - `dockerfiles/port-sync/` — qBittorrent VPN port sync (gluetun forwarded port → qBit API)
 

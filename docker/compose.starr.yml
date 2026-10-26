@@ -155,20 +155,22 @@ services:
       - ${DATA}/soularr:/data
       - ${RAID}/shared/soulseek/downloads:/downloads
 
-  # Unattended Lidarr queue fixer: imports edition mismatches, blocklists bad or
-  # dead releases, periodic missing search; ntfy for anything it can't fix.
+  # Unattended queue fixers, one container per app from one image
+  # (dockerfiles/arr-maint: shared engine + lidarr.py/radarr.py/sonarr.py rules).
+  # They fix known stuck patterns and send ntfy for anything they can't fix.
   # On proxy only to reach qBittorrent (vpn-netns has no other network).
-  # See docs/MUSIC.md ("Queue maintenance").
-  lidarr-maint:
+  # See docs/MUSIC.md, docs/RADARR.md and docs/SONARR.md ("Queue maintenance").
+  lidarr-maint: &arr-maint
     extends:
       file: compose.common.yml
       service: common-service
-    image: lidarr-maint
+    image: arr-maint
     build:
-      context: dockerfiles/lidarr-maint
+      context: dockerfiles/arr-maint
     container_name: lidarr-maint
     user: ${HOST_UID}:${HOST_GID}
-    environment:
+    environment: &arr-maint-env
+      APP: lidarr
       TZ: ${TZ}
       INTERVAL: 1800
       QBIT_USER: ${HOMEPAGE_VAR_QBIT_USER}
@@ -181,62 +183,34 @@ services:
     volumes:
       - ${DATA}/lidarr/config/config.xml:/lidarr/config.xml:ro
       - ${DATA}/lidarr-maint:/state
-      # Same /data paths as Lidarr; read-only because Lidarr does the imports.
+      # Same /data paths as the *arrs; read-only because the *arrs do the imports.
       - ${RAID}/shared:/data:ro
     depends_on:
       - lidarr
 
-  # On proxy only to reach qBittorrent (vpn-netns has no other network).
-  # See docs/RADARR.md ("Queue maintenance").
   radarr-maint:
-    extends:
-      file: compose.common.yml
-      service: common-service
-    image: radarr-maint
-    build:
-      context: dockerfiles/radarr-maint
+    <<: *arr-maint
     container_name: radarr-maint
-    user: ${HOST_UID}:${HOST_GID}
     environment:
-      TZ: ${TZ}
-      INTERVAL: 1800
-      QBIT_USER: ${HOMEPAGE_VAR_QBIT_USER}
-      QBIT_PASS: ${HOMEPAGE_VAR_QBIT_PASS}
-      NTFY_URL: https://ntfy.danteb.com
-      NTFY_TOPIC: homeserver-alerts
-    networks:
-      - proxy
-      - starr
+      <<: *arr-maint-env
+      APP: radarr
     volumes:
       - ${DATA}/radarr/config/config.xml:/radarr/config.xml:ro
       - ${DATA}/radarr-maint:/state
+      - ${RAID}/shared:/data:ro
     depends_on:
       - radarr
 
-  # On proxy only to reach qBittorrent (vpn-netns has no other network).
-  # See docs/SONARR.md ("Queue maintenance").
   sonarr-maint:
-    extends:
-      file: compose.common.yml
-      service: common-service
-    image: sonarr-maint
-    build:
-      context: dockerfiles/sonarr-maint
+    <<: *arr-maint
     container_name: sonarr-maint
-    user: ${HOST_UID}:${HOST_GID}
     environment:
-      TZ: ${TZ}
-      INTERVAL: 1800
-      QBIT_USER: ${HOMEPAGE_VAR_QBIT_USER}
-      QBIT_PASS: ${HOMEPAGE_VAR_QBIT_PASS}
-      NTFY_URL: https://ntfy.danteb.com
-      NTFY_TOPIC: homeserver-alerts
-    networks:
-      - proxy
-      - starr
+      <<: *arr-maint-env
+      APP: sonarr
     volumes:
       - ${DATA}/sonarr/config/config.xml:/sonarr/config.xml:ro
       - ${DATA}/sonarr-maint:/state
+      - ${RAID}/shared:/data:ro
     depends_on:
       - sonarr
 
