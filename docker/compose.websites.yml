@@ -2,6 +2,35 @@
 # Uncomment services as needed
 
 services:
+  # Intentionally public, read-only installer downloads; no accounts or APIs.
+  starr:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/dantebarbieri/starr-installer:latest
+    container_name: starr
+    user: "65534:65534"
+    environment:
+      PUBLIC_URL: https://starr.danteb.com
+      SOURCE_ROOT: /source
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 1
+    pids_limit: 64
+    expose:
+      - "8080"
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # Only docker/scripts/mirklurk-release.py starts or recreates the wiki frontend
   # (docs/MIRKLURK.md). The profile keeps the nightly updater, dcu, dcupdate and
   # a bare dcr off it; the helper moves the local tag after its checks and backup.

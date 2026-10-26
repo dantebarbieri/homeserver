@@ -584,6 +584,16 @@
             - { field: active, label: Active (24h), format: text }
 
 - Development:
+    - Starr Installer:
+        icon: mdi-download-box
+        href: https://starr.danteb.com
+        description: Setup guide and install command builder
+        siteMonitor: https://starr.danteb.com/healthz
+        server: my-docker
+        container: starr
+        widget:
+          <<: *container-info
+          url: http://homepage-inventory:8080/containers/starr
     - Code Server:
         icon: vscode.webp
         href: https://code.danteb.com
