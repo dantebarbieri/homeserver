@@ -66,35 +66,36 @@ See [`CLAUDE.md`](CLAUDE.md) for detailed architecture documentation.
 For a fresh Linux server without NixOS, use the independent public
 [Starr installer source](https://github.com/dantebarbieri/starr-installer) and
 [installer documentation](https://github.com/dantebarbieri/starr-installer#readme).
-The planned [hosted guide and command builder](https://starr.danteb.com)
-also serves `/install.sh` and `/install.py`. **The public hostname is not
-deployed yet.**
+The [hosted guide and command builder](https://starr.danteb.com) is live and
+serves `/i`, `/install.sh` and `/install.py`.
 
 This repository only hosts the installer using
 `ghcr.io/dantebarbieri/starr-installer:latest`. Required checks and gated image
-publication belong to the installer repository; the first deployment depends
-on its tested image being published and anonymously pullable. The existing
-homeserver updater can then pull new published images. The image bundles its
+publication belong to the installer repository. The image is publicly pullable,
+and the existing homeserver updater pulls new published images. The image bundles its
 source and public profile snapshot at `/source` (`SOURCE_ROOT`); the authoritative
 Recyclarr profiles remain here in `recyclarr-configs/`. There are no runtime
 source/profile mounts, Docker socket access, or host ports. The image's own
 entrypoint runs as UID/GID 65534 with a read-only filesystem.
 
-When ready to deploy, run from the main Compose entry point, not the websites
-category file, so NPM and `starr` share the existing proxy network:
+For subsequent deployments, use the main Compose entry point and retain the
+production project name (`compose`), so NPM and `starr` share the existing proxy
+network. Do not deploy the websites category file independently:
 
 ```bash
 z /srv/homeserver/docker
-docker compose pull starr
-docker compose up -d starr
+docker compose --project-name compose pull starr
+docker compose --project-name compose up -d --no-deps --wait starr
 ```
 
-In Nginx Proxy Manager, create `starr.danteb.com` with HTTP upstream
-`starr:8080`, a TLS certificate, and Force SSL. Keep `PUBLIC_URL` set to
+Nginx Proxy Manager routes `starr.danteb.com` to HTTP upstream `starr:8080`
+using the existing wildcard TLS certificate, Force SSL and Block Common Exploits.
+Keep `PUBLIC_URL` set to
 `https://starr.danteb.com`. Do not add Authelia or a login access list: the guide
 and installer downloads are intentionally public, read-only resources with no
-accounts or privileged API. Health checks use `/healthz`; Homepage monitors
-that URL and the `starr` container. No NixOS, router or firewall changes are
+accounts or privileged API. Health checks use `/healthz`; Homepage's Development
+group includes Starr Installer and monitors that URL and the `starr` container.
+No NixOS, router or firewall changes are
 needed because NPM provides the existing HTTPS ingress.
 
 For music, see [Lidarr + Plexamp](docker/docs/MUSIC.md): a shared FLAC library,
