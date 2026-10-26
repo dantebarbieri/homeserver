@@ -25,7 +25,7 @@ at most every 6 hours. Usenet "incomplete" and "repair failed" failures need no
 help: Radarr blocklists them and grabs another release on its own.
 
 The container reads Radarr's API key from its `config.xml` (read-only), uses the
-`HOMEPAGE_VAR_QBIT_*` credentials, and keeps its state in `${DATA}/radarr-maint`.
+qBittorrent's `QUSER`/`QPASS` credentials, and keeps its state in `${DATA}/radarr-maint`.
 It mounts `/data` read-only to check hardlinks; Radarr performs the imports.
 
 ```bash

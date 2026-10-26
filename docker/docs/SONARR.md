@@ -31,7 +31,7 @@ downloads and grabs another release on its own. Torrent "stalled" warnings are
 left alone until the dead-torrent rule applies, so they don't trigger alerts.
 
 The container reads Sonarr's API key from its `config.xml` (read-only), uses the
-`HOMEPAGE_VAR_QBIT_*` credentials, and keeps its state in `${DATA}/sonarr-maint`.
+qBittorrent's `QUSER`/`QPASS` credentials, and keeps its state in `${DATA}/sonarr-maint`.
 It mounts `/data` read-only to check hardlinks; Sonarr performs the imports.
 
 ```bash
