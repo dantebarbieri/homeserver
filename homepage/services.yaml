@@ -823,6 +823,14 @@
         widget:
           <<: *container-info
           url: http://homepage-inventory:8080/containers/lidarr-maint
+    - Radarr Maintenance:
+        icon: radarr.svg
+        description: Supports Radarr - unattended queue fixes
+        server: my-docker
+        container: radarr-maint
+        widget:
+          <<: *container-info
+          url: http://homepage-inventory:8080/containers/radarr-maint
 
 - Communication & Sync:
     - Synapse:

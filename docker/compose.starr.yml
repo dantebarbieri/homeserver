@@ -1,5 +1,5 @@
 # Starr apps and media management
-# radarr, sonarr, lidarr, lidarr-maint, bazarr, prowlarr, recyclarr, seerr, aurral, soularr, tdarr
+# radarr, radarr-maint, sonarr, lidarr, lidarr-maint, bazarr, prowlarr, recyclarr, seerr, aurral, soularr, tdarr
 
 services:
   recyclarr:
@@ -185,6 +185,33 @@ services:
       - ${RAID}/shared:/data:ro
     depends_on:
       - lidarr
+
+  # On proxy only to reach qBittorrent (vpn-netns has no other network).
+  # See docs/RADARR.md ("Queue maintenance").
+  radarr-maint:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: radarr-maint
+    build:
+      context: dockerfiles/radarr-maint
+    container_name: radarr-maint
+    user: ${HOST_UID}:${HOST_GID}
+    environment:
+      TZ: ${TZ}
+      INTERVAL: 1800
+      QBIT_USER: ${HOMEPAGE_VAR_QBIT_USER}
+      QBIT_PASS: ${HOMEPAGE_VAR_QBIT_PASS}
+      NTFY_URL: https://ntfy.danteb.com
+      NTFY_TOPIC: homeserver-alerts
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - ${DATA}/radarr/config/config.xml:/radarr/config.xml:ro
+      - ${DATA}/radarr-maint:/state
+    depends_on:
+      - radarr
 
   tdarr:
     extends:
