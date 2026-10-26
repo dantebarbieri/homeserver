@@ -2,7 +2,7 @@
 
 ## Queue maintenance (`sonarr-maint`)
 
-`sonarr-maint` (`compose.starr.yml`, built from `dockerfiles/sonarr-maint/`)
+`sonarr-maint` (`compose.starr.yml`, built from the shared `dockerfiles/arr-maint/` image (common engine in `arr_maint.py`, Sonarr rules in `sonarr.py`))
 checks Sonarr's queue every 30 minutes. Sonarr lists one queue row per episode,
 so the script groups rows by download. It only acts on downloads that have been
 stuck for at least 20 minutes (`GRACE_MINUTES`), so Sonarr's own import and
@@ -16,6 +16,7 @@ failure handling gets the first try.
 | Failed download | Blocklist and remove (Sonarr searches again) |
 | Dead torrent: no connected seeds for 24 h (`STALL_HOURS`) and either below 5%, including stuck on "downloading metadata", or partly done with availability below 1 and no activity for 24 h (Sonarr's qBittorrent categories) | Blocklist and remove (Sonarr searches again) |
 | "Not grabbed by Sonarr" entries | Remove from the queue (the download is kept) |
+| Torrent with no series match whose files were already imported by hand (hardlink count > 1) | Remove from the queue (the download is kept and keeps seeding) |
 | Missing monitored episodes | `MissingEpisodeSearch` at most every 168 h (`MISSING_SEARCH_HOURS`, `0` disables) |
 
 Quality, language and custom-format rejections are never overridden. In
@@ -31,7 +32,7 @@ left alone until the dead-torrent rule applies, so they don't trigger alerts.
 
 The container reads Sonarr's API key from its `config.xml` (read-only), uses the
 `HOMEPAGE_VAR_QBIT_*` credentials, and keeps its state in `${DATA}/sonarr-maint`.
-It does not mount `/data`; Sonarr performs the imports.
+It mounts `/data` read-only to check hardlinks; Sonarr performs the imports.
 
 ```bash
 docker logs -f sonarr-maint                                                  # what it did

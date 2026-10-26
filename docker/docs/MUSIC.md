@@ -275,16 +275,18 @@ automatically when the files are already in Lidarr's queue.
 
 ## Queue maintenance (`lidarr-maint`)
 
-`lidarr-maint` (`compose.starr.yml`, built from `dockerfiles/lidarr-maint/`)
-checks Lidarr's queue every 30 minutes and fixes the common stuck cases:
+`lidarr-maint` (`compose.starr.yml`, built from the shared `dockerfiles/arr-maint/` image (common engine in `arr_maint.py`, Lidarr rules in `lidarr.py`))
+checks Lidarr's queue every 30 minutes. It only acts on items that have been
+stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 
 | Stuck pattern | Fix |
 |---------------|-----|
 | Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents to keep hardlinks, move for usenet). Never switches the edition of an album that already has files, since that unlinks them |
 | Single/EP grabbed for an album (<=4 files for an 8+ track album) | Blocklist + re-search |
 | Failed download | Blocklist + re-search |
-| Torrent below 5% with no seeds for 24 h (`music` category) | Blocklist + re-search |
-| "Not grabbed by Lidarr" entries | Remove from the queue (download kept) |
+| Dead torrent: no connected seeds for 24 h (`STALL_HOURS`) and either below 5%, including stuck on "downloading metadata", or partly done with availability below 1 and no activity for 24 h (Lidarr's qBittorrent category, `music`) | Blocklist + re-search |
+| "Not grabbed by Lidarr" torrents | Move to `music-manual` (below), download kept |
+| "Not grabbed by Lidarr" usenet entries | Remove from the queue (download kept) |
 | Completed torrent with no artist match ("Artist name mismatch"), whose files were already imported by hand (hardlink count > 1) | Move the torrent to the `music-manual` qBit category (`/data/torrents/music-manual`), which Lidarr doesn't track, so it keeps seeding. Lidarr v3's queue *Remove* returns HTTP 500 for these unknown-artist items. Without hardlinked files, it notifies instead |
 | Missing albums | `MissingAlbumSearch` at most every 6 h |
 
