@@ -173,8 +173,8 @@ services:
       APP: lidarr
       TZ: ${TZ}
       INTERVAL: 1800
-      QBIT_USER: ${HOMEPAGE_VAR_QBIT_USER}
-      QBIT_PASS: ${HOMEPAGE_VAR_QBIT_PASS}
+      QBIT_USER: ${QUSER}
+      QBIT_PASS: ${QPASS}
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
     networks:

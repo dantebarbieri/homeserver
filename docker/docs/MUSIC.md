@@ -295,7 +295,7 @@ under the wrong album, is posted once to ntfy (`homeserver-alerts`) as
 "Lidarr: needs attention". A failing run alerts at high priority, and repeats of
 the same error at most every 6 hours. The container reads Lidarr's API key from
 its `config.xml` (read-only), so key rotations need no change. It uses the
-`HOMEPAGE_VAR_QBIT_*` credentials and keeps its state in
+qBittorrent's `QUSER`/`QPASS` credentials and keeps its state in
 `${DATA}/lidarr-maint`. It mounts `/data` read-only because Lidarr itself
 performs the imports.
 
