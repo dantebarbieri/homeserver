@@ -7,6 +7,8 @@ Every INTERVAL seconds:
   - blocklists + re-searches failed downloads, wrong tiny releases (<=4 files for an
     8+ track album) and torrents stalled at <5% with 0 seeds for 24h
   - removes stale "not grabbed" queue entries
+  - moves unmatched (no artist) completed torrents whose files are already hardlinked into
+    the library to the untracked QBIT_MANUAL_CATEGORY, so they keep seeding outside Lidarr
   - triggers MissingAlbumSearch at most every MISSING_SEARCH_HOURS
 Anything it can't fix is sent to ntfy once (deduplicated across runs).
 """
@@ -18,6 +20,8 @@ LIDARR_CONFIG = os.environ.get("LIDARR_CONFIG", "/lidarr/config.xml")
 QBIT_URL = os.environ.get("QBIT_URL", "http://qbittorrent:8080")
 QBIT_USER, QBIT_PASS = os.environ.get("QBIT_USER", ""), os.environ.get("QBIT_PASS", "")
 QBIT_CATEGORY = os.environ.get("QBIT_CATEGORY", "music")
+QBIT_MANUAL_CATEGORY = os.environ.get("QBIT_MANUAL_CATEGORY", "music-manual")
+QBIT_MANUAL_PATH = os.environ.get("QBIT_MANUAL_PATH", "/data/torrents/music-manual")
 NTFY_URL, NTFY_TOPIC = os.environ.get("NTFY_URL", ""), os.environ.get("NTFY_TOPIC", "")
 STATE = os.environ.get("STATE_DIR", "/state")
 INTERVAL = int(os.environ.get("INTERVAL", "1800"))
@@ -131,9 +135,30 @@ def remove_and_research(r):
     api("/api/v1/command", "POST", {"name": "AlbumSearch", "albumIds": [r["albumId"]]})
 
 
+def qbit():
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    op.open(f"{QBIT_URL}/api/v2/auth/login", urllib.parse.urlencode({"username": QBIT_USER, "password": QBIT_PASS}).encode(), timeout=30)
+    return op
+
+
+def release_to_manual(op, h):
+    # Lidarr's queue DELETE throws a NullReferenceException for items without an artist,
+    # so stop Lidarr tracking them by moving the torrent to an untracked category.
+    # Same filesystem, so setLocation is a rename and keeps hardlinks.
+    post = lambda p, d: op.open(f"{QBIT_URL}/api/v2/torrents/{p}", urllib.parse.urlencode(d).encode(), timeout=60)
+    try:
+        post("createCategory", {"category": QBIT_MANUAL_CATEGORY, "savePath": QBIT_MANUAL_PATH})
+    except urllib.error.HTTPError as e:
+        if e.code != 409:
+            raise
+    post("setCategory", {"hashes": h, "category": QBIT_MANUAL_CATEGORY})
+    post("setLocation", {"hashes": h, "location": QBIT_MANUAL_PATH})
+
+
 def run():
     actions, needs_user = [], {}
-    q = api("/api/v1/queue?pageSize=500&includeArtist=true&includeAlbum=true")["records"]
+    op = qbit() if QBIT_USER else None
+    q = api("/api/v1/queue?pageSize=500&includeArtist=true&includeAlbum=true&includeUnknownArtistItems=true")["records"]
     log("queue", len(q), dict(Counter(f"{r.get('trackedDownloadState')}/{r.get('trackedDownloadStatus')}" for r in q)))
     for r in q:
         state, status = r.get("trackedDownloadState"), r.get("trackedDownloadStatus")
@@ -146,6 +171,16 @@ def run():
             if not DRY:
                 api(f"/api/v1/queue/{r['id']}?removeFromClient=false&blocklist=false", "DELETE")
             actions.append(f"removed stale: {r['title'][:60]}")
+            continue
+        if not r.get("albumId"):
+            files = audio_files(r.get("outputPath")) if state in ("importFailed", "importPending", "importBlocked") else []
+            linked = sum(1 for f in files if os.stat(f).st_nlink > 1)
+            if torrent and op and linked:
+                if not DRY:
+                    release_to_manual(op, r["downloadId"].lower())
+                actions.append(f"unmatched, {linked}/{len(files)} already in library -> moved to {QBIT_MANUAL_CATEGORY}: {r['title'][:60]}")
+            else:
+                needs_user[f"unmatched:{r['downloadId']}"] = f"no artist/album match, {state}/{status} ({msgs[:100]}): {r['title'][:80]}"
             continue
         if state in ("failedPending", "failed") or r.get("status") in ("failed", "warning") and state == "downloading" and status == "error":
             remove_and_research(r)
@@ -167,14 +202,12 @@ def run():
         if torrent and status in ("warning", "error"):
             needs_user[f"warn:{r['downloadId']}"] = f"{name}: {state}/{status} {msgs[:150]}"
 
-    if QBIT_USER:
-        op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-        op.open(f"{QBIT_URL}/api/v2/auth/login", urllib.parse.urlencode({"username": QBIT_USER, "password": QBIT_PASS}).encode(), timeout=30)
+    if op:
         byhash = {(r.get("downloadId") or "").lower(): r for r in q}
         for t in json.loads(op.open(f"{QBIT_URL}/api/v2/torrents/info?category={QBIT_CATEGORY}", timeout=60).read()):
             if t["progress"] < 0.05 and t["num_seeds"] == 0 and time.time() - t["added_on"] > 86400:
                 r = byhash.get(t["hash"].lower())
-                if r:
+                if r and r.get("albumId"):
                     remove_and_research(r)
                     actions.append(f"stalled torrent blocklisted+re-search: {t['name'][:60]}")
                 else:

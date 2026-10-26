@@ -166,7 +166,8 @@ stat -c '%h %i %n' "/data/shared/torrents/music/<release>/<track>.flac" \
 **qbit-manage**: add `music` to the private
 `${DATA}/qbit-manage/config/config.yml` `cat:` mapping
 (`music: /data/torrents/music`) and to its `nohardlinks:` list, alongside the
-video categories. See [qBit Manage inactivity cleanup](QBIT-MANAGE-INACTIVITY.md).
+video categories. Do the same for `music-manual: /data/torrents/music-manual`,
+where `lidarr-maint` parks hand-imported torrents. See [qBit Manage inactivity cleanup](QBIT-MANAGE-INACTIVITY.md).
 
 **Quality guidance**: TRaSH Guides has no Lidarr guide and Recyclarr does not
 sync Lidarr; TRaSH points to
@@ -284,6 +285,7 @@ checks Lidarr's queue every 30 minutes and fixes the common stuck cases:
 | Failed download | Blocklist + re-search |
 | Torrent below 5% with no seeds for 24 h (`music` category) | Blocklist + re-search |
 | "Not grabbed by Lidarr" entries | Remove from the queue (download kept) |
+| Completed torrent with no artist match ("Artist name mismatch"), whose files were already imported by hand (hardlink count > 1) | Move the torrent to the `music-manual` qBit category (`/data/torrents/music-manual`), which Lidarr doesn't track, so it keeps seeding. Lidarr v3's queue *Remove* returns HTTP 500 for these unknown-artist items. Without hardlinked files, it notifies instead |
 | Missing albums | `MissingAlbumSearch` at most every 6 h |
 
 Anything else, such as partial edition matches, archives, or an album grabbed
