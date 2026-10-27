@@ -411,32 +411,28 @@ like Lidarr. It has its own users, so NPM has no Authelia in front of it
    `http://lidarr:8686`, Lidarr API key, root folder `/data/media/music`,
    profile **Lossless Preferred**, **Search on add** on. Do **not** use
    **Apply recommended settings** (it rewrites Lidarr's profile/naming).
-4. **Downloads Folder** (Aurral's own single-track/flow downloads):
-   `/data/media/aurral`.
-5. Lidarr **Settings > Connect > Webhook** named `Aurral`:
+4. Lidarr **Settings > Connect > Webhook** named `Aurral`:
    `http://aurral:3001/api/webhooks/lidarr`, On Release Import only, header
    `X-Api-Key` = Aurral's key from **Settings > System**, so requesters see
    when albums are available.
-6. **Settings > Download clients > slskd**: `http://slskd:5030`, the slskd
-   API key (same one Soularr uses), priority 10, **Clean up after runs off**
-   (it would clear completed transfers Soularr still needs). slskd reports
-   `/data/soulseek/downloads`, which Aurral sees at the same path, so no path
-   mapping is needed. This is only for single tracks and playlist/flow tracks
-   (Lidarr is album-only); those land in `/data/media/aurral`, outside
-   Lidarr. Don't add SABnzbd/qBittorrent: album downloads already go through
-   Lidarr, and a second path would only duplicate them.
-7. **Settings > Playback > Plex**: **Connect Plex account** (approve the
-   plex.tv popup), Server URL `http://plex:32400`, leave **Plex Aurral
-   Library path** blank (Plex mounts the same `/data/media` path), set
-   **Include tracks from an existing library** to **Music** so playlists reuse
-   Lidarr's files, then **Sync to Plex now**. This creates an **Aurral** music
-   library in Plex (at `/data/media/aurral`; the compose file sets
-   `DOWNLOAD_FOLDER` so Aurral doesn't fall back to `/data/downloads/aurral`,
-   which Plex can't see) for flows/playlists, which then show up in Plexamp.
-   Use **Music** as the main Plexamp library; **Aurral** only holds
-   Aurral-only single tracks/flows. If the
-   library dropdown only shows *None*, save first and reopen, or set it with
-   `POST /api/settings` `{"integrations":{"plex":{"mainLibrarySectionId":"8"}}}`.
+5. **Lidarr is the only download path.** Leave every Aurral download client
+   off: slskd, yt-dlp (enabled by default), SABnzbd, NZBGet, Deemix and
+   Prowlarr. Those clients only fetch single tracks and flow/playlist tracks,
+   which Lidarr (album-only) can't, and they save to Aurral's own folder
+   outside the Lidarr library. To get a single song, request the single or
+   album that contains it.
+6. Leave **Settings > Playback > Plex** unconnected. When Plex is connected
+   as a playback destination, Aurral always creates and recreates its own
+   **Aurral** Plex music library
+   (`plexPlaybackDestination.ensureLibrary`), even if it's deleted. Plexamp
+   uses the single **Music** library that Lidarr fills. If you connect it by
+   mistake, clear it with `POST /api/settings`
+   `{"integrations":{"plex":{"url":"","token":"","loginEnabled":false}}}`, then
+   delete the Aurral library in Plex.
+
+The compose file still sets `DOWNLOAD_FOLDER=/data/media/aurral`, which keeps
+Aurral's (now empty) download folder out of the default
+`/data/downloads/aurral`.
 
 Aurral's recommended Lidarr settings (Davo's community guide) are worse for
 this library: its **Aurral - HQ** profile allows only MP3-320 + 16-bit FLAC
