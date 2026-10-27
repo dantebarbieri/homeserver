@@ -409,7 +409,11 @@ picks up every release Soularr has failed (`search_attempts.json` or
 `failed_imports.json`). Each hour it takes up to 40 releases and:
 
 1. searches `<artist> <track title>` for the release's two most distinctive
-   tracks;
+   tracks, then the same under the artist's MusicBrainz aliases (Ye →
+   Kanye West, RØYLS → ROYLS; cached in `aliases.json`), then
+   `<album> <track title>` with no artist, keeping only folders whose path
+   names the album or the artist. Non-Latin titles (Ado's Japanese singles)
+   are searched and matched as-is;
 2. browses each candidate folder and matches every Lidarr track by title and
    duration (±6 s). Remix, live, instrumental and similar variants are
    rejected unless the track title has them. FLAC is preferred;
