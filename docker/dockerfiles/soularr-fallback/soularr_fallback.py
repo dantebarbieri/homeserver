@@ -4,7 +4,9 @@ Soularr searches "<artist> <album>" and needs one folder that matches the whole 
 That misses singles that only exist inside album folders, releases whose title search comes
 back empty, and releases whose first peer never answers. For each release Soularr has failed
 (its search_attempts.json / failed_imports.json) this:
-  1. searches "<artist> <track title>" for the release's most distinctive tracks,
+  1. searches "<artist> <track title>" for the release's most distinctive tracks, then the same
+     under the artist's MusicBrainz aliases (Ye -> Kanye West), then "<album> <track title>"
+     without the artist (only folders whose path names the album or artist count),
   2. browses each candidate folder and maps every Lidarr track to a file by title and
      duration (within LENGTH_TOLERANCE seconds), preferring FLAC,
   3. downloads only the matched files through slskd,
@@ -73,9 +75,15 @@ def save(name, value):
     os.replace(tmp, os.path.join(STATE_DIR, name))
 
 
+FOLD = str.maketrans({"ø": "o", "Ø": "O", "æ": "ae", "Æ": "AE", "œ": "oe", "ß": "ss", "đ": "d", "ł": "l", "Ł": "L",
+                      "•": " "})
+
+
 def norm(s):
-    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", re.sub(r"['`]", "", s)).split())
+    """Lowercase, accents and punctuation stripped; non-Latin scripts (e.g. Japanese) are kept."""
+    s = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", s).lower().translate(FOLD))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[\W_]+", " ", re.sub(r"['`\u2019]", "", s)).split())
 
 
 def core_title(title):
@@ -83,9 +91,43 @@ def core_title(title):
 
 
 def query_words(s):
-    """Soulseek search words: no bracketed parts, no apostrophe words, no 1-char words."""
+    """Soulseek search words: no bracketed parts, no apostrophe words, no 1-char Latin words."""
     s = re.sub(r"[\(\[].*?[\)\]]", " ", unicodedata.normalize("NFKC", s).replace("\u2019", "'"))
-    return [w for w in re.split(r"[^\w']+", s) if len(w) > 1 and "'" not in w]
+    return [w for w in re.split(r"[^\w']+", s) if (len(w) > 1 or w > "\u2e80") and "'" not in w]
+
+
+def artist_names(artist):
+    """Lidarr's name, its accent-folded form and MusicBrainz aliases (cached), e.g. Ye -> Kanye West."""
+    name = artist["artistName"]
+    cache = load(os.path.join(STATE_DIR, "aliases.json"), {})
+    mbid = artist.get("foreignArtistId")
+    if mbid and mbid not in cache:
+        aliases = []
+        try:
+            time.sleep(1.1)  # MusicBrainz allows one request per second
+            req = urllib.request.Request(f"https://musicbrainz.org/ws/2/artist/{mbid}?inc=aliases&fmt=json",
+                                         headers={"User-Agent": "homeserver-soularr-fallback/1.0 (danteb.com)"})
+            data = json.load(urllib.request.urlopen(req, timeout=30))
+            aliases = [data.get("name", "")] + sorted({a["name"] for a in data.get("aliases", [])
+                                                       if a.get("type") in (None, "Artist name", "Legal name")
+                                                       and not a.get("ended") and "," not in a["name"]},
+                                                      key=lambda n: -len(n))
+        except urllib.error.HTTPError as err:
+            log("MusicBrainz alias lookup failed for", name, err)
+            if err.code == 404:
+                cache[mbid] = []
+                save("aliases.json", cache)
+        except Exception as err:
+            log("MusicBrainz alias lookup failed for", name, err)
+        else:
+            cache[mbid] = aliases
+            save("aliases.json", cache)
+    names, seen = [], set()
+    for n in [name, name.translate(FOLD)] + cache.get(mbid, []):
+        if n and norm(n) and n.lower() not in seen:
+            seen.add(n.lower())
+            names.append(n)
+    return names[:4]
 
 
 def ext(f):
@@ -156,21 +198,42 @@ def assign(files, tracks, artist):
     return out
 
 
-def find(album, tracks, excluded):
+def queries(album, probes):
+    """(search text, probe, path guard) in order: Lidarr name, aliases, then album + track without artist."""
     artist = album["artist"]["artistName"]
-    artist_words = [] if artist.lower() in ("various artists", "soundtrack") else query_words(artist)
-    probes = sorted(tracks, key=lambda t: (-len(query_words(t["title"])), -len(t["title"])))[:2]
-    for probe in probes:
-        words = query_words(probe["title"])
-        if not words:
-            continue
+    va = artist.lower() in ("various artists", "soundtrack")
+    names = [artist] if va else artist_names(album["artist"])
+    album_words = query_words(album["title"])
+    out = []
+    for i, name in enumerate(names):
+        for probe in probes[:2] if i == 0 else probes[:1]:
+            words = query_words(probe["title"])
+            if words:
+                out.append((" ".join(([] if va else query_words(name)) + words), probe, None))
+    probe = probes[0]
+    if album_words and norm(album["title"]) != core_title(probe["title"]) and query_words(probe["title"]):
+        # No artist in the query, so the folder path must name the album or an artist name.
+        guard = [norm(album["title"])] + ([] if va else [norm(n) for n in names])
+        out.append((" ".join(album_words + query_words(probe["title"])), probe, guard))
+    seen = set()
+    return names, [q for q in out if not (q[0] in seen or seen.add(q[0]))]
+
+
+def find(album, tracks, excluded):
+    probes = sorted(tracks, key=lambda t: (-len(query_words(t["title"])), -len(t["title"])))
+    names, plan = queries(album, probes)
+    artist = " ".join(names)
+    for text, probe, guard in plan:
         folders = {}
-        for r in search(" ".join(artist_words + words)):
+        for r in search(text):
             if r["username"] in excluded:
                 continue
             for f in r.get("files", []):
+                folder = f["filename"].replace("\\", "/").rsplit("/", 1)[0]
+                if guard and not any(g and re.search(r"(^| )" + re.escape(g) + r"( |$)", norm(folder)) for g in guard):
+                    continue
                 if file_matches(f, probe, artist):
-                    folders[(r["username"], f["filename"].replace("\\", "/").rsplit("/", 1)[0])] = (r, f)
+                    folders[(r["username"], folder)] = (r, f)
         ranked = sorted(folders.items(), key=lambda kv: (quality_key(kv[1][1]), not kv[1][0].get("hasFreeUploadSlot"),
                                                          kv[1][0].get("queueLength", 0), -kv[1][0].get("uploadSpeed", 0)))
         if len(tracks) == 1 and ranked:
