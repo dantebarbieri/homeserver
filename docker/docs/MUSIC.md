@@ -1,29 +1,31 @@
-# Music - Lidarr + Plexamp
+# Music - Lidarr + Plexamp + Navidrome
 
-Lidarr manages artists, albums, and imports. The existing Plex server serves
-the music; **Plexamp** is the dedicated player on iPhone, Windows, and macOS.
-No additional playback container or duplicate library is needed.
+Lidarr manages artists, albums, and imports. Plex (with **Plexamp**) and
+**Navidrome** both serve the same Lidarr library, the same way Plex and
+Jellyfin share movies and TV. No duplicate library is needed.
 
 | Component | Address | Role |
 |-----------|---------|------|
 | Lidarr | `https://lidarr.danteb.com` / internally `http://lidarr:8686` | Library management; optional Prowlarr/download-client integration |
 | Plex | Existing Plex server | Music library, accounts, and streaming |
 | Plexamp | Install on each listening device | Music-focused playback, gapless, CarPlay, and FLAC support |
+| Navidrome | `https://navidrome.danteb.com` / internally `http://navidrome:4533` | Music-only server with a Subsonic API; read-only on the library |
 
 [Plexamp core playback is free](https://www.plex.tv/plexamp/). Plex Pass unlocks
-offline downloads, sonic discovery, and other premium features. Plexamp uses
-Plex, not Navidrome. An independent alternative is Navidrome with Amperfy on
-iPhone and Feishin on Windows/macOS, but that is not deployed by this setup.
+offline downloads, sonic discovery, and other premium features. Navidrome is
+free and has its own users, play counts, ratings, and playlists (not synced
+with Plex). See [Navidrome](#navidrome) below for clients.
 
 ## Library and ownership
 
-| Host path (default `.env`) | Lidarr path | Plex path |
-|---------------------------|-------------|-----------|
-| `/data/shared/media/music` | `/data/media/music` | `/data/media/music` |
-| `/data/shared/imports/music` | `/data/imports/music` | Not mounted |
-| `/data/shared/torrents/music` | `/data/torrents/music` | Not mounted |
-| `/data/shared/usenet/complete/music` | `/data/usenet/complete/music` | Not mounted |
-| `/srv/docker/data/lidarr/config` | `/config` | Not mounted |
+| Host path (default `.env`) | Lidarr path | Plex path | Navidrome path |
+|---------------------------|-------------|-----------|----------------|
+| `/data/shared/media/music` | `/data/media/music` | `/data/media/music` | `/music` (read-only) |
+| `/data/shared/imports/music` | `/data/imports/music` | Not mounted | Not mounted |
+| `/data/shared/torrents/music` | `/data/torrents/music` | Not mounted | Not mounted |
+| `/data/shared/usenet/complete/music` | `/data/usenet/complete/music` | Not mounted | Not mounted |
+| `/srv/docker/data/lidarr/config` | `/config` | Not mounted | Not mounted |
+| `/srv/docker/data/navidrome` | Not mounted | Not mounted | `/data` (DB, cache) |
 
 This follows the [TRaSH folder structure](https://trash-guides.info/File-and-Folder-Structure/How-to-set-up/Docker/)
 already used for movies and TV: the `music` folders under `media`, `torrents`,
@@ -247,6 +249,35 @@ docker compose up -d homepage
 
 The new Media Management tile uses `http://lidarr:8686` internally for its
 widget and `https://lidarr.danteb.com` for the browser/monitor.
+
+### 8. Navidrome
+
+Navidrome mounts the music folder read-only and rescans it hourly (plus file
+watching), so Lidarr imports show up without any hook. Start it and give it
+a host (it isn't reachable from outside until the NPM host exists):
+
+```bash
+install -d -m 2775 -o danteb -g docker /srv/docker/data/navidrome
+z /srv/homeserver/docker
+docker compose up -d navidrome
+```
+
+1. In NPM, add proxy host `navidrome.danteb.com` → `navidrome:4533`, with
+   WebSockets, Block Common Exploits, and the wildcard certificate. **No
+   Authelia**: Navidrome has its own login, and Subsonic apps can't pass SSO
+   (the same reason Plex has none).
+2. Open it right away: **the first visitor creates the admin account**. Then
+   add a regular user for daily listening.
+3. Clients (all speak the Subsonic API; server URL
+   `https://navidrome.danteb.com`):
+   - Windows/macOS/Linux: [Feishin](https://github.com/jeffvli/feishin)
+     (also works with Jellyfin) or [Supersonic](https://github.com/dweymouth/supersonic);
+   - iPhone: [Amperfy](https://github.com/BLeeEZ/amperfy) or play:Sub;
+   - the web UI works in any browser.
+
+Navidrome keeps its own play counts, stars, and playlists. It auto-imports
+`.m3u` files found in the music folder; Plex playlists are not synced.
+Homepage widget credentials are in [WIDGET_API_KEYS.md](../../homepage/WIDGET_API_KEYS.md#navidrome--homepage_var_navidrome_user--_token--_salt).
 
 ## Current production configuration
 

@@ -56,7 +56,7 @@ docker compose -f compose.gaming.yml up -d
 | **Gaming** | minecraft-server (vanilla Hardcore), matcha-minecraft-server (Fabric/Matcha), rlcraft-minecraft-server, satisfactory-server; hytale-server (opt-in profile) |
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
-| **Media** | plex, jellyfin, anime-relations, komga, komf, suwayomi, suwayomi_postgres, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader |
+| **Media** | plex, jellyfin, navidrome, anime-relations, komga, komf, suwayomi, suwayomi_postgres, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader |
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |
 | **RomM** | romm, romm-db |
 | **SearXNG** | searxng, searxng_redis |
