@@ -273,6 +273,15 @@ Grab those manually and import with **Wanted > Manual Import**, choosing the
 release whose track count matches the files. `lidarr-maint` (below) does this
 automatically when the files are already in Lidarr's queue.
 
+Add hand-grabbed torrents to qBittorrent's `music-manual` category, not
+`music`, and import them with `copy` (hardlink). Lidarr tracks everything in
+`music`. If a torrent wasn't grabbed by Lidarr, it reappears in the queue as
+"Import failed" on every poll, even after a successful manual import. A queue
+*Remove* without removing it from the client only hides it until the next
+poll. If one is already in `music`, change its category to `music-manual`.
+qBittorrent's automatic torrent management moves it on the same filesystem,
+so the hardlinks survive.
+
 ## Queue maintenance (`lidarr-maint`)
 
 `lidarr-maint` (`compose.starr.yml`, built from the shared `dockerfiles/arr-maint/` image (common engine in `arr_maint.py`, Lidarr rules in `lidarr.py`))
