@@ -359,8 +359,13 @@ itself), so hardlinks aren't needed here.
    `allowed_filetypes = flac 24/192,flac 24/96,flac 24/48,flac 16/44.1,flac,alac,mp3 320,mp3`;
    `skip_region_check = True`; `search_source = missing`;
    `ignore_failed_users = True`; `search_retry_wait_hours = 24`;
+   `album_prepend_artist = True`; `search_timeout = 15000`;
    `use_extension_whitelist = True` with `extensions_whitelist = lrc,cue,log,jpg,png`.
-   Keep it mode 600.
+   Keep it mode 600. Without `album_prepend_artist`, Soularr searches the bare
+   album title, so singles with generic names ("Soldier", "Easy") return
+   hundreds of unrelated results and never match. The default 5 s timeout
+   also cuts off most peer responses. After changing search settings, reset
+   `search_attempts.json` to `{}` so every missing album is retried at once.
 5. Add `soularr.danteb.com` to the `group:dev` two-factor rule in Authelia's
    `access_control` (the default policy is `deny`) and restart Authelia.
 6. NPM proxy hosts (TLS, WebSockets): `slskd.danteb.com` → `http://slskd:5030`
