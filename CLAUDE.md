@@ -74,7 +74,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.romm.yml` | romm, mariadb |
 | `compose.searxng.yml` | searxng, redis (valkey) |
-| `compose.starr.yml` | radarr, radarr-maint, sonarr, sonarr-maint, lidarr, lidarr-maint, bazarr, prowlarr, seerr, aurral, soularr, tdarr, recyclarr |
+| `compose.starr.yml` | radarr, radarr-maint, sonarr, sonarr-maint, lidarr, lidarr-maint, bazarr, prowlarr, seerr, aurral, soularr, soularr-fallback, tdarr, recyclarr |
 | `compose.utilities.yml` | vaultwarden, syncthing, ntfy, adguardhome, wg-easy, it-tools, code-server, convertx, snapotter, stirling-pdf, changedetection-io, sockpuppetbrowser |
 | `compose.websites.yml` | travel-planner, skyjo, skyjo_server, skyjo_postgres |
 
@@ -124,6 +124,7 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 - `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
 - `dockerfiles/arr-maint/` — queue auto-fixers for Lidarr, Radarr and Sonarr: one image, a shared engine plus per-app rules, selected by `APP`
+- `dockerfiles/soularr-fallback/` — track-level Soulseek search + Lidarr ManualImport for releases Soularr couldn't get
 - `dockerfiles/bmc-monitor/` — BMC IP monitor (ipmitool + NPM API updater)
 - `dockerfiles/port-sync/` — qBittorrent VPN port sync (gluetun forwarded port → qBit API)
 
