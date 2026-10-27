@@ -393,6 +393,37 @@ Check `docker logs slskd-port-sync` shows the forwarded port applied and the
 slskd UI shows connected. Soularr logs each search; Lidarr's history shows the
 imports.
 
+### Track-level fallback (`soularr-fallback`)
+
+Soularr only grabs a folder that matches the whole release from an
+"artist album" search. It misses:
+
+- singles that only exist inside album folders;
+- album searches that come back empty during one of slskd's 0-result bursts
+  (then wait 24 h);
+- releases whose first peer never answers (`Requested => Completed, TimedOut`
+  in the slskd log: the peer is offline or unreachable, not us).
+
+`soularr-fallback` (`dockerfiles/soularr-fallback`, in `compose.starr.yml`)
+picks up every release Soularr has failed (`search_attempts.json` or
+`failed_imports.json`). Each hour it takes up to 40 releases and:
+
+1. searches `<artist> <track title>` for the release's two most distinctive
+   tracks;
+2. browses each candidate folder and matches every Lidarr track by title and
+   duration (±6 s). Remix, live, instrumental and similar variants are
+   rejected unless the track title has them. FLAC is preferred;
+3. downloads only the matched files, then ManualImports them (move) with
+   explicit track ids.
+
+A peer that hasn't delivered within 12 h, or whose transfer fails, is skipped
+and the next one tried (five peers max). Releases with no match are searched
+again after 72 h. State is in `/srv/docker/data/soularr-fallback/state.json`.
+To set it up, run `install -d -m 2775 -o danteb -g docker
+/srv/docker/data/soularr-fallback`, then
+`docker compose up -d --build soularr-fallback`. `docker logs soularr-fallback`
+shows each grab, import, retry and miss.
+
 ## Requests (Aurral)
 
 [Aurral](https://docs.aurral.org/) is the Seerr equivalent for music:

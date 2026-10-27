@@ -1,5 +1,5 @@
 # Starr apps and media management
-# radarr, radarr-maint, sonarr, sonarr-maint, lidarr, lidarr-maint, bazarr, prowlarr, recyclarr, seerr, aurral, soularr, tdarr
+# radarr, radarr-maint, sonarr, sonarr-maint, lidarr, lidarr-maint, bazarr, prowlarr, recyclarr, seerr, aurral, soularr, soularr-fallback, tdarr
 
 services:
   recyclarr:
@@ -154,6 +154,35 @@ services:
     volumes:
       - ${DATA}/soularr:/data
       - ${RAID}/shared/soulseek/downloads:/downloads
+
+  # Track-level fallback for releases Soularr failed: searches "<artist> <track>",
+  # browses the folder, downloads only the matched files and ManualImports them.
+  # Gets singles that only exist inside album folders. See docs/MUSIC.md.
+  soularr-fallback:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: soularr-fallback
+    build:
+      context: dockerfiles/soularr-fallback
+    container_name: soularr-fallback
+    user: ${HOST_UID}:${HOST_GID}
+    environment:
+      TZ: ${TZ}
+      INTERVAL: 3600
+      SLSKD_API_KEY: ${SLSKD_API_KEY}
+    networks:
+      - proxy
+      - starr
+    volumes:
+      - ${DATA}/lidarr/config/config.xml:/lidarr/config.xml:ro
+      - ${DATA}/soularr:/soularr:ro
+      - ${DATA}/soularr-fallback:/state
+      # Same path Lidarr and slskd use, so ManualImport paths match.
+      - ${RAID}/shared/soulseek/downloads:/data/soulseek/downloads
+    depends_on:
+      - lidarr
+      - soularr
 
   # Unattended queue fixers, one container per app from one image
   # (dockerfiles/arr-maint: shared engine + lidarr.py/radarr.py/sonarr.py rules).
