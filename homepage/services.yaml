@@ -37,6 +37,19 @@
           key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
           version: 2
           enableNowPlaying: true
+    - Navidrome:
+        icon: navidrome.svg
+        href: https://navidrome.danteb.com
+        description: Music
+        siteMonitor: https://navidrome.danteb.com
+        server: my-docker
+        container: navidrome
+        widget:
+          type: navidrome
+          url: http://navidrome:4533
+          user: "{{HOMEPAGE_VAR_NAVIDROME_USER}}"
+          token: "{{HOMEPAGE_VAR_NAVIDROME_TOKEN}}"
+          salt: "{{HOMEPAGE_VAR_NAVIDROME_SALT}}"
     - Seerr:
         icon: seerr.svg
         href: https://seerr.danteb.com

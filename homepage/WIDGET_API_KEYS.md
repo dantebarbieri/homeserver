@@ -52,6 +52,18 @@ Jellyfin 12 / 10.12 and newer requires `version: 2` in the widget. The old
 
 ---
 
+## Navidrome — `HOMEPAGE_VAR_NAVIDROME_USER` / `_TOKEN` / `_SALT`
+
+The widget uses Subsonic token auth: `token = md5(password + salt)`.
+
+1. Create a regular (non-admin) Navidrome user, e.g. `homepage`.
+2. Pick a random salt and compute the token on the server:
+   `salt=$(openssl rand -hex 8); printf '%s' "<password>$salt" | md5sum`
+3. Set `HOMEPAGE_VAR_NAVIDROME_USER=homepage`, the md5 as `_TOKEN`, and the
+   salt as `_SALT`, then `docker compose up -d homepage`.
+
+---
+
 ## Suwayomi - `HOMEPAGE_VAR_SUWAYOMI_USER` / `HOMEPAGE_VAR_SUWAYOMI_PASS`
 
 Keep Suwayomi's **UI_LOGIN** mode. Set these variables to the UI account whose

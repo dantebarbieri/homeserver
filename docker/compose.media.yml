@@ -1,5 +1,5 @@
 # Media consumption services
-# plex, jellyfin, komga, komf, suwayomi, suwayomi_postgres, calibre-web,
+# plex, jellyfin, navidrome, komga, komf, suwayomi, suwayomi_postgres, calibre-web,
 # audiobookshelf, storyteller, librofm-downloader
 
 services:
@@ -65,6 +65,26 @@ services:
       - /tmp/jellyfin:/config/transcodes
       - ${RAID}/shared/media:/data/media:ro
       - ${DATA}/jellyfin/webroot/list.txt:/jellyfin/jellyfin-web/list.txt:ro
+
+  # Music-only server (Subsonic API) on the same Lidarr library Plex uses.
+  # Read-only: Lidarr owns the files; Navidrome keeps its own DB in /data.
+  navidrome:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    container_name: navidrome
+    image: deluan/navidrome:latest
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      TZ: ${TZ}
+      ND_MUSICFOLDER: /music
+      ND_DATAFOLDER: /data
+      ND_SCANNER_SCHEDULE: "@every 1h"
+    networks:
+      - proxy
+    volumes:
+      - ${DATA}/navidrome:/data
+      - ${RAID}/shared/media/music:/music:ro
 
   anime-relations:
     extends:
