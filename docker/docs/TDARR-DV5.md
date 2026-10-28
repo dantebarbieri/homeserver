@@ -90,6 +90,28 @@ lock fails explicitly and must be retried after the owner finishes. If a
 worker is forcibly killed, confirm no compatibility encode remains before
 removing a stale `Custom/dv5-sidecar.lock` directory.
 
+Classification checks for eligible DV5 video before requiring a single video
+stream. Multi-video movies with no DV5 stream skip normally; ambiguous eligible
+DV5 inputs still fail closed.
+
+### Sidecars after Radarr upgrades
+
+The ownership manifest binds a generated copy to one exact source fingerprint.
+After Radarr replaces or removes that source, the old copy must not remain a
+competing Plex version indefinitely. Preview and then archive stale owned copies:
+
+```bash
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/reconcile-sidecars.cjs
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/reconcile-sidecars.cjs --apply
+```
+
+This moves only manifest-owned files to `/data/media/.tdarr-sidecar-archive/`,
+outside the movie library, on the same filesystem. Media is not deleted.
+Each archive includes its source manifest, reason and output identity.
+Unchanged sources, unowned outputs, redirected paths and concurrent changes
+are never silently overwritten. Recovery is an explicit review/move of the
+archived file; do not restore a stale copy over a newer generated version.
+
 ## API rollout
 
 Use `POST /api/v2/cruddb` with an `x-api-key` header. Read back every write:

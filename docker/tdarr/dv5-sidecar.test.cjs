@@ -30,6 +30,12 @@ test('DV5 only; no Dolby Vision, other codecs and profile 8 skip normally', () =
     const probe = sourceProbe(); change(probe.streams[0]); assert.equal(h.plan(probe), null);
   }
 });
+test('non-DV5 multi-video movies skip instead of failing before eligibility is known', () => {
+  const p = sourceProbe();
+  p.streams[0].side_data_list = [];
+  p.streams.push({ ...p.streams[0], index: 4 });
+  assert.equal(h.plan(p), null);
+});
 test('guards partials and both old/new generated naming conventions', () => {
   for (const name of ['/movies/A/Plex Versions/Homeserver SDR/a.mp4', '/movies/a-AppleTV.mp4', '/movies/a-PlexSDR.mp4', '/movies/.dv5-x.partial/a.mp4']) assert.ok(h.skipped(name));
   assert.equal(h.skipped('/movies/A/movie.mkv'), false);

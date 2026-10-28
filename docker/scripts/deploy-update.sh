@@ -146,6 +146,10 @@ docker compose build "$SERVICE"
 
 # --- Step 4: Recreate behind a health gate ---
 echo "[4/4] Recreating '$SERVICE'..."
+if [ "$SERVICE" = tdarr ]; then
+    bash scripts/tdarr-update-guard.sh prepare
+    trap 'bash scripts/tdarr-update-guard.sh release' EXIT
+fi
 docker compose up -d --force-recreate "$SERVICE"
 
 cid=$(docker compose ps -q "$SERVICE")
@@ -170,6 +174,11 @@ if ! wait_for_health "$cid"; then
         echo "" >&2
         echo "(--no-pull is required: without it the redeploy would pull the" >&2
         echo " failed commit straight back in and undo the reset.)" >&2
+    fi
+
+    if [ "$SERVICE" = tdarr ]; then
+        bash scripts/tdarr-update-guard.sh release
+        trap - EXIT
     fi
     exit 1
 fi

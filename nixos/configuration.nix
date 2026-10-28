@@ -764,6 +764,19 @@ in
       fi
 
       held=("''${failed_pulls[@]}" "''${failed_builds[@]}")
+      tdarr_guard_ready=no
+      tdarr_guard_status=0
+      bash scripts/tdarr-update-guard.sh prepare || tdarr_guard_status=$?
+      if [ "$tdarr_guard_status" -eq 0 ]; then
+        tdarr_guard_ready=yes
+        trap 'bash scripts/tdarr-update-guard.sh release' EXIT
+      else
+        held+=(tdarr)
+        if [ "$tdarr_guard_status" -ne 75 ]; then
+          echo "Tdarr update guard failed; keeping its running container." >&2
+          failed_builds+=(tdarr)
+        fi
+      fi
       if [ "''${#held[@]}" -eq 0 ]; then
         docker compose up -d --remove-orphans
       else
@@ -775,7 +788,13 @@ in
             *) deploy+=("$svc") ;;
           esac
         done
-        docker compose up -d --remove-orphans "''${deploy[@]}"
+        if [ "''${#deploy[@]}" -ne 0 ]; then
+          docker compose up -d --remove-orphans "''${deploy[@]}"
+        fi
+      fi
+      if [ "$tdarr_guard_ready" = yes ]; then
+        bash scripts/tdarr-update-guard.sh release
+        trap - EXIT
       fi
       docker compose up -d --force-recreate homepage
       docker image prune -f
@@ -787,7 +806,7 @@ in
       if [ "''${#failed_builds[@]}" -ne 0 ]; then
         echo "Update finished, but these services kept their previous image because it failed to build: ''${failed_builds[*]}" >&2
       fi
-      if [ "''${#held[@]}" -ne 0 ]; then
+      if [ "''${#failed_pulls[@]}" -ne 0 ] || [ "''${#failed_builds[@]}" -ne 0 ]; then
         exit 1
       fi
     '';

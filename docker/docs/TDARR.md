@@ -4,8 +4,85 @@ Compress existing x264 TV show libraries to HEVC (x265) using CPU-only
 encoding (`libx265`) for maximum perceptual quality on an AMD EPYC server.
 Movie libraries follow the same pattern and are documented for future use.
 
-**Hardware:** AMD EPYC CPU, RTX 2070 SUPER (GPU decode only — not used for
-encoding). **Goal:** Best quality-per-bit, not speed.
+**Hardware:** AMD EPYC CPU, RTX 2070 SUPER. Library compression uses software
+decode and encoding; the separate DV5 compatibility flow uses CUDA/NVENC.
+**Goal:** Best quality-per-bit, not speed.
+
+## Active safe compression flow
+
+The versioned `homeserver-hevc-cpu-v1` flow supersedes the older UI-built flow
+described below. Deploy it without restarting Tdarr:
+
+```bash
+bash /srv/homeserver/docker/scripts/install-tdarr-safe-flows.sh --apply
+```
+
+The installer snapshots live settings under `Custom/backups` (sensitive files,
+mode 0600), retains the old flow for running jobs, and switches only the three
+existing TV libraries. It preserves CRF 20, `slow`, and source pixel formats.
+Do not overwrite a versioned worker module with different behavior while jobs
+using it are active; deploy a new version instead.
+
+The new flow requires CPU workers explicitly, skips HEVC/AV1/VP9 and preserves
+HDR sources rather than assuming every HDR format is HDR10. Unsupported
+multi-video sources and streams that cannot be copied into Matroska skip
+normally. Eligible legacy SDR video is encoded to HEVC with `pools=4`; other
+streams are copied. New files settle for three minutes before processing.
+Library alternation prevents a long TV backlog from monopolizing processing.
+
+Before replacement, the worker verifies duration, stream count/order/codecs,
+dimensions, pixel format, frame rate, color tags, audio channel/sample rate,
+language/title/disposition metadata and chapter timings. It fully decodes
+video and audio with FFmpeg's error checks and verifies that decoding reached
+the end. Source fingerprints are checked throughout. Publication uses an
+exclusive staging copy on the source filesystem and a recoverable original;
+an existing destination is never overwritten. A failed publication restores
+the original where possible and reports the recovery path if not.
+
+Less than 5% storage saving is a normal skip. There is no arbitrary 30%
+minimum output-size requirement: small anime outputs must pass the same
+integrity checks as everything else. These checks detect damage, not perceptual
+quality loss; compare representative samples before changing CRF or bit depth.
+HandBrake `--scan` health checks are not a substitute for complete decoding.
+
+For existing size-policy errors, first preview, then deliberately apply:
+
+```bash
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/recover-policy-errors.cjs
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/recover-policy-errors.cjs --apply
+```
+
+Only reports positively identifying the old 95% ceiling or 30% floor qualify.
+Ceiling rejections become normal skips; eligible legacy-codec floor rejections
+are requeued through the safe flow. Original rows are backed up and real
+encoder/decoder errors are preserved.
+
+### Updates and active jobs
+
+The NixOS updater, `dcu`, `dcupdate`, `dcr tdarr`, and the deployment script use
+`scripts/tdarr-update-guard.sh`. Busy Tdarr is deferred, not killed. An idle node
+is paused and checked again before recreation; its previous pause setting is
+restored after the internal node reconnects. API/guard failures hold Tdarr back
+and report failure rather than assuming it is safe to restart.
+
+For a continuously busy backlog, deliberately pause the node in Tdarr, let its
+current workers finish, run `dcr tdarr`, then resume the node. Deferral does not
+silently pause processing for the rest of the day. `dcupdate` uses an in-place
+update instead of a full teardown while Tdarr is running. Raw Docker commands,
+host shutdowns and OS maintenance are not intercepted by this guard.
+
+A crashed updater may leave `Custom/update-lease.json`. Inspect it and the
+node state before running `bash scripts/tdarr-update-guard.sh release` from the
+Docker directory. Do not remove another updater's active lease.
+
+### NVIDIA utility packaging regression
+
+On October 28, 2026, the current host `nvidia-smi` segfaulted with its dynamic
+section mapped read-only. The booted generation's utility, for the same
+595.104.02 driver, worked, and a real Tdarr NVENC encode succeeded. This is a
+packaged utility regression, not evidence that the GPU encoder is broken.
+Do not reload drivers or reboot merely to repair telemetry during active jobs;
+use the booted-generation utility for diagnosis until the package is corrected.
 
 ---
 
@@ -28,10 +105,10 @@ can't direct-play AV1. Not worth the trade-off.
 
 ### Why CPU (libx265) instead of NVENC?
 
-CPU (`libx265`) produces significantly better quality-per-bit than NVENC,
-especially at lower bitrates. On an EPYC with many cores, `slow` preset is
-practical. NVENC is fast but wastes ~20–30 % more bits for the same VMAF
-score. Since this is a background batch job, CPU encoding is the right call.
+At slower presets, `libx265` generally provides better quality-per-bit than
+this GPU's Turing NVENC. The difference depends on content and settings; do not
+assume a fixed percentage or compare CRF directly between encoders. CPU
+encoding remains the deliberate choice for background library compression.
 
 ### What about AV2?
 
@@ -118,7 +195,7 @@ cores, causing massive oversubscription and system-wide slowdown.
 
 ```yaml
 # compose.starr.yml → tdarr (top-level service key, not under environment)
-cpus: 12    # hard-cap container to 12 cores, leaving 4 for the OS/other services
+cpus: 12    # 12 logical CPU-equivalents of quota, not 12 pinned physical cores
 ```
 
 This is already applied in compose.starr.yml.
@@ -138,8 +215,9 @@ of auto-detecting all cores.
   -x265-params pools=4
   ```
 
-With `pools=4`, each worker uses ~4 threads → 4 workers × 4 threads = 16
-threads total = full core utilization without oversubscription.
+`pools=4` bounds x265's worker pool, but frame and other threads also exist.
+Four CPU encoders share the 12-CPU quota. Tag the flow CPU-only so the reserved
+GPU worker does not launch a fifth x265 process.
 
 ### Optional: add `starr` network
 
@@ -172,8 +250,8 @@ RAM, consider mapping to a disk path:
 ### Apply changes
 
 ```bash
-cd ~/homeserver/docker
-docker compose -f compose.starr.yml up -d tdarr
+z /srv/homeserver/docker
+dcr tdarr
 ```
 
 ---

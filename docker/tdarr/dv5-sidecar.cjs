@@ -29,11 +29,12 @@ function dimensions(width, height) {
 function plan(probe) {
   assert(probe && Array.isArray(probe.streams) && probe.streams.length, 'invalid probe streams');
   const videos = probe.streams.filter(s => s.codec_type === 'video' && !s.disposition?.attached_pic);
+  const eligible = videos.filter(video => video.codec_name === 'hevc'
+    && (video.side_data_list || []).some(d => Number(d.dv_profile) === 5
+      && Number(d.dv_bl_signal_compatibility_id) === 0));
+  if (!eligible.length) return null;
   assert(videos.length === 1, 'expected exactly one actual video stream');
-  const video = videos[0];
-  const dovi = (video.side_data_list || []).find(s => s.dv_profile !== undefined);
-  if (video.codec_name !== 'hevc' || Number(dovi?.dv_profile) !== 5
-    || Number(dovi?.dv_bl_signal_compatibility_id) !== 0) return null;
+  const video = eligible[0];
   assert(Number.isFinite(duration(probe)) && duration(probe) > 0, 'invalid source duration');
   const audio = probe.streams.filter(s => s.codec_type === 'audio');
   const subtitles = probe.streams.filter(s => s.codec_type === 'subtitle');
