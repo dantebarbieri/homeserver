@@ -16,7 +16,14 @@ failure handling gets the first try.
 | Dead torrent: no connected seeds for 24 h (`STALL_HOURS`) and either below 5%, including stuck on "downloading metadata", or partly done with availability below 1 and no activity for 24 h (Radarr's qBittorrent categories) | Blocklist and remove |
 | "Not grabbed by Radarr" entries | Remove from the queue (the download is kept) |
 | Torrent with no movie match whose files were already imported by hand (hardlink count > 1) | Remove from the queue (the download is kept and keeps seeding) |
-| Missing monitored movies | `MissingMoviesSearch` at most every 24 h (`MISSING_SEARCH_HOURS`) |
+| Missing monitored movies that have reached their configured minimum availability and are not queued | Explicit-ID `MoviesSearch` at most every 24 h (`MISSING_SEARCH_HOURS`) |
+
+Radarr treats commands submitted through its API as manual searches, which bypass
+minimum-availability checks even when initiated by automation. The maintenance
+job therefore checks each movie's `isAvailable` before submitting explicit movie
+IDs; it never submits the unrestricted `MissingMoviesSearch` command. No eligible
+movies means no search. Digital releases remain allowed by the quality profiles;
+the remux cutoff is an upgrade target, not a Blu-ray-only download restriction.
 
 Anything else, such as files that match a different movie or more than one
 importable file, is posted once to ntfy (`homeserver-alerts`) as "Radarr: needs
