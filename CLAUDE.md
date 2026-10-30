@@ -17,7 +17,7 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 | Directory | Purpose |
 |-----------|---------|
 | `docker/` | Docker Compose orchestration — 18 category files, 50+ services |
-| `nixos/` | NixOS system configuration — single `configuration.nix` |
+| `nixos/` | NixOS system configuration — flake (`flake.nix` + `flake.lock`), `configuration.nix` importing `modules/`, Home Manager in `home/` |
 | `homepage/` | Homepage dashboard YAML config |
 | `mail-config/` | Portable email/contacts setup (aerc, khard, vdirsyncer) — also used on macOS |
 | `recyclarr-configs/` | TRaSH Guides quality profiles for Sonarr/Radarr |
@@ -135,7 +135,7 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 3. Mount config to `${DATA}/<service>/config:/config`, bulk data under `${RAID}/shared/...`.
 4. Web UI services → join `proxy` + a dedicated internal network. Pure backends → internal only. No-comms services → no networks.
 5. **Authelia SSO** — **Default stance: protect everything that doesn't protect itself.** Add Authelia (NPM forward auth) to any service with **no built-in auth** (e.g., Dashdot, OpenClaw, Prometheus) or **weak/untrustworthy auth** (e.g., BMC/IPMI). Services with solid built-in authentication (e.g., Grafana, Vaultwarden, Nextcloud, Open WebUI) handle their own security — do not double up. A few intentionally public services (e.g., IT-Tools) skip Authelia by design.
-6. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/configuration.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
+6. If the service exposes ports externally, add the port to **three places**: `networking.firewall` in `nixos/modules/networking.nix`, router IPv4 port forwarding, and router IPv6 firewall inbound rules.
 7. **NPM proxy host** — create the proxy host in NPM. Use the container/service name as the subdomain by default; use a shorter/canonical name if it fits the exceptions in [Subdomain Naming Convention](#subdomain-naming-convention). Add **redirection hosts** (301) for common alternative names (e.g., `chat.danteb.com` → `openwebui.danteb.com`, `vpn.danteb.com` → `wireguard.danteb.com`). Enable **WebSockets** for services that stream (chat UIs, real-time dashboards). Enable **Block Common Exploits** for standard web apps but skip it for API proxies where it may interfere with large POST bodies.
 8. Update `homepage/` — add the service to `services.yaml` (follow the pattern in `homepage/CLAUDE.md`), add widget API key env vars to `docker/sample.env` **and** the `environment:` block in `docker/compose.dashboards.yml` (Homepage only sees env vars explicitly passed through — `.env` alone is not enough), and document key retrieval in `homepage/WIDGET_API_KEYS.md`.
 
@@ -169,17 +169,19 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 
 ## NixOS (`nixos/`)
 
-`configuration.nix` is the single-file declarative system config for the homeserver (hostname: `homeserver`, IP: `192.168.50.100/24`).
+`nixos/flake.nix` builds the homeserver (hostname: `homeserver`, IP: `192.168.50.100/24`) from `configuration.nix`, which imports one module per concern from `nixos/modules/`. `flake.lock` pins nixpkgs and Home Manager; a daily GitHub Actions job (`nixos-flake-update.yml`) bumps it after evaluation and tests pass. See `nixos/CLAUDE.md` for where things go.
 
 Key system services managed by NixOS:
 - **ZSH + zimfw** — default shell with plugin manager, Docker convenience functions in `nixos/docker-functions.zsh`, and nix helper functions — all sourced via `interactiveShellInit`
+- **Home Manager** — integrated NixOS module; `nixos/home/danteb.nix` owns `danteb`'s `.zshrc`, `.zimrc` and git identity. It is public and lands in the Nix store: secrets go in untracked `~/.zprofile.local` / `~/.zshrc.local`, never in Nix files
 - **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore enabled
 - **Firewall** — explicitly opened ports for HTTP/HTTPS, Plex, Coturn, LiveKit, game servers
 - **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`
+- **OS auto-upgrade** — daily at 04:30, `nixos-rebuild boot` of the committed flake lock (staged for next boot)
 - **RAID/drive monitoring** — `smartd`, `mdadm-ntfy`, 6-hourly health checks, weekly Sunday parity scrub — all alert via ntfy
 - **SSH** — key-only on port 28
 
-Rebuild: `sudo nixos-rebuild switch`
+Rebuild: `sudo nixos-rebuild switch` (`git add` new files first — the flake only sees tracked files)
 
 **Shell preference:** The server uses `zoxide` — always use `z` instead of `cd` when suggesting commands (e.g., `z /srv/homeserver`, not `cd /srv/homeserver`).
 

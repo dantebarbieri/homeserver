@@ -29,14 +29,14 @@ For the selected task, use **plan mode** to draft a detailed, well-structured im
 
 1. Call `EnterPlanMode` to enter plan mode. This gives you a structured plan file and restricts you to read-only exploration until the plan is approved.
 
-2. **Read every file** referenced in the FUTURE.md task section (compose files, configuration.nix, sample.env, homepage configs, etc.) to understand the current state.
+2. **Read every file** referenced in the FUTURE.md task section (compose files, `nixos/modules/*.nix`, sample.env, homepage configs, etc.) to understand the current state.
 
 3. **Fact-check all claims** in the FUTURE.md description. This is critical — FUTURE.md may be outdated or wrong:
    - **Docker images**: Verify image names/tags exist by checking the registry (use WebFetch on Docker Hub API `https://hub.docker.com/v2/repositories/library/<image>/tags/<tag>` or GitHub Container Registry equivalent). Flag images that don't exist or have been renamed.
    - **NixOS options**: Use `/nixos-option <option.path>` for every NixOS option mentioned. Flag any that don't exist, are deprecated, or have wrong types.
    - **NixOS omissions**: When the plan omits an optional NixOS option (e.g., not setting `channel` in `system.autoUpgrade`), verify that omitting it is valid — check the option's default value and confirm the module doesn't require it. Nix attribute sets with `enable = true` may have other fields that look optional but are actually required.
    - **File paths**: Use Glob/Read to verify every file path mentioned in the task actually exists in the repo.
-   - **Port numbers**: Cross-reference with existing compose files and configuration.nix firewall rules.
+   - **Port numbers**: Cross-reference with existing compose files and the firewall rules in `nixos/modules/networking.nix`.
    - **URLs/endpoints**: Verify health check endpoints and API paths mentioned are accurate for the current image versions.
    - **Environment variables**: Check `docker/sample.env` for any env vars referenced.
 

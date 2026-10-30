@@ -55,14 +55,14 @@ You should receive a push notification on your phone within seconds.
 
 ## Customizing
 
-The ntfy URL and topic are defined at the top of `configuration.nix`:
+The ntfy URL and topic are defined in `lib/shared.nix`:
 
 ```nix
 ntfyUrl   = "https://ntfy.danteb.com";
 ntfyTopic = "homeserver-alerts";
 ```
 
-Change these and run `doas nixos-rebuild switch` to update all scripts
+Change these and run `sudo nixos-rebuild switch` to update all scripts
 and services.
 
 ## Security Note

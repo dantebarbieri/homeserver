@@ -22,7 +22,7 @@ Monorepo for my NixOS-based home server infrastructure. 50+ Docker containers, N
 
 ```
 docker/              Docker Compose orchestration (18 category files)
-nixos/               NixOS system configuration (configuration.nix)
+nixos/               NixOS system configuration (flake + modules + Home Manager)
 homepage/            Homepage dashboard YAML config
 mail-config/         Optional legacy terminal mail/calendar config (not installed on server)
 recyclarr-configs/   TRaSH Guides quality profiles for Sonarr/Radarr
@@ -98,7 +98,7 @@ forwarding, exposed UDP port, or network changes are needed: the homeserver
 sends locally on the LAN.
 
 The source is `scripts/wake-pc.py`; `scripts/wake-pc.nix` packages it with a
-Nix-managed Python interpreter. `nixos/configuration.nix` includes that package
+Nix-managed Python interpreter. `nixos/modules/users.nix` includes that package
 in `users.users.danteb.packages`, so it is installed declaratively for `danteb`
 at `/etc/profiles/per-user/danteb/bin/wake-pc` on a system rebuild:
 
