@@ -1,6 +1,6 @@
 ---
 name: nixos-option
-description: Look up NixOS options to verify they exist and are correctly used. Use when editing nixos/configuration.nix or when the PostToolUse hook reminds you to verify options.
+description: Look up NixOS options to verify they exist and are correctly used. Use when editing nixos/**/*.nix (configuration.nix, modules/, home/) or when the PostToolUse hook reminds you to verify options.
 allowed-tools: WebFetch, Bash, Grep, Read
 ---
 
@@ -19,6 +19,6 @@ Look up the NixOS option "$ARGUMENTS" to verify it exists and is correctly used.
    - Fetch `https://raw.githubusercontent.com/NixOS/nixpkgs/master/nixos/modules/` and find the relevant module file
    - Look for the mkOption definition matching the option name
 
-3. Report the findings clearly so the user can verify their configuration.nix usage is correct.
+3. Report the findings clearly so the user can verify their usage in `nixos/` is correct. For Home Manager options (`nixos/home/`), check the home-manager source (`modules/programs/<name>.nix`) instead of search.nixos.org.
 
 4. If the option doesn't exist, suggest the closest valid alternatives.

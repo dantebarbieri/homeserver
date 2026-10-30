@@ -1,0 +1,41 @@
+name: Validate NixOS Config
+
+on:
+  push:
+    paths:
+      - nixos/**
+      - scripts/wake-pc.nix
+      - docker/scripts/reconcile-docker-socket-consumers.sh
+      - .github/workflows/nixos-*.yml
+  pull_request:
+    paths:
+      - nixos/**
+      - scripts/wake-pc.nix
+      - docker/scripts/reconcile-docker-socket-consumers.sh
+      - .github/workflows/nixos-*.yml
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+
+      # Evaluating the toplevel catches option, type, and assertion errors and
+      # proves flake.lock is complete. Building it would need the unfree NVIDIA
+      # driver, which no binary cache serves.
+      - name: Evaluate the homeserver system from the committed lock
+        run: |
+          nix eval --raw --no-update-lock-file \
+            ./nixos#nixosConfigurations.homeserver.config.system.build.toplevel.drvPath
+
+      - name: Run NixOS regression checks
+        run: python3 -B nixos/tests/test_health_cleanup.py -v

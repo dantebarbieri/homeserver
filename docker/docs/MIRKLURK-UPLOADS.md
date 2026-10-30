@@ -172,10 +172,11 @@ password. Unit tests/archive integrity alone do not prove restoreability.
 
 ## Installing scheduling with an operator-planned reboot
 
-Use the normal, reviewed `/etc/nixos/configuration.nix` configuration, which
-resolves to `/srv/homeserver/nixos/configuration.nix` and imports the tracked
-hardware configuration. Do not substitute an old pinned generation for an
-operator's planned `nixos-rebuild boot --upgrade`.
+Use the normal, reviewed `/etc/nixos` flake, which resolves to
+`/srv/homeserver/nixos/flake.nix`, builds `configuration.nix` with the tracked
+hardware configuration, and pins packages to the checked-out `flake.lock`. Do
+not substitute an old pinned generation for an operator's planned
+`nixos-rebuild boot`.
 
 The root-owned `/var/lib/mirklurk-upload-deployment/hold` file is a **deployment
 hold**, not MediaWiki's native read-only marker. While it exists, declarative
@@ -228,11 +229,12 @@ readlink -f /nix/var/nix/profiles/system > "$state/previous-boot"
 git -c safe.directory=/srv/homeserver -C /srv/homeserver rev-parse HEAD > "$state/source-revision"
 SH
 
-sudo nixos-rebuild boot --upgrade
+sudo nixos-rebuild boot
 sudo bootctl list --no-pager
 ```
 
-`boot --upgrade` can update packages/kernel and the next-boot entry; it does
+`boot` can update packages/kernel (to the checked-out `flake.lock`) and the
+next-boot entry; it does
 **not** activate those changes or restart the wiki now. Do not use `switch`.
 Keep the hold if the build/bootloader installation fails. Before reboot, verify
 build success, the intended default boot entry, the unchanged running generation,

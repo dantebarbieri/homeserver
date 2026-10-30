@@ -1,5 +1,5 @@
 # Nix convenience functions
-# Sourced by NixOS interactiveShellInit (programs.zsh) — see configuration.nix
+# Sourced by NixOS interactiveShellInit (programs.zsh) — see modules/shell.nix
 
 # Try packages without installing
 # Usage: nsp hello cowsay        →   nix shell nixpkgs#hello nixpkgs#cowsay

@@ -7,7 +7,7 @@ This is a monorepo for a NixOS-based homeserver running 50+ Docker containers. D
 ### Repository Layout
 
 - `docker/` — Docker Compose orchestration (18 category files, 50+ services)
-- `nixos/` — NixOS system configuration (`configuration.nix`)
+- `nixos/` — NixOS system configuration (flake; `configuration.nix` imports `modules/`; Home Manager in `home/`)
 - `homepage/` — Homepage dashboard YAML config
 - `mail-config/` — Portable email/contacts setup (aerc, khard, vdirsyncer)
 - `recyclarr-configs/` — TRaSH Guides quality profiles for Sonarr/Radarr
@@ -72,14 +72,14 @@ Authelia secrets are Docker secrets (files under `${DATA}/authelia/secrets/`). O
 
 ## NixOS (`nixos/`)
 
-`configuration.nix` is the single-file declarative system config. Key services:
+`flake.nix` (pinned by `flake.lock`, bumped daily by CI) builds `configuration.nix`, which imports one module per concern from `modules/`. Home Manager (`home/danteb.nix`) manages the user's zsh/Zim and git identity — never put secrets in Nix files; they go in untracked `~/.zprofile.local` / `~/.zshrc.local`. Key services:
 - Docker daemon (IPv6, CDI, live-restore)
 - Auto-update timer (daily at 04:00, pulls this monorepo)
+- OS auto-upgrade (daily at 04:30, `nixos-rebuild boot` of the committed lock)
 - RAID/drive monitoring (smartd, mdadm-ntfy, health checks)
-- vdirsyncer (iCloud contacts every 15 minutes)
 - SSH (key-only on port 28)
 
-Rebuild: `sudo nixos-rebuild switch`
+Rebuild: `sudo nixos-rebuild switch` (`git add` new files first; the flake only sees tracked files)
 
 ## Integration Points
 

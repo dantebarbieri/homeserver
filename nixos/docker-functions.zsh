@@ -1,5 +1,5 @@
 # Docker Compose convenience functions
-# Sourced by NixOS interactiveShellInit (programs.zsh) — see configuration.nix
+# Sourced by NixOS interactiveShellInit (programs.zsh) — see modules/shell.nix
 # All functions cd to the compose directory in a subshell so the caller's cwd is unaffected.
 
 # Show image info for a service (repo, tag, digest, created date)
