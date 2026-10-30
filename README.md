@@ -84,19 +84,22 @@ prove that firmware, sleep state, or shutdown behavior permits wake. No router
 port forwarding, exposed UDP port, or network changes are needed: the
 homeserver sends locally on the LAN.
 
-The source is `scripts/wake-pc.py`. Install it as the SSH user on NixOS from a
-checkout containing these files:
+The source is `scripts/wake-pc.py`; `scripts/wake-pc.nix` packages it with a
+Nix-managed Python interpreter. `nixos/configuration.nix` includes that package
+in `users.users.danteb.packages`, so it is installed declaratively for `danteb`
+at `/etc/profiles/per-user/danteb/bin/wake-pc` on a system rebuild:
 
 ```bash
-nix profile add --file /path/to/homeserver/scripts/wake-pc.nix
+sudo nixos-rebuild switch
 command -v wake-pc
 ```
 
-This installs `~/.nix-profile/bin/wake-pc` with its Nix-managed Python
-interpreter; it needs no system rebuild, root access, pip packages, or shell
-PATH edits. The installed package retains a snapshot, not a live checkout
-symlink. After changing the source, remove the `wake-pc` package shown by
-`nix profile list`, then run the install command again. Exit codes are `0`
+No pip packages or shell PATH edits are needed. Rebuilds capture the checked-out
+source, and the command is restored from configuration rather than depending on
+an imperative user-profile installation. If migrating from the earlier manual
+installation, verify the declarative command works before running
+`nix profile remove wake-pc`; otherwise the older `~/.nix-profile/bin` copy
+can shadow declarative updates. Exit codes are `0`
 for a successful send/help, `1` for socket/send failures, and `2` for invalid
 arguments. Run non-disruptive unit and loopback-packet checks locally with
 `uv run --no-project python -B -m unittest discover -s scripts/tests -p 'test_wake_pc.py'`.

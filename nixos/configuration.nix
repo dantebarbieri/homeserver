@@ -241,6 +241,7 @@ in
       ];
       packages = with pkgs; [
         tree
+        (import ../scripts/wake-pc.nix { inherit pkgs; })
       ];
     };
   };
