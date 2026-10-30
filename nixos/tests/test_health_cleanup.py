@@ -142,6 +142,8 @@ class HealthCleanupTests(unittest.TestCase):
         chown() { printf 'CHOWN:%s\\n' "$*"; return "$CHOWN_STATUS"; }
         cd() { echo CD; }
         sleep() { printf 'SLEEP:%s\\n' "$1"; }
+        # Tdarr update guard (docker/scripts/tdarr-update-guard.sh).
+        bash() { printf 'GUARD:%s\\n' "$*"; return 0; }
         pull_attempts=0
         docker() {
           if [ "$1" = ps ]; then return 0; fi
@@ -305,6 +307,11 @@ class HealthCleanupTests(unittest.TestCase):
                         self.assertIn("failed to build: " + " ".join(build_held), result.stderr)
                 else:
                     self.assertIn("DOCKER:compose up -d --remove-orphans", lines)
+                self.assertLess(
+                    lines.index("GUARD:scripts/tdarr-update-guard.sh prepare"),
+                    next(i for i, line in enumerate(lines) if line.startswith("DOCKER:compose up")),
+                )
+                self.assertIn("GUARD:scripts/tdarr-update-guard.sh release", lines)
                 if deploy_failed:
                     self.assertNotIn("DOCKER:image prune -f", lines)
                 else:
