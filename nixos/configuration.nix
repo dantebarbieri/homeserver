@@ -1,5 +1,6 @@
-# Entry point for the homeserver NixOS configuration. Each concern lives in
-# ./modules; values shared between modules live in ./lib/shared.nix.
+# Root module of the homeserver NixOS configuration, built by ./flake.nix.
+# Each concern lives in ./modules; values shared between modules live in
+# ./lib/shared.nix; Home Manager user configs live in ./home.
 # Options: https://search.nixos.org/options and configuration.nix(5).
 
 { ... }:
@@ -12,6 +13,7 @@
     ./modules/storage.nix
     ./modules/users.nix
     ./modules/shell.nix
+    ./modules/home-manager.nix
     ./modules/compat.nix
     ./modules/ssh.nix
     ./modules/forgejo-runner.nix

@@ -5,18 +5,15 @@ let
   inherit (import ../lib/shared.nix { inherit config pkgs; }) ntfyNotify;
 in
 {
+  # Personal identity and commit signing live in Home Manager (../home).
   programs.git = {
     enable = true;
     config = {
-      commit.gpgsign = true;
-      gpg.format = "ssh";
       init.defaultBranch = "main";
       push.autoSetupRemote = true;
-      user = {
-        email = "dantevbarbieri@gmail.com";
-        name  = "dantebarbieri";
-        signingkey = "~/.ssh/id_ed25519.pub";
-      };
+      # The repo is owned by danteb, but root evaluates the flake in it
+      # (nixos-upgrade) and pulls it (docker-compose-update).
+      safe.directory = "/srv/homeserver";
     };
   };
 

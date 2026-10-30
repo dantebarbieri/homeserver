@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -14,20 +15,32 @@ ROOT = Path(__file__).resolve().parents[2]
 class HealthCleanupTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Evaluate the flake exactly as the server does. git+file only sees
+        # tracked files, so `git add` new modules before running this.
         result = subprocess.run(
             [
-                "nix-instantiate", "--eval", "--strict", "--json", "-E",
+                "nix-instantiate", "--eval", "--strict", "--json",
+                "--extra-experimental-features", "nix-command flakes",
+                "--argstr", "flakeRef", f"git+file://{ROOT.as_posix()}?dir=nixos",
+                "-E",
                 """
+                { flakeRef }:
                 let
-                  system = import <nixpkgs/nixos> {
-                    configuration = ./nixos/configuration.nix;
-                  };
+                  system = (builtins.getFlake flakeRef).nixosConfigurations.homeserver;
                   c = system.config;
+                  hm = c.home-manager.users.danteb;
                 in {
                   failedAssertions = map (a: a.message)
                     (builtins.filter (a: !a.assertion) c.assertions);
                   upgradeScript = c.systemd.services.nixos-upgrade.script;
                   allowReboot = c.system.autoUpgrade.allowReboot;
+                  systemGit = c.programs.git.config;
+                  home = {
+                    inherit (hm.programs.zsh) dotDir profileExtra initContent;
+                    gitUser = hm.programs.git.settings.user;
+                    gitSigning = { inherit (hm.programs.git.signing) key format; };
+                    files = builtins.attrNames hm.home.file;
+                  };
                   primary = c.systemd.network.networks."40-enp66s0f1".networkConfig;
                   mailSyncService = builtins.hasAttr "vdirsyncer-sync" c.systemd.services;
                   mailSyncTimer = builtins.hasAttr "vdirsyncer-sync" c.systemd.timers;
@@ -49,6 +62,7 @@ class HealthCleanupTests(unittest.TestCase):
                   };
                   tmpfiles = c.systemd.tmpfiles.rules;
                   scrubFailure = c.systemd.services.mdadm-scrub.unitConfig.OnFailure;
+                  upgradeFailure = c.systemd.services.nixos-upgrade.unitConfig.OnFailure;
                   scrubRestart = c.systemd.services.mdadm-scrub.restartIfChanged;
                   scrubScript = c.systemd.services.mdadm-scrub.script;
                   runnerUnit = c.systemd.services.forgejo-runner-worldforge.serviceConfig;
@@ -65,6 +79,11 @@ class HealthCleanupTests(unittest.TestCase):
             text=True,
         )
         cls.config = json.loads(result.stdout)
+        # programs.git.config merges into a list of INI attrsets.
+        cls.systemGit = {}
+        for ini in cls.config["systemGit"]:
+            for section, values in ini.items():
+                cls.systemGit.setdefault(section, {}).update(values)
 
     def test_nixos_settings(self):
         self.assertEqual(self.config["failedAssertions"], [])
@@ -74,8 +93,38 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertEqual(self.config["primary"]["Bond"], "bond0")
         self.assertTrue(self.config["primary"]["PrimarySlave"])
         self.assertFalse(self.config["scrubRestart"])
-        for key in ("scrubFailure", "updateFailure"):
+        for key in ("scrubFailure", "updateFailure", "upgradeFailure"):
             self.assertEqual(self.config[key], "ntfy-failure@%n.service")
+
+    def test_upgrade_builds_the_locked_flake(self):
+        # Tokenize like bash: an unquoted `&` in the URL would background
+        # nixos-rebuild and silently skip the upgrade.
+        lexer = shlex.shlex(self.config["upgradeScript"], posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        args = list(lexer)
+        self.assertNotIn("&", args)
+        # ref=main: only committed content is built or copied into the store.
+        self.assertEqual(
+            args[args.index("--flake") + 1],
+            "git+file:///srv/homeserver?dir=nixos&ref=main#homeserver",
+        )
+        self.assertIn("--no-update-lock-file", args)
+        self.assertNotIn("--upgrade", args)
+        # root evaluates the danteb-owned checkout; libgit2 refuses it otherwise.
+        self.assertEqual(self.systemGit["safe"]["directory"], "/srv/homeserver")
+
+    def test_home_manager_owns_personal_shell_and_git(self):
+        home = self.config["home"]
+        self.assertNotIn("user", self.systemGit)
+        self.assertEqual(home["gitUser"]["name"], "dantebarbieri")
+        self.assertEqual(home["gitSigning"], {"key": "~/.ssh/id_ed25519.pub", "format": "ssh"})
+        self.assertEqual(home["dotDir"], "/home/danteb")
+        self.assertIn(".zimrc", home["files"])
+        # Secrets stay in untracked local files that the managed dotfiles source.
+        self.assertIn("~/.zprofile.local", home["profileExtra"])
+        self.assertIn("~/.zshrc.local", home["initContent"])
+        self.assertIn("zimfw.zsh init", home["initContent"])
 
     def test_mail_calendar_retired(self):
         self.assertFalse(self.config["mailSyncService"])
