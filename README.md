@@ -61,6 +61,49 @@ docker compose config
 
 See [`CLAUDE.md`](CLAUDE.md) for detailed architecture documentation.
 
+## Wake the Windows PC
+
+The homeserver's `wake-pc` command sends a Wake-on-LAN packet for DANTE-PC.
+After connecting to the home VPN, SSH to the homeserver in Termius and run:
+
+```bash
+wake-pc
+wake-pc --help
+wake-pc --mac 02:11:22:33:44:55 --broadcast 192.168.50.255 --port 9
+```
+
+With no arguments it sends one standard 102-byte UDP magic packet for Ethernet
+MAC `74:56:3C:B4:F5:4E` to LAN broadcast `192.168.50.255:9`. `--mac` identifies
+the device; `--broadcast` selects the LAN broadcast destination. A DHCP IP
+change does not change the Ethernet MAC, so the PC's current IP is not needed.
+There is no `--ip` option, hostname lookup, or ARP discovery.
+
+Success means **packet sent, not wake verified**. Sleep/shutdown wake still
+needs a separate user-controlled test; Windows driver settings alone do not
+prove that firmware, sleep state, or shutdown behavior permits wake. No router
+port forwarding, exposed UDP port, or network changes are needed: the
+homeserver sends locally on the LAN.
+
+The source is `scripts/wake-pc.py`; `scripts/wake-pc.nix` packages it with a
+Nix-managed Python interpreter. `nixos/configuration.nix` includes that package
+in `users.users.danteb.packages`, so it is installed declaratively for `danteb`
+at `/etc/profiles/per-user/danteb/bin/wake-pc` on a system rebuild:
+
+```bash
+sudo nixos-rebuild switch
+command -v wake-pc
+```
+
+No pip packages or shell PATH edits are needed. Rebuilds capture the checked-out
+source, and the command is restored from configuration rather than depending on
+an imperative user-profile installation. If migrating from the earlier manual
+installation, verify the declarative command works before running
+`nix profile remove wake-pc`; otherwise the older `~/.nix-profile/bin` copy
+can shadow declarative updates. Exit codes are `0`
+for a successful send/help, `1` for socket/send failures, and `2` for invalid
+arguments. Run non-disruptive unit and loopback-packet checks locally with
+`uv run --no-project python -B -m unittest discover -s scripts/tests -p 'test_wake_pc.py'`.
+
 ## Starr installer hosting
 
 For a fresh Linux server without NixOS, use the independent public
