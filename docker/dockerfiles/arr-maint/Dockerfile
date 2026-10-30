@@ -1,5 +1,7 @@
 FROM python:3.13-alpine
-COPY *.py /app/
+# --chmod: COPY keeps the checkout's mode, and a 0600 file is unreadable by the
+# non-root user the container runs as.
+COPY --chmod=0644 *.py /app/
 WORKDIR /app
 # Healthy only if a run completed within two intervals (plus slack for long imports).
 HEALTHCHECK --interval=5m --timeout=10s --start-period=15m \
