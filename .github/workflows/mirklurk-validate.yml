@@ -9,7 +9,7 @@ on:
       - docker/scripts/mirklurk-*.*
       - docker/nginx/mirklurk-map*.conf
       - docker/tests/test_mirklurk*.py
-      - nixos/configuration.nix
+      - nixos/**/*.nix
   pull_request:
     paths:
       - .github/workflows/mirklurk-validate.yml
@@ -17,7 +17,7 @@ on:
       - docker/scripts/mirklurk-*.*
       - docker/nginx/mirklurk-map*.conf
       - docker/tests/test_mirklurk*.py
-      - nixos/configuration.nix
+      - nixos/**/*.nix
 
 permissions:
   contents: read
