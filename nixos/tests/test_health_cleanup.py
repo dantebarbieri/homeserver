@@ -70,6 +70,13 @@ class HealthCleanupTests(unittest.TestCase):
                     inherit (c.systemd.services.forgejo-runner-worldforge-migrate)
                       requiredBy before unitConfig;
                   };
+                  nixIndex = {
+                    package = system.pkgs.lib.getName c.programs.nix-index.package;
+                    inherit (c.programs.nix-index) enable;
+                    commandNotFound = c.programs.command-not-found.enable;
+                    weeklyService = builtins.hasAttr "nix-index-update" c.systemd.services;
+                    weeklyTimer = builtins.hasAttr "nix-index-update" c.systemd.timers;
+                  };
                 }
                 """,
             ],
@@ -132,6 +139,16 @@ class HealthCleanupTests(unittest.TestCase):
         for package in ("aerc", "khard", "khal", "vdirsyncer", "w3m"):
             self.assertNotIn(package, self.config["packages"])
         self.assertNotIn("khal list", self.config["shellInit"])
+
+    def test_nix_locate_uses_the_prebuilt_database(self):
+        nix_index = self.config["nixIndex"]
+        # Only the database-wrapped package works without a local index, and
+        # nothing builds a local index any more (the weekly job had started failing).
+        self.assertEqual(nix_index["package"], "nix-index-with-full-db")
+        self.assertTrue(nix_index["enable"])
+        self.assertFalse(nix_index["commandNotFound"])
+        self.assertFalse(nix_index["weeklyService"])
+        self.assertFalse(nix_index["weeklyTimer"])
 
     def test_forgejo_runner_static_user_and_migration(self):
         unit = self.config["runnerUnit"]
