@@ -69,18 +69,14 @@ After connecting to the home VPN, SSH to the homeserver in Termius and run:
 ```bash
 wake-pc
 wake-pc --help
-wake-pc --ip 192.168.50.180
 wake-pc --mac 02:11:22:33:44:55 --broadcast 192.168.50.255 --port 9
 ```
 
 With no arguments it sends one standard 102-byte UDP magic packet for Ethernet
-MAC `74:56:3C:B4:F5:4E` to LAN broadcast `192.168.50.255:9`. `--ip` changes
-only the destination; it still targets that MAC unless `--mac` is supplied.
-An IP alone does not identify a powered-off device, and a DHCP IP change does
-not change its MAC. Prefer the default broadcast: unicast to the current
-Ethernet IP (`192.168.50.180`) may stop working after ARP entries expire.
-The command does not look up `DANTE-PC` (the router's hostname entry currently
-points to an old Wi-Fi address).
+MAC `74:56:3C:B4:F5:4E` to LAN broadcast `192.168.50.255:9`. `--mac` identifies
+the device; `--broadcast` selects the LAN broadcast destination. A DHCP IP
+change does not change the Ethernet MAC, so the PC's current IP is not needed.
+There is no `--ip` option, hostname lookup, or ARP discovery.
 
 Success means **packet sent, not wake verified**. Sleep/shutdown wake still
 needs a separate user-controlled test; Windows driver settings alone do not

@@ -8,7 +8,7 @@ import sys
 
 
 DEFAULT_MAC = "74:56:3C:B4:F5:4E"
-DEFAULT_IP = "192.168.50.255"
+DEFAULT_BROADCAST = "192.168.50.255"
 DEFAULT_PORT = 9
 
 
@@ -27,7 +27,7 @@ def parse_mac(value):
     return mac
 
 
-def parse_ip(value):
+def parse_broadcast(value):
     try:
         address = ipaddress.IPv4Address(value)
     except ipaddress.AddressValueError as exc:
@@ -55,10 +55,9 @@ def main(argv=None):
             "physical Ethernet MAC on the homeserver LAN."
         ),
         epilog=(
-            "--ip changes only the destination, not the target MAC. Use --mac for "
-            "another device; an IP alone cannot identify a powered-off device. "
-            "Prefer the LAN broadcast: unicast can fail when neighbor/ARP entries "
-            "expire. A DHCP IP change does not change the Ethernet MAC. "
+            "--mac identifies the device; --broadcast selects the LAN broadcast "
+            "destination. A DHCP IP change does not change the Ethernet MAC. "
+            "No hostname or ARP lookup is performed. "
             "Sending a packet does not verify that the device woke."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -68,8 +67,8 @@ def main(argv=None):
         help="target Ethernet MAC",
     )
     parser.add_argument(
-        "--ip", "--broadcast", dest="ip", type=parse_ip, default=DEFAULT_IP,
-        help="numeric IPv4 destination or LAN broadcast (no hostname/ARP lookup)",
+        "--broadcast", type=parse_broadcast, default=DEFAULT_BROADCAST,
+        help="LAN broadcast destination (numeric IPv4 address)",
     )
     parser.add_argument(
         "--port", type=parse_port, default=DEFAULT_PORT, help="UDP destination port",
@@ -79,15 +78,15 @@ def main(argv=None):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
             sender.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sent = sender.sendto(packet, (args.ip, args.port))
+            sent = sender.sendto(packet, (args.broadcast, args.port))
             if sent != len(packet):
                 raise OSError(f"short UDP send: {sent} of {len(packet)} bytes")
     except OSError as exc:
-        print(f"wake-pc: failed to send to {args.ip}:{args.port}: {exc}", file=sys.stderr)
+        print(f"wake-pc: failed to send to {args.broadcast}:{args.port}: {exc}", file=sys.stderr)
         return 1
     mac = args.mac.hex(":").upper()
     print(
-        f"Sent {sent}-byte magic packet for {mac} to {args.ip}:{args.port}. "
+        f"Sent {sent}-byte magic packet for {mac} to {args.broadcast}:{args.port}. "
         "Wake not verified."
     )
     return 0

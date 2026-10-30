@@ -49,13 +49,13 @@ class WakePcTests(unittest.TestCase):
                 "ff:ff:ff:ff:ff:ff", "01:56:3c:b4:f5:4e",
             )
         ] + [
-            ["--ip", value] for value in (
+            ["--broadcast", value] for value in (
                 "DANTE-PC", "192.168.50.999", "::1", "192.168.50.0/24",
                 "0.0.0.0", "224.0.0.1", "240.0.0.1",
             )
         ] + [
             ["--port", value] for value in ("0", "-1", "65536", "abc", "9.5")
-        ] + [["--unknown"], ["--ip"]]
+        ] + [["--unknown"], ["--broadcast"], ["--ip", "192.168.50.180"]]
         for argv in cases:
             with self.subTest(argv=argv), patch.object(wake_pc.socket, "socket") as factory:
                 with self.assertRaises(SystemExit) as exc:
@@ -67,11 +67,11 @@ class WakePcTests(unittest.TestCase):
         with patch.object(wake_pc.socket, "socket") as factory:
             sender = factory.return_value.__enter__.return_value
             sender.sendto.return_value = 102
-            result, _, _ = self.run_cli(["--ip", "192.168.50.180", "--port", "65535"])
+            result, _, _ = self.run_cli(["--broadcast", "192.168.60.255", "--port", "65535"])
         self.assertEqual(result, 0)
-        sender.sendto.assert_called_once_with(EXPECTED_PACKET, ("192.168.50.180", 65535))
+        sender.sendto.assert_called_once_with(EXPECTED_PACKET, ("192.168.60.255", 65535))
 
-    def test_broadcast_alias_and_mac_override(self):
+    def test_broadcast_and_mac_override(self):
         with patch.object(wake_pc.socket, "socket") as factory:
             sender = factory.return_value.__enter__.return_value
             sender.sendto.return_value = 102
@@ -114,7 +114,7 @@ class WakePcTests(unittest.TestCase):
             receiver.bind(("127.0.0.1", 0))
             receiver.settimeout(2)
             port = receiver.getsockname()[1]
-            result, output, error = self.run_cli(["--ip", "127.0.0.1", "--port", str(port)])
+            result, output, error = self.run_cli(["--broadcast", "127.0.0.1", "--port", str(port)])
             packet, _ = receiver.recvfrom(1024)
         self.assertEqual(result, 0)
         self.assertEqual(packet, EXPECTED_PACKET)
