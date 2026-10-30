@@ -20,6 +20,7 @@
     ./modules/docker.nix
     ./modules/mirklurk.nix
     ./modules/auto-upgrade.nix
+    ./modules/reboot-reminder.nix
     ./modules/ntfy.nix
     ./modules/backups.nix
     ./modules/nvidia.nix
