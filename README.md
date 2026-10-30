@@ -68,8 +68,11 @@ After connecting to the home VPN, SSH to the homeserver in Termius and run:
 
 ```bash
 wake-pc
+wake-pc --wait
+wake-pc --wait 60
 wake-pc --help
 wake-pc --mac 02:11:22:33:44:55 --broadcast 192.168.50.255 --port 9
+wake-pc --mac 02:11:22:33:44:55 --wait --wait-host 192.168.50.200 --wait-port 3389
 ```
 
 With no arguments it sends one standard 102-byte UDP magic packet for Ethernet
@@ -78,11 +81,21 @@ the device; `--broadcast` selects the LAN broadcast destination. A DHCP IP
 change does not change the Ethernet MAC, so the PC's current IP is not needed.
 There is no `--ip` option, hostname lookup, or ARP discovery.
 
-Success means **packet sent, not wake verified**. Sleep/shutdown wake still
-needs a separate user-controlled test; Windows driver settings alone do not
-prove that firmware, sleep state, or shutdown behavior permits wake. No router
-port forwarding, exposed UDP port, or network changes are needed: the
-homeserver sends locally on the LAN.
+Without `--wait`, success means **packet sent**, not verified readiness.
+`--wait [SECONDS]` waits up to 120 seconds by default for a TCP connection to
+RDP at `192.168.50.180:3389`. This means the RDP port is reachable, not that
+Windows login has completed or that this command caused a wake: the PC may
+already have been online. A timeout means RDP was not reachable, not proof of
+a power failure. Both wake senders have successfully woken this PC in a
+user-controlled test; the exact tested power state was not recorded.
+
+`--wait-host` and `--wait-port` customize only the verification endpoint and
+require `--wait`; changing `--mac` does not change that endpoint automatically.
+Unlike the Ethernet MAC, the verification IP must be updated if DHCP changes it.
+Numeric IPv4 targets avoid stale hostname lookup and bound connection attempts
+to the overall timeout; no ping or ARP discovery is used. No router port
+forwarding, exposed UDP port, or network changes are needed: the homeserver
+sends locally on the LAN.
 
 The source is `scripts/wake-pc.py`; `scripts/wake-pc.nix` packages it with a
 Nix-managed Python interpreter. `nixos/configuration.nix` includes that package
@@ -100,8 +113,9 @@ an imperative user-profile installation. If migrating from the earlier manual
 installation, verify the declarative command works before running
 `nix profile remove wake-pc`; otherwise the older `~/.nix-profile/bin` copy
 can shadow declarative updates. Exit codes are `0`
-for a successful send/help, `1` for socket/send failures, and `2` for invalid
-arguments. Run non-disruptive unit and loopback-packet checks locally with
+for a successful send/help (or RDP reachability with `--wait`), `1` for send,
+verification errors or timeout, `2` for invalid arguments, and `130` for Ctrl-C.
+Run non-disruptive unit and loopback-packet checks locally with
 `uv run --no-project python -B -m unittest discover -s scripts/tests -p 'test_wake_pc.py'`.
 
 ## Starr installer hosting

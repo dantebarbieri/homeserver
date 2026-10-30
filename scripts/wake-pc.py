@@ -1,15 +1,21 @@
 """Send a Wake-on-LAN magic packet from the homeserver's LAN."""
 
 import argparse
+import errno
 import ipaddress
+import math
 import re
 import socket
 import sys
+import time
 
 
 DEFAULT_MAC = "74:56:3C:B4:F5:4E"
 DEFAULT_BROADCAST = "192.168.50.255"
 DEFAULT_PORT = 9
+DEFAULT_WAIT = 120.0
+DEFAULT_WAIT_HOST = "192.168.50.180"
+DEFAULT_WAIT_PORT = 3389
 
 
 def parse_mac(value):
@@ -48,17 +54,63 @@ def parse_port(value):
     return port
 
 
-def main(argv=None):
+def parse_timeout(value):
+    try:
+        timeout = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("timeout must be positive finite seconds") from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError("timeout must be positive finite seconds")
+    return timeout
+
+
+def parse_wait_host(value):
+    address = parse_broadcast(value)
+    if address == "255.255.255.255":
+        raise argparse.ArgumentTypeError("RDP target must be a unicast IPv4 address")
+    return address
+
+
+def wait_for_rdp(host, port, timeout):
+    deadline = time.monotonic() + timeout
+    last_error = "deadline expired"
+    retry_errors = {
+        errno.ECONNREFUSED, errno.ETIMEDOUT, errno.EHOSTUNREACH,
+        errno.ENETUNREACH, errno.ECONNRESET,
+    }
+    print(f"Waiting up to {timeout:g}s for RDP at {host}:{port}...", flush=True)
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            print(
+                f"wake-pc: RDP not reachable at {host}:{port} within {timeout:g}s "
+                f"({last_error}).",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            with socket.create_connection((host, port), timeout=min(1.0, remaining)):
+                pass
+        except OSError as exc:
+            if not isinstance(exc, TimeoutError) and exc.errno not in retry_errors:
+                print(f"wake-pc: RDP check failed at {host}:{port}: {exc}", file=sys.stderr)
+                return 1
+            last_error = str(exc)
+        else:
+            if time.monotonic() <= deadline:
+                print(
+                    f"RDP reachable at {host}:{port}. "
+                    "PC may already have been online; Windows login not verified."
+                )
+                return 0
+        time.sleep(max(0.0, min(0.5, deadline - time.monotonic())))
+
+
+def run(argv=None):
     parser = argparse.ArgumentParser(
         description=(
             "Send one UDP Wake-on-LAN magic packet. Defaults target DANTE-PC's "
             "physical Ethernet MAC on the homeserver LAN."
-        ),
-        epilog=(
-            "--mac identifies the device; --broadcast selects the LAN broadcast "
-            "destination. A DHCP IP change does not change the Ethernet MAC. "
-            "No hostname or ARP lookup is performed. "
-            "Sending a packet does not verify that the device woke."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -73,7 +125,23 @@ def main(argv=None):
     parser.add_argument(
         "--port", type=parse_port, default=DEFAULT_PORT, help="UDP destination port",
     )
+    parser.add_argument(
+        "--wait", nargs="?", const=DEFAULT_WAIT, type=parse_timeout, metavar="SECONDS",
+        default=argparse.SUPPRESS,
+        help="wait for RDP reachability after sending (120s if no value)",
+    )
+    parser.add_argument(
+        "--wait-host", type=parse_wait_host, default=argparse.SUPPRESS,
+        help=f"numeric IPv4 RDP target, independent of MAC/broadcast (default: {DEFAULT_WAIT_HOST})",
+    )
+    parser.add_argument(
+        "--wait-port", type=parse_port, default=argparse.SUPPRESS,
+        help=f"TCP RDP port used with --wait (default: {DEFAULT_WAIT_PORT})",
+    )
     args = parser.parse_args(argv)
+    timeout = getattr(args, "wait", None)
+    if timeout is None and (hasattr(args, "wait_host") or hasattr(args, "wait_port")):
+        parser.error("--wait-host and --wait-port require --wait")
     packet = b"\xff" * 6 + args.mac * 16
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
@@ -85,11 +153,22 @@ def main(argv=None):
         print(f"wake-pc: failed to send to {args.broadcast}:{args.port}: {exc}", file=sys.stderr)
         return 1
     mac = args.mac.hex(":").upper()
-    print(
-        f"Sent {sent}-byte magic packet for {mac} to {args.broadcast}:{args.port}. "
-        "Wake not verified."
-    )
+    print(f"Sent magic packet for {mac} to {args.broadcast}:{args.port}.", flush=True)
+    if timeout is not None:
+        return wait_for_rdp(
+            getattr(args, "wait_host", DEFAULT_WAIT_HOST),
+            getattr(args, "wait_port", DEFAULT_WAIT_PORT),
+            timeout,
+        )
     return 0
+
+
+def main(argv=None):
+    try:
+        return run(argv)
+    except KeyboardInterrupt:
+        print("wake-pc: interrupted.", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":
