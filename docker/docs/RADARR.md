@@ -25,6 +25,18 @@ IDs; it never submits the unrestricted `MissingMoviesSearch` command. No eligibl
 movies means no search. Digital releases remain allowed by the quality profiles;
 the remux cutoff is an upgrade target, not a Blu-ray-only download restriction.
 
+### Wrong-movie guard
+
+Every run also checks files already in the library. A file shorter than 70% of the
+movie's TMDb runtime (`MIN_RUNTIME_RATIO`) is almost certainly a different film
+with the same title and year. For example, The Asylum's 86-minute *The Odyssey*
+(2026) was imported for Nolan's 173-minute film. When Radarr's history shows which
+grab produced the file, `radarr-maint` marks that grab failed (blocklisting the
+release), deletes the movie file and its torrent, and searches again only if the
+movie is available. An unreleased movie waits for its release date. Files with no
+matching grab, such as hand imports, are posted to ntfy instead of being deleted.
+Files without media info or a TMDb runtime are skipped.
+
 Anything else, such as files that match a different movie or more than one
 importable file, is posted once to ntfy (`homeserver-alerts`) as "Radarr: needs
 attention". A failing run alerts at high priority, and repeats of the same error

@@ -9,6 +9,7 @@ Every INTERVAL seconds, for downloads (queue rows grouped by download) stuck for
   - other usenet warnings/errors -> ntfy (torrent warnings are left to the dead-torrent rule)
   - dead torrents in the app's qBit categories: 0 connected seeds for STALL_HOURS and either
     below 5% (including stuck on metadata) or availability below 1 with no activity -> blocklist
+  - the app's check_library rules for files already in the library (see radarr.py)
   - the app's missing search at most every MISSING_SEARCH_HOURS (0 disables)
 Anything it can't fix is sent to ntfy once (deduplicated across runs).
 """
@@ -88,6 +89,11 @@ class Qbit:
     def post(self, path, data):
         return self.op.open(f"{QBIT_URL}/api/v2/{path}", urllib.parse.urlencode(data).encode(), timeout=60).read()
 
+    def delete(self, h):
+        """Remove a torrent and its download-side files; library hardlinks are untouched."""
+        if re.fullmatch(r"[0-9a-fA-F]{40}", h or ""):
+            self.post("torrents/delete", {"hashes": h.lower(), "deleteFiles": "true"})
+
     def torrents(self, category):
         return json.loads(self.op.open(f"{QBIT_URL}/api/v2/torrents/info?" + urllib.parse.urlencode({"category": category}), timeout=60).read())
 
@@ -159,6 +165,10 @@ class Arr:
     def summary(self):
         return None
 
+    def check_library(self):
+        """Returns (actions, needs_user) for problems with files already imported."""
+        return [], {}
+
     def search_missing(self):
         self.api("/command", "POST", self.missing_command)
         return self.missing_command["name"]
@@ -228,6 +238,10 @@ class Arr:
                         actions.append(f"dead torrent ({t['state']}, {t['progress']:.0%}) -> blocklisted: {t['name'][:60]}")
                     else:
                         needs_user[f"stalled:{t['hash']}"] = f"dead torrent not matched in {self.name}: {t['name'][:80]}"
+
+        done, ask = self.check_library()
+        actions += done
+        needs_user.update(ask)
 
         if self.missing_hours > 0:
             cmd = self.missing_command["name"]
