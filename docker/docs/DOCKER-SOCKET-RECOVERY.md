@@ -2,8 +2,13 @@
 
 Docker live-restore preserves running containers when the daemon restarts, but
 individual socket bind mounts can retain the replaced socket's old inode.
-Homepage can keep serving HTTP while Docker status checks fail; Alloy loses log
-collection; cAdvisor can export old samples that Prometheus rejects; and the VPN
+Homepage and Alloy no longer mount the socket; they reach Docker over TCP through
+their own read-only brokers, `homepage-socket-proxy` and `alloy-socket-proxy`,
+which hold the mounts instead. A stale broker leaves Homepage serving HTTP while
+its Docker health check and status widgets fail, and stops Alloy's log
+collection. Each broker probes its socket every 30 seconds and exits when it is
+unreachable, so its restart policy remounts it even before the helper below
+runs. cAdvisor can export old samples that Prometheus rejects, and the VPN
 namespace watcher cannot receive events to repair a future namespace mismatch.
 An HTTP scrape being `up` does not establish that its metrics are fresh.
 
@@ -13,10 +18,13 @@ An HTTP scrape being `up` does not establish that its metrics are fresh.
 after `docker.service` starts or restarts. It refreshes only these known services
 in Compose project **`compose`**, in this order:
 
-1. `homepage`
-2. `alloy`
+1. `homepage-socket-proxy`
+2. `alloy-socket-proxy`
 3. `cadvisor`
 4. `vpn-netns-watcher`
+
+Homepage and Alloy are not recreated: they hold no socket mount, and their TCP
+clients reconnect once the broker is back.
 
 Immediately before each recreation, it queries Docker for running, non-one-off
 containers with the exact project and service labels. Stopped, paused, absent,
@@ -43,8 +51,8 @@ brief interruption for each selected consumer.
 Do not replace this recovery with a broad `/run` bind mount, remove meaningful
 socket health checks, or set Prometheus `honor_timestamps: false` to disguise stale
 metrics. The helper verifies command success, not full application readiness;
-afterward check Homepage health, Alloy/watcher connection errors, and cAdvisor
-sample freshness.
+afterward check broker and Homepage health, Alloy/watcher connection errors, and
+cAdvisor sample freshness.
 
 ## Log collection exclusions and stale filesystem entries
 

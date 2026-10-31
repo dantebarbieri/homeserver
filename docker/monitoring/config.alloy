@@ -1,9 +1,10 @@
 // Grafana Alloy configuration — Docker log collection → Loki
 // Replaces Promtail (EOL March 2026)
 
-// Discover all Docker containers
+// Discover all Docker containers through Alloy's read-only socket broker
+// (alloy-socket-proxy in compose.monitoring.yml); Alloy has no socket mount.
 discovery.docker "containers" {
-  host = "unix:///var/run/docker.sock"
+  host = "tcp://alloy-socket-proxy:2375"
 }
 
 // Extract container metadata as labels
@@ -34,9 +35,11 @@ discovery.relabel "docker" {
   }
 }
 
-// Collect logs from Docker containers via the Docker daemon API
+// Collect logs from Docker containers via the same broker. Tailing needs
+// container inspect plus logs; a 403 in alloy-socket-proxy's logs means the
+// allowlist is missing an endpoint.
 loki.source.docker "containers" {
-  host       = "unix:///var/run/docker.sock"
+  host       = "tcp://alloy-socket-proxy:2375"
   targets    = discovery.relabel.docker.output
   forward_to = [loki.write.local.receiver]
 }

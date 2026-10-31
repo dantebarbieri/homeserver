@@ -298,6 +298,10 @@ Prowlarr runs with `DOTNET_SYSTEM_NET_DISABLEIPV6=1`: FlareSolverr solves
 Cloudflare over IPv4 and `cf_clearance` is bound to that IP, so Prowlarr must
 replay it over IPv4 too (over IPv6 it gets 403 "blocked by CloudFlare").
 
+Internet Archive stalls searches that carry Prowlarr's own User-Agent, so its
+indexer uses a repo-managed definition that sends a browser one; see
+[PROWLARR.md](PROWLARR.md#internet-archive-user-agent).
+
 Lidarr's MusicBrainz titles for Japanese releases (e.g. Ghibli soundtracks)
 are in Japanese while indexers use English, so automatic search rarely matches.
 Grab those manually and import with **Wanted > Manual Import**, choosing the

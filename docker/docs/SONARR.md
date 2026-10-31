@@ -1,5 +1,12 @@
 # Sonarr
 
+## Custom-order exceptions
+
+Kim Possible is intentionally kept outside Sonarr to preserve a pinned
+chronological order; TVDB `78259` is on the import-list exclusions. See
+[Kim Possible](KIM-POSSIBLE.md) for its ordering, title-based reorder tool, and
+isolated one-time upgrade procedure.
+
 ## Queue maintenance (`sonarr-maint`)
 
 `sonarr-maint` (`compose.starr.yml`, built from the shared `dockerfiles/arr-maint/` image (common engine in `arr_maint.py`, Sonarr rules in `sonarr.py`))

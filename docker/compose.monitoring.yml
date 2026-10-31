@@ -1,4 +1,5 @@
-# Monitoring stack: Prometheus, Grafana, Loki, Alloy, node-exporter, cAdvisor
+# Monitoring stack: Prometheus, Grafana, Loki, Alloy (+ its Docker socket
+# proxy), node-exporter, cAdvisor
 #
 # Only Grafana is publicly exposed (via proxy network).
 # All other services stay on the internal monitoring network — they have
@@ -67,12 +68,70 @@ services:
       - "--storage.path=/var/lib/alloy/data"
     volumes:
       - ./monitoring/config.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${DATA}/alloy:/var/lib/alloy
     networks:
       - monitoring
+      - alloy-docker-api
     depends_on:
       - loki
+      - alloy-socket-proxy
+
+  # Read-only Docker API broker for Alloy, which no longer mounts the socket.
+  #
+  # Unlike Homepage's broker, this one must allow container inspect:
+  # loki.source.docker calls GET /containers/{id}/json before and while tailing
+  # (TTY mode and running state), then streams /containers/{id}/logs?follow=1.
+  # discovery.docker lists containers and networks, and both Docker clients
+  # negotiate the API version with /_ping first. Inspect still exposes container
+  # Env, which is why this is a separate broker that only Alloy can reach rather
+  # than a shared one; create/exec/delete and every other endpoint stay denied.
+  #
+  # Regexes are anchored full matches on the path (query ignored) with an
+  # optional /vX.Y prefix. A `:ro` socket mount does not restrict the API.
+  #
+  # Holds the real socket: never join `proxy` or publish its port.
+  alloy-socket-proxy:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: wollomatic/socket-proxy:1.13.2
+    container_name: alloy-socket-proxy
+    # Runs as nobody; the docker group is what lets it open the socket.
+    group_add:
+      - "${DOCKER_GID}"
+    command:
+      - '-loglevel=info'
+      - '-listenip=0.0.0.0'
+      - '-proxyport=2375'
+      # Resolved through Docker DNS on each request: only Alloy's address on
+      # alloy-docker-api is accepted, so no subnet needs pinning.
+      - '-allowfrom=alloy'
+      - '-allowHEAD=(/v[0-9]+\.[0-9]+)?/_ping'
+      - '-allowGET=(/v[0-9]+\.[0-9]+)?/(_ping|networks|containers/(json|[a-zA-Z0-9][a-zA-Z0-9_.-]*/(json|logs)))'
+      - '-allowhealthcheck'
+      # Daemon restarts can leave this file bind mount on the replaced socket.
+      # Exiting lets the restart policy remount it even if the host reconcile
+      # unit has not run yet. Log streams never finish on their own, so keep
+      # the shutdown grace below Docker's 10s stop timeout.
+      - '-watchdoginterval=30'
+      - '-stoponwatchdog'
+      - '-shutdowngracetime=5'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - alloy-docker-api
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # Checks that the mounted Docker socket still accepts connections.
+      test: ["CMD", "/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   node-exporter:
     extends:
@@ -114,3 +173,6 @@ services:
 networks:
   proxy:
   monitoring:
+  # Only Alloy and its socket broker; carries Docker API traffic.
+  alloy-docker-api:
+    internal: true

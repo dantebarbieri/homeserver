@@ -17,7 +17,7 @@ dashboard, which is now archived.
 | `services.yaml` | App links and backend status cards with consumer descriptions |
 | `bookmarks.yaml` | External links (GitHub repos) and local management pages |
 | `widgets.yaml` | Top-level page widgets (date/time, weather) |
-| `docker.yaml` | Docker socket connection for container status |
+| `docker.yaml` | Docker API connection (via `homepage-socket-proxy`) for container status |
 
 ## Dashboard Layout
 
@@ -41,8 +41,9 @@ Backend descriptions name the apps or integrations they power and their role.
 Anime Relations is explicitly marked as having an undocumented consumer rather
 than guessing which app uses its API.
 Backend cards normally have no `href` or `siteMonitor`: API roots are not web
-interfaces. Docker status and inventory widgets use the existing Docker socket
-without exposing private services or joining their networks. CouchDB retains
+interfaces. Docker status (through `homepage-socket-proxy`) and inventory
+widgets (through the adapter's socket mount) reach Docker without exposing
+private services or joining their networks. CouchDB retains
 its useful admin link.
 
 Docker status reports container state and health where a healthcheck exists;
@@ -213,8 +214,10 @@ Widgets refresh every 30 seconds; successful inventory results are cached for
 The adapter runs as the unprivileged `node` user with `DOCKER_GID` as a
 supplementary group, a read-only root filesystem, and dropped capabilities.
 Its Docker socket mount is `:ro`, but **a read-only socket mount is not a
-Docker API authorization boundary**: the adapter is a trusted socket consumer,
-like Homepage itself. Keep it internal, and never expose its socket or raw
+Docker API authorization boundary**: the adapter is a trusted socket consumer.
+(Homepage itself no longer is: it reaches Docker only through
+`homepage-socket-proxy`, which allows container list and stats.) Keep the
+adapter internal, and never expose its socket or raw
 Docker inspection data to browsers. Archive reads are fixed version files for
 WireGuard/Satisfactory, the filtered WireGuard peer configuration, and ConvertX's
 converter registry; no arbitrary file paths or exec endpoints

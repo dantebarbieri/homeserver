@@ -1,5 +1,5 @@
 # Dashboard and monitoring services
-# homepage, homepage-inventory, snapotter-widget, suwayomi-widget, dashdot, uptime-kuma
+# homepage, homepage-socket-proxy, homepage-inventory, snapotter-widget, suwayomi-widget, dashdot, uptime-kuma
 
 services:
   homepage:
@@ -9,7 +9,10 @@ services:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"const http=require('http');const r=http.get({socketPath:'/var/run/docker.sock',path:'/containers/json?limit=1'},s=>{process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(3000,()=>process.exit(1))\""]
+      # Probes Docker through homepage-socket-proxy, the same path its status
+      # and stats widgets use, so a stale broker socket or a broken allowlist
+      # surfaces as unhealthy.
+      test: ["CMD-SHELL", "node -e \"const http=require('http');const r=http.get({host:'homepage-socket-proxy',port:2375,path:'/containers/json?limit=1'},s=>{process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(3000,()=>process.exit(1))\""]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -61,9 +64,66 @@ services:
     networks:
       - proxy
       - homepage-widgets
+      - homepage-docker-api
     volumes:
       - ${HOMEPAGE_CONFIG_PATH}:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - homepage-socket-proxy
+
+  # Read-only Docker API broker for Homepage, which no longer mounts the socket.
+  #
+  # The raw socket grants container create/exec/delete (root on the host) to an
+  # internet-facing app, and GET /containers/{id}/json returns every container's
+  # Env, i.e. most of .env in one request. Homepage's status and stats widgets
+  # only list containers (including health filters) and read one-shot stats by
+  # container ID, so inspect, logs and everything else stays denied.
+  #
+  # wollomatic/socket-proxy anchors each regex (full match on the path, query
+  # ignored); the optional /vX.Y prefix keeps versioned clients working. Methods
+  # without an -allow flag get 405, other paths 403, and both are logged.
+  # A `:ro` socket mount does not restrict the API; the allowlist does.
+  #
+  # Holds the real socket: never join `proxy` or publish its port.
+  homepage-socket-proxy:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: wollomatic/socket-proxy:1.13.2
+    container_name: homepage-socket-proxy
+    # Runs as nobody; the docker group is what lets it open the socket.
+    group_add:
+      - "${DOCKER_GID}"
+    command:
+      - '-loglevel=info'
+      - '-listenip=0.0.0.0'
+      - '-proxyport=2375'
+      # Resolved through Docker DNS on each request: only Homepage's address on
+      # homepage-docker-api is accepted, so no subnet needs pinning.
+      - '-allowfrom=homepage'
+      - '-allowGET=(/v[0-9]+\.[0-9]+)?/containers/(json|[a-zA-Z0-9][a-zA-Z0-9_.-]*/stats)'
+      - '-allowhealthcheck'
+      # Daemon restarts can leave this file bind mount on the replaced socket.
+      # Exiting lets the restart policy remount it even if the host reconcile
+      # unit has not run yet.
+      - '-watchdoginterval=30'
+      - '-stoponwatchdog'
+      - '-shutdowngracetime=5'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - homepage-docker-api
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # Checks that the mounted Docker socket still accepts connections.
+      test: ["CMD", "/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   homepage-inventory:
     extends:
@@ -193,6 +253,9 @@ services:
 networks:
   proxy:
   homepage-widgets:
+    internal: true
+  # Only Homepage and its socket broker; carries Docker API traffic.
+  homepage-docker-api:
     internal: true
   suwayomi:
   matrix:
