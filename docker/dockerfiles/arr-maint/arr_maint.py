@@ -159,6 +159,10 @@ class Arr:
     def summary(self):
         return None
 
+    def search_missing(self):
+        self.api("/command", "POST", self.missing_command)
+        return self.missing_command["name"]
+
     def run(self):
         actions, needs_user = [], {}
         now = time.time()
@@ -232,9 +236,10 @@ class Arr:
             recent = recent or any(c["name"] == cmd and (c.get("started") or c.get("queued") or "") >= cutoff
                                    for c in self.api("/command"))
             if not recent and not DRY:
-                self.api("/command", "POST", self.missing_command)
+                searched = self.search_missing()
                 save_state("last_missing.json", {"at": now})
-                actions.append(f"triggered {cmd}")
+                if searched:
+                    actions.append(f"triggered {searched}")
 
         for a in actions:
             log("ACTION:", a)

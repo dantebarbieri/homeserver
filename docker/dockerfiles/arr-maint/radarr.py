@@ -26,9 +26,20 @@ class App(Arr):
     media = "movie"
     queue_params = "includeMovie=true&includeUnknownMovieItems=true"
     category_field = "movieCategory"
-    missing_command = {"name": "MissingMoviesSearch", "filterKey": "monitored", "filterValue": "true"}
+    missing_command = {"name": "MoviesSearch"}
     missing_hours = 24.0
     tag = "movie_camera"
+
+    def search_missing(self):
+        # API commands are always manual in Radarr, bypassing availability checks.
+        queued = {r.get("movieId") for r in self.api(f"/queue?pageSize=2000&{self.queue_params}")["records"]}
+        movies = self.api("/movie")
+        ids = [m["id"] for m in movies
+               if m["monitored"] and not m["hasFile"] and m["isAvailable"] and m["id"] not in queued]
+        if not ids:
+            return None
+        self.api("/command", "POST", {"name": "MoviesSearch", "movieIds": ids})
+        return f"MoviesSearch ({len(ids)} available missing movies)"
 
     def label(self, rows):
         movie = rows[0].get("movie") or {}
