@@ -39,9 +39,12 @@ All use `set -euo pipefail` (bash) or `set -eu` (POSIX sh).
 - `scripts/deploy-update.sh <service>` — Pull, rebuild, zero-downtime restart
 - `scripts/setup-vpn-watcher.sh` — One-time setup, copies vpn-watcher.sh to `${DATA}` path
 - `scripts/vpn-watcher.sh` — Long-running Docker event monitor (POSIX sh, debounced restarts)
+- `scripts/reorder-episodes.py <order.json>` — Renumbers a show's files into the custom order in `scripts/episode-orders/` (see `docs/KIM-POSSIBLE.md`)
+- `scripts/pin-episode-metadata.py <order.json>` — Pins Plex/Jellyfin episode metadata for that custom order
 
 ## Service-Specific Docs (`docs/`)
 
+- `docs/KIM-POSSIBLE.md` — Pinned custom episode order, kept outside Sonarr
 - `docs/MATRIX.md` — Synapse, Element, Coturn, PostgreSQL setup
 - `docs/MATRIX-RTC.md` — LiveKit voice/video call integration
 - `docs/NEXTCLOUD.md` — PostgreSQL, Redis, cron, reverse proxy config

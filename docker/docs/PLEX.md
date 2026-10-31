@@ -117,3 +117,13 @@ Validate the **general** playback decision, not just `directPlayDecisionCode`,
 using the client's profile, subtitle selection and quality limit. Confirm both
 automatic version selection and seeking around the resume point; an
 unrestricted-quality test alone does not cover a capped Apple TV.
+
+## Custom episode orders
+
+Kim Possible's files are deliberately numbered in a custom chronology that no
+upstream order offers, and TVDB's later DVD-order rewrite made Plex (with
+`tvdbDvd` ordering) and Jellyfin put the wrong titles on correctly ordered
+files. `scripts/pin-episode-metadata.py` pins and locks titles, summaries, air
+dates and thumbnails from an order file in `scripts/episode-orders/`; see
+[Kim Possible](KIM-POSSIBLE.md) for the order, the reorder tool, and when to
+re-run them.
