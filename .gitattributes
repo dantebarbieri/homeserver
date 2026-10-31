@@ -1,5 +1,4 @@
-# Force LF for shell scripts and Dockerfiles so Windows checkouts don't break
-# alpine/busybox `exec`, which fails on CRLF shebang lines.
-*.sh         text eol=lf
-Dockerfile   text eol=lf
-Dockerfile.* text eol=lf
+# Store and check out every detected text file with LF, so Windows checkouts
+# never commit CRLF: shebang scripts and Dockerfiles stored as CRLF fail under
+# alpine/busybox `exec`, and CRLF files turn edits into whole-file diffs.
+* text=auto eol=lf
