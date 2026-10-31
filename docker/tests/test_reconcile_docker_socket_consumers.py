@@ -9,7 +9,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "docker/scripts/reconcile-docker-socket-consumers.sh"
-SERVICES = ("homepage", "alloy", "cadvisor", "vpn-netns-watcher")
+SERVICES = ("homepage-socket-proxy", "alloy-socket-proxy", "cadvisor", "vpn-netns-watcher")
 
 MOCK_DOCKER = r"""#!/usr/bin/env python3
 import json
@@ -125,13 +125,17 @@ class ReconcileDockerSocketConsumersTests(unittest.TestCase):
             self.assert_recreate(calls[2 + index * 2], service)
 
     def test_stopped_absent_and_unrelated_services_are_not_started(self):
-        result, calls = self.run_script(("alloy", "vpn-netns-watcher", "plex", "homepage-extra"))
+        # Homepage and Alloy reach Docker through their brokers, so they are unrelated now.
+        result, calls = self.run_script(
+            ("homepage", "alloy", "alloy-socket-proxy", "vpn-netns-watcher", "plex",
+             "homepage-socket-proxy-extra")
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         recreated = [call for call in calls if call["args"][0] == "compose"]
         self.assertEqual(len(recreated), 2)
-        self.assert_recreate(recreated[0], "alloy")
+        self.assert_recreate(recreated[0], "alloy-socket-proxy")
         self.assert_recreate(recreated[1], "vpn-netns-watcher")
-        self.assertIn("Skipping homepage", result.stdout)
+        self.assertIn("Skipping homepage-socket-proxy", result.stdout)
         self.assertIn("Skipping cadvisor", result.stdout)
 
     def test_no_running_consumers_is_a_successful_noop(self):
@@ -143,19 +147,21 @@ class ReconcileDockerSocketConsumersTests(unittest.TestCase):
         self.assertNotIn("Refreshing", result.stdout)
 
     def test_enumeration_failure_is_not_treated_as_no_running_container(self):
-        result, calls = self.run_script(SERVICES, FAIL_ENUMERATION="homepage")
+        result, calls = self.run_script(SERVICES, FAIL_ENUMERATION="homepage-socket-proxy")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("cannot enumerate running containers for homepage", result.stderr)
+        self.assertIn(
+            "cannot enumerate running containers for homepage-socket-proxy", result.stderr
+        )
         self.assertEqual(len(calls), 2)
 
     def test_recreation_failure_stops_and_reports_partial_progress(self):
-        result, calls = self.run_script(SERVICES, FAIL_RECREATE="alloy")
+        result, calls = self.run_script(SERVICES, FAIL_RECREATE="alloy-socket-proxy")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("recreation failed for alloy", result.stderr)
+        self.assertIn("recreation failed for alloy-socket-proxy", result.stderr)
         self.assertIn("remaining services were not attempted", result.stderr)
         self.assertEqual(len(calls), 5)
-        self.assert_recreate(calls[2], "homepage")
-        self.assert_recreate(calls[4], "alloy")
+        self.assert_recreate(calls[2], "homepage-socket-proxy")
+        self.assert_recreate(calls[4], "alloy-socket-proxy")
 
     def test_lock_failure_prevents_any_docker_command(self):
         result, calls = self.run_script(SERVICES, FAIL_LOCK="1")

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code when working with the `homepage/` dir
 - `settings.yaml` — Theme, layout, search provider, per-group column/icon config.
 - `widgets.yaml` — Top-of-page widgets (datetime, weather).
 - `bookmarks.yaml` — External links organized by category (GitHub repos, management UIs).
-- `docker.yaml` — Docker socket mapping (`my-docker` → `/var/run/docker.sock`).
+- `docker.yaml` — Docker API mapping (`my-docker` → `homepage-socket-proxy:2375`). Homepage does **not** mount the Docker socket; its broker in `docker/compose.dashboards.yml` allows only container list and stats (no inspect, logs or writes). A Docker feature needing another endpoint fails with 403 — check `docker logs homepage-socket-proxy` before widening the allowlist.
 - `WIDGET_API_KEYS.md` — Step-by-step guide for obtaining every service's API credentials.
 
 ## Adding a Service to `services.yaml`

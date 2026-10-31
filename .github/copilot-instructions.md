@@ -84,7 +84,7 @@ Rebuild: `sudo nixos-rebuild switch` (`git add` new files first; the flake only 
 ## Integration Points
 
 - **NixOS → Docker**: enables daemon, daily auto-update pulls monorepo and restarts services
-- **Homepage → Docker**: Docker socket + API widgets for live status
+- **Homepage → Docker**: read-only `homepage-socket-proxy` (container list + stats) + API widgets for live status
 - **NPM → Authelia**: SSO middleware via nginx snippets
 - **Recyclarr → Starr**: container in `compose.starr.yml`, syncs quality profiles via API
 - **Mail → NixOS**: vdirsyncer runs as NixOS systemd timer

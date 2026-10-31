@@ -17,7 +17,7 @@ exec 9>"$COMPOSE_LOCK_FILE" || fail "cannot open Compose lock"
 flock --exclusive --timeout 600 9 || fail "could not acquire Compose lock within 600 seconds"
 cd "$COMPOSE_DIR" || fail "cannot enter $COMPOSE_DIR"
 
-for service in homepage alloy cadvisor vpn-netns-watcher; do
+for service in homepage-socket-proxy alloy-socket-proxy cadvisor vpn-netns-watcher; do
     # Query immediately before each recreate, excluding stopped and one-off containers.
     if ! running_ids=$(docker ps \
         --filter status=running \

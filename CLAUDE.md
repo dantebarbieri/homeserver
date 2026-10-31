@@ -64,7 +64,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.ai.yml` | whisperasr |
 | `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
-| `compose.dashboards.yml` | homepage, dashdot |
+| `compose.dashboards.yml` | homepage, homepage-socket-proxy, dashdot |
 | `compose.downloads.yml` | vpn-netns, gluetun, qbittorrent, slskd-netns, gluetun-slskd, slskd, sabnzbd, flaresolverr, qbit-manage |
 | `compose.gaming.yml` | minecraft, rlcraft, hytale, satisfactory |
 | `compose.git.yml` | forgejo, postgres |
@@ -221,7 +221,7 @@ Common sources: ddclient (dynamic DNS), Nginx Proxy Manager (reverse proxy, TLS 
 ## Integration Points
 
 - **NixOS → Docker**: NixOS enables the Docker daemon and runs the daily auto-update timer that pulls this monorepo and restarts services
-- **Homepage → Docker**: mounted Docker socket for container status; service API widgets for live stats
+- **Homepage → Docker**: container status/stats through `homepage-socket-proxy` (read-only broker allowing only container list and stats; Homepage has no socket mount); service API widgets for live stats
 - **NPM → Authelia**: nginx snippets in NPM config provide SSO middleware (see `production-configs/` for reference copies)
 - **NPM → Coturn**: Let's Encrypt certs from NPM are passed to Matrix's Coturn for RTC
 - **Recyclarr → Starr**: runs as a container in `compose.starr.yml`, syncs quality profiles to Radarr/Sonarr via their APIs

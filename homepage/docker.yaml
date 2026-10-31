@@ -1,5 +1,15 @@
-# Docker socket integration for container status monitoring
+# Docker API access for container status and stats
 # https://gethomepage.dev/configs/docker/
+#
+# Homepage does not mount /var/run/docker.sock. It talks to
+# homepage-socket-proxy (docker/compose.dashboards.yml), which allows only GET
+# container list and per-container stats. Inspect, logs, exec, create and
+# delete are denied, so a compromised Homepage can neither control containers
+# nor read their environment variables.
+#
+# If status dots or stats go blank, check `docker logs homepage-socket-proxy`
+# for "blocked request" before widening its allowlist.
 
 my-docker:
-  socket: /var/run/docker.sock
+  host: homepage-socket-proxy
+  port: 2375

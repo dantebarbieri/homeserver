@@ -116,9 +116,11 @@ read-only deploy key.
 ### Docker socket consumers
 
 `docker-socket-consumers.service` follows Docker starts/restarts and serially
-recreates only running Homepage, Alloy, cAdvisor and VPN namespace watcher
-services in project `compose`. File bind mounts can otherwise retain an obsolete
-Docker socket across daemon restarts with live-restore enabled.
+recreates only running Homepage and Alloy socket proxies, cAdvisor and VPN
+namespace watcher services in project `compose`. File bind mounts can otherwise
+retain an obsolete Docker socket across daemon restarts with live-restore
+enabled. Homepage and Alloy themselves use the proxies over TCP and are not
+recreated.
 
 The helper does not start stopped/absent consumers or dependencies, pull/build
 images, or prune data. Unrelated containers retain live-restore. It shares
