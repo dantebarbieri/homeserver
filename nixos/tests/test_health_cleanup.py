@@ -70,6 +70,22 @@ class HealthCleanupTests(unittest.TestCase):
                     inherit (c.systemd.services.forgejo-runner-worldforge-migrate)
                       requiredBy before unitConfig;
                   };
+                  nixIndex = {
+                    package = system.pkgs.lib.getName c.programs.nix-index.package;
+                    inherit (c.programs.nix-index) enable;
+                    commandNotFound = c.programs.command-not-found.enable;
+                    weeklyService = builtins.hasAttr "nix-index-update" c.systemd.services;
+                    weeklyTimer = builtins.hasAttr "nix-index-update" c.systemd.timers;
+                  };
+                  rebootReminder = {
+                    inherit (c.systemd.services.reboot-reminder) script;
+                    failure = c.systemd.services.reboot-reminder.unitConfig.OnFailure;
+                    type = c.systemd.services.reboot-reminder.serviceConfig.Type;
+                    path = map system.pkgs.lib.getName c.systemd.services.reboot-reminder.path;
+                    timer = {
+                      inherit (c.systemd.timers.reboot-reminder) wantedBy timerConfig;
+                    };
+                  };
                 }
                 """,
             ],
@@ -132,6 +148,104 @@ class HealthCleanupTests(unittest.TestCase):
         for package in ("aerc", "khard", "khal", "vdirsyncer", "w3m"):
             self.assertNotIn(package, self.config["packages"])
         self.assertNotIn("khal list", self.config["shellInit"])
+
+    def test_nix_locate_uses_the_prebuilt_database(self):
+        nix_index = self.config["nixIndex"]
+        # Only the database-wrapped package works without a local index, and
+        # nothing builds a local index any more (the weekly job had started failing).
+        self.assertEqual(nix_index["package"], "nix-index-with-full-db")
+        self.assertTrue(nix_index["enable"])
+        self.assertFalse(nix_index["commandNotFound"])
+        self.assertFalse(nix_index["weeklyService"])
+        self.assertFalse(nix_index["weeklyTimer"])
+
+    def test_reboot_reminder_unit_and_timer(self):
+        reminder = self.config["rebootReminder"]
+        self.assertEqual(reminder["type"], "oneshot")
+        self.assertEqual(reminder["failure"], "ntfy-failure@%n.service")
+        for tool in ("coreutils", "gawk", "curl"):
+            self.assertIn(tool, reminder["path"])
+        self.assertEqual(reminder["timer"]["timerConfig"]["OnCalendar"], "*-*-* 10:00:00")
+        self.assertIn("timers.target", reminder["timer"]["wantedBy"])
+        self.assertIn("stale_days=7\n", reminder["script"])
+
+    def test_reboot_reminder_decisions(self):
+        script = self.config["rebootReminder"]["script"]
+        for original, fake in (
+            ("booted=/run/booted-system", 'booted="$TEST_ROOT/booted"'),
+            ("current=/run/current-system", 'current="$TEST_ROOT/current"'),
+            ("staged=/nix/var/nix/profiles/system", 'staged="$TEST_ROOT/staged"'),
+            ("uptime_file=/proc/uptime", 'uptime_file="$TEST_ROOT/uptime"'),
+            ("md_sync=/sys/block/md0/md/sync_action", 'md_sync="$TEST_ROOT/sync_action"'),
+        ):
+            self.assertIn(original + "\n", script)
+            script = script.replace(original + "\n", fake + "\n")
+        harness = 'curl() { printf "CURL:%s\\n" "$*"; return "$CURL_STATUS"; }\n'
+
+        def make_system(root, name, kernel, initrd, modules, version):
+            # The links a NixOS system closure carries; the booted one is
+            # /run/booted-system, the next-boot one the system profile.
+            closure = root / "store" / name
+            closure.mkdir(parents=True)
+            (root / "store" / modules / "lib" / "modules" / version).mkdir(parents=True, exist_ok=True)
+            (closure / "kernel").symlink_to(f"/store/{kernel}/bzImage")
+            (closure / "initrd").symlink_to(f"/store/{initrd}/initrd")
+            (closure / "kernel-modules").symlink_to(root / "store" / modules)
+            return closure
+
+        # (label, uptime days, what was staged, running the staged closure,
+        #  RAID action or None for no md device, curl exit status,
+        #  sent, expected exit status, text expected in the output)
+        cases = [
+            ("recently rebooted", 6.9, "kernel", True, "idle", 0, False, 0, "Up 6 days"),
+            ("nothing staged", 30, "same", True, "idle", 0, False, 0, "nothing to do"),
+            ("new kernel", 30, "kernel", True, "idle", 0, True, 0,
+             "Kernel update staged: running 6.18.54, next boot 6.18.59."),
+            ("new kernel and userland", 30, "kernel", False, "idle", 0, True, 0,
+             "running 6.18.54, next boot 6.18.59"),
+            ("driver only", 30, "modules", True, "idle", 0, True, 0,
+             "Kernel modules or initrd changed on 6.18.54 (e.g. an NVIDIA driver update)."),
+            ("userland only", 30, "same", False, "idle", 0, True, 0,
+             "OS updates are staged but not running yet."),
+            ("exactly at the threshold", 7, "same", False, "idle", 0, True, 0, "Up 7 days"),
+            ("no md device", 30, "kernel", True, None, 0, True, 0, "Kernel update staged"),
+            ("scrub running", 30, "kernel", True, "check", 0, False, 0,
+             "RAID md0 is running 'check'; not reminding until it is idle"),
+            ("rebuild running", 30, "same", False, "recover", 0, False, 0,
+             "RAID md0 is running 'recover'"),
+            ("ntfy unreachable", 30, "kernel", True, "idle", 22, True, 22, "CURL:"),
+        ]
+        for label, days, staged, running_staged, action, curl_status, sent, expected, text in cases:
+            with self.subTest(label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                booted = make_system(root, "sys-a", "k-54", "i-54", "m-54", "6.18.54")
+                kernel, initrd, modules, version = {
+                    "same": ("k-54", "i-54", "m-54", "6.18.54"),
+                    "kernel": ("k-59", "i-59", "m-59", "6.18.59"),
+                    "modules": ("k-54", "i-54", "m-54-nvidia", "6.18.54"),
+                }[staged]
+                next_boot = make_system(root, "sys-b", kernel, initrd, modules, version)
+                (root / "booted").symlink_to(booted)
+                (root / "staged").symlink_to(next_boot)
+                (root / "current").symlink_to(next_boot if running_staged else booted)
+                (root / "uptime").write_text(f"{int(days * 86400)}.25 0.00\n")
+                if action is not None:
+                    (root / "sync_action").write_text(action + "\n")
+                result = subprocess.run(
+                    ["bash", "-euo", "pipefail", "-c", harness + script],
+                    env={**os.environ, "TEST_ROOT": tmp, "CURL_STATUS": str(curl_status)},
+                    capture_output=True,
+                    text=True,
+                )
+                output = result.stdout + result.stderr
+                self.assertEqual(result.returncode, expected, output)
+                self.assertIn(text, output)
+                self.assertEqual("CURL:" in result.stdout, sent, output)
+                if sent:
+                    self.assertIn("Title: Reboot pending on homeserver", result.stdout)
+                    self.assertIn("Tags: arrows_counterclockwise,computer", result.stdout)
+                    self.assertIn("https://ntfy.danteb.com/homeserver-alerts", result.stdout)
+                    self.assertIn("--fail-with-body --show-error --silent --max-time 30", result.stdout)
 
     def test_forgejo_runner_static_user_and_migration(self):
         unit = self.config["runnerUnit"]

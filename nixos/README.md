@@ -22,7 +22,7 @@ Docker-based services (see [homeserver-docker](https://github.com/dantebarbieri/
 
 | Path | Purpose |
 |---|---|
-| `flake.nix` / `flake.lock` | Entry point. Pins nixpkgs and Home Manager; builds `nixosConfigurations.homeserver`. |
+| `flake.nix` / `flake.lock` | Entry point. Pins nixpkgs, Home Manager and the nix-index database; builds `nixosConfigurations.homeserver`. |
 | `configuration.nix` | Root module: imports `hardware-configuration.nix` and every file in `modules/`. |
 | `modules/*.nix` | One concern per file (networking, storage, docker, backups, …). |
 | `lib/shared.nix` | Values several modules share: ntfy endpoint, alert scripts, MirkLurk hold. |
@@ -163,6 +163,15 @@ This keeps NVIDIA userspace and the loaded kernel module on matching versions.
 A manual `nixos-rebuild switch` after a lock update can still create a mismatch and is
 not a substitute for rebooting after a driver update.
 
+`modules/reboot-reminder.nix` keeps that from depending on memory. Daily at 10:00
+it compares `/run/booted-system` with the system profile the upgrade stages, using
+the same kernel, initrd and kernel-modules comparison as upstream's `allowReboot`,
+and sends an ntfy "Reboot pending" notice when a different kernel or driver is
+waiting, or other updates are staged but not running. It stays quiet for the first
+7 days after a boot (the upgrade stages something most nights) and holds back while
+`md0` is running a scrub or rebuild, so it never invites a reboot that would cut
+one short (see below). It repeats daily until you reboot.
+
 The RAID scrub service is not restarted when its definition changes during a
 manual switch. Its existing monitor and suppression sentinel remain alive until
 the kernel finishes the check; script changes take effect on the next run.
@@ -291,6 +300,11 @@ Skip `--upgrade`: it only refreshes the root `nixos` channel, which the flake
 ignores. After activation, `nix shell nixpkgs#…` and `<nixpkgs>` also resolve
 to the locked nixpkgs.
 
+`nix-locate` (and the `nwp` helper built on it) reads the prebuilt database from
+[nix-index-database](https://github.com/nix-community/nix-index-database). It is
+pinned in `flake.lock` and refreshed by the nightly bump, so the server builds no
+index of its own and `~/.cache/nix-index` is unused.
+
 ## Forgejo Actions host runner
 
 `services.forgejo-runner.instances.worldforge` runs the `worldforge-host:host`
@@ -332,8 +346,8 @@ python3 nixos/tests/test_health_cleanup.py
 ```
 
 Run from the repository root (on the server, wrap it in
-`nix shell nixpkgs#python3 -c …`). This evaluates the flake's NixOS and Home Manager options and exercises scrub
-and update success/failure paths with mock commands; it does not contact or modify the
+`nix shell nixpkgs#python3 -c …`). This evaluates the flake's NixOS and Home Manager options and exercises scrub,
+update and reboot-reminder success/failure paths with mock commands; it does not contact or modify the
 server, synchronize real data, or build a system closure. The
 [`nixos-validate`](../.github/workflows/nixos-validate.yml) workflow runs it,
 plus a toplevel evaluation against the committed lock, on every change under

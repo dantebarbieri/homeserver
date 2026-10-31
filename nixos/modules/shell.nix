@@ -1,10 +1,12 @@
 # System-wide shell, editor and CLI tooling.
-{ config, pkgs, ... }:
+{ config, pkgs, inputs, ... }:
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; }) ntfyNotify;
 in
 {
+  imports = [ inputs.nix-index-database.nixosModules.nix-index ];
+
   # Personal identity and commit signing live in Home Manager (../home).
   programs.git = {
     enable = true;
@@ -104,29 +106,10 @@ in
 
   programs.gnupg.agent.enable = true;
   programs.ssh.startAgent = true;
-  programs.nix-index.enable = true;   # nix-locate — find which package provides a binary
+  # nix-locate (and nwp) read the prebuilt database that nix-index-database
+  # wraps into the package, pinned by flake.lock and refreshed by the nightly
+  # lock update. The weekly local index this replaced peaked at ~14 GB of RAM
+  # and had started failing.
+  programs.nix-index.enable = true;
   programs.command-not-found.enable = false;  # mutually exclusive with nix-index shell integrations
-
-  # nix-index — weekly database rebuild for nix-locate / nwp
-  systemd.services.nix-index-update = {
-    description = "Rebuild nix-index database for nix-locate";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "danteb";
-    };
-    path = with pkgs; [ nix-index ];
-    script = ''
-      nix-index
-    '';
-  };
-
-  systemd.timers.nix-index-update = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "weekly";
-      Persistent = true;
-    };
-  };
 }
