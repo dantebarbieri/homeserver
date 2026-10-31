@@ -135,7 +135,8 @@ services:
   suwayomi:
     container_name: suwayomi
     image: ghcr.io/suwayomi/suwayomi-server:stable
-    restart: on-failure:3
+    # Not on-failure:3, which stops retrying after three failures.
+    restart: unless-stopped
     user: "${HOST_UID}:${HOST_GID}"
     environment:
       TZ: ${TZ}

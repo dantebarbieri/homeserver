@@ -19,7 +19,7 @@ All services should extend one of these:
 | `common-service` | `restart: unless-stopped`, JSON logging (10m/3 files) |
 | `hotio-service` | + PUID/PGID/TZ for Hotio images |
 | `linuxserver-service` | + PUID/PGID/TZ for LinuxServer.io images |
-| `gpu-service` | + `devices: ["nvidia.com/gpu=all"]` |
+| `gpu-service` | `restart: unless-stopped`, `devices: ["nvidia.com/gpu=all"]` (no logging block; set `logging:` on the service) |
 
 ## Custom Dockerfiles (`dockerfiles/`)
 
