@@ -6,9 +6,31 @@
         to keep hardlinks, move for usenet)
       * same release as the existing file, or every file rejected as "not an upgrade"
         (e.g. an AI upscale caught by a negative custom format) -> blocklist + remove
+  - library: a file shorter than MIN_RUNTIME_RATIO of the movie's runtime is almost
+    certainly a different movie with the same title and year (e.g. a mockbuster)
+      -> blocklist the grab, delete the file and its torrent, re-search if available
 """
 import os, urllib.parse
+from datetime import datetime
 from arr_maint import Arr, DRY, NOT_UPGRADE, norm, stem
+
+MIN_RUNTIME = float(os.environ.get("MIN_RUNTIME_RATIO", "0.7"))
+
+
+def minutes(run_time):
+    """Radarr's mediaInfo runTime ("1:26:03", "26:03") in minutes, or None."""
+    try:
+        parts = [float(x) for x in (run_time or "").split(":")]
+    except ValueError:
+        return None
+    seconds = 0.0
+    for p in parts:
+        seconds = seconds * 60 + p
+    return seconds / 60
+
+
+def when(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
 def same_as_existing(cand, mf):
@@ -40,6 +62,44 @@ class App(Arr):
             return None
         self.api("/command", "POST", {"name": "MoviesSearch", "movieIds": ids})
         return f"MoviesSearch ({len(ids)} available missing movies)"
+
+    def grab_for(self, movie_id, mf):
+        """The history 'grabbed' event that produced the movie file, or None."""
+        history = self.api(f"/history/movie?movieId={movie_id}")
+        added = when(mf["dateAdded"])
+        imported = next((h for h in history if h["eventType"] == "downloadFolderImported" and h.get("downloadId")
+                         and ((h.get("data") or {}).get("importedPath") == mf.get("path")
+                              or abs((when(h["date"]) - added).total_seconds()) < 300)), None)
+        if not imported:
+            return None
+        return next((h for h in history if h["eventType"] == "grabbed"
+                     and (h.get("downloadId") or "").lower() == imported["downloadId"].lower()), None)
+
+    def check_library(self):
+        actions, needs_user = [], {}
+        for m in self.api("/movie"):
+            mf = m.get("movieFile") or {}
+            got, want = minutes((mf.get("mediaInfo") or {}).get("runTime")), m.get("runtime") or 0
+            if not got or not want or got >= MIN_RUNTIME * want:
+                continue
+            name, short = f"{m['title']} ({m['year']})", f"file runs {got:.0f} of {want} min"
+            grab = self.grab_for(m["id"], mf)
+            if not grab:
+                needs_user[f"short:{mf['id']}"] = (f"{name}: {short}, likely a different movie; no grab to blocklist"
+                                                   f" | {mf.get('relativePath', '')[:80]}")
+            elif DRY:
+                actions.append(f"DRY would reject {name}: {short}")
+            else:
+                self.api(f"/history/failed/{grab['id']}", "POST", {})
+                self.api(f"/moviefile/{mf['id']}", "DELETE")
+                if self.qbit:
+                    self.qbit.delete(grab["downloadId"])
+                # A manual API search would bypass availability, so unreleased movies wait.
+                if m["isAvailable"]:
+                    self.api("/command", "POST", {"name": "MoviesSearch", "movieIds": [m["id"]]})
+                actions.append(f"{name}: {short} -> blocklisted, deleted, "
+                               + ("re-searching" if m["isAvailable"] else "search waits for release"))
+        return actions, needs_user
 
     def label(self, rows):
         movie = rows[0].get("movie") or {}
