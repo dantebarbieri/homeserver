@@ -67,7 +67,7 @@ docker compose -f compose.gaming.yml up -d
 ## Shared Templates
 
 `compose.common.yml` provides reusable service templates:
-- `gpu-service` - NVIDIA GPU passthrough
+- `gpu-service` - NVIDIA GPU passthrough and the standard restart policy (no logging block)
 - `common-service` - Standard restart policy and logging
 - `hotio-service` - For Hotio images (PUID/PGID/TZ)
 - `linuxserver-service` - For LinuxServer.io images

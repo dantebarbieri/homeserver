@@ -6,9 +6,11 @@
 # It's only referenced via 'extends:' from other compose files
 
 services:
-  # GPU passthrough for NVIDIA
+  # GPU passthrough for NVIDIA. A service can't extend two templates, so this
+  # one carries the restart policy itself; logging is left to each service.
   gpu-service:
     image: alpine  # placeholder - overridden by extending service
+    restart: unless-stopped
     devices:
       - "nvidia.com/gpu=all"
 
