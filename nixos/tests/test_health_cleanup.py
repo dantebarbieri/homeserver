@@ -305,8 +305,15 @@ class HealthCleanupTests(unittest.TestCase):
         chown() { printf 'CHOWN:%s\\n' "$*"; return "$CHOWN_STATUS"; }
         cd() { echo CD; }
         sleep() { printf 'SLEEP:%s\\n' "$1"; }
-        # Tdarr update guard (docker/scripts/tdarr-update-guard.sh).
-        bash() { printf 'GUARD:%s\\n' "$*"; return 0; }
+        # Tdarr update guard (docker/scripts/tdarr-update-guard.sh) and the
+        # Prowlarr definition refresh (docker/scripts/setup-prowlarr-definitions.sh).
+        bash() {
+          printf 'GUARD:%s\\n' "$*"
+          case "$1" in
+            scripts/setup-prowlarr-definitions.sh) return "$DEFINITIONS_STATUS" ;;
+          esac
+          return 0
+        }
         pull_attempts=0
         docker() {
           if [ "$1" = ps ]; then return 0; fi
@@ -353,12 +360,15 @@ class HealthCleanupTests(unittest.TestCase):
             {"BUILD_STATUS": "1", "FAILING_BUILDS": "convertx"},
             {"BUILD_STATUS": "1", "FAILING_BUILDS": "convertx", "DEPLOY_STATUS": "1"},
             {"DEPLOY_STATUS": "1"},
+            {"DEFINITIONS_STATUS": "1"},
+            {"DEFINITIONS_STATUS": "1", "BUILD_STATUS": "1", "FAILING_BUILDS": "convertx"},
         ]
         for overrides in cases:
             with self.subTest(overrides=overrides):
                 statuses = dict.fromkeys(
                     ("LOCK_STATUS", "GIT_STATUS", "CHOWN_STATUS",
-                     "PULL_FAILURES", "BUILD_STATUS", "DEPLOY_STATUS"), "0",
+                     "PULL_FAILURES", "BUILD_STATUS", "DEPLOY_STATUS",
+                     "DEFINITIONS_STATUS"), "0",
                 )
                 statuses["FAILING_BUILDS"] = ""
                 statuses["FAILING_PULLS"] = ""
@@ -387,10 +397,11 @@ class HealthCleanupTests(unittest.TestCase):
                 )
                 exhausted = int(statuses["PULL_FAILURES"]) >= 3
                 deploy_failed = statuses["DEPLOY_STATUS"] != "0"
+                definitions_failed = statuses["DEFINITIONS_STATUS"] != "0"
                 build_held = statuses["FAILING_BUILDS"].split()
                 pull_held = statuses["FAILING_PULLS"].split() if exhausted else []
                 held = pull_held + build_held
-                failed = failed_before_pull or deploy_failed or bool(held)
+                failed = failed_before_pull or deploy_failed or bool(held) or definitions_failed
                 self.assertEqual(result.returncode, int(failed), result.stderr)
                 if statuses["LOCK_STATUS"] != "0":
                     self.assertNotIn("GIT:", result.stdout)
@@ -477,7 +488,18 @@ class HealthCleanupTests(unittest.TestCase):
                 self.assertIn("GUARD:scripts/tdarr-update-guard.sh release", lines)
                 if deploy_failed:
                     self.assertNotIn("DOCKER:image prune -f", lines)
+                    self.assertNotIn("GUARD:scripts/setup-prowlarr-definitions.sh", lines)
                 else:
+                    # Definitions are refreshed after the deploy; a failure is
+                    # reported but never stops the rest of the update.
+                    self.assertLess(
+                        lines.index("GUARD:scripts/tdarr-update-guard.sh release"),
+                        lines.index("GUARD:scripts/setup-prowlarr-definitions.sh"),
+                    )
+                    self.assertEqual(
+                        "Prowlarr's custom definitions need review" in result.stderr,
+                        definitions_failed,
+                    )
                     self.assertIn("DOCKER:compose up -d --force-recreate homepage", lines)
                     self.assertIn("DOCKER:image prune -f", lines)
                     self.assertIn("DOCKER:network prune -f", lines)

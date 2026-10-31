@@ -89,6 +89,12 @@ See [MATRIX.md](docs/MATRIX.md) for the full Matrix stack setup guide (Synapse, 
 
 See [MATRIX-RTC.md](docs/MATRIX-RTC.md) for adding voice/video call support via LiveKit (MatrixRTC).
 
+## Prowlarr Custom Definitions
+
+See [PROWLARR.md](docs/PROWLARR.md) for the repo-managed Internet Archive and
+anime-only Nyaa definitions, how the daily update keeps them current, and
+rollback.
+
 ## qBittorrent Web UI
 
 qBittorrent bundles the latest stable [VueTorrent](https://github.com/VueTorrent/VueTorrent)

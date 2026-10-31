@@ -81,15 +81,18 @@ jitter). The corresponding oneshot service:
    `danteb:docker`; otherwise a later manual `git pull` fails with
    "Permission denied".
 3. Pull non-buildable images with at most four parallel Compose operations,
-   rebuild local images, reconcile containers,
+   rebuild local images, reconcile containers, refresh the custom Prowlarr
+   definitions from upstream (`docker/docs/PROWLARR.md`),
    recreate Homepage, and prune unused images/networks.
 
 Failures stop the update and trigger the existing `ntfy-failure@` handler, with
-two exceptions: pulled and locally built images are isolated per service. If
+three exceptions: pulled and locally built images are isolated per service. If
 the combined pull is exhausted, the job pulls services one at a time; if the
 combined build fails, it rebuilds services one at a time. Either way it deploys
 everything else, leaves each failing service running its previous container,
-and then fails so ntfy still reports it.
+and then fails so ntfy still reports it. Likewise, a Prowlarr definition whose
+upstream changed shape keeps its installed copy, and the job finishes before
+failing.
 Combined image pulls get at most three attempts, with 60- and 120-second
 delays, before the one-at-a-time fallback. Retries and the fallback mitigate
 transient registry throttling (ghcr.io has rejected the large immich CUDA image

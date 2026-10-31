@@ -62,7 +62,7 @@ in
     wants = [ "network-online.target" ];
     unitConfig.OnFailure = "ntfy-failure@%n.service";
     unitConfig.ConditionPathExists = mirklurkDeploymentCondition;
-    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils pkgs.findutils pkgs.util-linux ];
+    path = [ pkgs.docker pkgs.git pkgs.openssh pkgs.bash pkgs.coreutils pkgs.diffutils pkgs.findutils pkgs.util-linux ];
     environment = {
       GIT_SSH_COMMAND = "ssh -i /root/.ssh/docker-compose-deploy -o StrictHostKeyChecking=accept-new";
     };
@@ -215,6 +215,11 @@ in
         bash scripts/tdarr-update-guard.sh release
         trap - EXIT
       fi
+      # Re-derive the custom Prowlarr definitions from the upstream ones Prowlarr
+      # refreshes itself (docker/docs/PROWLARR.md). An unexpected upstream keeps
+      # the installed copy and fails the unit for review.
+      prowlarr_definitions=ok
+      bash scripts/setup-prowlarr-definitions.sh || prowlarr_definitions=failed
       docker compose up -d --force-recreate homepage
       docker image prune -f
       docker network prune -f
@@ -225,7 +230,11 @@ in
       if [ "''${#failed_builds[@]}" -ne 0 ]; then
         echo "Update finished, but these services kept their previous image because it failed to build: ''${failed_builds[*]}" >&2
       fi
-      if [ "''${#failed_pulls[@]}" -ne 0 ] || [ "''${#failed_builds[@]}" -ne 0 ]; then
+      if [ "$prowlarr_definitions" = failed ]; then
+        echo "Update finished, but Prowlarr's custom definitions need review (docker/docs/PROWLARR.md)." >&2
+      fi
+      if [ "''${#failed_pulls[@]}" -ne 0 ] || [ "''${#failed_builds[@]}" -ne 0 ] ||
+        [ "$prowlarr_definitions" = failed ]; then
         exit 1
       fi
     '';
