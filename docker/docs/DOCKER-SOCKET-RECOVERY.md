@@ -9,7 +9,10 @@ its Docker health check and status widgets fail, and stops Alloy's log
 collection. Each broker probes its socket every 30 seconds and exits when it is
 unreachable, so its restart policy remounts it even before the helper below
 runs. cAdvisor can export old samples that Prometheus rejects, and the VPN
-namespace watcher cannot receive events to repair a future namespace mismatch.
+namespace watchers cannot receive events to repair a future namespace mismatch.
+The trusted Homepage inventory adapter still mounts the socket directly; a stale
+mount breaks its container and application widgets even when Homepage's broker
+is healthy.
 An HTTP scrape being `up` does not establish that its metrics are fresh.
 
 ## Targeted recovery helper
@@ -22,6 +25,8 @@ in Compose project **`compose`**, in this order:
 2. `alloy-socket-proxy`
 3. `cadvisor`
 4. `vpn-netns-watcher`
+5. `homepage-inventory`
+6. `slskd-netns-watcher`
 
 Homepage and Alloy are not recreated: they hold no socket mount, and their TCP
 clients reconnect once the broker is back.
@@ -51,7 +56,7 @@ brief interruption for each selected consumer.
 Do not replace this recovery with a broad `/run` bind mount, remove meaningful
 socket health checks, or set Prometheus `honor_timestamps: false` to disguise stale
 metrics. The helper verifies command success, not full application readiness;
-afterward check broker and Homepage health, Alloy/watcher connection errors, and
+afterward check broker, Homepage and inventory health, Alloy/watcher connection errors, and
 cAdvisor sample freshness.
 
 ## Log collection exclusions and stale filesystem entries
@@ -62,6 +67,10 @@ paths. Its health check and HTTP status remain available. Keep this exclusion
 aligned with `compose.websites.yml`; do not re-enable its logs to silence Alloy.
 Service/project labels come from the sanitized
 `__meta_docker_container_label_com_docker_compose_*` discovery labels.
+
+Alloy's optional usage reporting is disabled with `--disable-reporting`.
+The local DNS policy blocks its telemetry endpoint; collection and forwarding
+to Loki do not depend on that endpoint.
 
 Correcting stream labels can cause a one-time replay of retained Docker logs.
 Loki may reject entries older than its acceptance window; verify that current

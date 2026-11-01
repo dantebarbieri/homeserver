@@ -355,7 +355,6 @@
           <<: *container-info
           url: http://homepage-inventory:8080/stats/convertx
           mappings:
-            - { field: converters, label: Converters, format: text }
             - { field: completed, label: Done Files, format: text }
             - { field: other, label: Issues, format: text }
             - { field: jobs, label: Saved Jobs, format: text }

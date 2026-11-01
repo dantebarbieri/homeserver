@@ -129,7 +129,7 @@ Metrics are
 | BookBridge | Active, pending and processing books; Issues combines failed and unrecognized/null sync statuses. These are sync/processing states, not reading/finished states. |
 | Vaultwarden | Active login items, all active vault items, and trash. Includes personal/organization items once each across users; never reads encrypted names or contents. |
 | ntfy | Distinct topics represented in unexpired published cached messages, cached message count, and unexpired scheduled/unpublished messages. These are **not** subscription counts, connected subscribers, or all subscribable topics: ntfy accepts arbitrary topic names, and a topic disappears from this count when its cache expires. |
-| ConvertX | Registered converter engines in the installed application; retained successful file-result rows; non-success results (Issues); retained job rows. History can be deleted, and one conversion can produce several file-result rows: these are not lifetime conversion totals. |
+| ConvertX | Retained successful file-result rows; non-success results (Issues); retained job rows. History can be deleted, and one conversion can produce several file-result rows: these are not lifetime conversion totals. The converter count is omitted: compiled releases no longer ship the JavaScript registry, and the catalog page requires authentication. |
 | IT-Tools | Tools and categories from the deployed frontend's registration catalog. It executes tools in the browser, so there is no server-side usage count. The catalog is parsed as data, never executed by the collector. |
 | Stirling PDF | File-accepting document actions and their categories in the deployed OpenAPI schema. Excludes administrative APIs. These are API action capabilities, not unique UI-tool counts or completed conversions; no external analytics is enabled. |
 | SearXNG | Enabled engines; engine request calls since the metrics process started; unweighted mean of available per-engine response-time averages. One search fans out to several engines, so calls are **not search counts** and engine latency is not end-to-end search latency. Counters reset on restart; absent timing samples display No samples, not zero milliseconds. |
@@ -219,8 +219,7 @@ Docker API authorization boundary**: the adapter is a trusted socket consumer.
 `homepage-socket-proxy`, which allows container list and stats.) Keep the
 adapter internal, and never expose its socket or raw
 Docker inspection data to browsers. Archive reads are fixed version files for
-WireGuard/Satisfactory, the filtered WireGuard peer configuration, and ConvertX's
-converter registry; no arbitrary file paths or exec endpoints
+WireGuard/Satisfactory and the filtered WireGuard peer configuration; no arbitrary file paths or exec endpoints
 are offered.
 
 Service-specific icons use verified Dashboard Icons filenames where available,

@@ -66,6 +66,7 @@ services:
       - "run"
       - "/etc/alloy/config.alloy"
       - "--storage.path=/var/lib/alloy/data"
+      - "--disable-reporting"
     volumes:
       - ./monitoring/config.alloy:/etc/alloy/config.alloy:ro
       - ${DATA}/alloy:/var/lib/alloy

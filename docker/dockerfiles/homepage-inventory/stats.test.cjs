@@ -13,6 +13,27 @@ function fixture(t, schema) {
   return db;
 }
 
+test("ConvertX reports retained file results and jobs without requiring a converter registry", (t) => {
+  const db = fixture(t, `
+    CREATE TABLE file_names (status TEXT, filename TEXT);
+    CREATE TABLE jobs (id INTEGER);
+    INSERT INTO file_names VALUES ('Done','private'), ('Done','private'),
+      ('Error','private'), ('Converting','private');
+    INSERT INTO jobs VALUES (1);
+  `);
+  assert.deepEqual(collectStats(db, "convertx"), {
+    completed: "2", other: "2", jobs: "1",
+  });
+  db.exec("DELETE FROM jobs");
+  assert.deepEqual(collectStats(db, "convertx"), {
+    completed: "2", other: "2", jobs: "0",
+  });
+  db.exec("DELETE FROM file_names");
+  assert.deepEqual(collectStats(db, "convertx"), {
+    completed: "0", other: "0", jobs: "0",
+  });
+});
+
 test("Aurral counts available songs once, excludes missing files, and shows retained requests", (t) => {
   const db = fixture(t, `
     CREATE TABLE library_media_files (track_id INTEGER, album_id INTEGER, available INTEGER);

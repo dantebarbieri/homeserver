@@ -3,6 +3,23 @@
 For music libraries, FLAC imports, and Plexamp on iPhone, Windows, and macOS,
 see [Music setup](MUSIC.md).
 
+## Seerr library availability
+
+Seerr connects internally to `http://plex:32400`: set its Plex hostname to
+`plex`, port to `32400`, and SSL off for this Docker-network connection.
+Keep the public web-app URL at `https://plex.danteb.com`. Do not select a
+`plex.direct` address encoding a container IP: that address becomes stale when
+Docker assigns Plex a different IP, causing availability sync timeouts.
+
+Save through Seerr's settings UI or `POST /api/v1/settings/plex`, preserving its
+existing Plex token and enabled libraries. The API accepts `ip`, `port`,
+`useSsl`, and `webAppUrl`; do not send read-only response fields. With CSRF
+protection enabled, first GET the settings and retain the returned cookies,
+then send the `XSRF-TOKEN` value as `X-XSRF-TOKEN` with the write. Do not disable
+CSRF protection. Verify the same machine identifier and an authenticated
+`POST /api/v1/settings/plex/library/sync`; enabled library selections are preserved.
+Keep a private backup of the settings before changes; never commit its credentials.
+
 ## Bazarr library refreshes
 
 Bazarr connects internally to `http://plex:32400` using manual/API-key

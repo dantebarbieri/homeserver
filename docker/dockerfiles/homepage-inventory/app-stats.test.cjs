@@ -1,6 +1,20 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { metricValues, pdfCatalog, peerStats, statsNames, toolCatalog } = require("./app-stats.cjs");
+const { applicationStats, metricValues, pdfCatalog, peerStats, statsNames, toolCatalog } = require("./app-stats.cjs");
+
+test("compiled ConvertX releases need only SQLite aggregates, not archived JavaScript files", async () => {
+  const result = { completed: "31", other: "4", jobs: "0" };
+  assert.deepEqual(await applicationStats("convertx", {
+    readSqliteStats: (name) => {
+      assert.equal(name, "convertx");
+      return result;
+    },
+    readContainerFile: () => assert.fail("Compiled ConvertX has no JavaScript registry"),
+  }), result);
+  await assert.rejects(applicationStats("convertx", {
+    readSqliteStats: () => { throw new Error("Database unavailable"); },
+  }), /Database unavailable/);
+});
 
 test("tool catalog counts only registered category members, without executing scripts", () => {
   const bundle = `

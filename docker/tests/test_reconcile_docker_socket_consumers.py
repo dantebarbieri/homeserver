@@ -9,7 +9,10 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "docker/scripts/reconcile-docker-socket-consumers.sh"
-SERVICES = ("homepage-socket-proxy", "alloy-socket-proxy", "cadvisor", "vpn-netns-watcher")
+SERVICES = (
+    "homepage-socket-proxy", "alloy-socket-proxy", "cadvisor", "vpn-netns-watcher",
+    "homepage-inventory", "slskd-netns-watcher",
+)
 
 MOCK_DOCKER = r"""#!/usr/bin/env python3
 import json
@@ -119,7 +122,7 @@ class ReconcileDockerSocketConsumersTests(unittest.TestCase):
         self.assertEqual(
             calls[0], {"tool": "flock", "args": ["--exclusive", "--timeout", "600", "9"]}
         )
-        self.assertEqual(len(calls), 9)
+        self.assertEqual(len(calls), 1 + 2 * len(SERVICES))
         for index, service in enumerate(SERVICES):
             self.assert_enumeration(calls[1 + index * 2], service)
             self.assert_recreate(calls[2 + index * 2], service)
@@ -137,11 +140,22 @@ class ReconcileDockerSocketConsumersTests(unittest.TestCase):
         self.assert_recreate(recreated[1], "vpn-netns-watcher")
         self.assertIn("Skipping homepage-socket-proxy", result.stdout)
         self.assertIn("Skipping cadvisor", result.stdout)
+        self.assertIn("Skipping homepage-inventory", result.stdout)
+        self.assertIn("Skipping slskd-netns-watcher", result.stdout)
+
+    def test_inventory_and_soulseek_watcher_are_refreshed_independently(self):
+        services = ("homepage-inventory", "slskd-netns-watcher")
+        result, calls = self.run_script(services)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recreated = [call for call in calls if call["args"][0] == "compose"]
+        self.assertEqual(len(recreated), len(services))
+        for call, service in zip(recreated, services):
+            self.assert_recreate(call, service)
 
     def test_no_running_consumers_is_a_successful_noop(self):
         result, calls = self.run_script()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(calls), 5)
+        self.assertEqual(len(calls), 1 + len(SERVICES))
         for call, service in zip(calls[1:], SERVICES):
             self.assert_enumeration(call, service)
         self.assertNotIn("Refreshing", result.stdout)

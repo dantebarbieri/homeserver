@@ -100,17 +100,9 @@ function peerStats(body) {
   return { peers: count(peers.length), enabled: count(peers.filter((peer) => peer.enabled).length) };
 }
 
-async function applicationStats(name, { readContainerFile }) {
+async function applicationStats(name, { readContainerFile, readSqliteStats = readStats }) {
   if (Object.hasOwn(databaseFiles, name)) {
-    const result = readStats(name);
-    if (name === "convertx") {
-      const source = await readContainerFile("convertx", "/app/dist/src/converters/main.js");
-      const registry = /const properties = \{([\s\S]*?)\n\};/.exec(source)?.[1];
-      const converters = registry?.match(/^\s{4}[A-Za-z][A-Za-z0-9]*: \{\s+properties:/gm);
-      if (!converters?.length) throw new Error("Missing converter registry");
-      return { converters: count(converters.length), ...result };
-    }
-    return result;
+    return readSqliteStats(name);
   }
   switch (name) {
     case "wg-easy":
