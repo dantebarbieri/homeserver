@@ -147,7 +147,7 @@ in
       TimeoutStartSec = "8h";
     };
     environment.RCLONE_CONFIG = "/root/.config/rclone/rclone.conf";
-    path = with pkgs; [ rclone curl coreutils ];
+    path = with pkgs; [ rclone rsync curl coreutils ];
     script = ''
       set -uo pipefail
 
@@ -177,37 +177,47 @@ in
       fi
 
       # Selective /srv/docker/data (service configs and non-regenerable app data).
-      # Any error makes rclone rerun the whole sync (up to 3x) and skip remote
-      # deletions, so files that churn while it runs and have no restore value
-      # are excluded: AdGuard's DNS query log (~4 GB rewritten daily, plus a
-      # ~9 GB rotation), *arr crash-report spools and log DBs, slskd's event
-      # and search history, Suwayomi's browser cache, and SQLite -shm indexes
-      # (rebuilt on open; main databases and their -wal files are kept).
-      # --local-no-check-updated uploads growing logs at their listed size
-      # instead of failing them with "sizes differ".
-      if ! rclone sync /srv/docker/data/ "$REMOTE/docker-data/" \
-          --local-no-check-updated \
-          --exclude "plex/**" \
-          --exclude "jellyfin/**" \
-          --exclude "romm/resources/**" \
-          --exclude "satisfactory-server/**" \
-          --exclude "syncthing/**" \
-          --exclude "tdarr/logs/**" \
-          --exclude "nextcloud/html/**" \
-          --exclude "nginxproxymanager/data/logs/**" \
-          --exclude "prometheus/**" \
-          --exclude "loki/**" \
-          --exclude "alloy/**" \
-          --exclude "mirklurk/backups/.mirklurk-*/**" \
-          --exclude "mirklurk/backups/.mirklurk-snapshot-sql-*.sql.gz" \
-          --exclude "mirklurk/backup-control/**" \
-          --exclude "adguardhome/workdir/data/querylog.json*" \
-          --exclude "*/config/Sentry/**" \
-          --exclude "{sonarr,radarr,lidarr,prowlarr}/config/logs.db*" \
-          --exclude "slskd/data/{events,search}.db*" \
-          --exclude "suwayomi/config/cache/**" \
+      # Live files change and vanish while a slow upload runs, and any such
+      # error makes rclone rerun the whole sync (up to 3x) and skip remote
+      # deletions, which pushed this job past its timeout. So it is first
+      # mirrored to a local staging copy (minutes; rsync exit 24 means a file
+      # vanished mid-copy, which is harmless), and rclone uploads from that.
+      # Also skipped: AdGuard's DNS query log (~4 GB rewritten daily, plus a
+      # ~9 GB rotation), *arr crash-report spools, text logs and log DBs,
+      # slskd's event and search history, Suwayomi's browser cache, and
+      # SQLite -shm indexes (rebuilt on open; databases and -wal are kept).
+      STAGE=/data/offsite-staging/docker-data
+      mkdir -p "$STAGE" && chmod 700 /data/offsite-staging
+      rsync -a --delete --delete-excluded --no-specials --no-devices \
+          --exclude "/plex/" \
+          --exclude "/jellyfin/" \
+          --exclude "/romm/resources/" \
+          --exclude "/satisfactory-server/" \
+          --exclude "/syncthing/" \
+          --exclude "/tdarr/logs/" \
+          --exclude "/nextcloud/html/" \
+          --exclude "/nginxproxymanager/data/logs/" \
+          --exclude "/prometheus/" \
+          --exclude "/loki/" \
+          --exclude "/alloy/" \
+          --exclude "/mirklurk/backups/.mirklurk-*/" \
+          --exclude "/mirklurk/backups/.mirklurk-snapshot-sql-*.sql.gz" \
+          --exclude "/mirklurk/backup-control/" \
+          --exclude "/adguardhome/workdir/data/querylog.json*" \
+          --exclude "/*/config/Sentry/" \
+          --exclude "/*/config/logs/" \
+          --exclude "/*/config/logs.db*" \
+          --exclude "/slskd/data/events.db*" \
+          --exclude "/slskd/data/search.db*" \
+          --exclude "/suwayomi/config/cache/" \
           --exclude "*-shm" \
-          --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+          /srv/docker/data/ "$STAGE/" 2>&1
+      RC=$?
+      if [ "$RC" -ne 0 ] && [ "$RC" -ne 24 ]; then
+        FAILED="$FAILED docker-data-staging(rsync=$RC)"
+      fi
+      if ! rclone sync "$STAGE/" "$REMOTE/docker-data/" \
+          --fast-list --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
         FAILED="$FAILED docker-data"
       fi
 
