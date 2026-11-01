@@ -17,6 +17,7 @@ failure handling gets the first try.
 
 | Stuck pattern | Fix |
 |---------------|-----|
+| Import blocked although Sonarr reports no rejections, such as "release was matched to series by ID. Automatic import is not possible". Applies only when every file maps to the queued series and the files together cover exactly the queued episodes, each once | Manual import as Sonarr mapped the files, using each file's detected quality and languages (copy for torrents to keep hardlinks, move for usenet) |
 | Import pending because the file's episode numbering doesn't match the grab, common with anime absolute numbers (`[HatSubs] One Piece 1162` parsed as 11x62, or "Invalid season or episode"). Applies only when there is exactly one file, the grab was for exactly one episode, and every rejection is a numbering one | Manual import into the grabbed episode, using the grab's quality and languages (copy for torrents to keep hardlinks, move for usenet) |
 | Downloaded the same release that is already in the library | Blocklist and remove |
 | Every file rejected as "not an upgrade" | Blocklist and remove |

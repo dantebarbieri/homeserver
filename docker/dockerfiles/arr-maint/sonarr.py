@@ -2,6 +2,10 @@
 
 Sonarr lists one queue row per episode; the engine groups them by download.
   - importPending/importBlocked/importFailed:
+      * every file importable (Sonarr reports no rejections) and mapped to the queued series,
+        together covering exactly the queued episodes, e.g. "matched to series by ID.
+        Automatic import is not possible" -> ManualImport as Sonarr mapped them (copy for
+        torrents to keep hardlinks, move for usenet)
       * one file whose only rejections are episode-numbering parse failures (anime absolute
         numbers read as SxxEyy, "Invalid season or episode", "not found in the grabbed
         release") and a download grabbed for exactly one episode -> ManualImport into that
@@ -68,6 +72,23 @@ class App(Arr):
         if reasons and all(NOT_UPGRADE.search(x) for x in reasons) and all(c.get("rejections") for c in cands):
             self.remove(rows)
             return "not an upgrade -> blocklisted", None
+        mapped = [e["id"] for c in cands for e in c.get("episodes") or []]
+        if (eids and not reasons and all((c.get("series") or {}).get("id") == r["seriesId"] for c in cands)
+                and len(mapped) == len(set(mapped)) and set(mapped) == set(eids)):
+            first = os.path.basename(cands[0]["path"]) + (f" (+{len(cands) - 1} files)" if len(cands) > 1 else "")
+            if DRY:
+                return f"DRY would import {first} ({'copy' if torrent else 'move'})", None
+            before = {eid: self.episode_file(eid) for eid in eids}
+            cid = self.api("/command", "POST", {"name": "ManualImport", "importMode": "copy" if torrent else "move", "files": [{
+                "path": c["path"], "folderName": c.get("folderName", ""), "seriesId": r["seriesId"],
+                "episodeIds": [e["id"] for e in c["episodes"]], "quality": c["quality"], "languages": c.get("languages", []),
+                "releaseGroup": c.get("releaseGroup"), "indexerFlags": c.get("indexerFlags", 0),
+                "releaseType": c.get("releaseType") or ("singleEpisode" if len(c["episodes"]) == 1 else "multiEpisode"),
+                "downloadId": r["downloadId"]} for c in cands]})["id"]
+            self.wait(cid)
+            if all(self.episode_file(eid) not in (0, before[eid]) for eid in eids):
+                return f"imported {first}", None
+            return None, "manual import ran but the episode files did not change"
         c = cands[0]
         rej = [x["reason"] for x in c.get("rejections", [])]
         if len(cands) == 1 and len(eids) == 1 and rej and all(NUMBERING.search(x) for x in rej):
