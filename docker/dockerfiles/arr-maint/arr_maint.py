@@ -138,6 +138,17 @@ class Arr:
         t = urllib.request.urlopen(r, timeout=600).read()
         return json.loads(t) if t else None
 
+    def connect_qbit(self, tries=5, delay=30):
+        # The 04:00 auto-update recreates qBittorrent; ride out its restart before alerting.
+        for i in range(tries):
+            try:
+                return Qbit()
+            except urllib.error.URLError as e:
+                if i == tries - 1:
+                    raise
+                log(f"qBittorrent unreachable ({e.reason}), retrying in {delay}s")
+                time.sleep(delay)
+
     def wait(self, cid, tries=120):
         for _ in range(tries):
             time.sleep(5)
@@ -183,7 +194,7 @@ class Arr:
             groups.setdefault(r.get("downloadId") or str(r["id"]), []).append(r)
         log("queue", len(q), "rows,", len(groups), "downloads",
             dict(Counter(f"{rs[0].get('trackedDownloadState')}/{rs[0].get('trackedDownloadStatus')}" for rs in groups.values())))
-        self.qbit = Qbit() if QBIT_USER else None
+        self.qbit = self.connect_qbit() if QBIT_USER else None
         stuck = set()
         for did, rows in groups.items():
             r = rows[0]
