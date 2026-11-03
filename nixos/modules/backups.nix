@@ -186,16 +186,21 @@ in
       # ~9 GB rotation), *arr crash-report spools, text logs and log DBs,
       # slskd's event and search history, Suwayomi's browser cache, and
       # SQLite -shm indexes (rebuilt on open; databases and -wal are kept).
+      # Nextcloud's code ships in its image, but config/ (instance secrets)
+      # and themes/ are what its backup docs say to keep (rsync filters are
+      # first-match, so the includes go first).
       STAGE=/data/offsite-staging/docker-data
       mkdir -p "$STAGE" && chmod 700 /data/offsite-staging
       rsync -a --delete --delete-excluded --no-specials --no-devices \
+          --include "/nextcloud/html/config/***" \
+          --include "/nextcloud/html/themes/***" \
+          --exclude "/nextcloud/html/*" \
           --exclude "/plex/" \
           --exclude "/jellyfin/" \
           --exclude "/romm/resources/" \
           --exclude "/satisfactory-server/" \
           --exclude "/syncthing/" \
           --exclude "/tdarr/logs/" \
-          --exclude "/nextcloud/html/" \
           --exclude "/nginxproxymanager/data/logs/" \
           --exclude "/prometheus/" \
           --exclude "/loki/" \
@@ -216,8 +221,15 @@ in
       if [ "$RC" -ne 0 ] && [ "$RC" -ne 24 ]; then
         FAILED="$FAILED docker-data-staging(rsync=$RC)"
       fi
+      # --fast-list matters: on this crypt-over-Drive remote, one subtree
+      # (27k objects) lists in 31s with it and over 3 min without. Remote
+      # deletions cost one Drive API call per file and directory, after the
+      # uploads, so dropping a big tree from the backup can take hours; purge
+      # it server-side first (rclone purge is one call on Drive). The
+      # periodic stats line shows which phase a long run is in.
       if ! rclone sync "$STAGE/" "$REMOTE/docker-data/" \
-          --fast-list --transfers 4 --checkers 8 --log-level NOTICE 2>&1; then
+          --fast-list --transfers 4 --checkers 8 --log-level NOTICE \
+          --stats 30m --stats-one-line --stats-log-level NOTICE 2>&1; then
         FAILED="$FAILED docker-data"
       fi
 

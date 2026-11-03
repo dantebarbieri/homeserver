@@ -272,6 +272,8 @@ docker exec nextcloud_postgres pg_dump -U nextcloud nextcloud > nextcloud-db-bac
 
 # File data is at ${RAID}/nextcloud — include in your regular RAID backup strategy
 # Config/app data is at ${DATA}/nextcloud/html/config
+# The daily offsite sync (rclone-offsite-daily) keeps html/config and html/themes;
+# the rest of html/ (code, app store apps) ships in the image or reinstalls
 ```
 
 > **Restore:** To restore, put Nextcloud in maintenance mode, import the SQL dump with `psql`, and ensure the data directory contents match. See the [Nextcloud backup/restore docs](https://docs.nextcloud.com/server/latest/admin_manual/maintenance/backup.html) for the full procedure.
