@@ -173,6 +173,16 @@ Since b2d6538 the bundled wiki catalog includes `Version 0.9.2.0` among
 512 titles and both wiki-data verification dates read 2026-10-30. All 308
 wiki images are byte-identical; offline version-link coverage is added.
 This is browser data only, with no backend, save, rules or proxy change.
+Since e1979ae Mirklurk 0.9.5.0 is **Latest**, with independent version rules,
+Snail Shell Shard/Intact Snail Shell, Toadkin Shaman/Giant Snail and the
+Wooden Buckler name. Wellbeing uses saved Survivor ranks and versioned
+rounding; missing ranks are unavailable, not guessed. Carried torches keep
+stacks of three while equipping one torch preserves the remainder's
+condition and identity. Optional death-choice fields round-trip unchanged.
+The server-reachable player parser adds two optional finite Survivor ranks,
+but sharing still uses its unchanged world grid. Upload validation, limits,
+authentication, storage and API policy are unchanged. Art bytes are unchanged;
+wiki catalog/art refresh follows publication separately.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (394 files) so
@@ -196,9 +206,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `b2d6538dff1e6b70444502c84a11e283dda2c568`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/40995099779) passed `test` and `docker-smoke` |
-| Web | `mirklurk-map:b2d6538`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:b2d6538`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `e1979ae8eddac8084d8737df3eb704ac5b0183a4`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/42051819645) passed `test` and `docker-smoke`; [review gate](https://github.com/dantebarbieri/mirklurk-map/actions/runs/42051090893) passed |
+| Web | `mirklurk-map:e1979ae`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:e1979ae`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -210,9 +220,9 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.565d20a64f.js` | `565d20a64f3a6b8ec0d797f0e955ef41d498123dd33f355f73a528539fcafc1c` |
-| `edit.fcd29a52ae.js` | `fcd29a52ae821dce159e70144cd7bd17f331f0e303211a219388ff752958150e` |
-| `sw.js` | `e468cf427fbf73c69de4cc64bc279330cb38377fabee729bc59604bd03b92bd8` |
+| `app.66e78c9962.js` | `66e78c9962d55fd970dcb29f1077875308763468280824e916a75ca0d547a4c9` |
+| `edit.90e2c3426e.js` | `90e2c3426e57a9bdf63bbba9ca684fa3a22b4aa8b2798a8e1331bf89f57e6bca` |
+| `sw.js` | `66a8035a6ebffa4dd3fbb5c847304c196a105f8da280c1479e11ebe71b9ab673` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
 unchanged); the service worker keeps 394 entries and
@@ -220,7 +230,8 @@ lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
 `Patch notes`. Both
-browser bundles contain `latest:"0.9.2.0"`, `Version 0.9.2.0` and `2026-10-30`.
+browser bundles contain `latest:"0.9.5.0"`; the pending wiki catalog still
+contains `Version 0.9.2.0` and verification date `2026-10-30`.
 Both browser bundles contain `Flint_Dagger_icon_(cropped).png` and
 `Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
 `Flint Dagger`. Both browser bundles contain `0.9.0.2`, `0.9.0.1` and
@@ -346,7 +357,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.15** and **fd2b:92df:1a5b:1::f**, not
+`compose_proxy` addresses **192.168.128.27** and **fd2b:92df:1a5b:1::1b**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -355,7 +366,10 @@ to 192.168.128.33 / fd2b:92df:1a5b:1::21; until the 00b3872 release updated
 this file, web nginx saw every client as NPM, so all clients shared one quota
 bucket. NPM was recreated again at 2026-10-22 13:47 UTC, moving to the current
 addresses, and `immich_server` then took 192.168.128.33 / ::21; the 5515978
-release replaced them. A stale entry trusts
+release replaced them. By 2026-11-05 NPM had moved again to .27 / ::1b,
+while Dashdot owned the old .15 / ::f. The e1979ae release replaces those
+stale exact entries, without retaining them or trusting additional peers.
+No NPM API apply or network change is needed. A stale entry trusts
 whichever container takes that address next, so replace it; never add to it.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
@@ -432,6 +446,23 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 `192.168.50.1` NAT identity; do not mistake that for the Docker proxy identity.
 
 ## Rollback
+
+Previous source: `b2d6538dff1e6b70444502c84a11e283dda2c568`, tags
+`mirklurk-map:b2d6538` / `mirklurk-map-uploads:b2d6538`. Preflight on
+2026-11-05 UTC observed exact running images
+`sha256:14b93ec612bfea92bb6088b6d31bcd58f4609bfac4607a7555acf682cbc7b123`
+(web) and
+`sha256:0a58060bbcb8db9f15a9a031393f5df133746afebf56935ea7832ff9384c4b6e`
+(uploads). Retain and recheck both under
+`rollback-b2d6538-20261105-e1979ae` before mutation. The source release is
+[dantebarbieri/mirklurk-map#59](https://github.com/dantebarbieri/mirklurk-map/pull/59).
+The shared parser reads optional finite Survivor ranks; no new mandatory save
+fields, stored-format migration or sharing-policy change occurs. `server/`,
+Dockerfile, `.dockerignore`, `deploy/`, Compose and sharing code are unchanged.
+Recreate uploads, then web from retained exact b2d6538 images under the lock,
+keeping the current corrected NPM trust addresses; never restore the uploads
+volume or the stale trusted peer. This restores 0.9.2.0's viewer/editor rules
+without losing stored worlds.
 
 Previous source: `7370c9cbb2468e0d5416b9d6c5dc8e3ef02af0a5`, tags
 `mirklurk-map:7370c9c` / `mirklurk-map-uploads:7370c9c`. Preflight on
