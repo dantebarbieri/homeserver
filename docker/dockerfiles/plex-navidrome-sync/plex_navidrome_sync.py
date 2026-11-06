@@ -77,6 +77,26 @@ def save_state(name, value):
     os.replace(tmp, os.path.join(STATE, name))
 
 
+def configured():
+    return bool(ND_USER and ND_PASS)
+
+
+def healthcheck():
+    if not configured():
+        log("not configured; waiting for Navidrome credentials (not syncing)")
+        return 0
+    try:
+        with open(os.path.join(STATE, "last_ok.json")) as f:
+            age = time.time() - json.load(f)["at"]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        log("unhealthy: cannot read last successful sync:", e)
+        return 1
+    if not 0 <= age < 2 * INTERVAL + 900:
+        log("unhealthy: last successful sync is stale or has an invalid timestamp")
+        return 1
+    return 0
+
+
 def ntfy(title, body, priority="default", tags=""):
     if not (NTFY_URL and NTFY_TOPIC):
         return
@@ -315,7 +335,7 @@ class Navidrome:
     name = "Navidrome"
 
     def __init__(self):
-        if not (ND_USER and ND_PASS):
+        if not configured():
             raise RuntimeError("NAVIDROME_USER and NAVIDROME_PASSWORD must be set")
         auth = http("POST", ND_URL + "/auth/login", headers={"Content-Type": "application/json"},
                     body=json.dumps({"username": ND_USER, "password": ND_PASS}).encode())[0]
@@ -513,7 +533,7 @@ def run(plex=None, nd=None):
 
 def main():
     signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))      # run finally blocks on docker stop
-    if not (ND_USER and ND_PASS):
+    if not configured():
         log("NAVIDROME_USER/NAVIDROME_PASSWORD not set in docker/.env; not syncing (see docs/MUSIC.md)")
         signal.pause() if hasattr(signal, "pause") else time.sleep(sys.maxsize)
     os.makedirs(STATE, exist_ok=True)

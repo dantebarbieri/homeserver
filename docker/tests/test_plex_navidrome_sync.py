@@ -2,7 +2,11 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -38,6 +42,80 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(sync.overlay(["c", "a", "d"], own, {"a", "b", "c", "d"}), ["x0", "c", "x2", "a", "x1", "d"])
         # Anchor removed from the target: its followers go at the end.
         self.assertEqual(sync.overlay(["a"], own, {"a", "b", "c"}), ["x0", "a", "x1", "x2"])
+
+
+class HealthcheckTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.state = Path(self.dir.name) / "state"
+        command = next(line.strip()[4:] for line in (ROOT / "Dockerfile").read_text().splitlines()
+                       if line.strip().startswith("CMD "))
+        self.command = [sys.executable, "-B", *shlex.split(command)[1:]]
+
+    def check(self, user="listener", password="test-password"):
+        return subprocess.run(
+            self.command, cwd=ROOT, capture_output=True, text=True, timeout=10,
+            env={**os.environ, "STATE_DIR": str(self.state), "INTERVAL": "900",
+                 "NAVIDROME_USER": user, "NAVIDROME_PASSWORD": password},
+        )
+
+    def marker(self, content):
+        self.state.mkdir(exist_ok=True)
+        (self.state / "last_ok.json").write_text(content)
+
+    def test_unconfigured_without_state_is_healthy_and_does_not_write(self):
+        for user, password in (("listener", ""), ("", "test-password"), ("", "")):
+            with self.subTest(user=user, password_set=bool(password)):
+                result = self.check(user, password)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("not configured", result.stdout)
+                self.assertFalse(self.state.exists())
+
+    def test_unconfigured_ignores_old_success_without_refreshing_it(self):
+        content = '{"at": 1}'
+        self.marker(content)
+        result = self.check(password="")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.state / "last_ok.json").read_text(), content)
+        # Supplying credentials must restore the freshness check immediately.
+        self.assertNotEqual(self.check().returncode, 0)
+
+    def test_configured_requires_valid_recent_success(self):
+        cases = (None, "not json", "{}", '{"at": "bad"}', "null",
+                 '{"at": 1}', json.dumps({"at": time.time() + 86400}))
+        for content in cases:
+            with self.subTest(content=content):
+                if content is not None:
+                    self.marker(content)
+                result = self.check()
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.marker(json.dumps({"at": time.time()}))
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_unconfigured_main_never_syncs_or_sends_alerts(self):
+        with patch.multiple(sync, ND_USER="listener", ND_PASS="", STATE=str(self.state)), \
+                patch.object(sync.signal, "signal"), \
+                patch.object(sync.signal, "pause", create=True, side_effect=SystemExit) as pause, \
+                patch.object(sync, "run") as run, patch.object(sync, "ntfy") as ntfy:
+            with self.assertRaises(SystemExit):
+                sync.main()
+            pause.assert_called_once()
+            run.assert_not_called()
+            ntfy.assert_not_called()
+            self.assertFalse(self.state.exists())
+
+    def test_health_window_uses_configured_interval(self):
+        for interval in (60, 900):
+            limit = 2 * interval + 900
+            for age, expected in ((limit - 1, 0), (limit, 1), (limit + 1, 1)):
+                with self.subTest(interval=interval, age=age):
+                    self.marker(json.dumps({"at": 10000 - age}))
+                    with patch.multiple(sync, ND_USER="listener", ND_PASS="test-password",
+                                        STATE=str(self.state), INTERVAL=interval), \
+                            patch.object(sync.time, "time", return_value=10000):
+                        self.assertEqual(sync.healthcheck(), expected)
 
 
 class PlanTrackTests(unittest.TestCase):

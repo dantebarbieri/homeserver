@@ -101,7 +101,7 @@ services:
       TZ: ${TZ}
       INTERVAL: 900
       NAVIDROME_USER: ${NAVIDROME_USER:-danteb}
-      NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD}
+      NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD:-}
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
     networks:

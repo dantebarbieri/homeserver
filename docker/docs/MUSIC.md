@@ -611,7 +611,13 @@ docker compose up -d plex-navidrome-sync
 ```
 
 The Plex token is read from Plex's `Preferences.xml` (mounted read-only).
-Until `NAVIDROME_PASSWORD` is set the container just logs that and waits.
+Until both `NAVIDROME_USER` and `NAVIDROME_PASSWORD` are set, the container
+logs that it is waiting and stays healthy without syncing, writing a success
+timestamp, or sending failure alerts. Once configured, health requires a
+successful run within two intervals plus 15 minutes; missing or invalid
+success state is unhealthy. After adding credentials to `.env`, preview
+first, then use `docker compose up -d plex-navidrome-sync` to recreate the
+waiting container with the new environment (a restart alone won't load it).
 State (the last synced value of every track and playlist) is in
 `/srv/docker/data/plex-navidrome-sync/state.json`; deleting it makes the next
 run behave like the first one again, including copying play counts once more.
