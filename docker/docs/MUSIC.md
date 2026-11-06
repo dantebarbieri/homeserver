@@ -333,6 +333,7 @@ stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 | "Not grabbed by Lidarr" usenet entries | Remove from the queue (download kept) |
 | Completed torrent with no artist match ("Artist name mismatch"), whose files were already imported by hand (hardlink count > 1) | Move the torrent to the `music-manual` qBit category (`/data/torrents/music-manual`), which Lidarr doesn't track, so it keeps seeding. Lidarr v3's queue *Remove* returns HTTP 500 for these unknown-artist items. Without hardlinked files, it notifies instead |
 | Missing albums | `MissingAlbumSearch` at most every 6 h |
+| Albums below the Lossless cutoff (MP3, AAC, ...) | `CutoffUnmetAlbumSearch` at most every 24 h (`UPGRADE_SEARCH_HOURS`, `0` disables). Lidarr skips unmonitored and already-queued albums. RSS alone rarely sees lossless releases of older albums |
 
 Anything else, such as partial edition matches, archives, or an album grabbed
 under the wrong album, is posted once to ntfy (`homeserver-alerts`) as

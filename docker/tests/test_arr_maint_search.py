@@ -13,6 +13,12 @@ with patch.dict(sys.modules, {"arr_maint": engine}):
     spec = importlib.util.spec_from_file_location("radarr_rules", ROOT / "radarr.py")
     radarr = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(radarr)
+    spec = importlib.util.spec_from_file_location("lidarr_rules", ROOT / "lidarr.py")
+    lidarr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lidarr)
+    spec = importlib.util.spec_from_file_location("sonarr_rules", ROOT / "sonarr.py")
+    sonarr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sonarr)
 
 
 def movie(id, **changes):
@@ -80,6 +86,62 @@ class MissingSearchTests(unittest.TestCase):
             app.run()
         self.assertFalse(any(call.args[0] == "/command" and len(call.args) > 1
                              for call in app.api.call_args_list))
+
+
+UPGRADE = {"name": "CutoffUnmetAlbumSearch"}
+
+
+class UpgradeSearchTests(unittest.TestCase):
+    def run_lidarr(self, state=None, commands=(), dry=False, hours=None):
+        env = {} if hours is None else {"UPGRADE_SEARCH_HOURS": str(hours)}
+        with patch.dict("os.environ", env):
+            app = lidarr.App()
+        app.missing_hours = 0
+        app.api = Mock(side_effect=lambda path, *args: (
+            {"records": []} if path.startswith("/queue") else
+            list(commands) if path == "/command" and not args else [] if not args else {"id": 1}
+        ))
+        with patch.object(engine, "DRY", dry), patch.object(engine, "QBIT_USER", ""), \
+                patch.object(engine, "load_state", side_effect=lambda name, default: (state or {}).get(name, default)), \
+                patch.object(engine, "save_state") as save, patch.object(engine, "log"):
+            app.run()
+        return app, save
+
+    def posted(self, app):
+        return [call.args[2] for call in app.api.call_args_list if call.args[:2] == ("/command", "POST")]
+
+    def test_lidarr_searches_cutoff_unmet_and_records_it(self):
+        app, save = self.run_lidarr()
+        self.assertEqual(self.posted(app), [UPGRADE])
+        self.assertTrue(any(call.args[0] == "last_upgrade.json" for call in save.call_args_list))
+
+    def test_recent_or_ui_started_upgrade_search_is_not_repeated(self):
+        recent = engine.time.time() - 3600
+        started = engine.time.strftime("%Y-%m-%dT%H:%M:%SZ", engine.time.gmtime(recent))
+        for state, commands in (({"last_upgrade.json": {"at": recent}}, ()),
+                                (None, [{"name": "CutoffUnmetAlbumSearch", "started": started}])):
+            with self.subTest(state=state, commands=commands):
+                app, save = self.run_lidarr(state, commands)
+                self.assertEqual(self.posted(app), [])
+                self.assertFalse(any(call.args[0] == "last_upgrade.json" for call in save.call_args_list))
+
+    def test_old_upgrade_search_is_repeated_daily(self):
+        app, _ = self.run_lidarr({"last_upgrade.json": {"at": engine.time.time() - 25 * 3600}})
+        self.assertEqual(self.posted(app), [UPGRADE])
+
+    def test_dry_run_or_zero_hours_never_searches(self):
+        for kwargs in ({"dry": True}, {"hours": 0}):
+            with self.subTest(**kwargs):
+                app, _ = self.run_lidarr(**kwargs)
+                self.assertEqual(self.posted(app), [])
+
+    def test_radarr_and_sonarr_have_no_upgrade_search(self):
+        for app in (radarr.App(), sonarr.App()):
+            with self.subTest(app=app.name):
+                app.api = Mock()
+                self.assertIsNone(app.periodic(engine.time.time(), app.upgrade_command, app.upgrade_hours,
+                                               "last_upgrade.json", app.search_upgrades))
+                app.api.assert_not_called()
 
 
 if __name__ == "__main__":

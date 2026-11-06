@@ -11,6 +11,7 @@ Every INTERVAL seconds, for downloads (queue rows grouped by download) stuck for
     below 5% (including stuck on metadata) or availability below 1 with no activity -> blocklist
   - the app's check_library rules for files already in the library (see radarr.py)
   - the app's missing search at most every MISSING_SEARCH_HOURS (0 disables)
+  - the app's cutoff-unmet (upgrade) search, if it has one, at most every UPGRADE_SEARCH_HOURS (0 disables)
 Anything it can't fix is sent to ntfy once (deduplicated across runs).
 """
 import os, re, json, time, importlib, traceback, unicodedata, urllib.request, urllib.parse, http.cookiejar
@@ -118,6 +119,8 @@ class Arr:
     category_field = ""       # qBit download client field holding the category
     missing_command = {}      # body for POST /command
     missing_hours = 24.0
+    upgrade_command = {}      # body for POST /command searching albums/movies below the quality cutoff
+    upgrade_hours = 0.0
     tag = ""                  # ntfy emoji tag
 
     def __init__(self):
@@ -125,6 +128,7 @@ class Arr:
         self.base = os.environ.get(f"{key}_URL", self.url)
         self.config = os.environ.get(f"{key}_CONFIG", f"/{self.name.lower()}/config.xml")
         self.missing_hours = float(os.environ.get("MISSING_SEARCH_HOURS", self.missing_hours))
+        self.upgrade_hours = float(os.environ.get("UPGRADE_SEARCH_HOURS", self.upgrade_hours))
         self.qbit = None
 
     def key(self):
@@ -183,6 +187,26 @@ class Arr:
     def search_missing(self):
         self.api("/command", "POST", self.missing_command)
         return self.missing_command["name"]
+
+    def search_upgrades(self):
+        self.api("/command", "POST", self.upgrade_command)
+        return self.upgrade_command["name"]
+
+    def periodic(self, now, command, hours, state, search):
+        """Runs search() at most every `hours`, counting runs started elsewhere (e.g. the UI)."""
+        if hours <= 0 or not command:
+            return None
+        if now - load_state(state, {}).get("at", 0) < hours * 3600:
+            return None
+        cutoff = time.strftime("%Y-%m-%dT%H:%M", time.gmtime(now - hours * 3600))
+        if any(c["name"] == command["name"] and (c.get("started") or c.get("queued") or "") >= cutoff
+               for c in self.api("/command")):
+            return None
+        if DRY:
+            return None
+        searched = search()
+        save_state(state, {"at": now})
+        return searched
 
     def run(self):
         actions, needs_user = [], {}
@@ -254,17 +278,12 @@ class Arr:
         actions += done
         needs_user.update(ask)
 
-        if self.missing_hours > 0:
-            cmd = self.missing_command["name"]
-            cutoff = time.strftime("%Y-%m-%dT%H:%M", time.gmtime(now - self.missing_hours * 3600))
-            recent = now - load_state("last_missing.json", {}).get("at", 0) < self.missing_hours * 3600
-            recent = recent or any(c["name"] == cmd and (c.get("started") or c.get("queued") or "") >= cutoff
-                                   for c in self.api("/command"))
-            if not recent and not DRY:
-                searched = self.search_missing()
-                save_state("last_missing.json", {"at": now})
-                if searched:
-                    actions.append(f"triggered {searched}")
+        for command, hours, state, search in (
+                (self.missing_command, self.missing_hours, "last_missing.json", self.search_missing),
+                (self.upgrade_command, self.upgrade_hours, "last_upgrade.json", self.search_upgrades)):
+            searched = self.periodic(now, command, hours, state, search)
+            if searched:
+                actions.append(f"triggered {searched}")
 
         for a in actions:
             log("ACTION:", a)

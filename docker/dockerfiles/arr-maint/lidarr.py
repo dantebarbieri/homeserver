@@ -6,6 +6,7 @@
   - a single/EP grabbed for an album (<=4 files for an 8+ track album) -> blocklist + re-search
   - "forget" moves torrents to QBIT_MANUAL_CATEGORY instead of using Lidarr's queue Remove,
     which throws a NullReferenceException (HTTP 500) for items without an artist
+  - CutoffUnmetAlbumSearch daily, so albums below the Lossless cutoff (MP3 etc.) get upgraded
 """
 import os, re, difflib, urllib.parse, urllib.error
 from arr_maint import Arr, DRY, norm
@@ -35,6 +36,9 @@ class App(Arr):
     category_field = "musicCategory"
     missing_command = {"name": "MissingAlbumSearch"}
     missing_hours = 6.0
+    # RSS alone rarely sees lossless releases of older albums, so actively search MP3/lossy albums.
+    upgrade_command = {"name": "CutoffUnmetAlbumSearch"}
+    upgrade_hours = 24.0
     tag = "musical_note"
 
     def label(self, rows):
