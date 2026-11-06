@@ -344,6 +344,10 @@ import, when MusicBrainz metadata changes, and on *Retag*, so inconsistent or
 missing album art in Plexamp is fixed by retagging in Lidarr, not by editing
 files in another tagger.
 
+When MusicBrainz has no cover to embed, the optional
+[shared artwork fallback](#shared-artwork-fallback-music-cover-fallback)
+can add a `cover.jpg` sidecar instead, without changing audio tags.
+
 That is only safe while no library file shares data with a seeding torrent.
 In November 2026 a whole-library retag ran while *Use Hardlinks instead of
 Copy* was still on. It rewrote about 2,100 library files in place, which also
@@ -621,6 +625,78 @@ waiting container with the new environment (a restart alone won't load it).
 State (the last synced value of every track and playlist) is in
 `/srv/docker/data/plex-navidrome-sync/state.json`; deleting it makes the next
 run behave like the first one again, including copying play counts once more.
+
+## Shared artwork fallback (`music-cover-fallback`)
+
+This opt-in Docker service checks downloaded Lidarr albums once a day. It adds
+`cover.jpg` beside the tracks so both Plex and Navidrome can use it; it does not
+need the Navidrome password or the ratings-sync service. Existing image files
+(even nonstandard names), embedded artwork and Lidarr-provided covers are left
+alone. Lidarr remains the sole audio tag writer.
+
+The source order is Cover Art Archive (the selected MusicBrainz release, then
+its release group), then Apple Music and Deezer. Store matches require the same
+artist, exact album/edition title, full track count, ordered track titles and
+durations within five seconds. Apple's trailing ` - Single`/` - EP` labels are
+ignored; deluxe/live/remix distinctions are not. Different release dates are
+allowed for reissues only when those checks pass. If matched editions/stores
+have visibly different covers, the job reports the conflict instead of choosing.
+Spotify is not queried: these public catalog APIs need no additional account
+or token. Only public artist/album search terms are sent to the stores.
+
+Safety and limitations:
+
+- No audio file is written, moved or retagged, so torrent payloads are untouched.
+  Albums must follow the existing `Artist/Album/track` layout; flat imports,
+  split folders and symlinks are refused.
+- It verifies image bytes, size and dimensions, converts to JPEG, and publishes
+  the complete file atomically without overwriting an existing `cover.jpg`.
+  A source outage is logged as an error, never interpreted as "no MusicBrainz art".
+- Source links, MusicBrainz IDs and SHA-256 hashes are kept under
+  `/srv/docker/data/music-cover-fallback/state.json`. `report.json` lists writes,
+  unresolved matches and errors. New unresolved cases alert through ntfy;
+  unchanged cases remind weekly. Failed runs alert; an overdue successful run
+  makes the container unhealthy.
+- A Plex partial scan and missing-art metadata refresh follow each new cover.
+  Existing/locked Plex posters are not replaced, including the six manual fixes.
+  Failed refreshes are retried without downloading or rewriting the cover again.
+  Navidrome picks up the sidecar through its watcher/hourly scan. Clients with
+  downloaded/cached artwork may still need a refresh or re-download.
+- Plex's **Album Art** must be **Both Plex Music and Local Files** (the current
+  setting) or **Local Files Only**. Navidrome's default `CoverArtPriority`
+  already prefers `cover.*`; no global preference is changed by the script.
+- This is a conservative fallback, not an artwork upgrader: it never replaces
+  a fallback with later MusicBrainz art automatically. To undo a generated cover,
+  check its recorded hash before removing that specific file and refreshing the
+  album. Do not remove manually edited covers.
+
+The service is **disabled by default**, and remains idle/healthy until enabled.
+After merging, create its writable state directory and preview from the main
+Compose entry point. Plex and Lidarr need to join the new `music-maintenance`
+network once; recreating these two services briefly interrupts them:
+
+```bash
+install -d -m 2775 -o danteb -g docker /srv/docker/data/music-cover-fallback
+z /srv/homeserver/docker
+docker compose build music-cover-fallback
+docker compose up -d plex lidarr
+docker compose run --rm --no-deps -e DRY=1 -e ONCE=1 music-cover-fallback
+# After reviewing the proposed matches, set MUSIC_COVER_FALLBACK_ENABLED=1 in .env.
+docker compose up -d music-cover-fallback
+docker compose logs --tail=50 music-cover-fallback
+```
+
+`DRY=1` reads APIs/files and validates candidate images, but writes no covers,
+state, notifications or Plex changes. `ONCE=1` exits nonzero on errors. Concurrent
+apply instances are refused by a state-directory lock. To preview again while
+enabled, use the same read-only command above; do not run another apply instance.
+
+Focused regression checks (no live server calls):
+
+```bash
+uv run --no-project --with-requirements docker/dockerfiles/music-cover-fallback/requirements.txt \
+  python -B -m unittest discover -s docker/tests -p 'test_music_cover_fallback.py'
+```
 
 ## Fixing merged Plex albums
 

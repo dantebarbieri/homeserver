@@ -1,0 +1,35 @@
+name: Validate Music Cover Fallback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/music-cover-validate.yml
+      - docker/dockerfiles/music-cover-fallback/**
+      - docker/tests/test_music_cover_fallback.py
+      - docker/compose.media.yml
+      - docker/compose.starr.yml
+  pull_request:
+    paths:
+      - .github/workflows/music-cover-validate.yml
+      - docker/dockerfiles/music-cover-fallback/**
+      - docker/tests/test_music_cover_fallback.py
+      - docker/compose.media.yml
+      - docker/compose.starr.yml
+
+permissions:
+  contents: read
+
+jobs:
+  covers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+      - name: Exercise artwork and file-safety safeguards
+        run: >-
+          uv run --no-project --with-requirements docker/dockerfiles/music-cover-fallback/requirements.txt
+          python -B -m unittest discover -s docker/tests -p 'test_music_cover_fallback.py'
+      - name: Build and verify non-root import
+        run: docker build -q docker/dockerfiles/music-cover-fallback
