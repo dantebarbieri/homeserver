@@ -1,22 +1,27 @@
 """Lidarr rules. See docker/docs/MUSIC.md ("Queue maintenance").
 
   - importFailed/Pending/Blocked: if the file count matches another edition of the album and
-    the titles match, ManualImport into it (copy for torrents to keep hardlinks, move for
+    the titles match, ManualImport into it (copy for torrents so they keep seeding, move for
     usenet); never switches editions on an album that already has files, since that unlinks them
   - a completed single audio file (outputPath is a file, not a folder) is imported only into an
     empty, monitored one-track release when Lidarr's own manual-import mapping (artist, album,
     release, track) agrees and no remix/live/edit qualifier differs; anything else is left for the user
+  - an import counts as done when the album has its files, even if Lidarr fails the command
+    afterwards; the queue entry it then leaves stuck is cleared (see settle), and the download is
+    remembered in imported.json until that worked, so it is never imported twice
   - a single/EP grabbed for an album (<=4 files for an 8+ track album) -> blocklist + re-search
   - "forget" moves torrents to QBIT_MANUAL_CATEGORY instead of using Lidarr's queue Remove,
     which throws a NullReferenceException (HTTP 500) for items without an artist
   - CutoffUnmetAlbumSearch daily, so albums below the Lossless cutoff (MP3 etc.) get upgraded
 """
-import os, re, difflib, urllib.parse, urllib.error
-from arr_maint import Arr, DRY, norm
+import os, re, time, difflib, urllib.parse, urllib.error
+from arr_maint import Arr, DRY, IMPORT_STATES, is_torrent, load_state, norm, save_state
 
 AUD = (".flac", ".m4a", ".mp3", ".ape", ".wv")
 QBIT_MANUAL_CATEGORY = os.environ.get("QBIT_MANUAL_CATEGORY", "music-manual")
 QBIT_MANUAL_PATH = os.environ.get("QBIT_MANUAL_PATH", "/data/torrents/music-manual")
+IMPORTED_STATE = "imported.json"
+IMPORTED_TTL = 14 * 86400
 
 
 def strip(fname):
@@ -58,7 +63,7 @@ class App(Arr):
             self.api("/command", "POST", {"name": "AlbumSearch", "albumIds": ids})
 
     def forget(self, rows):
-        if not (self.qbit and rows[0].get("protocol") == "torrent"):
+        if not (self.qbit and is_torrent(rows[0])):
             return super().forget(rows)
         if DRY:
             return
@@ -77,13 +82,51 @@ class App(Arr):
         if len(albums) > 1:
             return None, f"download covers {len(albums)} albums"
         r = rows[0]
+        marks = self.marks()
+        if r["downloadId"] in marks:
+            # Imported on an earlier run; only clearing its queue entry failed.
+            return ("DRY would clear the queue entry of an earlier import", None) if DRY else self.finish(rows, "already imported", marks)
         nfiles = len(audio_files(r.get("outputPath")))
         counts = {x["trackCount"] for x in self.api(f"/album/{r['albumId']}")["releases"]}
         if nfiles and nfiles <= 4 and counts and min(counts) >= 8:
             self.remove(rows)
             return f"wrong release ({nfiles} files) -> blocklisted+re-search", None
         res = self.import_dir(r.get("outputPath") or "", r["albumId"], "copy" if torrent else "move", r["downloadId"])
-        return (res, None) if res.startswith(("imported", "DRY")) else (None, res)
+        if res.startswith("DRY"):
+            return res, None
+        if not res.startswith("imported"):
+            return None, res
+        marks[r["downloadId"]] = time.time()
+        save_state(IMPORTED_STATE, marks)
+        return self.finish(rows, res, marks)
+
+    def marks(self):
+        """Downloads imported by this helper whose queue entry has not been cleared yet."""
+        now = time.time()
+        return {k: v for k, v in load_state(IMPORTED_STATE, {}).items() if now - v < IMPORTED_TTL}
+
+    def finish(self, rows, res, marks):
+        try:
+            cleared = self.settle(rows)
+        except Exception as e:
+            return None, f"{res}; clearing its queue entry failed ({type(e).__name__}: {e})"[:300]
+        save_state(IMPORTED_STATE, {k: v for k, v in marks.items() if k != rows[0]["downloadId"]})
+        return (f"{res}; queue entry cleared" if cleared else res), None
+
+    def settle(self, rows):
+        """Forgets the queue entries Lidarr still lists as stuck after an import; returns how many.
+
+        Lidarr v3 can throw a NullReferenceException at the end of a manual import: it reads the
+        tracked download's ImportItem, which is unset for a download rebuilt from its history. The
+        files are imported by then, but the bookkeeping that marks the download imported is
+        skipped, so the entry would stay in importFailed and, as torrents are copied, be imported
+        again every run."""
+        r = rows[0]
+        left = [x for x in self.api(f"/queue/details?albumIds={r['albumId']}")
+                if x.get("downloadId") == r["downloadId"] and x.get("trackedDownloadState") in IMPORT_STATES]
+        if left:
+            self.forget(left)
+        return len(left)
 
     def import_dir(self, folder, album_id, mode, download_id=None, min_score=0.45):
         single_file = os.path.isfile(folder)
@@ -93,6 +136,7 @@ class App(Arr):
         if not files:
             return "no audio files"
         alb = self.api(f"/album/{album_id}")
+        before = (alb.get("statistics") or {}).get("trackFileCount", 0)
         best = None
         for rel in [r for r in alb["releases"] if r["trackCount"] == len(files) and
                     (not single_file or r["monitored"])]:
@@ -138,12 +182,16 @@ class App(Arr):
                         **({"downloadId": download_id} if download_id else {})) for f, t in zip(files, tr)]
         cid = self.api("/command", "POST", {"name": "ManualImport", "files": payload, "importMode": mode, "replaceExistingFiles": False})["id"]
         self.wait(cid, 60)
-        if single_file:
-            status = self.api(f"/command/{cid}")["status"]
-            if status != "completed":
-                return f"single-file import command {cid}: {status}; import not confirmed"
+        status = self.api(f"/command/{cid}")["status"]
         s = self.api(f"/album/{album_id}")["statistics"]
-        return f"imported {s['trackFileCount']}/{s['trackCount']} (score {sc:.2f})" if s["trackFileCount"] else "import ran but 0 files"
+        have = s["trackFileCount"]
+        got = f"{have}/{s['trackCount']}"
+        if status == "completed" and have >= len(files):
+            return f"imported {got} (score {sc:.2f})"
+        if status == "failed" and not before and have >= len(files):
+            # Lidarr can throw after importing (see settle), so judge by the files, not the status.
+            return f"imported {got} (score {sc:.2f}); command {cid} failed after importing"
+        return f"import command {cid} {status}; {got} files, import not confirmed"
 
     def summary(self):
         albums = self.api("/album")
