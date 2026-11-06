@@ -1,4 +1,4 @@
-FROM python:3.13-alpine
+FROM python:3.15-alpine
 # COPY keeps the checkout's modes, and the non-root user this runs as can't read a
 # 0600 file or enter a 0700 dir. Not COPY --chmod=0644: it also gave the /app dir it
 # creates mode 0644, which nobody but root can enter.
