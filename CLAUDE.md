@@ -70,7 +70,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 | `compose.git.yml` | forgejo, postgres |
 | `compose.immich.yml` | immich-server, immich-machine-learning, redis, postgres |
 | `compose.matrix.yml` | synapse, element, coturn, livekit, lk-jwt-service, postgres |
-| `compose.media.yml` | plex, jellyfin, navidrome, anime-relations, komga, komf, suwayomi, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader, postgres |
+| `compose.media.yml` | plex, jellyfin, navidrome, plex-navidrome-sync, music-cover-fallback, anime-relations, komga, komf, suwayomi, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader, postgres |
 | `compose.nextcloud.yml` | nextcloud, nextcloud_cron, postgres, redis |
 | `compose.romm.yml` | romm, mariadb |
 | `compose.searxng.yml` | searxng, redis (valkey) |
@@ -125,6 +125,8 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
 - `dockerfiles/arr-maint/` — queue auto-fixers for Lidarr, Radarr and Sonarr: one image, a shared engine plus per-app rules, selected by `APP`
 - `dockerfiles/soularr-fallback/` — track-level Soulseek search + Lidarr ManualImport for releases Soularr couldn't get
+- `dockerfiles/plex-navidrome-sync/` — two-way Plex ↔ Navidrome sync of ratings, hearts, play counts and playlists
+- `dockerfiles/music-cover-fallback/` — opt-in daily shared `cover.jpg` fallback from Cover Art Archive, Apple Music and Deezer; never edits audio tags or replaces existing art
 - `dockerfiles/bmc-monitor/` — BMC IP monitor (ipmitool + NPM API updater)
 - `dockerfiles/port-sync/` — qBittorrent VPN port sync (gluetun forwarded port → qBit API)
 

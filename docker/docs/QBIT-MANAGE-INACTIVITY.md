@@ -31,6 +31,12 @@ cleanup. Missing hardlinks are a storage signal, not proof that an item has been
 imported successfully: a failed import also lacks hardlinks, so resolve stuck
 imports within the 14-day window.
 
+Music torrents are the exception to "hardlinked ones seed indefinitely": Lidarr
+copies torrent imports instead of hardlinking them (see
+[Tags, copies and seeding](MUSIC.md#tags-copies-and-seeding)), so a `music`
+torrent is `noHL` from the moment it is imported and is removed by this group
+like any other. That removal is also what frees the extra copy of the album.
+
 The recycle bin retains removed data and saved `.torrent` metadata for 14 days;
 after that they are permanently deleted. Some share-limit actions also resume
 paused torrents.
@@ -146,6 +152,7 @@ cat:
   indian-movies: /data/torrents/indian/movies
   indian-tv: /data/torrents/indian/tv
   music: /data/torrents/music
+  music-manual: /data/torrents/music-manual
   books: /data/torrents/ebooks
   roms: /data/torrents/roms
   prowlarr: /data/torrents/prowlarr
@@ -158,6 +165,7 @@ nohardlinks:
 - indian-movies
 - indian-tv
 - music
+- music-manual
 ```
 
 Each category's qBittorrent save path must be distinct, so `prowlarr` saves to

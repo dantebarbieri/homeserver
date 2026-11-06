@@ -57,6 +57,7 @@ services:
     networks:
       - proxy
       - starr
+      - music-maintenance
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/lidarr/config:/config
@@ -292,4 +293,5 @@ services:
 networks:
   proxy:
   starr:
+  music-maintenance:
   flaresolverr:
