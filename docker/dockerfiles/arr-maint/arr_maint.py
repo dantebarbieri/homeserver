@@ -52,6 +52,11 @@ def files_under(path):
     return [os.path.join(d, f) for d, _, fs in os.walk(path) for f in fs]
 
 
+def is_torrent(row):
+    """Radarr and Sonarr report protocol "torrent"; Lidarr reports its type name, "TorrentDownloadProtocol"."""
+    return "torrent" in (row.get("protocol") or "").lower()
+
+
 def load_state(name, default):
     try:
         with open(os.path.join(STATE, name)) as f:
@@ -231,7 +236,7 @@ class Arr:
                 continue
             name = self.label(rows)
             msgs = "; ".join(m for s in r.get("statusMessages", []) for m in [s.get("title", "")] + s.get("messages", []))
-            torrent = r.get("protocol") == "torrent"
+            torrent = is_torrent(r)
             try:
                 if not r.get(self.media_id) and re.search(r"(wasn't|was not|not) grabbed", msgs, re.I):
                     self.forget(rows)
