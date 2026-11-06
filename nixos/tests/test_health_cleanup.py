@@ -3,9 +3,11 @@
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -84,6 +86,16 @@ class HealthCleanupTests(unittest.TestCase):
                     path = map system.pkgs.lib.getName c.systemd.services.reboot-reminder.path;
                     timer = {
                       inherit (c.systemd.timers.reboot-reminder) wantedBy timerConfig;
+                    };
+                  };
+                  plexAlbumCheck = {
+                    inherit (c.systemd.services.plex-album-check) script after wants;
+                    failure = c.systemd.services.plex-album-check.unitConfig.OnFailure;
+                    inherit (c.systemd.services.plex-album-check.serviceConfig)
+                      Type StateDirectory;
+                    path = map system.pkgs.lib.getName c.systemd.services.plex-album-check.path;
+                    timer = {
+                      inherit (c.systemd.timers.plex-album-check) wantedBy timerConfig;
                     };
                   };
                 }
@@ -246,6 +258,199 @@ class HealthCleanupTests(unittest.TestCase):
                     self.assertIn("Tags: arrows_counterclockwise,computer", result.stdout)
                     self.assertIn("https://ntfy.danteb.com/homeserver-alerts", result.stdout)
                     self.assertIn("--fail-with-body --show-error --silent --max-time 30", result.stdout)
+
+    def test_plex_album_check_unit_and_timer(self):
+        check = self.config["plexAlbumCheck"]
+        self.assertEqual(check["Type"], "oneshot")
+        self.assertEqual(check["StateDirectory"], "plex-album-check")
+        self.assertEqual(check["failure"], "ntfy-failure@%n.service")
+        self.assertIn("docker.service", check["after"])
+        self.assertIn("network-online.target", check["wants"])
+        for tool in ("coreutils", "curl", "docker", "gawk", "gnugrep", "jq"):
+            self.assertIn(tool, check["path"])
+        self.assertEqual(check["timer"]["timerConfig"]["OnCalendar"], "*-*-* 06:30:00")
+        self.assertIn("timers.target", check["timer"]["wantedBy"])
+        self.assertIn("remind_days=7\n", check["script"])
+
+    def test_plex_album_check_decisions(self):
+        script = self.config["plexAlbumCheck"]["script"]
+        state_dir = "state_dir=/var/lib/plex-album-check\n"
+        self.assertIn(state_dir, script)
+        script = script.replace(state_dir, 'state_dir="$TEST_ROOT/state"\n')
+        # The fake docker records its arguments and the SQL it was fed, then
+        # replays a canned Plex answer (nothing at all, like an empty result).
+        harness = (
+            'docker() { printf "%s\\n" "$*" > "$TEST_ROOT/docker.args"; '
+            'cat > "$TEST_ROOT/docker.stdin"; '
+            '[ ! -f "$TEST_ROOT/plex.json" ] || cat "$TEST_ROOT/plex.json"; '
+            'return "$DOCKER_STATUS"; }\n'
+            'curl() { printf "CURL:%s\\n" "$*"; return "$CURL_STATUS"; }\n'
+        )
+
+        def album(album_id, artist, name, folders):
+            # One track per entry of folders; repeat a folder for more tracks.
+            return [
+                {
+                    "album_id": album_id,
+                    "artist": artist,
+                    "album": name,
+                    "file": f"/data/media/music/{artist}/{folder}/{number:02d} - Song.flac",
+                }
+                for number, folder in enumerate(folders, 1)
+            ]
+
+        clean = album(1, "AJR", "The Maybe Man", ["The Maybe Man (2023)"] * 3)
+        discs = album(2, "Hans Zimmer", "Inception", [
+            "Inception (2010)/CD1", "Inception (2010)/CD 2",
+            "Inception (2010)/Disc 3", "Inception (2010)/disk 4",
+        ])
+        stray = album(3, "Daft Punk", "Alive", [
+            "Alive 2007 (2007)/CD1", "Alive 2007 (2007)/CD2", "Alive 1997 (1997)",
+        ])
+        ajr = album(4, "AJR", "Neotheater", [
+            "Neotheater (2019)", "Neotheater (2019)",
+            "Neotheater (Deluxe) (2019)", "Neotheater (Deluxe) (2019)",
+            "Neotheater (Live) (2020)",
+        ])
+        ghibli = album(5, "Studio Ghibli", "Collection", ["Spirited Away (2001)", "Totoro (1988)"])
+        many = [
+            track
+            for n in range(15)
+            for track in album(100 + n, f"Artist {n:02d}", f"Album {n:02d}", [f"A{n}", f"B{n}"])
+        ]
+        header = "Plex merged several album folders into one album"
+        repair = 'Repair: docker/docs/MUSIC.md, section "Fixing merged Plex albums".'
+        ajr_line = "- AJR - Neotheater (3 folders, 5 tracks)"
+        ghibli_line = "- Studio Ghibli - Collection (2 folders, 2 tracks)"
+
+        def run(rows, known, alerted, docker_status, curl_status):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "state").mkdir()
+                if rows is not None:
+                    (root / "plex.json").write_text(json.dumps(rows))
+                for name, content in (("known", known), ("alerted", alerted)):
+                    if content is not None:
+                        (root / "state" / name).write_text(content)
+                result = subprocess.run(
+                    ["bash", "-euo", "pipefail", "-c", harness + script],
+                    env={
+                        **os.environ,
+                        "TEST_ROOT": tmp,
+                        "DOCKER_STATUS": str(docker_status),
+                        "CURL_STATUS": str(curl_status),
+                    },
+                    capture_output=True,
+                    text=True,
+                )
+
+                def read(name):
+                    path = root / name
+                    return path.read_text() if path.exists() else None
+
+                return result, {
+                    name: read(name)
+                    for name in ("state/known", "state/alerted", "docker.args", "docker.stdin")
+                }
+
+        # Each case: library rows (None = Plex prints nothing), the known file,
+        # how many days ago the last alert was (or raw text), docker and curl
+        # exit statuses, then the expected exit status, whether ntfy was
+        # called, text that must / must not be in the output, and the state
+        # left behind: the known names (None = no file) and the alert time.
+        cases = [
+            dict(label="clean library, multi-disc albums are one album",
+                 rows=clean + discs, rc=0, text=["No Plex album spans more than one folder"],
+                 known_after=None, alerted_after=None),
+            dict(label="disc folders do not hide a real merge",
+                 rows=clean + discs + stray, sent=True,
+                 text=[header, "- Daft Punk - Alive (2 folders, 3 tracks)", repair],
+                 absent=["Hans Zimmer"], known_after=["Daft Punk - Alive"], alerted_after="fresh"),
+            dict(label="new merge",
+                 rows=clean + ajr, sent=True,
+                 text=[header, ajr_line, repair, "Title: Merged Plex albums on homeserver",
+                       "Tags: warning,musical_note", "https://ntfy.danteb.com/homeserver-alerts",
+                       "--fail-with-body --show-error --silent --max-time 30"],
+                 known_after=["AJR - Neotheater"], alerted_after="fresh"),
+            dict(label="already reported",
+                 rows=clean + ajr, known="AJR - Neotheater\n", alerted=1,
+                 text=["Already reported: 1 merged album(s)"],
+                 known_after=["AJR - Neotheater"], alerted_after="same"),
+            dict(label="weekly reminder",
+                 rows=clean + ajr, known="AJR - Neotheater\n", alerted=8, sent=True,
+                 text=["Still merged in Plex", ajr_line, repair], absent=[header],
+                 known_after=["AJR - Neotheater"], alerted_after="fresh"),
+            dict(label="unreadable alert time reminds",
+                 rows=clean + ajr, known="AJR - Neotheater\n", alerted="not a number\n", sent=True,
+                 text=["Still merged in Plex", ajr_line],
+                 known_after=["AJR - Neotheater"], alerted_after="fresh"),
+            dict(label="a second merge lists only the new one",
+                 rows=clean + ajr + ghibli, known="AJR - Neotheater\n", alerted=1, sent=True,
+                 text=[header, ghibli_line], absent=[ajr_line],
+                 known_after=["AJR - Neotheater", "Studio Ghibli - Collection"],
+                 alerted_after="fresh"),
+            dict(label="a repaired merge is forgotten",
+                 rows=clean + ajr, known="AJR - Neotheater\nStudio Ghibli - Collection\n", alerted=1,
+                 text=["Already reported: 1 merged album(s)"],
+                 known_after=["AJR - Neotheater"], alerted_after="same"),
+            dict(label="repairing everything clears the state",
+                 rows=clean, known="AJR - Neotheater\n", alerted=1,
+                 text=["No Plex album spans more than one folder"],
+                 known_after=None, alerted_after=None),
+            dict(label="ntfy unreachable keeps the merge unreported",
+                 rows=clean + ajr, curl=22, sent=True, rc=22, text=["CURL:"],
+                 known_after=None, alerted_after=None),
+            dict(label="docker failure",
+                 rows=clean + ajr, docker=3, rc=3, known_after=None, alerted_after=None),
+            dict(label="empty result is an error, not a clean library",
+                 rows=None, rc=1, text=["Plex returned no music tracks"],
+                 known_after=None, alerted_after=None),
+            dict(label="long lists are capped",
+                 rows=many, sent=True,
+                 text=["- Artist 00 - Album 00 (2 folders, 2 tracks)",
+                       "- Artist 11 - Album 11 (2 folders, 2 tracks)", "...and 3 more"],
+                 absent=["Artist 12"], known_after=[f"Artist {n:02d} - Album {n:02d}" for n in range(15)],
+                 alerted_after="fresh"),
+        ]
+        for case in cases:
+            with self.subTest(case["label"]):
+                alerted = case.get("alerted")
+                if isinstance(alerted, int):
+                    alerted = f"{int(time.time() - alerted * 86400)}\n"
+                result, files = run(
+                    case["rows"], case.get("known"), alerted,
+                    case.get("docker", 0), case.get("curl", 0),
+                )
+                output = result.stdout + result.stderr
+                self.assertEqual(result.returncode, case.get("rc", 0), output)
+                self.assertEqual("CURL:" in result.stdout, case.get("sent", False), output)
+                for text in case.get("text", []):
+                    self.assertIn(text, output)
+                for text in case.get("absent", []):
+                    self.assertNotIn(text, output)
+
+                known = files["state/known"]
+                if case["known_after"] is None:
+                    self.assertIsNone(known)
+                else:
+                    self.assertEqual(sorted(known.splitlines()), sorted(case["known_after"]))
+                if case["alerted_after"] is None:
+                    self.assertIsNone(files["state/alerted"])
+                elif case["alerted_after"] == "same":
+                    self.assertEqual(files["state/alerted"], alerted)
+                else:
+                    self.assertLess(abs(int(files["state/alerted"]) - time.time()), 300)
+
+                # Whatever the outcome, Plex was only ever read.
+                args, sql = files["docker.args"], files["docker.stdin"]
+                self.assertIn("exec -i plex ", args)
+                self.assertIn("-bail -readonly -json", args)
+                self.assertTrue(sql.lstrip().startswith("SELECT"), sql)
+                self.assertEqual(sql.count(";"), 1, sql)
+                self.assertIsNone(
+                    re.search(r"\b(insert|update|delete|drop|alter|attach|pragma|create|replace)\b", sql, re.I),
+                    sql,
+                )
 
     def test_forgejo_runner_static_user_and_migration(self):
         unit = self.config["runnerUnit"]
