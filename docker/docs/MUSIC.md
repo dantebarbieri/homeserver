@@ -291,8 +291,9 @@ docker compose up -d navidrome
    - iPhone: [Amperfy](https://github.com/BLeeEZ/amperfy) or play:Sub;
    - the web UI works in any browser.
 
-Navidrome keeps its own play counts, stars, and playlists. It auto-imports
-`.m3u` files found in the music folder; Plex playlists are not synced.
+Navidrome auto-imports `.m3u` files found in the music folder. Ratings, hearts,
+play counts and regular playlists are kept in step with Plex by
+[`plex-navidrome-sync`](#plex--navidrome-sync-plex-navidrome-sync).
 Homepage widget credentials are in [WIDGET_API_KEYS.md](../../homepage/WIDGET_API_KEYS.md#navidrome--homepage_var_navidrome_user--_token--_salt).
 
 ## Current production configuration
@@ -573,6 +574,46 @@ Plex picks up new music via Lidarr's Plex Connect (partial scan on import) and
 Plex's own filesystem watcher. As a backstop, Plex **Settings > Library >
 Scan my library periodically** is on (hourly), since a manual import was once
 missed by both.
+
+## Plex ↔ Navidrome sync (`plex-navidrome-sync`)
+
+`plex-navidrome-sync` (in `compose.media.yml`, code in
+`dockerfiles/plex-navidrome-sync/`) keeps one Navidrome account in step with
+Plex every 15 minutes, both ways. Tracks are matched by their path in the music
+folder, so it needs nothing beyond both apps having scanned the file.
+
+| What | How it syncs |
+|------|--------------|
+| Ratings | A change on either side is copied to the other; if both changed since the last run, the newer one wins. Plex half stars round up (3.5★ → 4★ in Navidrome). |
+| Hearts | Plex has no heart, so a Navidrome heart means "2★ or more". Hearting an unrated song rates it 3★ on both sides (as the Spotify/YouTube likes were); un-hearting clears the rating; rating a song 2★+ in Plexamp hearts it in Navidrome. |
+| Play counts | Plays added on one side since the last run are added to the other. Plex gets them as normal plays; Navidrome gets them as scrobbles from the `plex-navidrome-sync` player, whose external scrobbling (Last.fm/ListenBrainz) the sync switches off so plays aren't sent twice. |
+| Playlists | Regular playlists only (not smart playlists or `.m3u` imports). Paired by name the first time, then by ID. A changed track list replaces the other side's (both changed: the newer wins). Renames and deletions are mirrored; a deleted playlist's track list is saved first under `/srv/docker/data/plex-navidrome-sync/deleted-playlists/`. Songs the other app hasn't scanned yet are left in place. |
+
+On the first run, Plex's playlists overwrite Navidrome's playlists of the same
+name, a song rated differently on the two sides takes the more recent rating,
+and each side's existing play counts are added to the other once.
+
+Safety: a run that would clear more than `MAX_CLEARS` (default 50) ratings, or
+that matches fewer than half the tracks of the previous run (a library mid-rebuild
+or a missing mount), stops without changing anything and alerts ntfy
+(`homeserver-alerts`). If a Plex or Navidrome item is re-created (a re-import),
+it gets its last synced rating back instead of the rating being cleared.
+
+Setup:
+
+```bash
+install -d -m 2775 -o danteb -g docker /srv/docker/data/plex-navidrome-sync
+z /srv/homeserver/docker
+# add NAVIDROME_PASSWORD (and NAVIDROME_USER if it isn't danteb) to .env
+docker compose build plex-navidrome-sync
+docker compose run --rm -e DRY=1 -e ONCE=1 plex-navidrome-sync   # preview only
+docker compose up -d plex-navidrome-sync
+```
+
+The Plex token is read from Plex's `Preferences.xml` (mounted read-only).
+State (the last synced value of every track and playlist) is in
+`/srv/docker/data/plex-navidrome-sync/state.json`; deleting it makes the next
+run behave like the first one again, including copying play counts once more.
 
 ## Fixing merged Plex albums
 
