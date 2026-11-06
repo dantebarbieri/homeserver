@@ -489,6 +489,8 @@ def sync_playlists(state, plex, nd, matched, counts):
 def run(plex=None, nd=None):
     state = load_state("state.json", {})
     state.setdefault("tracks", {})
+    # Fail before writing anything if state can't be saved: unsaved play counts would be copied again.
+    save_state("state.json", state)
     plex, nd = plex or Plex(), nd or Navidrome()
     if not DRY:
         try:
@@ -511,19 +513,27 @@ def run(plex=None, nd=None):
 
 def main():
     signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))      # run finally blocks on docker stop
+    if not (ND_USER and ND_PASS):
+        log("NAVIDROME_USER/NAVIDROME_PASSWORD not set in docker/.env; not syncing (see docs/MUSIC.md)")
+        signal.pause() if hasattr(signal, "pause") else time.sleep(sys.maxsize)
     os.makedirs(STATE, exist_ok=True)
+    last = {}
     while True:
         try:
             run()
             save_state("last_ok.json", {"at": time.time()})
         except Exception as e:
             log("ERROR:", traceback.format_exc())
-            err = load_state("last_error.json", {})
             msg = f"{type(e).__name__}: {e}"[:300]
-            if err.get("msg") != msg or time.time() - err.get("at", 0) > 6 * 3600:
+            last = load_state("last_error.json", last)
+            if last.get("msg") != msg or time.time() - last.get("at", 0) > 6 * 3600:
                 if not DRY:
                     ntfy("Plex/Navidrome sync failed", msg, "high", "musical_note,rotating_light")
-                save_state("last_error.json", {"msg": msg, "at": time.time()})
+                last = {"msg": msg, "at": time.time()}
+                try:
+                    save_state("last_error.json", last)
+                except OSError:
+                    pass
         if ONCE:
             return
         time.sleep(INTERVAL)

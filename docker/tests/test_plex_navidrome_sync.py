@@ -242,6 +242,12 @@ class RunTests(unittest.TestCase):
                 sync.run(self.plex, self.nd)
         self.assertEqual((self.plex.calls, self.nd.calls), ([], []))
 
+    def test_unwritable_state_stops_before_any_write(self):
+        with patch.object(sync, "save_state", side_effect=PermissionError("read-only")):
+            with self.assertRaises(PermissionError):
+                sync.run(self.plex, self.nd)
+        self.assertEqual((self.plex.calls, self.nd.calls), ([], []))
+
     def test_dry_run_writes_nothing(self):
         with patch.object(sync, "DRY", True):
             sync.run(self.plex, self.nd)

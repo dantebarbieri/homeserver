@@ -611,6 +611,7 @@ docker compose up -d plex-navidrome-sync
 ```
 
 The Plex token is read from Plex's `Preferences.xml` (mounted read-only).
+Until `NAVIDROME_PASSWORD` is set the container just logs that and waits.
 State (the last synced value of every track and playlist) is in
 `/srv/docker/data/plex-navidrome-sync/state.json`; deleting it makes the next
 run behave like the first one again, including copying play counts once more.
