@@ -3,6 +3,9 @@
   - importFailed/Pending/Blocked: if the file count matches another edition of the album and
     the titles match, ManualImport into it (copy for torrents to keep hardlinks, move for
     usenet); never switches editions on an album that already has files, since that unlinks them
+  - a completed single audio file (outputPath is a file, not a folder) is imported only into an
+    empty, monitored one-track release when Lidarr's own manual-import mapping (artist, album,
+    release, track) agrees and no remix/live/edit qualifier differs; anything else is left for the user
   - a single/EP grabbed for an album (<=4 files for an 8+ track album) -> blocklist + re-search
   - "forget" moves torrents to QBIT_MANUAL_CATEGORY instead of using Lidarr's queue Remove,
     which throws a NullReferenceException (HTTP 500) for items without an artist
@@ -83,13 +86,19 @@ class App(Arr):
         return (res, None) if res.startswith(("imported", "DRY")) else (None, res)
 
     def import_dir(self, folder, album_id, mode, download_id=None, min_score=0.45):
-        if not os.path.isdir(folder):
+        single_file = os.path.isfile(folder)
+        if not (single_file or os.path.isdir(folder)):
             return "no folder"
-        files = audio_files(folder)
+        files = ([folder] if folder.lower().endswith(AUD) else []) if single_file else audio_files(folder)
+        if not files:
+            return "no audio files"
         alb = self.api(f"/album/{album_id}")
         best = None
-        for rel in [r for r in alb["releases"] if r["trackCount"] == len(files)]:
+        for rel in [r for r in alb["releases"] if r["trackCount"] == len(files) and
+                    (not single_file or r["monitored"])]:
             tr = sorted(self.api(f"/track?albumReleaseId={rel['id']}"), key=lambda t: (t["mediumNumber"], t["absoluteTrackNumber"]))
+            if single_file and len(tr) != 1:
+                continue
             sc = sum(difflib.SequenceMatcher(None, norm(t["title"]), norm(strip(os.path.basename(f)))).ratio() for f, t in zip(files, tr)) / len(files)
             if not best or sc > best[0]:
                 best = (sc, rel, tr)
@@ -98,6 +107,21 @@ class App(Arr):
         sc, rel, tr = best
         if sc < min_score:
             return f"low title match {sc:.2f}"
+        q = None
+        if single_file:
+            # A bare file must agree with Lidarr's mapping, not guess an edition or remix.
+            if (alb.get("statistics") or {}).get("trackFileCount"):
+                return "single-file album already has files; not replacing"
+            versions = lambda s: set(re.findall(r"\b(?:remix|mix|live|acoustic|instrumental|karaoke|edit|version)\b", s, re.I))
+            if versions(os.path.basename(folder).lower()) != versions(tr[0]["title"].lower()):
+                return "single-file version differs from target track"
+            q = {i["path"]: i for i in self.api("/manualimport?" + urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "false"}))}
+            item = q.get(folder) or {}
+            if ((item.get("artist") or {}).get("id") != alb["artistId"] or
+                    (item.get("album") or {}).get("id") != album_id or
+                    item.get("albumReleaseId") != rel["id"] or
+                    [t["id"] for t in (item.get("tracks") or [])] != [t["id"] for t in tr]):
+                return "single-file mapping does not match monitored release"
         if DRY:
             return f"DRY would import {len(files)} into {rel['format']} score {sc:.2f}"
         if not rel["monitored"]:
@@ -107,12 +131,17 @@ class App(Arr):
             for r in alb["releases"]:
                 r["monitored"] = r["id"] == rel["id"]
             self.api(f"/album/{album_id}", "PUT", alb)
-        q = {i["path"]: i for i in self.api("/manualimport?" + urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "false"}))}
+        if q is None:
+            q = {i["path"]: i for i in self.api("/manualimport?" + urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "false"}))}
         payload = [dict({"path": f, "artistId": alb["artistId"], "albumId": album_id, "albumReleaseId": rel["id"], "trackIds": [t["id"]],
                          "quality": q[f]["quality"], "disableReleaseSwitching": True, "indexerFlags": 0},
                         **({"downloadId": download_id} if download_id else {})) for f, t in zip(files, tr)]
         cid = self.api("/command", "POST", {"name": "ManualImport", "files": payload, "importMode": mode, "replaceExistingFiles": False})["id"]
         self.wait(cid, 60)
+        if single_file:
+            status = self.api(f"/command/{cid}")["status"]
+            if status != "completed":
+                return f"single-file import command {cid}: {status}; import not confirmed"
         s = self.api(f"/album/{album_id}")["statistics"]
         return f"imported {s['trackFileCount']}/{s['trackCount']} (score {sc:.2f})" if s["trackFileCount"] else "import ran but 0 files"
 

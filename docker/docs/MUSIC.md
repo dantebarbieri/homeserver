@@ -421,6 +421,7 @@ stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 | Stuck pattern | Fix |
 |---------------|-----|
 | Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents so they keep seeding, move for usenet). Never switches the edition of an album that already has files, since that unlinks them |
+| Completed single audio file rather than an album folder | Import only into an empty, monitored one-track release when Lidarr's manual-import artist, album, release and track IDs agree. Differing remix/live/edit/version qualifiers stay for manual review. Never scans the parent download directory, switches editions or replaces existing files; requires a completed import command before reporting success |
 | Single/EP grabbed for an album (<=4 files for an 8+ track album) | Blocklist + re-search |
 | Failed download | Blocklist + re-search |
 | Dead torrent: no connected seeds for 24 h (`STALL_HOURS`) and either below 5%, including stuck on "downloading metadata", or partly done with availability below 1 and no activity for 24 h (Lidarr's qBittorrent category, `music`) | Blocklist + re-search |
