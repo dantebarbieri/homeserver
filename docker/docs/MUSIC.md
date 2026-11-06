@@ -35,10 +35,11 @@ mounts `${RAID}/shared/torrents:/data/torrents` and SABnzbd mounts
 
 Lidarr mounts `${RAID}/shared:/data`, like Sonarr/Radarr. Its library,
 purchase-import staging, and download paths share one mount and one XFS
-filesystem, so torrent imports are hardlinks and Usenet/purchase imports are
-instant moves. Never mount `torrents`, `usenet`, and `media/music` into Lidarr
+filesystem, so Usenet/purchase imports are instant moves. Torrent imports are
+copies on purpose (see [Tags, copies and seeding](#tags-copies-and-seeding)).
+Never mount `torrents`, `usenet`, and `media/music` into Lidarr
 as separate volumes; Docker treats each bind mount as a separate filesystem
-and imports silently degrade to full copies. Plex already mounts
+and moves silently degrade to slow copy-and-delete. Plex already mounts
 `${RAID}/shared/media:/data/media`; do not add a second music mount or change
 existing movie/TV libraries. Lidarr is the music file manager; Plex only needs
 to read this directory (its existing broad media mount is unchanged).
@@ -96,11 +97,15 @@ In Lidarr:
 3. Start with artists/albums **unmonitored** and automatic searches off while
    importing purchases. Enable monitoring deliberately for albums you want
    Lidarr to acquire through sources you are authorized to use.
-4. Leave audio-tag rewriting disabled (it breaks seeding hardlinks; see step 4)
-   and automatic track renaming disabled initially,
-   particularly for Japanese editions and compilations. Review album/release
-   matches before importing. Include soundtrack/compilation/EP release types
-   in a metadata profile when the default profile excludes the desired release.
+4. Turn **Rename Tracks** on before the first import, with the formats under
+   [Current production configuration](#current-production-configuration).
+   Files imported flat and renamed later left Plex with merged albums (see
+   [Fixing merged Plex albums](#fixing-merged-plex-albums)). Keep *Tag Audio
+   Files with Metadata* off until hardlinks are disabled (section 4 below):
+   retagging a hardlinked file corrupts its seeding torrent. Review
+   album/release matches before importing, particularly for Japanese editions
+   and compilations. Include soundtrack/compilation/EP release types in a
+   metadata profile when the default profile excludes the desired release.
 
 A FLAC-only profile filters acquisitions; it does not convert existing MP3/AAC
 files into lossless audio or prove a download's provenance. Allow both FLAC
@@ -142,23 +147,27 @@ video categories unchanged.
 | Settings > Download Clients > SABnzbd | Name `SABnzbd`, host `sabnzbd`, port `8080`, existing API key, category `music` |
 | Settings > Download Clients > Completed Download Handling | Enabled (default) |
 | Settings > Download Clients > Remote Path Mappings | None; all apps already see `/data/...` |
-| Settings > Media Management > Importing | *Use Hardlinks instead of Copy* enabled (default) |
-| Settings > Metadata > Tag Audio Files with Metadata | `Never` (see below) |
+| Settings > Media Management > Importing | *Use Hardlinks instead of Copy* **disabled**, so torrent imports are copies (see below) |
+| Settings > Metadata > Tag Audio Files with Metadata | *All files; keep in sync with MusicBrainz* (`writeAudioTags=sync`), *Embed Cover Art In Audio Files* on, *Scrub Existing Tags* off. Only safe with hardlinks off |
 | Prowlarr > Settings > Apps > Lidarr | Prowlarr server `http://prowlarr:9696`, Lidarr server `http://lidarr:8686`, Lidarr API key, default Audio sync categories; test, save, then *Sync App Indexers* |
 
 Use `qbittorrent`, the VPN namespace's network alias, not `qbittorrent-app`.
 Never point a download category at `/data/media/music` or the import staging
 folder.
 
-**Do not let Lidarr write tags to hardlinked files.** A hardlink is the same
-data as the seeding torrent, so retagging the library copy also changes the
-torrent's payload; the torrent then fails its hash check and stops seeding.
-Keep *Tag Audio Files with Metadata* at `Never` and fix tags in MusicBrainz Picard on a copy
-before importing instead. Usenet and purchased imports are moves, not
-hardlinks, but one global setting covers all of them.
+**Keep *Use Hardlinks instead of Copy* off.** Lidarr writes tags into the
+library copy of every file it manages: on import, when MusicBrainz metadata
+changes, and for every file of an artist on *Retag*. A hardlink is the same
+data as the seeding torrent, so a tag write also changes the torrent's payload;
+the torrent then fails its hash check and stops seeding. Lidarr has no check
+for this (it only skips files that map to several tracks). With hardlinks off,
+each torrent import is a separate full copy; the cost and the cleanup are in
+[Tags, copies and seeding](#tags-copies-and-seeding). Usenet and purchased
+imports are moves either way.
 
-Verify a hardlink after the first torrent import (link count `2` and the same
-inode for both paths):
+Verify after the first torrent import that the two paths are independent
+copies: link count `1` and different inodes. Link count `2` with the same inode
+is a hardlink, and the next retag corrupts that torrent.
 
 ```bash
 stat -c '%h %i %n' "/data/shared/torrents/music/<release>/<track>.flac" \
@@ -168,8 +177,11 @@ stat -c '%h %i %n' "/data/shared/torrents/music/<release>/<track>.flac" \
 **qbit-manage**: add `music` to the private
 `${DATA}/qbit-manage/config/config.yml` `cat:` mapping
 (`music: /data/torrents/music`) and to its `nohardlinks:` list, alongside the
-video categories. Do the same for `music-manual: /data/torrents/music-manual`,
-where `lidarr-maint` parks hand-imported torrents. See [qBit Manage inactivity cleanup](QBIT-MANAGE-INACTIVITY.md).
+video categories. Music torrents are never hardlinked, so qbit-manage always
+sees them as `noHL`; that is what eventually deletes the torrent-side copy (see
+[Tags, copies and seeding](#tags-copies-and-seeding)). Do the same for
+`music-manual: /data/torrents/music-manual`, where `lidarr-maint` parks torrents
+Lidarr did not grab. See [qBit Manage inactivity cleanup](QBIT-MANAGE-INACTIVITY.md).
 
 **Quality guidance**: TRaSH Guides has no Lidarr guide and Recyclarr does not
 sync Lidarr; TRaSH points to
@@ -217,8 +229,12 @@ correct metadata match exists. Plex playback does not depend on Lidarr.
 
 In Plex Web, create a **Music** library named `Music` with folder
 `/data/media/music`. Enable automatic library scanning, and run an initial
-scan. Use Plex Music metadata; prefer local metadata if preserving your
-carefully tagged editions is more important than Plex's matches. With Plex
+scan. Use Plex Music metadata and turn on the library's **Prefer local
+metadata** option (stored as `respectTags`; off by default), so Plex trusts the
+tags Lidarr writes over its online matches. Do not scan before *Rename Tracks*
+is on and every album sits in its own folder: Plex keeps albums merged when
+their files are renamed after the first scan (see
+[Fixing merged Plex albums](#fixing-merged-plex-albums)). With Plex
 Pass, enable sonic analysis if desired; its initial analysis can take time.
 
 Install [Plexamp](https://www.plex.tv/plexamp/) on iPhone, Windows, and macOS,
@@ -288,7 +304,10 @@ on. These are configured in the apps (not in this repo):
 |---------|-------|
 | Quality profile | `Lossless Preferred`: Lossless group + `MP3 320/V0` fallback, cutoff Lossless, upgrades on. Used by all artists and the Spotify import list (`FLAC Only` is unused) |
 | Metadata profiles | `Standard` (Album, EP, Single), `Soundtracks` (Soundtrack/Compilation, for Studio Ghibli) |
-| Renaming | On: `{Album Title} ({Release Year})/{track:00} - {Track Title}`, multi-disc `{medium:0}-{track:00}`, artist folder `{Artist Name}`. Renames keep hardlinks (same inode) |
+| Renaming | On, from the first import: `{Album Title} ({Release Year})/{track:00} - {Track Title}`, multi-disc `{medium:0}-{track:00}`, artist folder `{Artist Name}`. One album is one folder, which Plex's grouping and `plex-album-check` rely on |
+| Hardlinks | Off (`copyUsingHardlinks=false`): torrent imports are copies, so tag writes never touch a seeding torrent. See [Tags, copies and seeding](#tags-copies-and-seeding) |
+| Tagging | *All files; keep in sync with MusicBrainz* (`writeAudioTags=sync`), *Embed Cover Art In Audio Files* on, *Scrub Existing Tags* off. An artist's *Retag* button (`RetagArtist` command) rewrites its files on demand |
+| Plex Music library | *Prefer local metadata* on (`respectTags=true`) |
 | Import list | Spotify playlists: monitor specific album, no new albums |
 | Connect | Plex Media Server (`plex:32400`), *Update Library* on import. Plex's own change detection misses Lidarr imports |
 | Indexers | NZBgeek, The Pirate Bay, 1337x, kickasstorrents, Internet Archive. Torrent minimum seeders `2` (music is thinly seeded) |
@@ -309,13 +328,45 @@ release whose track count matches the files. `lidarr-maint` (below) does this
 automatically when the files are already in Lidarr's queue.
 
 Add hand-grabbed torrents to qBittorrent's `music-manual` category, not
-`music`, and import them with `copy` (hardlink). Lidarr tracks everything in
-`music`. If a torrent wasn't grabbed by Lidarr, it reappears in the queue as
-"Import failed" on every poll, even after a successful manual import. A queue
-*Remove* without removing it from the client only hides it until the next
-poll. If one is already in `music`, change its category to `music-manual`.
-qBittorrent's automatic torrent management moves it on the same filesystem,
-so the hardlinks survive.
+`music`, and import them with *Copy* (a real copy, since hardlinks are off).
+Lidarr tracks everything in `music`. If a torrent wasn't grabbed by Lidarr, it
+reappears in the queue as "Import failed" on every poll, even after a
+successful manual import. A queue *Remove* without removing it from the client
+only hides it until the next poll. If one is already in `music`, change its
+category to `music-manual`. qBittorrent's automatic torrent management moves
+the files on the same filesystem; the library copy is independent of that move.
+
+### Tags, copies and seeding
+
+Lidarr owns the tags and cover art of every library file. It writes them on
+import, when MusicBrainz metadata changes, and on *Retag*, so inconsistent or
+missing album art in Plexamp is fixed by retagging in Lidarr, not by editing
+files in another tagger.
+
+That is only safe while no library file shares data with a seeding torrent.
+In November 2026 a whole-library retag ran while *Use Hardlinks instead of
+Copy* was still on. It rewrote about 2,100 library files in place, which also
+rewrote the matching torrent payloads: 175 torrents no longer matched their
+pieces, so a recheck fails them and they cannot seed correctly. The fix was to
+turn hardlinks off, remove those torrents from qBittorrent keeping their files,
+and give the remaining torrents independent copies. No library file changed.
+
+With hardlinks off:
+
+- Every torrent import is a second full copy of the album (a real copy, not a
+  reflink). It lasts until qbit-manage's `noHL` cleanup removes the torrent
+  (at least 14 days seeded and 7 days inactive), and the recycle bin keeps the
+  removed data 14 more days. See [QBIT-MANAGE-INACTIVITY.md](QBIT-MANAGE-INACTIVITY.md).
+- Music torrents are `noHL` from the moment they are imported. A torrent whose
+  import failed looks the same, so resolve stuck imports inside that window.
+- Never turn hardlinks back on while tag writing is on.
+- `find /data/shared/media/music -type f -links +1` must print nothing. Any
+  file it lists is tied to a torrent. Break the tie from the torrent side:
+  `cp -a --reflink=auto` the torrent's file to a temporary name in the same
+  folder, then `mv -f` it over the original, so the library file is never
+  touched, and recheck the torrent in qBittorrent. If a retag already ran, the
+  torrent's payload is already corrupt (the recheck fails): remove it from
+  qBittorrent and keep its files instead.
 
 ## Queue maintenance (`lidarr-maint`)
 
@@ -325,13 +376,13 @@ stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 
 | Stuck pattern | Fix |
 |---------------|-----|
-| Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents to keep hardlinks, move for usenet). Never switches the edition of an album that already has files, since that unlinks them |
+| Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents so they keep seeding, move for usenet). Never switches the edition of an album that already has files, since that unlinks them |
 | Single/EP grabbed for an album (<=4 files for an 8+ track album) | Blocklist + re-search |
 | Failed download | Blocklist + re-search |
 | Dead torrent: no connected seeds for 24 h (`STALL_HOURS`) and either below 5%, including stuck on "downloading metadata", or partly done with availability below 1 and no activity for 24 h (Lidarr's qBittorrent category, `music`) | Blocklist + re-search |
 | "Not grabbed by Lidarr" torrents | Move to `music-manual` (below), download kept |
 | "Not grabbed by Lidarr" usenet entries | Remove from the queue (download kept) |
-| Completed torrent with no artist match ("Artist name mismatch"), whose files were already imported by hand (hardlink count > 1) | Move the torrent to the `music-manual` qBit category (`/data/torrents/music-manual`), which Lidarr doesn't track, so it keeps seeding. Lidarr v3's queue *Remove* returns HTTP 500 for these unknown-artist items. Without hardlinked files, it notifies instead |
+| Completed torrent with no artist match ("Artist name mismatch"), whose files were already imported by hand (hardlink count > 1) | Move the torrent to the `music-manual` qBit category (`/data/torrents/music-manual`), which Lidarr doesn't track, so it keeps seeding. Lidarr v3's queue *Remove* returns HTTP 500 for these unknown-artist items. The rule only recognises hardlinked imports and Lidarr now copies, so a hand import is usually not recognised: the torrent is notified instead, and you move it to `music-manual` yourself |
 | Missing albums | `MissingAlbumSearch` at most every 6 h |
 | Albums below the Lossless cutoff (MP3, AAC, ...) | `CutoffUnmetAlbumSearch` at most every 24 h (`UPGRADE_SEARCH_HOURS`, `0` disables). Lidarr skips unmonitored and already-queued albums. RSS alone rarely sees lossless releases of older albums |
 
@@ -513,13 +564,80 @@ hi-res, its naming uses underscores, and its Compilation/Remix secondary types
 bloat the wanted list. Keep **Lossless Preferred**, our naming, and the
 Standard/Soundtracks metadata profiles.
 
-Leave Lidarr's **Tag Audio Files** off: retagging writes into files that are
-hardlinked to seeding torrents. Aurral then matches artists by name.
+Leave Lidarr's tag writing on (see [Tags, copies and seeding](#tags-copies-and-seeding)).
+Aurral matches Lidarr's files to artists by MusicBrainz tags first and by name
+second, so without tags an artist whose name several MusicBrainz artists share
+stays unmatched.
 
 Plex picks up new music via Lidarr's Plex Connect (partial scan on import) and
 Plex's own filesystem watcher. As a backstop, Plex **Settings > Library >
 Scan my library periodically** is on (hourly), since a manual import was once
 missed by both.
+
+## Fixing merged Plex albums
+
+A merged album shows mixed cover art in Plexamp, or one album page that lists
+the tracks of several albums. Retagging in Lidarr does not fix it, because the
+merge is in Plex's library, not in the files.
+
+**Cause.** Plex keeps the albums it built from a scan even after the files are
+renamed. Lidarr's first imports (October 24, 2026) were flat because *Rename
+Tracks* was off; Plex scanned them, then the bulk rename ran and Plex kept the
+merged albums. A few other albums were separate folders that Plex's agent
+matched into one while *Prefer local metadata* was off.
+
+**Prevention.** Turn *Rename Tracks* on before the first import, turn *Prefer
+local metadata* on, and don't let Plex scan flat imports. Both settings live in
+the apps, not in this repo, and neither repairs an album that is already
+merged. Lidarr's naming puts each album in its own `<Artist>/<Album>/` folder,
+so one Plex album should be one folder.
+
+**Detection.** `plex-album-check` (`nixos/modules/plex-album-check.nix`) runs
+daily at 06:30 (up to 10 minutes later). It opens Plex's database read-only and
+groups the tracks by album: an album built from more than one folder is a merge
+(a trailing disc folder such as `CD 2` does not count). A new merge sends an
+ntfy notice to `homeserver-alerts` ("Merged Plex albums on homeserver") at once,
+a merge that is still unrepaired repeats it weekly, and a clean library stays
+silent. If Plex returns no tracks the unit fails, which raises the usual ntfy
+failure alert. It remembers what it has reported in `/var/lib/plex-album-check`.
+Run it on demand:
+
+```bash
+sudo systemctl start plex-album-check
+journalctl -u plex-album-check -n 30 --no-pager
+```
+
+**Repair.** `PUT /library/metadata/<id>/split` does nothing for merges the
+scanner made, so make Plex forget the affected albums and scan again. No media
+file is moved or changed. The steps use Plex's API (`X-Plex-Token` from
+`Preferences.xml`; the Music section id is `8` here):
+
+1. **Snapshot first.** Record the ratings, play counts and playlist contents
+   (in order) of the affected tracks. Deleting an item drops its playlist
+   entries.
+2. **Drop the albums.** Put a `.plexignore` containing `*` in each affected
+   album folder, then partial-scan the parent folder:
+   `GET /library/sections/8/refresh?path=<parent folder>`. Plex removes the items
+   at once because *Empty trash automatically after every scan* is on (the
+   default); if it was turned off, empty the trash.
+3. **Recreate them.** Delete the `.plexignore` files and scan the same folders
+   again. Plex rebuilds the albums grouped by folder, with new ids. Poll
+   `GET /activities` to see when a scan has finished.
+4. **Restore your data.**
+   - Ratings and play counts of tracks Plex matched online come back by
+     themselves. Tracks with a `local://` guid lose their ratings: re-rate them
+     by path with
+     `PUT /:/rate?key=<ratingKey>&identifier=com.plexapp.plugins.library&rating=<0-10>`
+     (10 is five stars). Play counts cannot be restored exactly.
+   - Re-add playlist entries with
+     `PUT /playlists/<id>/items?uri=server://<machineIdentifier>/com.plexapp.plugins.library/library/metadata/<ratingKey>,<ratingKey>,...`,
+     about 120 keys per call. To fix an order, re-add or move items to the end
+     of the playlist: about 20 or more consecutive "move after" calls into one
+     gap scramble it.
+
+Never use `DELETE /library/metadata/<id>` for this: Plex mounts the library
+read-write, so with media deletion allowed it deletes the files from disk.
+Never write to Plex's database either; the check only ever opens it read-only.
 
 ## Acceptance checks
 
@@ -531,8 +649,13 @@ missed by both.
 - Play it in Plexamp on iPhone and both desktops; check Direct Play/FLAC.
 - If using Plex Pass downloads, verify playback in airplane mode.
 - For optional automated downloads, confirm a `music`-category torrent lands
-  in `/data/torrents/music`, imports into the music root as a hardlink (link
-  count 2), keeps seeding, and the FLAC-only profile rejects lossy releases.
+  in `/data/torrents/music`, imports into the music root as an independent
+  copy (link count 1), keeps seeding, and the FLAC-only profile rejects lossy
+  releases.
+- `find /data/shared/media/music -type f -links +1` lists nothing.
+- `sudo systemctl start plex-album-check` succeeds, and
+  `journalctl -u plex-album-check -n 5 --no-pager` says "No Plex album spans
+  more than one folder".
 
 ## References
 

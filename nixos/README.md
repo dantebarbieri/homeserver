@@ -344,15 +344,15 @@ journalctl -u forgejo-runner-worldforge-migrate -u forgejo-runner-worldforge -b
 
 ## Local regression checks
 
-With Python 3, Bash, and Nix (flakes enabled) available:
+With Python 3, Bash, jq, and Nix (flakes enabled) available:
 
 ```bash
 python3 nixos/tests/test_health_cleanup.py
 ```
 
 Run from the repository root (on the server, wrap it in
-`nix shell nixpkgs#python3 -c …`). This evaluates the flake's NixOS and Home Manager options and exercises scrub,
-update and reboot-reminder success/failure paths with mock commands; it does not contact or modify the
+`nix shell nixpkgs#python3 nixpkgs#jq -c …`). This evaluates the flake's NixOS and Home Manager options and exercises scrub,
+update, reboot-reminder and plex-album-check success/failure paths with mock commands; it does not contact or modify the
 server, synchronize real data, or build a system closure. The
 [`nixos-validate`](../.github/workflows/nixos-validate.yml) workflow runs it,
 plus a toplevel evaluation against the committed lock, on every change under
