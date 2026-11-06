@@ -326,7 +326,9 @@ Lidarr's MusicBrainz titles for Japanese releases (e.g. Ghibli soundtracks)
 are in Japanese while indexers use English, so automatic search rarely matches.
 Grab those manually and import with **Wanted > Manual Import**, choosing the
 release whose track count matches the files. `lidarr-maint` (below) does this
-automatically when the files are already in Lidarr's queue.
+automatically when the files are already in Lidarr's queue. To move an album
+that is already imported onto another edition (for example English titles
+instead of Korean), see [Choosing an edition after import](#choosing-an-edition-after-import).
 
 Add hand-grabbed torrents to qBittorrent's `music-manual` category, not
 `music`, and import them with *Copy* (a real copy, since hardlinks are off).
@@ -372,6 +374,43 @@ With hardlinks off:
   touched, and recheck the torrent in qBittorrent. If a retag already ran, the
   torrent's payload is already corrupt (the recheck fails): remove it from
   qBittorrent and keep its files instead.
+
+### Choosing an edition after import
+
+Lidarr has no language or country preference. It monitors whichever release of
+a release group best matched the files at import, and tag writing then puts
+that edition's titles into the files. Hisaishi's *The Tale of the Princess
+Kaguya* soundtrack imported as the Korean CD edition, so Plex showed Korean
+titles; MusicBrainz is not wrong, the release group simply has five editions.
+The metadata profile also allows pseudo-releases (translations and
+transliterations), which is where the English titles of several soundtracks
+come from.
+
+To move an imported album onto another edition without losing its Plex ratings,
+play counts or playlist entries (the edition needs the same tracks in the same
+order; done this way for 12 albums):
+
+1. Copy the album folder outside the music library first
+   (`cp -a --reflink=auto`).
+2. Re-import the library files with a `ManualImport` command
+   (`POST /api/v1/command`) that names the wanted release for every file: its
+   `albumReleaseId`, the matching `trackIds` (from `/track?albumReleaseId=`),
+   the file's own `quality`, and `disableReleaseSwitching: true`, with
+   `importMode: auto` and `replaceExistingFiles: false`. Files already under
+   the artist folder are retagged in place and the monitored release changes;
+   nothing is moved or copied. **Never set `replaceExistingFiles: true`:** it
+   removes the album's existing files first, which are the files being imported.
+3. Refresh the album in Plex: `PUT /library/metadata/<album ratingKey>/refresh`.
+   A folder scan alone misses the retag, because FLAC padding keeps the file
+   size unchanged.
+4. Run Lidarr's `RenameFiles` command for the album (preview it with
+   `/rename?artistId=&albumId=`) so the folder and file names follow the new
+   titles, then scan the folder in Plex. Plex matches the renamed files to the
+   same tracks, so ratings, play counts and playlists stay.
+
+Do not switch the monitored release with a `PUT` on the album instead: it
+unlinks the files and rescans, and the rescan can choose the tagged edition
+again. Plexamp downloads keep the old titles until they are downloaded again.
 
 ## Queue maintenance (`lidarr-maint`)
 
