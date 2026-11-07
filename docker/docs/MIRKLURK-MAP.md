@@ -196,6 +196,11 @@ surfaces are not simulated. Game/wiki image bytes are unchanged. The wiki
 catalog still reflects November 5; a separate catalog refresh is mandatory
 after confirmed 0.9.5.3 wiki publication. No upload API, storage, deployment,
 proxy or migration change is needed; nothing new uploads automatically.
+Since 66a4bae the post-publication catalog refresh is complete: 521 titles
+include `Version 0.9.5.3`, and both wiki verification dates read 2026-11-07.
+All 312 bundled pictures and both CSS files are byte-identical. No runtime
+logic, game rules, save fields, server-reachable modules, sharing or
+deployment policy changes.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (398 files) so
@@ -219,9 +224,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `8999d9a0527a9ea45b50b579c39b0c11729ecd65`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/42315892256) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/61) has no open issues |
-| Web | `mirklurk-map:8999d9a`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:8999d9a`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `66a4baebb5be5700e98ba696b57a6d0445ee95cd`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/42324370439) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/62) has no open issues |
+| Web | `mirklurk-map:66a4bae`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:66a4bae`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -233,18 +238,18 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.9e72c930c5.js` | `9e72c930c5d144d5b0567044ebb26a770deeedc51fcbf505070967fbc34faebea` |
-| `edit.a8111efaef.js` | `a8111efaef5d612924060d7c756085953e3a42ec7ae876ace7bdc10297073304` |
-| `sw.js` | `2a81c69c019f480b2be224c2578d39d6ac209bb4ca1a973babdcff7f94d09b41` |
+| `app.49ea318c9f.js` | `49ea318c9fbeda5f2e3a88168b61c2cfa35713faeabf7cf89d6434ccd6cd9f95` |
+| `edit.6b7669ee08.js` | `6b7669ee085a764c85a300a5cb4564e5951100538859c0f866cf4838b946677d` |
+| `sw.js` | `24412c4b58023a2ab75c5cdac23392c1a10ea06a0f6a427d56916aea7b360c99` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 398 entries (cache `e959da0b44`) and
+unchanged); the service worker keeps 398 entries (cache `835badd8e2`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
 `Patch notes`. Both
-browser bundles contain `latest:"0.9.5.3"`, `Version 0.9.5.0`,
-`Wooden Buckler` and verification date `2026-11-05`.
+browser bundles contain `latest:"0.9.5.3"`, `Version 0.9.5.3`,
+`Wooden Buckler` and verification date `2026-11-07`.
 Both browser bundles contain `Flint_Dagger_icon_(cropped).png` and
 `Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
 `Flint Dagger`. Both browser bundles contain `0.9.0.2`, `0.9.0.1` and
@@ -459,6 +464,19 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 `192.168.50.1` NAT identity; do not mistake that for the Docker proxy identity.
 
 ## Rollback
+
+Previous source: `8999d9a0527a9ea45b50b579c39b0c11729ecd65`, tags
+`mirklurk-map:8999d9a` / `mirklurk-map-uploads:8999d9a`. Preflight on
+2026-11-07 UTC observed exact running images
+`sha256:1cffbf4be61222b3f9b5fe3990bf01cba4895684b263070dc84a5c885848380d`
+(web) and
+`sha256:5ee017d60cd7f4d7b6186a495a728327f9ed5f596d1b239660b2118fd52d9880`
+(uploads). Retain and recheck both under `rollback-8999d9a-20261107-66a4bae`.
+This catalog-only refresh changes README, wiki data/art verification metadata
+and link regression tests. No runtime/server-reachable module or image bytes
+change. Recreate uploads then web from retained exact images under the shared
+lock, preserving current exact NPM trust and the shares volume. This restores
+the core 0.9.5.3 release with its older wiki catalog, not older game rules.
 
 Previous source: `b3deb6a6b43f027bbcd38f352fdc9febbaf4f22b`, tags
 `mirklurk-map:b3deb6a` / `mirklurk-map-uploads:b3deb6a`. Preflight on
