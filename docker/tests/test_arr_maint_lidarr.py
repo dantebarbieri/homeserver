@@ -42,6 +42,7 @@ class SingleFileImportTests(unittest.TestCase):
         self.status = "completed"
         self.written = 1  # files left in the library once a ManualImport ran, whatever its status says
         self.more_tracks, self.more_items = [], []
+        self.native_passes = []  # per /manualimport call: {file index: album id Lidarr maps it to, None when unidentified}
         self.queue = []
         self.state = {}
         self.app = lidarr.App()
@@ -73,7 +74,10 @@ class SingleFileImportTests(unittest.TestCase):
         if path == "/track?albumReleaseId=37608":
             return [self.track, *self.more_tracks]
         if path.startswith("/manualimport?"):
-            return [self.item, *self.more_items]
+            items = copy.deepcopy([self.item, *self.more_items])
+            for index, album in (self.native_passes.pop(0) if self.native_passes else {}).items():
+                items[index].update(artist={"id": 678} if album else None, album={"id": album} if album else None)
+            return items
         if path == "/command" and method == "POST":
             return {"id": 99}
         if path == "/command/99":
@@ -179,6 +183,131 @@ class SingleFileImportTests(unittest.TestCase):
     def test_directory_import_retains_existing_behavior(self):
         self.assertTrue(self.run_dir().startswith("imported 1/1"))
         self.assertEqual(self.posts()[0][2]["files"][0]["path"], str(self.path))
+
+    def directory_mapping(self, filenames, titles, artist="Luis Fonsi"):
+        self.path.unlink()
+        self.album["artist"] = {"artistName": artist}
+        self.album["releases"][0]["trackCount"] = len(titles)
+        self.album["statistics"]["trackCount"] = len(titles)
+        self.written = len(titles)
+        tracks = [{"id": 255376 + i, "title": title, "mediumNumber": 1, "absoluteTrackNumber": i + 1}
+                  for i, title in enumerate(titles)]
+        items = []
+        for filename in filenames:
+            path = Path(self.tmp.name) / filename
+            path.touch()
+            items.append({"path": str(path), "artist": {"id": 678}, "album": {"id": 14060},
+                          "quality": {"quality": {"id": 4}}})
+        self.track, self.more_tracks = tracks[0], tracks[1:]
+        self.item, self.more_items = items[0], items[1:]
+
+    def test_alphabetical_artist_prefixed_files_map_by_exact_title_not_position(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz.flac", "Luis Fonsi - Despacito (Remix).flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Despacito (remix)", "Apaga la luz"],
+        )
+        self.assertTrue(self.run_dir().startswith("imported 3/3"))
+        files = self.posts()[0][2]["files"]
+        self.assertEqual([f["trackIds"] for f in files], [[255378], [255377], [255376]])
+
+    def test_reordered_edition_maps_titles_with_feature_credits(self):
+        self.directory_mapping(
+            ["01. Satellites.mp3", "02. Higher (feat. Betty Who).mp3",
+             "03. Echoes.mp3", "04. Give Me Love [feat. Calum Scott].mp3"],
+            ["Give Me Love", "Higher", "Satellites", "Echoes"], artist="Don Diablo",
+        )
+        self.assertTrue(self.run_dir().startswith("imported 4/4"))
+        self.assertEqual([f["trackIds"] for f in self.posts()[0][2]["files"]],
+                         [[255378], [255377], [255379], [255376]])
+
+    def test_exact_title_fallback_requires_native_artist_and_album_agreement(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz.flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        for field in ("artist", "album"):
+            with self.subTest(field=field):
+                original = self.item[field]
+                self.item[field] = {"id": 999}
+                self.assertEqual(self.run_dir(), "title mapping does not match native artist/album")
+                self.assertEqual(self.posts(), [])
+                self.item[field] = original
+
+    def test_exact_title_fallback_confirms_files_across_unstable_native_passes(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz.flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        self.native_passes = [{0: None}, {1: None}]
+        self.assertTrue(self.run_dir().startswith("imported 2/2"))
+        self.assertEqual(len(self.posts()), 1)
+
+    def test_exact_title_fallback_rejects_files_native_never_identifies(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz.flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        self.native_passes = [{0: None}] * 3
+        self.assertEqual(self.run_dir(), "title mapping does not match native artist/album")
+        self.assertEqual(self.posts(), [])
+
+    def test_exact_title_fallback_rejects_when_a_later_native_pass_disagrees(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz.flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        self.native_passes = [{0: None}, {1: 999}]
+        self.assertEqual(self.run_dir(), "title mapping does not match native artist/album")
+        self.assertEqual(self.posts(), [])
+
+    def test_exact_title_fallback_keeps_version_qualifiers(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz (Live).flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        self.assertTrue(self.run_dir().startswith("low title match"))
+        self.assertEqual(self.posts(), [])
+
+    def test_exact_title_fallback_requires_a_bijection(self):
+        self.directory_mapping(
+            ["01. Luis Fonsi - Sola.flac", "02. Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        self.assertTrue(self.run_dir().startswith("low title match"))
+        self.assertEqual(self.posts(), [])
+
+    def test_exact_title_fallback_rejects_duplicate_target_titles_and_missing_metadata(self):
+        files = ["Luis Fonsi - Sola.flac", "Luis Fonsi - Apaga La Luz.flac"]
+        tracks = [{"id": 1, "title": "Sola"}, {"id": 2, "title": "Sola"}]
+        self.assertIsNone(lidarr.title_mapping(files, tracks, "Luis Fonsi"))
+        self.assertIsNone(lidarr.title_mapping(files, tracks[:1], "Luis Fonsi"))
+
+    def test_exact_title_fallback_keeps_original_and_remix_distinct(self):
+        files = ["Luis Fonsi - Despacito (Remix).flac", "Luis Fonsi - Despacito.flac"]
+        tracks = [{"id": 1, "title": "Despacito"}, {"id": 2, "title": "Despacito (remix)"}]
+        self.assertEqual([t["id"] for t in lidarr.title_mapping(files, tracks, "Luis Fonsi")], [2, 1])
+
+    def test_exact_title_fallback_dry_run_does_not_change_edition_or_import(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz.flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        self.album["releases"][0]["monitored"] = False
+        with patch.object(lidarr, "DRY", True):
+            self.assertTrue(self.app.import_dir(self.tmp.name, 14060, "copy").startswith("DRY"))
+        self.assertEqual(self.posts(), [])
+        self.assertFalse(any(c.args[1:2] == ("PUT",) for c in self.app.api.call_args_list))
+
+    def test_exact_title_fallback_does_not_switch_an_edition_with_existing_files(self):
+        self.directory_mapping(
+            ["Luis Fonsi - Apaga La Luz.flac", "Luis Fonsi - Sola.flac"],
+            ["Sola", "Apaga la luz"],
+        )
+        self.album["releases"][0]["monitored"] = False
+        self.album["statistics"]["trackFileCount"] = 1
+        self.assertIn("not switching", self.run_dir())
+        self.assertEqual(self.posts(), [])
+        self.assertFalse(any(c.args[1:2] == ("PUT",) for c in self.app.api.call_args_list))
 
     def test_low_title_match_does_not_import(self):
         self.track["title"] = "Unrelated Song"
