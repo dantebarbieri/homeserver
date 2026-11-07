@@ -188,6 +188,14 @@ bundled pictures, including four new cropped images, Version 0.9.5.0 and
 canonical Wooden Buckler links/source naming. All previous 308 picture bytes
 are unchanged. Verification dates read 2026-11-05. No game rules, save parser,
 backend runtime, API, container, migration or proxy behavior changes.
+Since 8999d9a Mirklurk 0.9.5.3 is **Latest**, sharing 0.9.5.0's modeled
+rules: both versions hide the redundant switch, while earlier saves retain
+their own rules. Version detection, optional death-choice preservation and
+torch-limit regressions cover the new version. Game fixes outside modeled
+surfaces are not simulated. Game/wiki image bytes are unchanged. The wiki
+catalog still reflects November 5; a separate catalog refresh is mandatory
+after confirmed 0.9.5.3 wiki publication. No upload API, storage, deployment,
+proxy or migration change is needed; nothing new uploads automatically.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (398 files) so
@@ -211,9 +219,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `b3deb6a6b43f027bbcd38f352fdc9febbaf4f22b`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/42090691816) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/60) has no open issues |
-| Web | `mirklurk-map:b3deb6a`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:b3deb6a`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `8999d9a0527a9ea45b50b579c39b0c11729ecd65`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/42315892256) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/61) has no open issues |
+| Web | `mirklurk-map:8999d9a`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:8999d9a`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -225,17 +233,17 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.3aa3615fc6.js` | `3aa3615fc626263a4ca27790de8bc9d29ff182e58c2e18b6f3e3381ff321959d` |
-| `edit.42cc904466.js` | `42cc9044661ffc46d7197db1dba75c68e984109b802073029d79b31012cd7300` |
-| `sw.js` | `b6ac5b055b287178713cae1ef30194b2e21cdbcf196a4d565186b90fec6248f4` |
+| `app.9e72c930c5.js` | `9e72c930c5d144d5b0567044ebb26a770deeedc51fcbf505070967fbc34faebea` |
+| `edit.a8111efaef.js` | `a8111efaef5d612924060d7c756085953e3a42ec7ae876ace7bdc10297073304` |
+| `sw.js` | `2a81c69c019f480b2be224c2578d39d6ac209bb4ca1a973babdcff7f94d09b41` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 398 entries (cache `e021e6bd3e`) and
+unchanged); the service worker keeps 398 entries (cache `e959da0b44`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
 `Patch notes`. Both
-browser bundles contain `latest:"0.9.5.0"`, `Version 0.9.5.0`,
+browser bundles contain `latest:"0.9.5.3"`, `Version 0.9.5.0`,
 `Wooden Buckler` and verification date `2026-11-05`.
 Both browser bundles contain `Flint_Dagger_icon_(cropped).png` and
 `Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
@@ -451,6 +459,21 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 `192.168.50.1` NAT identity; do not mistake that for the Docker proxy identity.
 
 ## Rollback
+
+Previous source: `b3deb6a6b43f027bbcd38f352fdc9febbaf4f22b`, tags
+`mirklurk-map:b3deb6a` / `mirklurk-map-uploads:b3deb6a`. Preflight on
+2026-11-07 UTC observed exact running images
+`sha256:2b10f7713206e8394b69d3815d499d15ddb95ce42304200d5cbc6d0c3d3f9147`
+(web) and
+`sha256:5471f31753e3fecd457297bd3d1ca0dbc9eba902eb9fd9f735206f708993eeb3`
+(uploads). Retain and recheck both under `rollback-b3deb6a-20261107-8999d9a`.
+The 8999d9a release adds shared-rule version registration and source/version
+metadata, tests and documentation. `server/`, Dockerfile, `deploy/`, sharing
+policy and asset bytes are unchanged. The server-reachable version registry
+is used by save parsing; no upload schema or rule calculation changes.
+Recreate uploads then web from retained exact images under the shared lock,
+preserving current exact NPM trust and the shares volume. This restores
+0.9.5.0 as Latest, not older sharing storage or game data.
 
 Previous source: `e1979ae8eddac8084d8737df3eb704ac5b0183a4`, tags
 `mirklurk-map:e1979ae` / `mirklurk-map-uploads:e1979ae`. Verified running
