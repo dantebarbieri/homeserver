@@ -434,8 +434,14 @@ stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 
 Anything else, such as partial edition matches, archives, or an album grabbed
 under the wrong album, is posted once to ntfy (`homeserver-alerts`) as
-"Lidarr: needs attention". A failing run alerts at high priority, and repeats of
-the same error at most every 6 hours. The container reads Lidarr's API key from
+"Lidarr: needs attention", with release names shown with their HTML entities
+decoded. An item stays in the queue until you import or remove it and is
+logged as `NEEDS USER` on every run, but it is never notified twice (unless it
+leaves the list and comes back). A failing run alerts at high priority once
+`FAIL_ALERT_CYCLES` (default 2) runs in a row have failed, so the 04:00
+auto-update restarting Lidarr or this container (a one-off "Connection
+refused") heals silently; repeats of the same error alert at most every 6
+hours. The container reads Lidarr's API key from
 its `config.xml` (read-only), so key rotations need no change. It uses the
 qBittorrent's `QUSER`/`QPASS` credentials and keeps its state in
 `${DATA}/lidarr-maint`. It mounts `/data` read-only because Lidarr itself
