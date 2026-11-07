@@ -34,6 +34,30 @@ def audio_files(folder):
     return sorted(os.path.join(d, f) for d, _, fs in os.walk(folder) for f in fs if f.lower().endswith(AUD))
 
 
+def title_mapping(files, tracks, artist):
+    """Only rescue a low positional score when every title has exactly one counterpart."""
+    def title(value):
+        return norm(re.sub(r"\s*(?:\(feat\.?\s+[^)]+\)|\[feat\.?\s+[^]]+\])\s*$", "", value, flags=re.I))
+
+    by_title = {}
+    for track in tracks:
+        key = title(track["title"])
+        if not key or key in by_title:
+            return None
+        by_title[key] = track
+    mapped = []
+    for path in files:
+        name = strip(os.path.basename(path))
+        prefix, sep, rest = name.partition(" - ")
+        if sep and artist and norm(prefix) == norm(artist):
+            name = rest
+        track = by_title.pop(title(name), None)
+        if track is None:
+            return None
+        mapped.append(track)
+    return mapped if not by_title else None
+
+
 class App(Arr):
     name = "Lidarr"
     url = "http://lidarr:8686"
@@ -128,6 +152,26 @@ class App(Arr):
             self.forget(left)
         return len(left)
 
+    def native_items(self, folder, files, artist_id, album_id, passes=3):
+        """Lidarr's folder identification differs between calls, leaving a few files unmapped each time.
+        Accept a file once any pass maps it here; refuse if any pass maps one to another artist or album."""
+        query = "/manualimport?" + urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "false"})
+        items, confirmed = {}, set()
+        for _ in range(passes):
+            found = {i["path"]: i for i in self.api(query)}
+            for f in files:
+                item = found.get(f) or {}
+                artist, album = (item.get("artist") or {}).get("id"), (item.get("album") or {}).get("id")
+                if artist not in (None, artist_id) or album not in (None, album_id):
+                    return None
+                if item:
+                    items.setdefault(f, item)
+                if (artist, album) == (artist_id, album_id):
+                    confirmed.add(f)
+            if len(confirmed) == len(files):
+                return items
+        return None
+
     def import_dir(self, folder, album_id, mode, download_id=None, min_score=0.45):
         single_file = os.path.isfile(folder)
         if not (single_file or os.path.isdir(folder)):
@@ -144,14 +188,23 @@ class App(Arr):
             if single_file and len(tr) != 1:
                 continue
             sc = sum(difflib.SequenceMatcher(None, norm(t["title"]), norm(strip(os.path.basename(f)))).ratio() for f, t in zip(files, tr)) / len(files)
+            exact = None
+            if not single_file and sc < min_score:
+                exact = title_mapping(files, tr, (alb.get("artist") or {}).get("artistName"))
+                if exact:
+                    sc, tr = 1.0, exact
             if not best or sc > best[0]:
-                best = (sc, rel, tr)
+                best = (sc, rel, tr, exact is not None)
         if not best:
             return f"{len(files)} files, no release with that count ({sorted({r['trackCount'] for r in alb['releases']})})"
-        sc, rel, tr = best
+        sc, rel, tr, exact = best
         if sc < min_score:
             return f"low title match {sc:.2f}"
         q = None
+        if exact:
+            q = self.native_items(folder, files, alb["artistId"], album_id)
+            if q is None:
+                return "title mapping does not match native artist/album"
         if single_file:
             # A bare file must agree with Lidarr's mapping, not guess an edition or remix.
             if (alb.get("statistics") or {}).get("trackFileCount"):

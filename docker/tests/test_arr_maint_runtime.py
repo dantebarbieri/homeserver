@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -122,6 +123,122 @@ class RuntimeGuardTests(unittest.TestCase):
                 patch.object(engine, "save_state"), patch.object(engine, "log") as log:
             app.run()
         self.assertTrue(any("blocklisted, deleted" in str(c.args) for c in log.call_args_list))
+
+
+class FakeApp(engine.Arr):
+    name = "Fake"
+    media_id = "mediaId"
+    media = "thing"
+    category_field = "musicCategory"
+    tag = "musical_note"
+
+    def fix_import(self, rows, torrent):
+        return None, "needs a human"
+
+
+class StopLoop(Exception):
+    pass
+
+
+class AlertTests(unittest.TestCase):
+    def test_clean_unescapes_html_entities(self):
+        self.assertEqual(engine.clean("Ti&euml;sto &amp; Co &ndash; &quot;On My Way&quot; &rsquo;"), "Tiësto & Co – \"On My Way\" ’")
+        self.assertEqual((engine.clean(None), engine.clean("plain & simple")), ("", "plain & simple"))
+        self.assertEqual(engine.Arr().label([{"title": "Rock &amp; Roll"}]), "Rock & Roll")
+
+    def test_needs_attention_messages_are_readable(self):
+        def row(i, title, media_id, state, status, messages=()):
+            return {"id": i, "downloadId": f"d{i}", "title": title, "mediaId": media_id, "protocol": "torrent",
+                    "trackedDownloadState": state, "trackedDownloadStatus": status,
+                    "statusMessages": [{"title": m, "messages": []} for m in messages]}
+
+        rows = [row(1, "Ti&euml;sto &amp; Friends &ndash; On My Way", 5, "importFailed", "warning"),
+                row(2, "Unmatched &amp; Co", None, "importFailed", "warning", ["Rock &amp; Roll", "Artist &quot;X&quot;"]),
+                row(3, "Healthy", 7, "downloading", "ok")]
+        torrents = [{"hash": "D3", "name": "Matched &amp; Co", "state": "stalledDL", "progress": 0.01, "num_seeds": 0, "added_on": 0},
+                    {"hash": "FFF", "name": "CloZee &ndash; Koto &amp; More", "state": "stalledDL", "progress": 0.01, "num_seeds": 0,
+                     "added_on": 0}]
+        qbit = Mock()
+        qbit.torrents.return_value = torrents
+        app = FakeApp()
+        app.connect_qbit = Mock(return_value=qbit)
+        app.api = Mock(side_effect=lambda path, *args: (
+            {"records": rows} if path.startswith("/queue") else
+            [{"implementation": "QBittorrent", "fields": [{"name": "musicCategory", "value": "music"}]}]
+            if path == "/downloadclient" else []))
+        with patch.object(engine, "DRY", False), patch.object(engine, "GRACE", 0), patch.object(engine, "QBIT_USER", "user"), \
+                patch.object(engine, "load_state", side_effect=lambda name, default: default), \
+                patch.object(engine, "save_state"), patch.object(engine, "log") as log, patch.object(engine, "ntfy") as ntfy:
+            app.run()
+        title, body = ntfy.call_args.args[:2]
+        self.assertEqual(title, "Fake: needs attention")
+        self.assertEqual(body.splitlines(), [
+            "Tiësto & Friends – On My Way: needs a human | Tiësto & Friends – On My Way",
+            'no thing match, importFailed/warning (Rock & Roll; Artist "X"): Unmatched & Co',
+            "dead torrent not matched in Fake: CloZee – Koto & More"])
+        logged = [c.args for c in log.call_args_list]
+        self.assertIn(("ACTION:", "dead torrent (stalledDL, 1%) -> blocklisted: Matched & Co"), logged)
+        self.assertNotRegex(" ".join(map(str, logged)), r"&[a-z]+;")
+
+    def failing_main(self, outcomes, alert_cycles=2):
+        """Runs main() through `outcomes` (an exception to fail a run, None to pass); returns the ntfy mock."""
+        app = Mock()
+        app.name, app.tag = "Lidarr", "musical_note"
+        app.run.side_effect = outcomes
+        module = Mock()
+        module.App.return_value = app
+        sleeps = iter([None] * (len(outcomes) - 1) + [StopLoop()])
+
+        def sleep(_):
+            step = next(sleeps)
+            if step:
+                raise step
+
+        state = {}
+        with patch.dict(os.environ, {"APP": "lidarr"}), patch.object(engine.importlib, "import_module", return_value=module), \
+                patch.object(engine.os, "makedirs"), patch.object(engine.time, "sleep", side_effect=sleep), \
+                patch.object(engine, "DRY", False), patch.object(engine, "ONCE", False), \
+                patch.object(engine, "FAIL_ALERT_CYCLES", alert_cycles), patch.object(engine, "log"), \
+                patch.object(engine, "load_state", side_effect=lambda name, default: state.get(name, default)), \
+                patch.object(engine, "save_state", side_effect=state.__setitem__), patch.object(engine, "ntfy") as ntfy:
+            with self.assertRaises(StopLoop):
+                engine.main()
+        return ntfy, state
+
+    def test_one_failed_run_is_not_alerted(self):
+        refused = ConnectionRefusedError("[Errno 111] Connection refused")
+        for outcomes in ([refused, None, None], [refused, None, refused, None], [None, refused]):
+            with self.subTest(outcomes=outcomes):
+                ntfy, state = self.failing_main(outcomes)
+                ntfy.assert_not_called()
+                self.assertNotIn("last_error.json", state)
+
+    def test_consecutive_failed_runs_alert_once(self):
+        refused = ConnectionRefusedError("[Errno 111] Connection refused")
+        ntfy, state = self.failing_main([refused, None, refused, refused, refused, refused])
+        ntfy.assert_called_once_with("Lidarr maintenance: run failed", "ConnectionRefusedError: [Errno 111] Connection refused",
+                                     "high", "musical_note,rotating_light")
+        self.assertEqual(state["last_error.json"]["msg"], "ConnectionRefusedError: [Errno 111] Connection refused")
+
+    def test_alert_cycles_can_be_one_to_alert_at_once(self):
+        ntfy, _ = self.failing_main([RuntimeError("boom")], alert_cycles=1)
+        ntfy.assert_called_once()
+
+    def test_changed_or_old_errors_alert_again(self):
+        app = Mock()
+        app.name, app.tag = "Lidarr", "musical_note"
+        state = {}
+        with patch.object(engine, "DRY", False), patch.object(engine, "FAIL_ALERT_CYCLES", 2), \
+                patch.object(engine, "load_state", side_effect=lambda name, default: state.get(name, default)), \
+                patch.object(engine, "save_state", side_effect=state.__setitem__), patch.object(engine, "ntfy") as ntfy:
+            engine.report_failure(app, RuntimeError("one"), 2)
+            engine.report_failure(app, RuntimeError("one"), 3)
+            self.assertEqual(ntfy.call_count, 1)
+            engine.report_failure(app, RuntimeError("two"), 4)
+            self.assertEqual(ntfy.call_count, 2)
+            state["last_error.json"]["at"] -= 7 * 3600
+            engine.report_failure(app, RuntimeError("two"), 5)
+            self.assertEqual(ntfy.call_count, 3)
 
 
 if __name__ == "__main__":

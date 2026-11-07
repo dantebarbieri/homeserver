@@ -32,7 +32,9 @@ particular, the English-dub anime profiles' strict audio requirements are
 intentional. Anything else, such as files that match a different series or a
 multi-file download with rejections, is posted once to ntfy
 (`homeserver-alerts`) as "Sonarr: needs attention". A failing run alerts at high
-priority, and repeats of the same error at most every 6 hours.
+priority once two runs in a row have failed (`FAIL_ALERT_CYCLES`), so the 04:00
+auto-update restarting Sonarr or this container heals silently, and repeats of
+the same error at most every 6 hours.
 
 These need no help: Sonarr blocklists usenet "repair failed" and "incomplete"
 downloads and grabs another release on its own. Torrent "stalled" warnings are

@@ -420,7 +420,7 @@ stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 
 | Stuck pattern | Fix |
 |---------------|-----|
-| Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents so they keep seeding, move for usenet). Never switches the edition of an album that already has files, since that unlinks them. Lidarr reports a torrent's `protocol` as `TorrentDownloadProtocol` (Radarr and Sonarr use `torrent`), and the helper matches both |
+| Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents so they keep seeding, move for usenet). A low filename-order score can be rescued only by a complete, unique exact-title mapping that Lidarr's own folder identification also confirms: every file must be mapped to this artist/album in at least one of up to three identification passes (Lidarr leaves a couple of files unidentified at random on each call), and no pass may map any file elsewhere. This handles alphabetically named files and reordered editions; only the exact album artist prefix and trailing bracketed `feat.` credits are ignored, not remix/live/version qualifiers. Never switches the edition of an album that already has files, since that unlinks them. Lidarr reports a torrent's `protocol` as `TorrentDownloadProtocol` (Radarr and Sonarr use `torrent`), and the helper matches both |
 | Completed single audio file rather than an album folder | Import only into an empty, monitored one-track release when Lidarr's manual-import artist, album, release and track IDs agree. Differing remix/live/edit/version qualifiers stay for manual review. Never scans the parent download directory, switches editions or replaces existing files |
 | Queue entry still `importFailed` after the helper's own import | Lidarr can fail the manual-import command *after* importing, with a `NullReferenceException` (seen for downloads it rebuilt from its history), and then skips marking the download imported. So a failed command still counts as imported when the album was empty before and now holds every file. A completed command must also have imported every file, and unfinished or aborted commands never count; those are reported for manual review. The helper then clears the leftover entry the same way as the "not grabbed" rows below (torrents move to `music-manual`, usenet entries leave the queue). Until that worked the download is remembered in `${DATA}/lidarr-maint/imported.json` (14 days) and is not imported again |
 | Single/EP grabbed for an album (<=4 files for an 8+ track album) | Blocklist + re-search |
@@ -434,8 +434,14 @@ stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 
 Anything else, such as partial edition matches, archives, or an album grabbed
 under the wrong album, is posted once to ntfy (`homeserver-alerts`) as
-"Lidarr: needs attention". A failing run alerts at high priority, and repeats of
-the same error at most every 6 hours. The container reads Lidarr's API key from
+"Lidarr: needs attention", with release names shown with their HTML entities
+decoded. An item stays in the queue until you import or remove it and is
+logged as `NEEDS USER` on every run, but it is never notified twice (unless it
+leaves the list and comes back). A failing run alerts at high priority once
+`FAIL_ALERT_CYCLES` (default 2) runs in a row have failed, so the 04:00
+auto-update restarting Lidarr or this container (a one-off "Connection
+refused") heals silently; repeats of the same error alert at most every 6
+hours. The container reads Lidarr's API key from
 its `config.xml` (read-only), so key rotations need no change. It uses the
 qBittorrent's `QUSER`/`QPASS` credentials and keeps its state in
 `${DATA}/lidarr-maint`. It mounts `/data` read-only because Lidarr itself
