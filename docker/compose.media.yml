@@ -1,5 +1,6 @@
 # Media consumption services
-# plex, jellyfin, navidrome, plex-navidrome-sync, music-cover-fallback, komga, komf, suwayomi, suwayomi_postgres, calibre-web,
+# plex, jellyfin, navidrome, plex-navidrome-sync, music-cover-fallback, music-lyrics-fallback,
+# komga, komf, suwayomi, suwayomi_postgres, calibre-web,
 # audiobookshelf, storyteller, librofm-downloader
 
 services:
@@ -136,6 +137,28 @@ services:
     volumes:
       - ${DATA}/music-cover-fallback:/state
       - ${DATA}/lidarr/config/config.xml:/lidarr/config.xml:ro
+      - "${DATA}/plex/config/Library/Application Support/Plex Media Server/Preferences.xml:/plex/Preferences.xml:ro"
+      - ${RAID}/shared/media/music:/music
+
+  # Shared lyrics: LRC/TXT for Plex and richer Lyricsfile YAML for Navidrome.
+  music-lyrics-fallback:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: music-lyrics-fallback
+    build:
+      context: dockerfiles/music-lyrics-fallback
+    container_name: music-lyrics-fallback
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      TZ: ${TZ}
+      ENABLED: ${MUSIC_LYRICS_FALLBACK_ENABLED:-0}
+      NTFY_URL: https://ntfy.danteb.com
+      NTFY_TOPIC: homeserver-alerts
+    networks:
+      - music-maintenance
+    volumes:
+      - ${DATA}/music-lyrics-fallback:/state
       - "${DATA}/plex/config/Library/Application Support/Plex Media Server/Preferences.xml:/plex/Preferences.xml:ro"
       - ${RAID}/shared/media/music:/music
 
