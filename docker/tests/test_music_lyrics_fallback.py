@@ -77,6 +77,19 @@ class PayloadTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises((ValueError, yaml.YAMLError)):
                 app.payloads(TRACK, {**SOURCE, "lyricsfile": text})
 
+    def test_yaml_lyrics_are_strings_even_when_they_look_like_scalars(self):
+        for text in ("no", "on", "yes", "off", "true", "42"):
+            doc = (
+                "version: '1.0'\nmetadata:\n  artist: Test Artist\n  title: Test Track\n"
+                f"lines:\n- text: {text}\n  start_ms: 1000\n  words:\n"
+                f"  - text: {text}\n    start_ms: 1000\n    end_ms: 2000\n"
+            )
+            with self.subTest(text=text):
+                self.assertEqual(app.validate_yaml(doc, TRACK), 1)
+                self.assertEqual(yaml.load(doc, Loader=app.LyricsLoader)["lines"][0]["text"], text)
+        plain = "version: '1.0'\nmetadata:\n  artist: Test Artist\n  title: Test Track\nplain: no\n"
+        self.assertEqual(app.validate_yaml(plain, TRACK), 0)
+
     def test_retry_after(self):
         self.assertEqual(app.retry_delay("60", 0), 61)
         self.assertEqual(app.retry_delay(None, 1), 4)

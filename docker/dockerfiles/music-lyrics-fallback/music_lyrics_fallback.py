@@ -218,10 +218,22 @@ def matched(track, source):
             and abs(track["duration"] - source["duration"]) <= 2)
 
 
+class LyricsLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        mapping = super().construct_mapping(node, deep=deep)
+        # Navidrome decodes these into strings; YAML 1.1 otherwise turns lyrics
+        # such as unquoted "no" or "on" into booleans in PyYAML.
+        for key, value in node.value:
+            if (key.value in {"text", "plain", "artist", "title", "album", "language", "version"}
+                    and isinstance(value, yaml.ScalarNode) and value.tag != "tag:yaml.org,2002:null"):
+                mapping[key.value] = value.value
+        return mapping
+
+
 def validate_yaml(text, track):
     if any(isinstance(event, yaml.AliasEvent) for event in yaml.parse(text)):
         raise ValueError("lyrics YAML aliases are not allowed")
-    doc = yaml.safe_load(text)
+    doc = yaml.load(text, Loader=LyricsLoader)
     if not isinstance(doc, dict) or str(doc.get("version")) != "1.0":
         raise ValueError("invalid Lyricsfile version")
     metadata = doc.get("metadata", {})
