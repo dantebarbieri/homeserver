@@ -43,6 +43,12 @@ case "${1:-}" in
     ;;
 esac
 
+# Lock the bind-mounted directory itself: safe-reboot holds it exclusively
+# through Docker shutdown. Shared locks still allow online and snapshot dumps.
+mkdir -p "$BACKUP_DIR"
+exec 9<"$BACKUP_DIR"
+flock --shared 9
+
 temporary=""
 finish() {
   local status=$?

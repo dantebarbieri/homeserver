@@ -13,6 +13,7 @@ This file provides guidance to Claude Code when working with the `nixos/` direct
 - `nix-functions.zsh` — Nix convenience shell functions (`nsp`, `nss`, `nwp`), sourced by `interactiveShellInit` in `modules/shell.nix`. `nwp` queries `nix-locate`, which uses the prebuilt `nix-index-database` pinned in the lock; no index is built on the server.
 - `docker-functions.zsh` — Docker Compose convenience shell functions (`dci`, `dce`, `dcs`, `dcl`, `dcr`, `dcu`, `dcupdate`), sourced by `interactiveShellInit` in `modules/shell.nix`
 - `tests/test_health_cleanup.py` — Evaluates the flake and mock-runs unit scripts; run in CI by `nixos-validate.yml`.
+- `modules/safe-reboot.nix` / `safe-reboot.py` — Installs `sudo safe-reboot` plus `--check`, `--status`, `--cancel`. The opt-in systemd worker waits for backups/maintenance and RAID idle; never substitute plain `reboot` when a safe reboot is intended. `tests/test_safe_reboot.py` exercises coordination/recovery without a live server.
 
 `/etc/nixos` on the server is a symlink to this directory, so `nixos-rebuild` auto-detects `flake.nix` and builds `#homeserver`.
 
@@ -114,6 +115,8 @@ reintroduce the timer just because optional `mail-config/` templates remain.
 
 - Use full Nix store paths in scripts: `${pkgs.curl}/bin/curl`, not just `curl` (unless added to `path`)
 - Services don't inherit shell aliases/functions — use `path` and `environment` explicitly
+- Docker live-restore is disabled for orderly host shutdown; daemon restarts now interrupt containers. Default container stop grace is 180s; explicit Compose grace periods take precedence. Deploy changes to Docker settings only after backups finish.
+- Safe-reboot guards use an additional `ConditionPathExists`, not a replacement for the wiki deployment hold. Protected jobs have `restartIfChanged = false` so installing/changing a guard does not interrupt an active backup.
 - The docker-compose-update service uses `git -c safe.directory=/srv/homeserver` because the repo is owned by `danteb` but the service runs as root. `nixos-upgrade` evaluates the same repo as root through libgit2, which ignores `-c`, so `modules/shell.nix` also sets `safe.directory` in the system git config — keep both.
 - nixpkgs splices `system.autoUpgrade.flake` and `flags` into the upgrade script **unquoted**, so the flake URL (which contains `&`) goes through `lib.escapeShellArg`. The test tokenizes the script like bash to catch regressions.
 - `sudo-rs` replaces classic sudo — the Rust implementation
@@ -127,4 +130,5 @@ sudo nixos-rebuild switch    # Apply changes (git add new files first)
 sudo nixos-rebuild boot      # Stage for next boot (driver/kernel changes)
 sudo nixos-rebuild test      # Test without persisting
 python3 nixos/tests/test_health_cleanup.py    # From repo root; evaluates the flake
+python3 -B -m unittest discover -s nixos/tests -p 'test_*.py'
 ```
