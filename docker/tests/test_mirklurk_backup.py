@@ -1,4 +1,5 @@
 import gzip
+import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -102,6 +103,30 @@ esac
         result = self.run_script(BACKUP_TEST_WEEKDAY="5")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(list((self.backups / "weekly").iterdir()), [])
+
+    def test_reboot_lock_defers_dump_until_released(self):
+        self.backups.mkdir()
+        fd = os.open(self.backups, os.O_RDONLY)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                ["bash", str(SCRIPT), "--once"], env=self.env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            try:
+                time.sleep(0.2)
+                self.assertIsNone(process.poll())
+                self.assertFalse(self.call_log.exists())
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                stdout, stderr = process.communicate(timeout=10)
+                self.assertEqual(process.returncode, 0, stdout + stderr)
+                self.assertTrue(self.call_log.exists())
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate()
+        finally:
+            os.close(fd)
 
     def test_snapshot_sql_is_unique_and_independent_of_online_daily_dump(self):
         identifier = "20261002T143000123456Z"

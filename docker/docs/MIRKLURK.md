@@ -264,6 +264,14 @@ backups. A failure keeps prior complete dumps, emits an error, makes the
 container unhealthy, and retries after five minutes. Successful backups clear
 the failure state; a success older than 6.5 hours is unhealthy.
 
+Each dump holds a shared `flock` on the bind-mounted backup directory. The
+Nix-managed [`sudo safe-reboot`](../../nixos/README.md#safe-reboot) coordinator
+takes that directory lock exclusively after other maintenance finishes and keeps
+it until Docker has stopped. This lets an in-flight dump finish and prevents a
+new periodic dump racing shutdown, without adding a root-owned file to the
+sidecar's data directory. Deploy the updated backup script and let any older
+in-flight dump finish before using the coordinator.
+
 There is one dump per UTC date under `daily/`, retained for seven days.
 Sunday dumps also populate `weekly/`, retained for 28 days. Each successful
 same-day run replaces that day's snapshot. Backup health is visible in Docker;

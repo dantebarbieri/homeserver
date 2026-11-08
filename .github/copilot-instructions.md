@@ -73,7 +73,7 @@ Authelia secrets are Docker secrets (files under `${DATA}/authelia/secrets/`). O
 ## NixOS (`nixos/`)
 
 `flake.nix` (pinned by `flake.lock`, bumped daily by CI) builds `configuration.nix`, which imports one module per concern from `modules/`. Home Manager (`home/danteb.nix`) manages the user's zsh/Zim and git identity — never put secrets in Nix files; they go in untracked `~/.zprofile.local` / `~/.zshrc.local`. Key services:
-- Docker daemon (IPv6, CDI, live-restore)
+- Docker daemon (IPv6, CDI, live-restore disabled for graceful shutdown; use `sudo safe-reboot` to wait for backups/maintenance)
 - Auto-update timer (daily at 04:00, pulls this monorepo)
 - OS auto-upgrade (daily at 04:30, `nixos-rebuild boot` of the committed lock)
 - RAID/drive monitoring (smartd, mdadm-ntfy, health checks)

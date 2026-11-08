@@ -21,6 +21,7 @@
     ./modules/mirklurk.nix
     ./modules/auto-upgrade.nix
     ./modules/reboot-reminder.nix
+    ./modules/safe-reboot.nix
     ./modules/plex-album-check.nix
     ./modules/ntfy.nix
     ./modules/backups.nix

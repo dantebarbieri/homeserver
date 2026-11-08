@@ -176,7 +176,7 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 Key system services managed by NixOS:
 - **ZSH + zimfw** — default shell with plugin manager, Docker convenience functions in `nixos/docker-functions.zsh`, and nix helper functions — all sourced via `interactiveShellInit`
 - **Home Manager** — integrated NixOS module; `nixos/home/danteb.nix` owns `danteb`'s `.zshrc`, `.zimrc` and git identity. It is public and lands in the Nix store: secrets go in untracked `~/.zprofile.local` / `~/.zshrc.local`, never in Nix files
-- **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore enabled
+- **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore disabled for graceful shutdown; use `sudo safe-reboot` to wait for backups/maintenance (supports `--check`, `--status`, `--cancel`)
 - **Firewall** — explicitly opened ports for HTTP/HTTPS, Plex, Coturn, LiveKit, game servers
 - **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`
 - **OS auto-upgrade** — daily at 04:30, `nixos-rebuild boot` of the committed flake lock (staged for next boot)

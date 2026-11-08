@@ -118,12 +118,12 @@ read-only deploy key.
 `docker-socket-consumers.service` follows Docker starts/restarts and serially
 recreates only running Homepage and Alloy socket proxies, cAdvisor and VPN
 namespace watcher services in project `compose`. File bind mounts can otherwise
-retain an obsolete Docker socket across daemon restarts with live-restore
-enabled. Homepage and Alloy themselves use the proxies over TCP and are not
+retain an obsolete Docker socket, especially on older live-restore generations.
+Homepage and Alloy themselves use the proxies over TCP and are not
 recreated.
 
 The helper does not start stopped/absent consumers or dependencies, pull/build
-images, or prune data. Unrelated containers retain live-restore. It shares
+images, or prune data. It shares
 `/run/lock/homeserver-compose.lock` with the daily updater. Recreation briefly
 interrupts selected consumers and applies their checked-out Compose configuration
 and local image tags. Failure invokes the existing ntfy handler.
@@ -176,6 +176,60 @@ waiting, or other updates are staged but not running. It stays quiet for the fir
 7 days after a boot (the upgrade stages something most nights) and holds back while
 `md0` is running a scrub or rebuild, so it never invites a reboot that would cut
 one short (see below). It repeats daily until you reboot.
+
+### Safe reboot
+
+Use the Nix-managed command instead of `sudo reboot`:
+
+```bash
+sudo safe-reboot           # Queue now; wait as long as needed, even after SSH disconnects
+sudo safe-reboot --check   # Check current blockers without queuing a reboot
+sudo safe-reboot --status  # Service state and recent progress
+sudo safe-reboot --cancel # Cancel while still waiting; restore previously active timers
+```
+
+`configuration.nix` imports `modules/safe-reboot.nix`, which installs the command
+and an **on-demand**, root-owned `safe-reboot.service`. Nothing queues a reboot at
+boot or on a schedule. The reminder includes the command.
+
+The worker pauses only currently active (or queued) backup/maintenance timers,
+and temporarily guards their services against new starts. It does **not** stop
+running jobs. It waits for database/Vaultwarden backups, both offsite syncs,
+Docker and NixOS updates, wiki snapshots/deployments/checks/sitemap jobs, socket
+reconciliation, and RAID scrub/recovery. It respects the existing wiki deployment
+hold without removing it. An idle degraded array, failed job, missing/unreadable
+state, stale/failed wiki SQL backup, or Docker/API error refuses the reboot and alerts via the existing ntfy
+failure handler. Review and fix a failed job before clearing its failed state.
+Backup target failures now return a failing service result, not just an alert.
+
+Once idle, it holds the existing Compose lock and an exclusive lock on the wiki
+backup directory, checks again, and requests a normal, inhibitor-respecting
+systemd reboot. The wiki SQL sidecar takes a shared lock on that same directory,
+so existing dumps finish and new dumps wait through Docker shutdown. No container
+is manually stopped or removed by the command, preserving `unless-stopped`
+restart behavior and existing manually stopped containers.
+
+Docker live-restore is **disabled** so dockerd actually shuts down containers.
+Its default per-container stop grace is 180 seconds (Docker 29.9.2 in the pinned
+flake supports `default-stop-timeout`); explicit container timeouts, including
+Minecraft's 150 seconds, still take precedence. The daemon gets 200 seconds and
+systemd allows 240 seconds for cleanup. A stuck container can still be killed at
+its timeout. **Docker daemon restarts now interrupt containers too.**
+
+Cancel/failure restores only timers this request paused; it never enables a
+disabled timer or clears someone else's deployment hold. A failed restoration
+keeps its recovery record under `/run/safe-reboot`; retry `--cancel` after fixing
+the systemd error. Cancellation is too late once shutdown is requested. The
+queue and guards are volatile and do not survive an actual reboot.
+
+This is not a guard around plain `reboot`, power loss, arbitrary manual jobs, game
+sessions, streams, or transcodes. Finish untracked work before queuing. Existing
+systemd jobs remain running when their new guard is installed, but **the initial
+configuration switch changes Docker settings and can restart Docker**: first let
+backups/maintenance finish and arrange a service downtime window. The updated
+wiki backup script must also be deployed, with any old in-flight dump finished,
+before using this command. Do not run `nixos-rebuild switch` during a queued
+reboot; cancel first. Subsequent queued reboots need no SSH session kept open.
 
 The RAID scrub service is not restarted when its definition changes during a
 manual switch. Its existing monitor and suppression sentinel remain alive until
@@ -347,12 +401,12 @@ journalctl -u forgejo-runner-worldforge-migrate -u forgejo-runner-worldforge -b
 With Python 3, Bash, jq, and Nix (flakes enabled) available:
 
 ```bash
-python3 nixos/tests/test_health_cleanup.py
+python3 -B -m unittest discover -s nixos/tests -p 'test_*.py'
 ```
 
 Run from the repository root (on the server, wrap it in
 `nix shell nixpkgs#python3 nixpkgs#jq -c …`). This evaluates the flake's NixOS and Home Manager options and exercises scrub,
-update, reboot-reminder and plex-album-check success/failure paths with mock commands; it does not contact or modify the
+update, reboot-reminder, safe-reboot and plex-album-check success/failure paths with mock commands; it does not contact or modify the
 server, synchronize real data, or build a system closure. The
 [`nixos-validate`](../.github/workflows/nixos-validate.yml) workflow runs it,
 plus a toplevel evaluation against the committed lock, on every change under
