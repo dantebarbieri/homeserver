@@ -745,6 +745,76 @@ uv run --no-project --with-requirements docker/dockerfiles/music-cover-fallback/
   python -B -m unittest discover -s docker/tests -p 'test_music_cover_fallback.py'
 ```
 
+## Shared lyrics fallback (`music-lyrics-fallback`)
+
+This opt-in service queries [LRCLIB](https://lrclib.net/docs) for the existing
+Plex Music library, prioritizing rated tracks. It publishes sidecars beside the
+audio without modifying tags, ratings, playlists or audio bytes:
+
+- `.lrc` provides line-synced lyrics to Plexamp and Navidrome.
+- `.txt` provides plain lyrics to Plex when no timed version is already present.
+- `.yaml` preserves LRCLIB's Lyricsfile representation, including word timings
+  when available. Navidrome 0.63+ reads this format before LRC by default.
+  Rendering word-by-word karaoke still requires a client supporting the enhanced
+  OpenSubsonic lyrics response; ordinary synced-lyrics support is not sufficient.
+
+Navidrome keeps its read-only music mount. No plugin, Navidrome password or
+ratings-sync activation is needed. Plex's **Find Lyrics** stays enabled:
+LyricFind remains available alongside these local files. When LRCLIB only has
+plain text and Plex already has timed lyrics, only the Navidrome YAML sidecar
+is written, avoiding a plain-text override in Plex. Provider coverage differs;
+this is not a promise of timed lyrics for every recording or exact per-song
+LyricFind parity. No LyricFind content is extracted or redistributed.
+
+Matching requires the same artist, title and album after Unicode-preserving
+case/punctuation normalization, and actual audio duration within **two seconds**.
+Live, remix, instrumental and edition words are not stripped. There is no fuzzy
+search fallback. Confirmed instrumentals receive no lyric file. Existing sidecars
+and embedded lyrics are left alone, including manual edits. Symlinks and multiple
+audio files sharing a lyric basename are refused.
+
+The helper runs daily, with sequential requests limited to one per second,
+bounded responses, retries honoring `Retry-After`, and a 30-day cache for missing
+or instrumental results. First-library backfill can take hours. New tracks are
+checked on the next run. Source IDs, file hashes and publication/refresh state
+are recorded in `/srv/docker/data/music-lyrics-fallback/state.json`; progress and
+the latest report live beside it. Completed sidecars are published atomically,
+never overwritten, and interrupted publications can resume from their manifest.
+Only affected Plex albums receive metadata refreshes, deduplicated in batches
+of 50 lookups; failed refreshes retry. A track-only refresh does not discover
+local lyrics with the Plex Music agent.
+Navidrome reads sidecars on lyric requests. Provider/IO failures stop the run and
+alert through ntfy; unavailable or unsafe matches are logged without per-song
+notifications. Disabled services remain idle and healthy.
+
+From the **main Compose entry point**, after the changes are deployed:
+
+```bash
+install -d -m 2775 -o danteb -g docker /srv/docker/data/music-lyrics-fallback
+z /srv/homeserver/docker
+docker compose build music-lyrics-fallback
+docker compose run --rm --no-deps music-lyrics-fallback --dry-run --once --limit 20
+# After reviewing matches, set MUSIC_LYRICS_FALLBACK_ENABLED=1 in .env.
+docker compose up -d music-lyrics-fallback
+docker compose logs --tail=30 music-lyrics-fallback
+```
+
+`--dry-run` writes no sidecars, state or Plex changes. `--keys 123,456` scopes a
+preview or one-shot run to specific Plex track IDs. `--limit N` caps new lookups;
+omit it for the full library. Apply runs take an exclusive state-directory lock.
+To undo, stop the helper and remove only generated sidecars whose hashes still
+match the manifest, then refresh their Plex albums. Do not remove changed or
+manually supplied lyric files. Downloads already on a phone may need to be
+downloaded again; offline lyric rendering depends on the client and is not
+guaranteed merely because the audio is downloaded.
+
+Focused checks (synthetic lyrics only; no live API requests):
+
+```bash
+uv run --no-project --with-requirements docker/dockerfiles/music-lyrics-fallback/requirements.txt \
+  python -B -m unittest discover -s docker/tests -p 'test_music_lyrics_fallback.py'
+```
+
 ## Fixing merged Plex albums
 
 A merged album shows mixed cover art in Plexamp, or one album page that lists
