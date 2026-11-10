@@ -121,6 +121,7 @@ in
           -H "Tags: warning,floppy_disk" \
           -d "FAILED: $FAILED | Succeeded: $SUCCEEDED" \
           "${ntfyUrl}/${ntfyTopic}"
+        exit 1
       fi
     '';
   };
@@ -244,6 +245,7 @@ in
           -H "Tags: warning,cloud" \
           -d "Failed sync targets: $FAILED" \
           "${ntfyUrl}/${ntfyTopic}"
+        exit 1
       fi
     '';
   };
@@ -318,6 +320,7 @@ in
           -H "Tags: warning,cloud" \
           -d "Failed sync targets: $FAILED" \
           "${ntfyUrl}/${ntfyTopic}"
+        exit 1
       fi
     '';
   };

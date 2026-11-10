@@ -12,9 +12,11 @@ Every INTERVAL seconds, for downloads (queue rows grouped by download) stuck for
   - the app's check_library rules for files already in the library (see radarr.py)
   - the app's missing search at most every MISSING_SEARCH_HOURS (0 disables)
   - the app's cutoff-unmet (upgrade) search, if it has one, at most every UPGRADE_SEARCH_HOURS (0 disables)
-Anything it can't fix is sent to ntfy once (deduplicated across runs).
+Anything it can't fix is sent to ntfy once (deduplicated across runs). A run that fails (typically
+because the app or this container was restarted by the 04:00 auto-update) is only alerted after
+FAIL_ALERT_CYCLES failed runs in a row.
 """
-import os, re, json, time, importlib, traceback, unicodedata, urllib.request, urllib.parse, http.cookiejar
+import os, re, json, time, html, importlib, traceback, unicodedata, urllib.request, urllib.parse, http.cookiejar
 from collections import Counter
 
 QBIT_URL = os.environ.get("QBIT_URL", "http://qbittorrent:8080")
@@ -26,6 +28,7 @@ GRACE = float(os.environ.get("GRACE_MINUTES", "20")) * 60
 STALL = float(os.environ.get("STALL_HOURS", "24")) * 3600
 DRY = os.environ.get("DRY") == "1"
 ONCE = os.environ.get("ONCE") == "1"
+FAIL_ALERT_CYCLES = int(os.environ.get("FAIL_ALERT_CYCLES", "2"))
 NOT_UPGRADE = re.compile(r"not an? (custom format |quality revision )?upgrade|equal or higher", re.I)
 HEALTHY = {"downloading", "importing", "imported"}
 IMPORT_STATES = ("importFailed", "importPending", "importBlocked")
@@ -34,6 +37,11 @@ IMPORT_STATES = ("importFailed", "importPending", "importBlocked")
 def log(*a):
     msg = " ".join(str(x) for x in a)
     print(time.strftime("%Y-%m-%d %H:%M:%S"), re.sub(r"\b[0-9a-f]{32}\b", "***", msg), flush=True)
+
+
+def clean(s):
+    """Indexers often hand over release and torrent names HTML-escaped (`&amp;`, `&eacute;`); undo that for messages."""
+    return html.unescape(s or "")
 
 
 def norm(s):
@@ -176,7 +184,7 @@ class Arr:
             self.api("/queue/bulk?removeFromClient=false&blocklist=false", "DELETE", {"ids": [r["id"] for r in rows]})
 
     def label(self, rows):
-        return rows[0].get("title", "?")[:60]
+        return clean(rows[0].get("title", "?"))[:60]
 
     def fix_import(self, rows, torrent):
         """Returns (action, None) when handled or (None, reason) when it needs the user."""
@@ -235,12 +243,13 @@ class Arr:
             if now - seen.setdefault(did, now) < GRACE:
                 continue
             name = self.label(rows)
-            msgs = "; ".join(m for s in r.get("statusMessages", []) for m in [s.get("title", "")] + s.get("messages", []))
+            title = clean(r.get("title"))
+            msgs = clean("; ".join(m for s in r.get("statusMessages", []) for m in [s.get("title", "")] + s.get("messages", [])))
             torrent = is_torrent(r)
             try:
                 if not r.get(self.media_id) and re.search(r"(wasn't|was not|not) grabbed", msgs, re.I):
                     self.forget(rows)
-                    actions.append(f"removed stale: {r['title'][:60]}")
+                    actions.append(f"removed stale: {title[:60]}")
                 elif state in ("failedPending", "failed"):
                     self.remove(rows)
                     actions.append(f"failed -> blocklisted: {name}")
@@ -249,15 +258,15 @@ class Arr:
                     linked = sum(1 for f in files if os.stat(f).st_nlink > 1)
                     if torrent and linked:
                         self.forget(rows)
-                        actions.append(f"unmatched, {linked}/{len(files)} files already in library -> forgotten: {r['title'][:60]}")
+                        actions.append(f"unmatched, {linked}/{len(files)} files already in library -> forgotten: {title[:60]}")
                     else:
-                        needs_user[f"unmatched:{did}"] = f"no {self.media} match, {state}/{status} ({msgs[:100]}): {r['title'][:80]}"
+                        needs_user[f"unmatched:{did}"] = f"no {self.media} match, {state}/{status} ({msgs[:100]}): {title[:80]}"
                 elif state in IMPORT_STATES:
                     done, why = self.fix_import(rows, torrent)
                     if done:
                         actions.append(f"{name}: {done}")
                     else:
-                        needs_user[f"import:{did}"] = f"{name}: {why} | {r['title'][:80]}"
+                        needs_user[f"import:{did}"] = f"{name}: {why} | {title[:80]}"
                 # Torrent warnings ("stalled", "no connections") are left to the dead-torrent rule below.
                 elif status in ("warning", "error") and not torrent:
                     needs_user[f"warn:{did}"] = f"{name}: {state}/{status} {msgs[:150]}"
@@ -275,9 +284,9 @@ class Arr:
                     rows = byhash.get(t["hash"].lower())
                     if rows and rows[0].get(self.media_id):
                         self.remove(rows)
-                        actions.append(f"dead torrent ({t['state']}, {t['progress']:.0%}) -> blocklisted: {t['name'][:60]}")
+                        actions.append(f"dead torrent ({t['state']}, {t['progress']:.0%}) -> blocklisted: {clean(t['name'])[:60]}")
                     else:
-                        needs_user[f"stalled:{t['hash']}"] = f"dead torrent not matched in {self.name}: {t['name'][:80]}"
+                        needs_user[f"stalled:{t['hash']}"] = f"dead torrent not matched in {self.name}: {clean(t['name'])[:80]}"
 
         done, ask = self.check_library()
         actions += done
@@ -306,21 +315,32 @@ class Arr:
         save_state("notified.json", {k: notified.get(k, now) for k in needs_user})
 
 
+def report_failure(app, e, failures):
+    """Alerts once `failures` runs in a row have failed, so the app or this container restarting during
+    the 04:00 auto-update heals without a notification. The same error repeats at most every 6 hours."""
+    if failures < FAIL_ALERT_CYCLES:
+        return
+    err = load_state("last_error.json", {})
+    msg = f"{type(e).__name__}: {e}"[:300]
+    if err.get("msg") != msg or time.time() - err.get("at", 0) > 6 * 3600:
+        if not DRY:
+            ntfy(f"{app.name} maintenance: run failed", msg, "high", f"{app.tag},rotating_light")
+        save_state("last_error.json", {"msg": msg, "at": time.time()})
+
+
 def main():
     app = importlib.import_module(os.environ["APP"].lower()).App()
     os.makedirs(STATE, exist_ok=True)
+    failures = 0
     while True:
         try:
             app.run()
+            failures = 0
             save_state("last_ok.json", {"at": time.time()})
         except Exception as e:
             log("ERROR:", traceback.format_exc())
-            err = load_state("last_error.json", {})
-            msg = f"{type(e).__name__}: {e}"[:300]
-            if err.get("msg") != msg or time.time() - err.get("at", 0) > 6 * 3600:
-                if not DRY:
-                    ntfy(f"{app.name} maintenance: run failed", msg, "high", f"{app.tag},rotating_light")
-                save_state("last_error.json", {"msg": msg, "at": time.time()})
+            failures += 1
+            report_failure(app, e, failures)
         if ONCE:
             return
         time.sleep(INTERVAL)

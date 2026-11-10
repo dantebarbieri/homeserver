@@ -14,12 +14,16 @@ in
       fixed-cidr-v6 = "fd00::/80";
       ip6tables = true;  # IPv6 NAT — masquerade ULA to host's public GUA, like IPv4
       ipv6 = true;
-      live-restore = true;
+      # Let dockerd stop containers on host shutdown, preserving restart policies.
+      live-restore = false;
+      default-stop-timeout = 180;
+      shutdown-timeout = 200;
       userland-proxy = true;
     };
   };
+  systemd.services.docker.serviceConfig.TimeoutStopSec = "240s";
 
-  # live-restore can retain file bind mounts pointing at the replaced daemon socket.
+  # Reconcile file bind mounts if a container retained an obsolete daemon socket.
   systemd.services.docker-socket-consumers = {
     description = "Reconnect running Docker socket consumers after daemon startup";
     wantedBy = [ "docker.service" ];

@@ -88,6 +88,22 @@ class HealthCleanupTests(unittest.TestCase):
                       inherit (c.systemd.timers.reboot-reminder) wantedBy timerConfig;
                     };
                   };
+                  safeReboot = {
+                    inherit (c.systemd.services.safe-reboot)
+                      before wantedBy restartIfChanged serviceConfig unitConfig;
+                    guarded = system.pkgs.lib.genAttrs [
+                      "postgres-backup" "rclone-offsite-daily" "rclone-offsite-weekly"
+                      "docker-compose-update" "docker-socket-consumers" "nixos-upgrade"
+                      "mdadm-scrub" "mirklurk-snapshot" "mirklurk-auto-update"
+                      "mirklurk-backup-check" "mirklurk-sitemap"
+                    ] (name: {
+                      inherit (c.systemd.services.${name}) unitConfig restartIfChanged;
+                    });
+                    docker = c.virtualisation.docker.daemon.settings;
+                    dockerStopTimeout = c.systemd.services.docker.serviceConfig.TimeoutStopSec;
+                    backupScripts = map (name: c.systemd.services.${name}.script)
+                      [ "postgres-backup" "rclone-offsite-daily" "rclone-offsite-weekly" ];
+                  };
                   plexAlbumCheck = {
                     inherit (c.systemd.services.plex-album-check) script after wants;
                     failure = c.systemd.services.plex-album-check.unitConfig.OnFailure;
@@ -180,6 +196,48 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertEqual(reminder["timer"]["timerConfig"]["OnCalendar"], "*-*-* 10:00:00")
         self.assertIn("timers.target", reminder["timer"]["wantedBy"])
         self.assertIn("stale_days=7\n", reminder["script"])
+        self.assertIn("sudo safe-reboot", reminder["script"])
+
+    def test_safe_reboot_unit_and_guards(self):
+        reboot = self.config["safeReboot"]
+        self.assertIn("safe-reboot", self.config["packages"])
+        self.assertEqual(reboot["wantedBy"], [])
+        self.assertIn("docker.service", reboot["before"])
+        self.assertFalse(reboot["restartIfChanged"])
+        self.assertEqual(reboot["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
+        service = reboot["serviceConfig"]
+        self.assertEqual(service["Type"], "exec")
+        self.assertTrue(service["ExecStart"].endswith("/bin/safe-reboot --worker"))
+        self.assertTrue(service["ExecStopPost"].endswith("/bin/safe-reboot --cleanup"))
+        self.assertEqual(service["RuntimeDirectory"], "safe-reboot")
+        self.assertTrue(service["RuntimeDirectoryPreserve"])
+        for name, job in reboot["guarded"].items():
+            with self.subTest(name=name):
+                self.assertFalse(job["restartIfChanged"])
+                self.assertIn("!/run/safe-reboot/pending", job["unitConfig"]["ConditionPathExists"])
+        for name in ("rclone-offsite-daily", "docker-compose-update", "nixos-upgrade",
+                     "mirklurk-snapshot", "mirklurk-auto-update", "mirklurk-backup-check"):
+            self.assertIn("!/var/lib/mirklurk-upload-deployment/hold",
+                          reboot["guarded"][name]["unitConfig"]["ConditionPathExists"])
+        self.assertFalse(reboot["docker"]["live-restore"])
+        self.assertEqual(reboot["docker"]["default-stop-timeout"], 180)
+        self.assertGreater(reboot["docker"]["shutdown-timeout"], 180)
+        self.assertEqual(reboot["dockerStopTimeout"], "240s")
+
+    def test_backup_target_failures_fail_the_unit(self):
+        for script in self.config["safeReboot"]["backupScripts"]:
+            # Run the actual final notification/exit block without touching data.
+            condition = 'if [ -n "$FAILED" ]; then'
+            self.assertIn(condition, script)
+            tail = condition + script.rsplit(condition, 1)[1]
+            for failed, expected in (("", 0), ("failed-target", 1)):
+                with self.subTest(failed=failed, script=script[:60]):
+                    result = subprocess.run(
+                        ["bash", "-eu", "-c", 'curl() { return 0; }\n' + tail],
+                        env={**os.environ, "FAILED": failed, "SUCCEEDED": "ok"},
+                        capture_output=True, text=True,
+                    )
+                    self.assertEqual(result.returncode, expected, result.stderr)
 
     def test_reboot_reminder_decisions(self):
         script = self.config["rebootReminder"]["script"]
@@ -484,8 +542,8 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertIn("docker-compose-update.service", unit["after"])
         self.assertIn("docker.service", unit["requires"])
         self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
-        for gated in (unit["unitConfig"], timer["unitConfig"]):
-            self.assertEqual(gated["ConditionPathExists"], "!/var/lib/mirklurk-upload-deployment/hold")
+        self.assertIn("!/var/lib/mirklurk-upload-deployment/hold", unit["unitConfig"]["ConditionPathExists"])
+        self.assertEqual(timer["unitConfig"]["ConditionPathExists"], "!/var/lib/mirklurk-upload-deployment/hold")
         self.assertEqual(unit["serviceType"], "oneshot")
         self.assertIn("/srv/homeserver/docker/scripts/mirklurk-release.py auto-update", unit["script"])
         self.assertNotIn("--dry-run", unit["script"])

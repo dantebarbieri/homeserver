@@ -5,12 +5,14 @@ on:
     paths:
       - nixos/**
       - scripts/wake-pc.nix
+      - docker/scripts/mirklurk-backup.sh
       - docker/scripts/reconcile-docker-socket-consumers.sh
       - .github/workflows/nixos-*.yml
   pull_request:
     paths:
       - nixos/**
       - scripts/wake-pc.nix
+      - docker/scripts/mirklurk-backup.sh
       - docker/scripts/reconcile-docker-socket-consumers.sh
       - .github/workflows/nixos-*.yml
 
@@ -38,4 +40,4 @@ jobs:
             ./nixos#nixosConfigurations.homeserver.config.system.build.toplevel.drvPath
 
       - name: Run NixOS regression checks
-        run: python3 -B nixos/tests/test_health_cleanup.py -v
+        run: python3 -B -m unittest discover -s nixos/tests -p 'test_*.py' -v

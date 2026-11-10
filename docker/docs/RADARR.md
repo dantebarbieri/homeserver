@@ -39,8 +39,10 @@ Files without media info or a TMDb runtime are skipped.
 
 Anything else, such as files that match a different movie or more than one
 importable file, is posted once to ntfy (`homeserver-alerts`) as "Radarr: needs
-attention". A failing run alerts at high priority, and repeats of the same error
-at most every 6 hours. Usenet "incomplete" and "repair failed" failures need no
+attention". A failing run alerts at high priority once two runs in a row have
+failed (`FAIL_ALERT_CYCLES`), so the 04:00 auto-update restarting Radarr or this
+container heals silently, and repeats of the same error at most every 6 hours.
+Usenet "incomplete" and "repair failed" failures need no
 help: Radarr blocklists them and grabs another release on its own.
 
 The container reads Radarr's API key from its `config.xml` (read-only), uses the

@@ -1,5 +1,10 @@
 # Docker socket recovery after daemon restarts
 
+Live-restore is now disabled in NixOS for
+[orderly reboots](../../nixos/README.md#safe-reboot); restarting Docker also
+interrupts containers. The targeted helper remains as a recovery safeguard,
+including for older generations that still enable live-restore.
+
 Docker live-restore preserves running containers when the daemon restarts, but
 individual socket bind mounts can retain the replaced socket's old inode.
 Homepage and Alloy no longer mount the socket; they reach Docker over TCP through

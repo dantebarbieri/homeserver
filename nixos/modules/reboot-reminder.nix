@@ -69,7 +69,7 @@ in
       curl --fail-with-body --show-error --silent --max-time 30 \
         -H "Title: Reboot pending on ${config.networking.hostName}" \
         -H "Tags: arrows_counterclockwise,computer" \
-        -d "$message Up $days days; reboot when convenient." \
+        -d "$message Up $days days; run sudo safe-reboot to wait for backups and maintenance before rebooting. Inspect with sudo safe-reboot --status; cancel with sudo safe-reboot --cancel." \
         "${ntfyUrl}/${ntfyTopic}"
     '';
   };

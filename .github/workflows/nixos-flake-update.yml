@@ -47,7 +47,7 @@ jobs:
 
       - name: Run NixOS regression checks
         if: steps.update.outputs.changed == 'true'
-        run: python3 -B nixos/tests/test_health_cleanup.py -v
+        run: python3 -B -m unittest discover -s nixos/tests -p 'test_*.py' -v
 
       # GITHUB_TOKEN pushes do not trigger other workflows, so the checks above
       # are the gate. A rejected push (main moved) fails here and retries tomorrow.
