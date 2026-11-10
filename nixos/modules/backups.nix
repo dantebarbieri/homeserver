@@ -3,7 +3,7 @@
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; })
-    ntfyUrl ntfyTopic mirklurkDeploymentCondition;
+    ntfyNotify mirklurkDeploymentCondition;
 in
 {
   # ── Backup automation (database dumps + Vaultwarden + rclone offsite) ─────
@@ -14,7 +14,7 @@ in
     requires = [ "docker.service" ];
     wants = [ "network-online.target" ];
     unitConfig.OnFailure = "ntfy-failure@%n.service";
-    path = with pkgs; [ docker coreutils gzip curl gnutar findutils ];
+    path = with pkgs; [ docker coreutils gzip gnutar findutils ntfyNotify ];
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
@@ -38,6 +38,38 @@ in
       FAILED=""
       SUCCEEDED=""
 
+      # dump CONTAINER FILE COMMAND...: writes COMMAND's output to FILE
+      # gzipped and sets RESULT to ok or the reason it failed. A database
+      # that has just started can refuse connections for a few seconds, so a
+      # failed or empty dump is retried; a stopped container is reported as
+      # such rather than as a dump failure.
+      dump() {
+        local container=$1 file=$2 attempt state
+        shift 2
+        for attempt in 1 2 3; do
+          state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null) ||
+            state=missing
+          if [ "$state" != running ]; then
+            RESULT="not running: $state"
+          elif "$@" | gzip > "$file"; then
+            # gzip header alone is ~20 bytes
+            if [ "$(stat -c%s "$file" 2>/dev/null || echo 0)" -gt 100 ]; then
+              RESULT=ok
+              return 0
+            fi
+            RESULT=empty
+          else
+            RESULT="dump failed"
+          fi
+          rm -f "$file"
+          if [ "$attempt" -lt 3 ]; then
+            echo "$container: $RESULT (attempt $attempt of 3), retrying in 30 s" >&2
+            sleep 30
+          fi
+        done
+        return 0
+      }
+
       # Format: "container:user:database"
       DATABASES="
         immich_postgres:postgres:immich
@@ -54,35 +86,23 @@ in
         DB=$(echo "$entry" | cut -d: -f3)
         DUMP_FILE="$PG_DIR/daily/''${CONTAINER}-''${DATE}.sql.gz"
 
-        if docker exec "$CONTAINER" pg_dump -U "$USER" "$DB" 2>/dev/null | gzip > "$DUMP_FILE"; then
-          # Verify non-empty (gzip header alone is ~20 bytes)
-          if [ "$(stat -c%s "$DUMP_FILE" 2>/dev/null || echo 0)" -gt 100 ]; then
-            SUCCEEDED="$SUCCEEDED $CONTAINER"
-          else
-            FAILED="$FAILED $CONTAINER(empty)"
-            rm -f "$DUMP_FILE"
-          fi
+        dump "$CONTAINER" "$DUMP_FILE" docker exec "$CONTAINER" pg_dump -U "$USER" "$DB"
+        if [ "$RESULT" = ok ]; then
+          SUCCEEDED="$SUCCEEDED $CONTAINER"
         else
-          FAILED="$FAILED $CONTAINER"
-          rm -f "$DUMP_FILE"
+          FAILED="$FAILED $CONTAINER($RESULT)"
         fi
       done
 
       # RomM MariaDB dump. Read credentials from the container environment so
       # they never need to be duplicated in the NixOS configuration.
       MYSQL_DUMP="$MYSQL_DIR/daily/romm-db-''${DATE}.sql.gz"
-      if docker exec romm-db sh -c \
-          'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump --single-transaction --quick --lock-tables=false -u root "$MARIADB_DATABASE"' \
-          2>/dev/null | gzip > "$MYSQL_DUMP"; then
-        if [ "$(stat -c%s "$MYSQL_DUMP" 2>/dev/null || echo 0)" -gt 100 ]; then
-          SUCCEEDED="$SUCCEEDED romm-db"
-        else
-          FAILED="$FAILED romm-db(empty)"
-          rm -f "$MYSQL_DUMP"
-        fi
+      dump romm-db "$MYSQL_DUMP" docker exec romm-db sh -c \
+        'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump --single-transaction --quick --lock-tables=false -u root "$MARIADB_DATABASE"'
+      if [ "$RESULT" = ok ]; then
+        SUCCEEDED="$SUCCEEDED romm-db"
       else
-        FAILED="$FAILED romm-db"
-        rm -f "$MYSQL_DUMP"
+        FAILED="$FAILED romm-db($RESULT)"
       fi
 
       # Weekly rotation: copy Sunday's dumps
@@ -102,7 +122,7 @@ in
 
       # Vaultwarden backup (SQLite WAL-mode safe for file copy)
       VW_FAILED=""
-      if docker cp vaultwarden:/data/. "$VW_DIR/" 2>/dev/null; then
+      if docker cp vaultwarden:/data/. "$VW_DIR/"; then
         VW_STATUS="ok"
       else
         VW_FAILED="vaultwarden"
@@ -115,12 +135,9 @@ in
       # Silent on success — only alert on per-database / Vaultwarden failures.
       # Timeouts / SIGTERM / OOM kills are caught separately by unitConfig.OnFailure.
       if [ -n "$FAILED" ]; then
-        curl -s \
-          -H "Title: Backup FAILED on ${config.networking.hostName}" \
-          -H "Priority: high" \
-          -H "Tags: warning,floppy_disk" \
-          -d "FAILED: $FAILED | Succeeded: $SUCCEEDED" \
-          "${ntfyUrl}/${ntfyTopic}"
+        ntfy-notify "Backup FAILED on ${config.networking.hostName}" \
+          "FAILED: $FAILED | Succeeded: $SUCCEEDED" high "warning,floppy_disk" ||
+          echo "Backup failure alert was not delivered" >&2
         exit 1
       fi
     '';
@@ -148,7 +165,7 @@ in
       TimeoutStartSec = "8h";
     };
     environment.RCLONE_CONFIG = "/root/.config/rclone/rclone.conf";
-    path = with pkgs; [ rclone rsync curl coreutils ];
+    path = with pkgs; [ rclone rsync coreutils ntfyNotify ];
     script = ''
       set -uo pipefail
 
@@ -239,12 +256,9 @@ in
       # Silent on success — only alert on rclone-level failures. Timeouts /
       # SIGTERM / OOM kills are caught separately by unitConfig.OnFailure.
       if [ -n "$FAILED" ]; then
-        curl -s \
-          -H "Title: Daily offsite sync FAILED on ${config.networking.hostName}" \
-          -H "Priority: high" \
-          -H "Tags: warning,cloud" \
-          -d "Failed sync targets: $FAILED" \
-          "${ntfyUrl}/${ntfyTopic}"
+        ntfy-notify "Daily offsite sync FAILED on ${config.networking.hostName}" \
+          "Failed sync targets: $FAILED" high "warning,cloud" ||
+          echo "Offsite failure alert was not delivered" >&2
         exit 1
       fi
     '';
@@ -272,7 +286,7 @@ in
       TimeoutStartSec = "24h";
     };
     environment.RCLONE_CONFIG = "/root/.config/rclone/rclone.conf";
-    path = with pkgs; [ rclone curl coreutils ];
+    path = with pkgs; [ rclone coreutils ntfyNotify ];
     script = ''
       set -uo pipefail
 
@@ -314,12 +328,9 @@ in
       # Silent on success — only alert on rclone-level failures. Timeouts /
       # SIGTERM / OOM kills are caught separately by unitConfig.OnFailure.
       if [ -n "$FAILED" ]; then
-        curl -s \
-          -H "Title: Weekly offsite sync FAILED on ${config.networking.hostName}" \
-          -H "Priority: high" \
-          -H "Tags: warning,cloud" \
-          -d "Failed sync targets: $FAILED" \
-          "${ntfyUrl}/${ntfyTopic}"
+        ntfy-notify "Weekly offsite sync FAILED on ${config.networking.hostName}" \
+          "Failed sync targets: $FAILED" high "warning,cloud" ||
+          echo "Offsite failure alert was not delivered" >&2
         exit 1
       fi
     '';

@@ -7,6 +7,8 @@ on:
       - scripts/wake-pc.nix
       - docker/scripts/mirklurk-backup.sh
       - docker/scripts/reconcile-docker-socket-consumers.sh
+      - docker/scripts/restart-daemon-interrupted-containers.py
+      - docker/tests/test_restart_daemon_interrupted_containers.py
       - .github/workflows/nixos-*.yml
   pull_request:
     paths:
@@ -14,6 +16,8 @@ on:
       - scripts/wake-pc.nix
       - docker/scripts/mirklurk-backup.sh
       - docker/scripts/reconcile-docker-socket-consumers.sh
+      - docker/scripts/restart-daemon-interrupted-containers.py
+      - docker/tests/test_restart_daemon_interrupted_containers.py
       - .github/workflows/nixos-*.yml
 
 permissions:
@@ -41,3 +45,6 @@ jobs:
 
       - name: Run NixOS regression checks
         run: python3 -B -m unittest discover -s nixos/tests -p 'test_*.py' -v
+
+      - name: Exercise the restart of daemon-interrupted containers
+        run: python3 -B -m unittest discover -s docker/tests -p 'test_restart_daemon_interrupted_containers.py' -v
