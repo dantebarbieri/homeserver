@@ -8,7 +8,6 @@ let
     "rclone-offsite-weekly"
     "docker-compose-update"
     "docker-socket-consumers"
-    "docker-interrupted-containers"
     "nixos-upgrade"
     "mdadm-scrub"
     "mirklurk-snapshot"
@@ -16,10 +15,13 @@ let
     "mirklurk-backup-check"
     "mirklurk-sitemap"
   ];
+  # Waited on but never guarded: a pending reboot must not skip crash recovery.
+  recoveryJobs = [ "docker-interrupted-containers" ];
+  waited = jobs ++ recoveryJobs;
   jobConfig = pkgs.writeText "safe-reboot-jobs.json" (builtins.toJSON {
-    services = map (name: "${name}.service") jobs;
+    services = map (name: "${name}.service") waited;
     timers = map (name: "${name}.timer")
-      (builtins.filter (name: builtins.hasAttr name config.systemd.timers) jobs);
+      (builtins.filter (name: builtins.hasAttr name config.systemd.timers) waited);
   });
   command = pkgs.writeShellApplication {
     name = "safe-reboot";

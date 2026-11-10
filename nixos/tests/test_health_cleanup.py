@@ -99,8 +99,7 @@ class HealthCleanupTests(unittest.TestCase):
                       before wantedBy restartIfChanged serviceConfig unitConfig;
                     guarded = system.pkgs.lib.genAttrs [
                       "postgres-backup" "rclone-offsite-daily" "rclone-offsite-weekly"
-                      "docker-compose-update" "docker-socket-consumers"
-                      "docker-interrupted-containers" "nixos-upgrade"
+                      "docker-compose-update" "docker-socket-consumers" "nixos-upgrade"
                       "mdadm-scrub" "mirklurk-snapshot" "mirklurk-auto-update"
                       "mirklurk-backup-check" "mirklurk-sitemap"
                     ] (name: {
@@ -681,6 +680,8 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertTrue(unit["serviceConfig"]["RemainAfterExit"])
         self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
         self.assertIn("restart-daemon-interrupted-containers.py", unit["script"])
+        # A pending safe reboot must not silently skip recovery; it only waits.
+        self.assertNotIn("ConditionPathExists", unit["unitConfig"])
         for tool in ("docker", "systemd", "ntfy-notify"):
             self.assertIn(tool, unit["path"])
 
