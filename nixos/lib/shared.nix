@@ -8,31 +8,53 @@ let
   # Subscribe on your phone — see NTFY-PHONE-SETUP.md
   ntfyUrl   = "https://ntfy.danteb.com";
   ntfyTopic = "homeserver-alerts";
+  # ntfy runs in Docker, so it is down whenever Docker is. Root's alerts that
+  # cannot be delivered wait here for ntfy-spool-flush (modules/ntfy.nix).
+  ntfySpool = "/var/lib/ntfy-spool";
   mirklurkDeploymentCondition = "!/var/lib/mirklurk-upload-deployment/hold";
 
   # General-purpose CLI helper (available in $PATH as `ntfy-notify`)
   #   Usage: ntfy-notify "Title" "Message body" [priority] [tags]
+  # Succeeds once the alert is delivered or queued; exits non-zero otherwise.
   ntfyNotify = pkgs.writeShellScriptBin "ntfy-notify" ''
+    PATH=${pkgs.lib.makeBinPath [ pkgs.curl pkgs.coreutils pkgs.findutils ]}:$PATH
     TITLE="''${1:-Homeserver Alert}"
     MESSAGE="''${2:-No details provided}"
     PRIORITY="''${3:-default}"
     TAGS="''${4:-}"
-    ${pkgs.curl}/bin/curl -s \
+    curl --fail --silent --show-error --max-time 20 \
+      --retry 2 --retry-delay 5 --retry-connrefused \
       -H "Title: $TITLE" \
       -H "Priority: $PRIORITY" \
       -H "Tags: $TAGS" \
-      -d "$MESSAGE" \
-      "${ntfyUrl}/${ntfyTopic}"
+      --data-raw "$MESSAGE" \
+      "${ntfyUrl}/${ntfyTopic}" && exit 0
+    status=$?
+    SPOOL=${ntfySpool}
+    if [ -w "$SPOOL" ] &&
+      [ "$(find "$SPOOL" -maxdepth 1 -name '*.alert' | wc -l)" -lt 1000 ] &&
+      entry=$(mktemp -d "$SPOOL/.new.XXXXXX"); then
+      if printf '%s' "$TITLE" > "$entry/title" &&
+        printf '%s' "$MESSAGE" > "$entry/message" &&
+        printf '%s' "$PRIORITY" > "$entry/priority" &&
+        printf '%s' "$TAGS" > "$entry/tags" &&
+        date -u '+%Y-%m-%d %H:%M:%S UTC' > "$entry/queued" &&
+        mv "$entry" "$SPOOL/$(date -u +%Y%m%dT%H%M%S%N)-$$.alert"; then
+        echo "ntfy unreachable (curl exit $status); alert queued in $SPOOL for redelivery" >&2
+        exit 0
+      fi
+      rm -rf "$entry"
+    fi
+    echo "ntfy unreachable (curl exit $status); alert was not delivered" >&2
+    exit "$status"
   '';
 
   # smartd alert handler (called via -M exec; receives SMARTD_* env vars)
   smartdAlert = pkgs.writeShellScript "smartd-ntfy" ''
-    ${pkgs.curl}/bin/curl -s \
-      -H "Title: SMART: $SMARTD_FAILTYPE on ${config.networking.hostName}" \
-      -H "Priority: high" \
-      -H "Tags: warning,computer" \
-      -d "Device: $SMARTD_DEVICE — Type: $SMARTD_DEVICETYPE — $SMARTD_MESSAGE" \
-      "${ntfyUrl}/${ntfyTopic}"
+    exec ${ntfyNotify}/bin/ntfy-notify \
+      "SMART: $SMARTD_FAILTYPE on ${config.networking.hostName}" \
+      "Device: $SMARTD_DEVICE — Type: $SMARTD_DEVICETYPE — $SMARTD_MESSAGE" \
+      high "warning,computer"
   '';
 
   # mdadm event handler (PROGRAM directive; args: event device [component])
@@ -67,14 +89,12 @@ let
         ;;
     esac
 
-    ${pkgs.curl}/bin/curl -s \
-      -H "Title: RAID $EVENT on ${config.networking.hostName}" \
-      -H "Priority: $PRIORITY" \
-      -H "Tags: $TAGS" \
-      -d "Array: $MD_DEVICE | Component: $COMPONENT" \
-      "${ntfyUrl}/${ntfyTopic}"
+    exec ${ntfyNotify}/bin/ntfy-notify \
+      "RAID $EVENT on ${config.networking.hostName}" \
+      "Array: $MD_DEVICE | Component: $COMPONENT" \
+      "$PRIORITY" "$TAGS"
   '';
 in
 {
-  inherit ntfyUrl ntfyTopic mirklurkDeploymentCondition ntfyNotify smartdAlert mdadmAlert;
+  inherit ntfyUrl ntfyTopic ntfySpool mirklurkDeploymentCondition ntfyNotify smartdAlert mdadmAlert;
 }

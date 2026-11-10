@@ -38,6 +38,17 @@ homeserver-alerts
 | **mdadm event** | Drive failure, degraded array, spare missing, rebuild | urgent/high |
 | **drive-health-check** (every 6 h) | Degraded RAID, LVM health issues, missing PVs | urgent |
 | **mdadm-scrub** (weekly Sun 2 AM) | Parity check started | low |
+| **docker-interrupted-containers** (every Docker start) | Containers a daemon start stopped were restarted (default) or could not be (high) | default/high |
+| **Any unit with `ntfy-failure@`** | Backups, offsite sync, updates and other jobs failing | high |
+
+## When ntfy itself is down
+
+ntfy runs in Docker, so a Docker outage also takes down the alert channel.
+Alerts sent by root through `ntfy-notify` are then queued in
+`/var/lib/ntfy-spool`, and `ntfy-spool-flush` redelivers them every five
+minutes once ntfy is back, titled "… (delayed)" and noting when they were
+queued. Check the queue with `sudo ls /var/lib/ntfy-spool`. Alerts are lost
+only if the host itself is down or the queue holds 1,000 alerts.
 
 ## Test It
 

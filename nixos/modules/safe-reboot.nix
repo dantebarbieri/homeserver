@@ -8,6 +8,7 @@ let
     "rclone-offsite-weekly"
     "docker-compose-update"
     "docker-socket-consumers"
+    "docker-interrupted-containers"
     "nixos-upgrade"
     "mdadm-scrub"
     "mirklurk-snapshot"
