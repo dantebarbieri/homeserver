@@ -47,9 +47,9 @@ private services or joining their networks. CouchDB retains
 its useful admin link.
 
 Docker status reports container state and health where a healthcheck exists;
-it does not prove end-to-end application availability. The disabled Hytale
-server is labeled so absence is not mistaken for
-an unexpected outage. Homepage itself is not listed on its own dashboard.
+it does not prove end-to-end application availability. Hytale also requires
+valid server authentication for players to join; see
+[`HYTALE.md`](../docker/docs/HYTALE.md). Homepage itself is not listed on its own dashboard.
 The qBittorrent port-sync card uses Compose's generated container name
 `compose-qbit-port-sync-1` because that service has no explicit `container_name`.
 
@@ -138,7 +138,7 @@ Metrics are
 | Element / Synapse | Non-deactivated, non-guest local users; all known room records; distinct users in Synapse's daily-visit tracking during the last 24 hours. These are homeserver metrics, not Element browser sessions or message contents. |
 | Authelia | Successful/failed authentication-log events in the last 24 hours, TOTP configurations, and registered WebAuthn credentials. Authentication attempts are not distinct users. No usernames, IPs, authentication secrets or log records are returned. |
 
-Hytale remains disabled. Satisfactory's server denies passwordless client login;
+Satisfactory's server denies passwordless client login;
 without a client credential it keeps its compact build/uptime fallback rather
 than reporting invented player counts. No game server is restarted by this work.
 
@@ -205,7 +205,7 @@ version is explicitly labeled **Wrapper**, not the game version.
 
 Uptime is time since the container started, not a promise about application
 availability or a process's age. No widget repeats Docker state or health.
-A stopped container has no live uptime; Hytale stays disabled.
+A stopped container has no live uptime.
 Missing containers and Docker/version-source failures
 are visible widget errors, not invented healthy or zero-valued responses.
 Widgets refresh every 30 seconds; successful inventory results are cached for

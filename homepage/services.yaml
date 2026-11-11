@@ -659,7 +659,7 @@
     - Hytale:
         icon: hytale.webp
         href: https://hytale-servers.com/server/dante-s-hytale-server
-        description: Disabled - awaiting reauthorization
+        description: Adventure sandbox - danteb.com:5205
         server: my-docker
         container: hytale-server
         widget:

@@ -8,16 +8,24 @@ services:
       service: common-service
     image: hybrowse/hytale-server:latest
     container_name: hytale-server
-    profiles: ["hytale"]
     tty: true
     stdin_open: true
+    stop_grace_period: 120s
     mem_limit: 24g
     memswap_limit: 24g
     ports:
       - "5205:5520/udp"
     environment:
       HYTALE_AUTO_DOWNLOAD: "true"
-      HYTALE_AUTO_UPDATE: "true"
+      # Native updates reuse the server login; the downloader only provisions missing files.
+      HYTALE_AUTO_UPDATE: "false"
+      HYTALE_NATIVE_UPDATES: "true"
+      HYTALE_ENABLE_BACKUP: "true"
+      HYTALE_CONFIG_PATCH_JSON: >-
+        {"AuthCredentialStore":{"Type":"Encrypted","Path":"auth.enc"},
+        "Update":{"Enabled":true,"CheckIntervalSeconds":3600,"Patchline":"release",
+        "RunBackupBeforeUpdate":true,"BackupConfigBeforeUpdate":true,
+        "AutoApplyMode":"WhenEmpty"}}
       HYTALE_BIND: "0.0.0.0:5520"
       HYTALE_AUTH_MODE: authenticated
       HYTALE_DISABLE_SENTRY: "true"

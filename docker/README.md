@@ -53,7 +53,7 @@ docker compose -f compose.gaming.yml up -d
 | **Auth** | authelia, authelia_postgres, authelia_redis |
 | **Dashboards** | homepage, suwayomi-widget, dashdot |
 | **Downloads** | vpn-netns, gluetun, qbittorrent, qbit-port-sync, qbit-manage, sabnzbd, flaresolverr |
-| **Gaming** | minecraft-server (vanilla Hardcore), matcha-minecraft-server (Fabric/Matcha), rlcraft-minecraft-server, satisfactory-server; hytale-server (opt-in profile) |
+| **Gaming** | minecraft-server (vanilla Hardcore), matcha-minecraft-server (Fabric/Matcha), rlcraft-minecraft-server, hytale-server, satisfactory-server |
 | **Immich** | immich-server, immich-machine-learning, immich-redis, immich-postgres |
 | **Matrix** | synapse, synapse_postgres, element, coturn, livekit, lk-jwt-service |
 | **Media** | plex, jellyfin, navidrome, anime-relations, komga, komf, suwayomi, suwayomi_postgres, calibre-web, audiobookshelf, storyteller, bookbridge, librofm-downloader |
@@ -117,7 +117,8 @@ in `dockerfiles/Dockerfile.qbittorrent` to a known-good release (for example,
 ## Game Servers
 
 See [MINECRAFT.md](docs/MINECRAFT.md) for the separate Hardcore, Matcha and RLCraft
-worlds, and [HYTALE.md](docs/HYTALE.md) for Hytale's disabled profile and recovery.
+worlds, and [HYTALE.md](docs/HYTALE.md) for Hytale's persistent login and native
+automatic updates.
 
 ## Nextcloud Setup
 
