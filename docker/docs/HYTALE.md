@@ -91,6 +91,26 @@ docker compose up -d --force-recreate hytale-server
 
 Clients connect to `danteb.com:5205` (UDP). Keep authenticated mode enabled.
 
+## Starting a fresh world
+
+`/data/server/universe/` holds every world plus player inventories, positions
+and universe-wide progress such as Memories.
+`/data/server/mods/Hytale_Shop/barter_shop_state.json` holds merchant stock.
+To start over while no players are online (check with `/who`):
+
+1. Stop `hytale-server` through the main Compose entry point.
+2. Archive `universe/` and `mods/Hytale_Shop/` from the volume to a private
+   mode-700 directory and verify the archive lists the world and players.
+3. Delete `universe/` and the barter-shop state files, then start the service.
+
+The log reports `Fresh Universe` and generates `default` with a new random
+seed. Keep `auth.enc`, `config.json`, bans, permissions and `/data/.machine-id`:
+they are server identity and settings, not world state.
+
+Official minigames (Prop Hunt, Shuffle Jam) are hosted by Hypixel and reached
+from the client's main-menu **Minigames** button. They need nothing on this
+server and do not affect its survival world.
+
 ## Downloader recovery (fresh provisioning only)
 
 An `invalid_grant` error while fetching the game-assets manifest is a
