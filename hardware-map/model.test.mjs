@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectors, connectorById, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, connectionCounts, fanAvailability, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
+import { connectors, connectorById, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
+import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, fanAvailability, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
 
 const now = "2026-11-12T21:30:00.000Z";
 const annotation = { target: "CPU cooler via splitter", confidence: "confirmed", occupancy: "occupied", evidence: "Cable physically traced; example test evidence", note: "Both branches checked" };
 
-test("board connectors are unique and initially have no assigned physical connections", () => {
+test("board connectors are unique and a blank annotation document has no assigned connections", () => {
   assert.equal(connectorById.size, connectors.length);
   const counts = connectionCounts(emptyDocument());
   assert.deepEqual(counts, { confirmed: 0, inferred: 0, unknown: connectors.length });
@@ -20,6 +20,41 @@ test("a connection edit preserves other connectors and retains evidence on expor
   assert.equal(restored.connections.FAN1.updatedAt, now);
   assert.deepEqual(connectionCounts(restored), { confirmed: 1, inferred: 1, unknown: connectors.length - 2 });
   assert.equal(first.connections.FAN2, undefined);
+});
+
+test("inspection defaults preserve photo confirmation, user reports, uncertainty and unresolved slots", () => {
+  const document = withInspectionDefaults(emptyDocument());
+  for (const id of ["M2_1", "M2_2", "SATA_0_3", "SATA_4_7"]) {
+    assert.equal(document.connections[id].confidence, "confirmed");
+    assert.equal(document.connections[id].provenance, "photo-confirmed");
+    assert.equal(document.connections[id].occupancy, "occupied");
+  }
+  for (const id of ["FAN1", "FAN2", "DDR4_A1", "DDR4_B1", "DDR4_G1", "DDR4_H1", "USB3_3_4", "LAN1", "LAN2", "IPMI_LAN1"]) {
+    assert.equal(document.connections[id].provenance, "user-reported");
+    assert.equal(document.connections[id].confidence, "inferred");
+    assert.equal(document.connections[id].occupancy, "occupied");
+  }
+  for (const id of ["PCIE1", "PCIE2", "FAN3", "FAN4", "FAN5", "FAN6", "FAN7"]) {
+    assert.equal(document.connections[id].confidence, "unknown");
+    assert.equal(document.connections[id].occupancy, "unverified");
+  }
+  assert.equal(document.connections.GFX_12V1.provenance, "photo-uncertain");
+  assert.equal(document.connections.GFX_12V1.confidence, "inferred");
+  assert.deepEqual(fanAvailability(document), { free: 0, occupied: 0, unverified: 7 });
+  assert.deepEqual(parseDocument(serializeDocument(document)), document);
+});
+
+test("adding inspection defaults never overwrites existing user annotations, including explicit unknowns", () => {
+  let document = updateConnection(emptyDocument(), "FAN1", annotation, now);
+  document = updateConnection(document, "M2_1", emptyConnection(), now);
+  const combined = withInspectionDefaults(document);
+  assert.deepEqual(combined.connections.FAN1, document.connections.FAN1);
+  assert.deepEqual(combined.connections.M2_1, document.connections.M2_1);
+  assert.equal(combined.connections.M2_2.provenance, "photo-confirmed");
+  assert.equal(inspectionConnections.FAN1.provenance, "user-reported");
+  assert.equal(inspectionConnections.M2_1.confidence, "confirmed");
+  assert.deepEqual(withInspectionDefaults(combined), combined);
+  assert.throws(() => withInspectionDefaults({ ...emptyDocument(), connections: null }), /object/);
 });
 
 test("confirmed and inferred claims cannot be saved without both target and evidence", () => {
@@ -50,6 +85,9 @@ test("imports reject incompatible versions, boards, connector identities and mal
   }
   for (const bad of [null, [], { ...annotation, note: {} }, { ...annotation, target: "x".repeat(201) }, { ...annotation, confidence: "probably" }]) {
     assert.throws(() => validateDocument({ ...emptyDocument(), connections: { FAN1: bad } }));
+  }
+  for (const provenance of ["automatic-photo-proof", ["user-reported"], {}, null, 0]) {
+    assert.throws(() => updateConnection(emptyDocument(), "FAN1", { ...annotation, provenance }, now), /evidence source/);
   }
 });
 

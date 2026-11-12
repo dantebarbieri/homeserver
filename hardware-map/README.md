@@ -24,9 +24,10 @@ node --test hardware-map/model.test.mjs
 
 - Select board connectors with the original schematic, keyboard or searchable
   list. Fan headers have verified **logical** six-pin details.
-- Annotate connection target, confidence, physical occupancy, evidence and notes. Confirmed and
-  inferred connections require evidence; no physical fan, GPU, HBA, drive or
-  DIMM connections are pre-confirmed.
+- Annotate connection target, confidence, physical occupancy, evidence source
+  and notes. Confirmed and inferred connections require evidence.
+  Inspection defaults distinguish photo-confirmed, uncertain photo,
+  user-reported and unverified observations.
 - Fan-planning counts separate confirmed-free, confirmed-occupied and
   unverified headers. Inferred availability and missing tach readings never
   count as verified free. Seven headers, fourteen possible tach inputs,
@@ -34,7 +35,10 @@ node --test hardware-map/model.test.mjs
 - Save to browser local storage; import/export versioned, validated JSON.
   Notes do not leave the browser. Export a backup: clearing browser data or
   changing the origin/port creates a different workspace. Import replaces,
-  rather than merges, the saved connection annotations.
+  rather than merges, the saved connection annotations. Current inspection
+  defaults fill missing connectors, but never overwrite an imported or saved
+  annotation, even an explicit unknown. The supplied inspection record remains
+  separately visible beside your editable annotation.
 - Inspect explicitly dated observed snapshots, reported capacities and
   unknowns. Separately opt into synthetic telemetry and an air-temperature
   interpolation demonstration. There is no live refresh.
@@ -45,6 +49,30 @@ data unless deliberately exported. Imported evidence/confidence is an assertion
 by the file's author, not independent verification. Invalid saved data is not
 silently overwritten; import a valid export to replace it. A change from another
 tab blocks saves until reload to reduce accidental overwrites.
+
+## Cleaning inspection, November 12, 2026
+
+These are relayed observations from the coordinating session, not a new
+inspection of the actual photos by this app. No photos or identifying serial
+numbers are bundled.
+
+| Provenance | Observation |
+| --- | --- |
+| Photo-confirmed | Board silkscreen `ROMED8-2T REV 1.03`; GPU label `GV-N2070SGAMING OC-8GD rev 1.0`. |
+| Photo-confirmed | GPU fan side directly above a low-profile HBA with two SFF-8643 cables. This does not identify their PCIe slot numbers. |
+| Photo-confirmed | Both M.2 sockets populated without heatsinks; both onboard SATA connectors appear cabled. Logical NVMe A/B identities and cable-to-drive routing remain unknown. |
+| Uncertain photo | GFX_12V1 appears empty, not certainly. It is not marked confirmed-free. |
+| User-reported, unverified slot assignment | HBA in PCIE1 and GPU in PCIE2. A dual-slot card in PCIE2 could overlap PCIE1; await a slot-label photo instead of resolving this as fact. |
+| User-reported | DIMMs in A1/B1/G1/H1; NH-U9 cooler fans on FAN1/FAN2; case USB 3 cable on USB3_3_4. |
+| User-reported | LAN1, LAN2 and BMC LAN connected to the switch; no other rear I/O connections except PSU power. The other rear ports are a logical group, `REAR_OTHER`, not a vendor header identifier. |
+| User-reported | Three front plus three middle fans, likely 120 mm, daisy-chained to an unknown endpoint. Two rear 80 mm fans are Molex-powered, fixed-speed, with no tach connection. |
+| Unknown | FAN3–FAN7 occupancy; FAN4–FAN7 hidden under the GPU. The user's suspicion that they are empty and the lack of tach readings do not establish free headers. |
+
+User-reported occupied headers remain inferred rather than independently
+confirmed. Fan-planning counts therefore still show zero verified-free
+headers, with FAN1/FAN2 explicitly labeled user-reported occupied. The eight
+case fans are not assigned to motherboard headers. Neither photo-confirmed
+M.2 occupancy nor reported cooler wiring creates new telemetry measurements.
 
 ## Sources and interpretation
 

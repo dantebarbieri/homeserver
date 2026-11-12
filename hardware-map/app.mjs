@@ -1,8 +1,8 @@
-import { connectors, connectorById, components, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, connectionCounts, fanAvailability, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
+import { connectors, connectorById, components, boardRevision, inspectionConnections, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
+import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, connectionCounts, fanAvailability, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
-let inventory = emptyDocument();
+let inventory = withInspectionDefaults(emptyDocument());
 let selectedId = "FAN1";
 let mode = "snapshot";
 let zoom = 100;
@@ -18,7 +18,7 @@ function notify(message, error = false) {
 }
 
 try {
-  inventory = loadDocument(window.localStorage);
+  inventory = withInspectionDefaults(loadDocument(window.localStorage));
 } catch (error) {
   storageBlocked = true;
   notify(`Saved map could not be loaded: ${error.message} Existing data was not overwritten. Import a valid JSON export to replace it; exports remain available for this tab.`, true);
@@ -52,7 +52,7 @@ function connectionFor(id) {
 
 function describeConnection(id) {
   const connection = connectionFor(id);
-  return `${id}, ${connection.confidence} connection, ${connection.occupancy}${connection.target ? ` to ${connection.target}` : ""}`;
+  return `${id}, ${connection.confidence} connection, ${connection.occupancy}, ${provenanceLabels[connection.provenance]}${connection.target ? ` to ${connection.target}` : ""}`;
 }
 
 function selectConnector(id) {
@@ -70,13 +70,8 @@ function renderBoard() {
   for (const x of [100, 180, 400, 550, 725]) {
     board.append(svgElement("path", { d: `M${x} 165 V840`, class: "board-rail" }));
   }
-  board.append(svgElement("text", { x: 92, y: 38, class: "board-label" }, "ASROCK RACK / ROMED8-2T"));
-  const ioLabels = ["VGA / COM", "USB / BMC", "10G LAN", "10G LAN"];
-  ioLabels.forEach((text, i) => {
-    board.append(svgElement("rect", { x: 35, y: 186 + i * 61, width: 86, height: 44, rx: 4, class: "io-block" }));
-    board.append(svgElement("text", { x: 78, y: 211 + i * 61, class: "io-text" }, text));
-  });
-  board.append(svgElement("text", { x: 145, y: 840, class: "board-caption" }, "Seven expansion slots · actual GPU / HBA positions unknown"));
+  board.append(svgElement("text", { x: 92, y: 38, class: "board-label" }, `ASROCK RACK / ROMED8-2T / REV ${boardRevision}`));
+  board.append(svgElement("text", { x: 145, y: 840, class: "board-caption" }, "GPU / HBA slot reports UNVERIFIED · see PCIE1 / PCIE2"));
   board.append(svgElement("text", { x: 92, y: 910, class: "board-label" }, "ORIGINAL LOGICAL SCHEMATIC / NOT A WIRING GUIDE"));
   for (const connector of connectors) {
     const { id, x, y, width, height } = connector;
@@ -140,12 +135,22 @@ function renderSelection() {
   }
   const availability = fanAvailability(inventory);
   $("fan-availability").textContent = `${availability.free} / ${availability.occupied}`;
-  $("fan-unverified").textContent = `${availability.unverified} headers unverified`;
+  const reportedOccupied = connectors.filter(connector =>
+    connector.category === "Fans" && connectionFor(connector.id).provenance === "user-reported" &&
+    connectionFor(connector.id).confidence !== "confirmed" && connectionFor(connector.id).occupancy === "occupied",
+  ).length;
+  $("fan-unverified").textContent = `${availability.unverified} not independently verified; ${reportedOccupied} user-reported occupied`;
   $("detail-category").textContent = `${connector.category.toUpperCase()} / SELECTED CONNECTOR`;
   $("detail-name").textContent = connector.id;
   $("detail-confidence").className = `badge ${connection.confidence}`;
   $("detail-confidence").textContent = `${connection.confidence[0].toUpperCase()}${connection.confidence.slice(1)} connection`;
   $("detail-occupancy").textContent = `${connection.occupancy[0].toUpperCase()}${connection.occupancy.slice(1)} occupancy`;
+  $("detail-provenance").textContent = provenanceLabels[connection.provenance];
+  const observation = inspectionConnections[selectedId];
+  $("inspection-observation").hidden = !observation;
+  $("inspection-observation").textContent = observation
+    ? `Supplied inspection record — ${provenanceLabels[observation.provenance]}; ${observation.confidence}, ${observation.occupancy}${observation.target ? `: ${observation.target}` : ""}. ${observation.evidence} ${observation.note}`
+    : "";
   $("detail-description").textContent = connector.detail;
   $("detail-source").textContent = connector.source;
   const reading = readingFor(currentReadings(), selectedId);
@@ -170,18 +175,18 @@ function renderSelection() {
     $("pin-table").append(row);
   }
   $("pin-caution").textContent = connector.caution ?? "";
-  for (const key of ["target", "confidence", "occupancy", "evidence", "note"]) $(key).value = connection[key];
+  for (const key of ["target", "confidence", "occupancy", "provenance", "evidence", "note"]) $(key).value = connection[key];
   $("save-status").textContent = pendingPersistence
     ? "NOT PERSISTED — tab-only changes. Export JSON to keep them."
     : connection.updatedAt
       ? `Last annotated ${new Date(connection.updatedAt).toLocaleString()}. Browser-local; export a backup.`
-      : "Saved only in this browser. Export a backup.";
+      : observation ? "Inspection default / existing annotation; no local edit timestamp. Export a backup." : "Saved only in this browser. Export a backup.";
 }
 
 $("connection-form").addEventListener("input", () => { dirty = true; });
 $("connection-form").addEventListener("submit", event => {
   event.preventDefault();
-  const fields = Object.fromEntries(["target", "confidence", "occupancy", "evidence", "note"].map(key => [key, $(key).value]));
+  const fields = Object.fromEntries(["target", "confidence", "occupancy", "provenance", "evidence", "note"].map(key => [key, $(key).value]));
   let next;
   try {
     next = updateConnection(inventory, selectedId, fields);
@@ -229,7 +234,7 @@ $("import-file").addEventListener("change", async event => {
   if (!file) return;
   try {
     if (file.size > maxImportBytes) throw new Error("Import must be smaller than 256 KiB.");
-    const next = parseDocument(await file.text());
+    const next = withInspectionDefaults(parseDocument(await file.text()));
     if (!window.confirm("Replace this browser's connection annotations with the imported map? Export first if you need a backup.")) return;
     saveDocument(window.localStorage, next);
     inventory = next;
@@ -237,7 +242,7 @@ $("import-file").addEventListener("change", async event => {
     storageBlocked = false;
     pendingPersistence = false;
     renderSelection();
-    notify("Map imported and saved in this browser. Imported confidence labels are user assertions, not independently verified.");
+    notify("Map imported and saved in this browser. Inspection defaults fill only missing connectors; imported annotations take precedence. Imported labels are assertions, not independent verification.");
   } catch (error) {
     notify(`Import failed: ${error.message} Existing annotations were not replaced.`, true);
   } finally {
@@ -262,6 +267,8 @@ $("category").addEventListener("change", renderList);
 for (const category of [...new Set(connectors.map(connector => connector.category))]) {
   $("category").append(element("option", { value: category }, category));
 }
+for (const [value, label] of Object.entries(provenanceLabels)) $("provenance").append(element("option", { value }, label));
+$("board-revision").textContent = `ROMED8-2T · REV ${boardRevision}`;
 for (const component of components) $("component-options").append(element("option", { value: component.model }));
 $("connector-total").textContent = connectors.length;
 
@@ -333,6 +340,7 @@ $("air-position").addEventListener("input", renderAir);
 for (const component of components) {
   const card = element("article", { class: "inventory-card" });
   card.append(element("h4", {}, component.label), element("p", {}, component.model), element("strong", {}, component.capacity), element("p", {}, component.status));
+  if (component.note) card.append(element("p", {}, component.note));
   $("inventory-grid").append(card);
 }
 renderBoard();

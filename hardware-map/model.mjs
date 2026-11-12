@@ -1,4 +1,4 @@
-import { boardId, connectorById } from "./board.mjs";
+import { boardId, connectorById, inspectionConnections, provenanceLabels } from "./board.mjs";
 
 export const storageKey = "homeserver.hardware-map.v1";
 export const confidenceValues = ["unknown", "inferred", "confirmed"];
@@ -11,7 +11,7 @@ export function emptyDocument() {
 }
 
 export function emptyConnection() {
-  return { target: "", confidence: "unknown", occupancy: "unverified", evidence: "", note: "", updatedAt: null };
+  return { target: "", confidence: "unknown", occupancy: "unverified", provenance: "unverified", evidence: "", note: "", updatedAt: null };
 }
 
 function text(value, field, limit) {
@@ -36,11 +36,15 @@ export function validateDocument(input) {
       target: text(entry.target, `${id} connection`, 200),
       confidence: entry.confidence,
       occupancy: entry.occupancy ?? (entry.confidence !== "unknown" && entry.target ? "occupied" : "unverified"),
+      provenance: entry.provenance === undefined ? "user-annotation" : entry.provenance,
       evidence: text(entry.evidence, `${id} evidence`, 600),
       note: text(entry.note, `${id} note`, 2000),
       updatedAt: entry.updatedAt,
     };
     if (!occupancyValues.includes(connection.occupancy)) throw new Error(`${id} has an invalid occupancy state.`);
+    if (typeof connection.provenance !== "string" || !Object.hasOwn(provenanceLabels, connection.provenance)) {
+      throw new Error(`${id} has an invalid evidence source.`);
+    }
     if (connection.occupancy !== "unverified" && connection.confidence === "unknown") {
       throw new Error(`${id}: occupied/free claims need inferred or confirmed confidence and evidence.`);
     }
@@ -95,6 +99,14 @@ export function saveDocument(storage, document) {
 export function loadDocument(storage) {
   const raw = storage.getItem(storageKey);
   return raw === null ? emptyDocument() : parseDocument(raw);
+}
+
+export function withInspectionDefaults(document) {
+  const validated = validateDocument(document);
+  return validateDocument({
+    ...validated,
+    connections: { ...inspectionConnections, ...validated.connections },
+  });
 }
 
 export function connectionCounts(document) {

@@ -8,6 +8,14 @@ export const manual = Object.freeze({
 
 export const boardId = "asrock-rack-romed8-2t";
 export const snapshotDate = "2026-11-12";
+export const boardRevision = "1.03";
+export const provenanceLabels = {
+  "photo-confirmed": "Photo-confirmed (relayed)",
+  "photo-uncertain": "Photo observation — uncertain",
+  "user-reported": "User-reported",
+  "user-annotation": "Local user annotation",
+  unverified: "Unverified",
+};
 export const layoutSource = "Official manual rev. 1.30, printed pp. 7–8 (PDF pp. 14–15).";
 const fanPins = [
   { number: 1, signal: "GND", description: "Ground" },
@@ -24,13 +32,13 @@ function connector(id, label, category, x, y, width, height, detail, extra = {})
 
 export const connectors = [
   connector("CPU1", "SP3 / CPU", "Compute", 235, 180, 240, 155,
-    "AMD EPYC 7313P installed; Noctua NH-U9 TR4-SP3 cooler. The cooler's fan wiring is not yet verified."),
+    "AMD EPYC 7313P installed; Noctua NH-U9 TR4-SP3 cooler. The user reports its two fans on FAN1 and FAN2; that wiring has not been independently traced."),
   ...["H", "G", "F", "E"].map((letter, i) =>
     connector(`DDR4_${letter}1`, `DDR4 ${letter}1`, "Memory", 200, 65 + i * 21, 310, 15,
-      "DDR4 ECC DIMM socket. 128 GB total installed RAM is reported; populated socket identities await inspection.")),
+      "DDR4 ECC DIMM socket. The user reports DIMMs in A1, B1, G1 and H1; 128 GB total. Other sockets are not independently verified free.")),
   ...["A", "B", "C", "D"].map((letter, i) =>
     connector(`DDR4_${letter}1`, `DDR4 ${letter}1`, "Memory", 200, 370 + i * 21, 310, 15,
-      "DDR4 ECC DIMM socket. Do not infer socket population from the BMC's DDR4 temperature-channel labels.")),
+      "DDR4 ECC DIMM socket. The user reports DIMMs in A1, B1, G1 and H1. Do not infer population from BMC temperature-channel labels.")),
   connector("ATX12V1", "EPS 8-pin", "Power", 565, 65, 75, 35,
     "8-pin ATX 12 V connector. Cable connection awaits visual confirmation.",
     { source: "Official manual rev. 1.30, printed p. 31 (PDF p. 38)." }),
@@ -87,18 +95,74 @@ export const connectors = [
     { source: "Official manual rev. 1.30, printed p. 32 (PDF p. 39)." }),
   connector("PSU_SMB1", "PSU SMB", "Sensors", 565, 20, 100, 25,
     "PSU SMBus header. Its presence does not establish that the PSU exposes telemetry or that a cable is connected."),
+  connector("REAR_OTHER", "VGA/COM/USB", "Rear I/O", 35, 186, 86, 44,
+    "Logical group of other rear I/O ports, not a motherboard header identifier. The user reports no connections here; rear power refers to the PSU inlet, not these ports."),
+  connector("IPMI_LAN1", "BMC LAN", "Rear I/O", 35, 247, 86, 44,
+    "Dedicated BMC Ethernet port. The user reports it connected to the switch."),
+  connector("LAN1", "10G LAN1", "Rear I/O", 35, 308, 86, 44,
+    "First onboard 10 GbE port. The user reports it connected to the switch."),
+  connector("LAN2", "10G LAN2", "Rear I/O", 35, 369, 86, 44,
+    "Second onboard 10 GbE port. The user reports it connected to the switch."),
 ];
 
 export const connectorById = new Map(connectors.map(item => [item.id, item]));
 
+function observation(target, confidence, occupancy, provenance, evidence, note = "") {
+  return { target, confidence, occupancy, provenance, evidence: `${snapshotDate}: ${evidence}`, note, updatedAt: null };
+}
+
+export const inspectionConnections = {
+  M2_1: observation("NVMe SSD; logical A/B identity unknown", "confirmed", "occupied", "photo-confirmed",
+    "Cleaning photos show both M.2 sockets populated, with no heatsinks. Relayed by the coordinating session."),
+  M2_2: observation("NVMe SSD; logical A/B identity unknown", "confirmed", "occupied", "photo-confirmed",
+    "Cleaning photos show both M.2 sockets populated, with no heatsinks. Relayed by the coordinating session."),
+  SATA_0_3: observation("SATA breakout cable; drive routing unknown", "confirmed", "occupied", "photo-confirmed",
+    "Connector appears cabled in the cleaning photos, as relayed by the coordinating session."),
+  SATA_4_7: observation("SATA breakout cable; drive routing unknown", "confirmed", "occupied", "photo-confirmed",
+    "Connector appears cabled in the cleaning photos, as relayed by the coordinating session."),
+  GFX_12V1: observation("", "inferred", "free", "photo-uncertain",
+    "Appears empty in the cleaning photos, but this is not certain.", "Not a verified-free connector."),
+  PCIE1: observation("Low-profile HBA — reported slot, UNVERIFIED", "unknown", "unverified", "user-reported",
+    "User reports HBA in PCIE1; slot-label photo pending.",
+    "A dual-slot GPU reported in PCIE2 could overlap PCIE1. Do not resolve the slot assignment from that report alone. Photos confirm a low-profile HBA with two SFF-8643 cables below the GPU's fan side."),
+  PCIE2: observation("GV-N2070SGAMING OC-8GD — reported slot, UNVERIFIED", "unknown", "unverified", "user-reported",
+    "User reports GPU in PCIE2; slot-label photo pending.",
+    "A dual-slot GPU here could overlap the HBA's reported PCIE1 position. Photos confirm the GPU label and its fan side directly above the HBA, not the slot numbers."),
+  ...Object.fromEntries(["A", "B", "G", "H"].map(letter => [
+    `DDR4_${letter}1`, observation("ECC DDR4 DIMM", "inferred", "occupied", "user-reported",
+      "User reports DIMMs in A1, B1, G1 and H1; independent socket-label verification pending."),
+  ])),
+  FAN1: observation("NH-U9 cooler fan — first of two", "inferred", "occupied", "user-reported",
+    "User reports the two NH-U9 fans on FAN1 and FAN2. BMC tach readings are consistent but do not independently establish the wiring."),
+  FAN2: observation("NH-U9 cooler fan — second of two", "inferred", "occupied", "user-reported",
+    "User reports the two NH-U9 fans on FAN1 and FAN2. BMC tach readings are consistent but do not independently establish the wiring."),
+  ...Object.fromEntries([3, 4, 5, 6, 7].map(number => [
+    `FAN${number}`, observation("", "unknown", "unverified", "unverified",
+      "No BMC tach reading; occupancy remains unknown.",
+      `${number >= 4 ? "Hidden under the GPU. " : ""}The user suspects these headers are empty, but no reading is not evidence that a header is free. The front/middle fan chain endpoint is unknown.`),
+  ])),
+  USB3_3_4: observation("Case front-panel USB 3 cable", "inferred", "occupied", "user-reported",
+    "User reports the case front-panel USB 3 cable connected here."),
+  ...Object.fromEntries(["LAN1", "LAN2", "IPMI_LAN1"].map(id => [
+    id, observation("TP-Link TL-SX1008 switch", "inferred", "occupied", "user-reported",
+      "User reports both onboard LAN ports and the dedicated BMC LAN connected to the switch."),
+  ])),
+  REAR_OTHER: observation("", "inferred", "free", "user-reported",
+    "User reports no other rear I/O connections except power.", "Power refers to the PSU inlet; this does not verify the motherboard's internal power-header wiring."),
+};
+
 export const components = [
+  { id: "board", label: "Motherboard", model: "ROMED8-2T REV 1.03", capacity: "Silkscreen revision", status: "Photo-confirmed (relayed)" },
   { id: "cpu", label: "CPU + cooler", model: "EPYC 7313P · NH-U9 TR4-SP3", capacity: "16 cores / 32 threads", status: "Reported installed" },
-  { id: "memory", label: "Memory", model: "ECC DDR4 · populated slots unknown", capacity: "128 GB reported", status: "Reported installed" },
-  { id: "gpu", label: "Graphics", model: "RTX 2070 SUPER · slot unknown", capacity: "8 GB VRAM", status: "Reported installed" },
-  { id: "nvme-a", label: "NVMe A", model: "Samsung 990 EVO · socket unknown", capacity: "2 TB nominal", status: "Reported installed" },
-  { id: "nvme-b", label: "NVMe B", model: "Samsung 990 EVO · socket unknown", capacity: "2 TB nominal", status: "Reported installed" },
+  { id: "memory", label: "Memory", model: "ECC DDR4 · A1 / B1 / G1 / H1 reported", capacity: "128 GB reported", status: "User-reported; socket labels not independently verified" },
+  { id: "gpu", label: "Graphics", model: "GV-N2070SGAMING OC-8GD rev 1.0", capacity: "RTX 2070 SUPER · 8 GB VRAM", status: "Photo-confirmed label (relayed)", note: "Fan side directly above the low-profile HBA: photo-confirmed. PCIE2 is user-reported and UNVERIFIED; potential PCIE1 overlap needs a slot-label photo." },
+  { id: "nvme-a", label: "NVMe A", model: "Samsung 990 EVO · logical socket binding unknown", capacity: "2 TB nominal", status: "Both M.2 sockets photo-confirmed populated; no heatsinks" },
+  { id: "nvme-b", label: "NVMe B", model: "Samsung 990 EVO · logical socket binding unknown", capacity: "2 TB nominal", status: "Both M.2 sockets photo-confirmed populated; no heatsinks" },
   { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "11 active + 1 hot spare · RAID6", status: "Reported installed" },
-  { id: "hba", label: "Storage HBA", model: "Model and PCIe slot unknown", capacity: "4 connected HDDs reported", status: "Reported installed" },
+  { id: "hba", label: "Storage HBA", model: "Low-profile HBA · two SFF-8643 cables", capacity: "4 connected HDDs reported", status: "Photo-confirmed appearance (relayed); model unknown", note: "PCIE1 is user-reported and UNVERIFIED; the GPU's reported PCIE2 position could overlap it." },
+  { id: "case-fans", label: "Front + middle fans", model: "3 front + 3 middle · likely 120 mm", capacity: "6 fans reported daisy-chained", status: "User-reported; size not verified", note: "Where the chain ends is unknown. No motherboard header, power source or control group is assigned." },
+  { id: "rear-fans", label: "Rear fans", model: "2 × 80 mm · Molex-powered", capacity: "Fixed speed · no tach connection reported", status: "User-reported", note: "Not assigned to FAN1–FAN7; no RPM value is invented." },
+  { id: "rear-io", label: "Rear connections", model: "LAN1 / LAN2 / BMC LAN → switch", capacity: "Other rear I/O unused except PSU power", status: "User-reported" },
   { id: "filesystem", label: "/data", model: "LVM + XFS over RAID6", capacity: "≈53 / 66 TiB used", status: "Reported snapshot; approximate" },
 ];
 
@@ -110,8 +174,8 @@ export const observedReadings = [
   { id: "nvme-b-secondary", label: "NVMe B · Sensor 1", value: 71.85, unit: "°C", kind: "component", provenance: "snapshot", source: "Prometheus / node-exporter hwmon; sensor meaning not independently verified", observedAt: snapshotDate },
   { id: "mb", label: "Motherboard sensor", value: 39, unit: "°C", kind: "component", provenance: "snapshot", source: "BMC / MB Temp; physical sensor position unverified", observedAt: snapshotDate },
   { id: "lan", label: "Onboard LAN sensor", value: 66, unit: "°C", kind: "component", provenance: "snapshot", source: "BMC / Onboard LAN Temp", observedAt: snapshotDate },
-  { id: "FAN1", label: "FAN1 · primary tach", value: 1300, unit: "RPM", kind: "fan", provenance: "snapshot", source: "BMC / FAN1; attached physical fan unknown", observedAt: snapshotDate },
-  { id: "FAN2", label: "FAN2 · primary tach", value: 1400, unit: "RPM", kind: "fan", provenance: "snapshot", source: "BMC / FAN2; attached physical fan unknown", observedAt: snapshotDate },
+  { id: "FAN1", label: "FAN1 · primary tach", value: 1300, unit: "RPM", kind: "fan", provenance: "snapshot", source: "BMC / FAN1; cooler-fan assignment comes from a later user report, not this tach reading", observedAt: snapshotDate },
+  { id: "FAN2", label: "FAN2 · primary tach", value: 1400, unit: "RPM", kind: "fan", provenance: "snapshot", source: "BMC / FAN2; cooler-fan assignment comes from a later user report, not this tach reading", observedAt: snapshotDate },
 ];
 
 export const syntheticReadings = [
