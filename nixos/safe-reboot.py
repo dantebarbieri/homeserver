@@ -180,7 +180,14 @@ def worker(config):
                             committed = STATE / "committed"
                             committed.touch()
                             try:
-                                run("systemctl", "--check-inhibitors=yes", "reboot")
+                                # Check inhibitors even as root, without systemctl's
+                                # additional logged-in-user veto. No fallback on denial.
+                                # 1 = SD_LOGIND_ROOT_CHECK_INHIBITORS.
+                                run(
+                                    "busctl", "--system", "--allow-interactive-authorization=no",
+                                    "call", "org.freedesktop.login1", "/org/freedesktop/login1",
+                                    "org.freedesktop.login1.Manager", "RebootWithFlags", "t", "1",
+                                )
                             except (RebootError, subprocess.TimeoutExpired, OSError):
                                 committed.unlink()
                                 raise
