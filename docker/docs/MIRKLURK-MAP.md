@@ -209,6 +209,11 @@ saved pits, plants and unknown fields. Server-reachable release metadata changes
 but no API, schema, sharing policy, deployment or PNG bytes change. The wiki
 catalog intentionally remains dated 2026-11-07; a separate refresh is mandatory
 after confirmed 0.9.5.5 wiki publication.
+Since 2322d41 that separate refresh is complete: 522 titles include
+`Version 0.9.5.5`, with wiki verification dates 2026-11-12. All 312 PNGs
+and both CSS files are unchanged. Only bundled title/date metadata and the
+existing version-link regression change; no API, server, save or game-rule
+change.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (398 files) so
@@ -232,9 +237,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `672918c0f0fb1a8b4031c85287220256d5f99e9d`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/43126518092) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/63) has no open issues |
-| Web | `mirklurk-map:672918c`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:672918c`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `2322d4194c04b9d9b1e25ea3015cb912e60bc42d`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/43137086873) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/64) has no open issues |
+| Web | `mirklurk-map:2322d41`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:2322d41`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -246,12 +251,12 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.12cebf0e96.js` | `12cebf0e963e542a028d55eddfb1c213e99c55582acac5be4bf6f55d5999b4e1` |
-| `edit.add7580d6b.js` | `add7580d6b57888e2cd8558c278f98bc7c741f2879b51987ef064353cfd6529f` |
-| `sw.js` | `b025270a30fa512c9200a1d466299a0b3a5a58dd6a19f3f9c5e51f2cc4746d0c` |
+| `app.c34c149da8.js` | `c34c149da8d275b7acf8e687b886c37c7763d9eb09c435bface48b35a7e019bf` |
+| `edit.5aa36ff628.js` | `5aa36ff628ebd256dd11b5bdf0dee941104df24edfbce77e0437cec998c78645` |
+| `sw.js` | `eee15676551dfcc2152a95807f88125735dd133cd6a6d524a93da660e99c444b` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 398 entries (cache `d441f473b0`) and
+unchanged); the service worker keeps 398 entries (cache `a2044286f2`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
@@ -383,7 +388,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.24** and **fd2b:92df:1a5b:1::18**, not
+`compose_proxy` addresses **192.168.128.60** and **fd2b:92df:1a5b:1::3c**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -406,6 +411,12 @@ reviewed config inode. Verify actual NPM identity/addresses again before
 activation and complete normal public/identity acceptance afterward.
 No NPM API apply or network change is needed. A stale entry trusts
 whichever container takes that address next, so replace it; never add to it.
+After the user-initiated reboot at 2026-11-12 01:23 UTC, the same NPM
+container acquired .60 / ::3c and code-server acquired .24 / ::18.
+The 2322d41 catalog rollout replaces that stale pair with only the newly
+verified NPM addresses. It does not broaden trust, pin network addresses,
+change NPM or reinstate the old pair on rollback. Recheck actual ownership
+again before activation; dynamic leases may change after future restarts.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
@@ -481,6 +492,20 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 `192.168.50.1` NAT identity; do not mistake that for the Docker proxy identity.
 
 ## Rollback
+
+Previous source: `672918c0f0fb1a8b4031c85287220256d5f99e9d`, tags
+`mirklurk-map:672918c` / `mirklurk-map-uploads:672918c`. Preflight on
+2026-11-12 UTC observed exact running images
+`sha256:c10b8ebe755786af40a055afb0cf86156bdc38a8632bea5a15eda3901c6925c4`
+(web) and
+`sha256:9391a308f08e54c5d670e1da3646d8c5ffd18b9db0d0edefbe8a0d5ce8709cd3`
+(uploads). Retain and recheck both under `rollback-672918c-20261112-2322d41`.
+This catalog-only refresh adds Version 0.9.5.5 and new verification dates;
+server-reachable logic, API, save formats and PNGs are unchanged.
+Recreate uploads then web from retained exact images under the shared lock,
+preserving **current** verified NPM trust and the shares volume. Never
+restore the stale .24 / ::18 trust pair. This restores core 0.9.5.5 with
+its older wiki catalog, not older game rules.
 
 Previous source: `66a4baebb5be5700e98ba696b57a6d0445ee95cd`, tags
 `mirklurk-map:66a4bae` / `mirklurk-map-uploads:66a4bae`. Preflight on
