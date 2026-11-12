@@ -16,6 +16,12 @@ spec = importlib.util.spec_from_file_location("safe_reboot", ROOT / "nixos/safe-
 reboot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reboot)
 
+REBOOT_REQUEST = (
+    "busctl", "--system", "--allow-interactive-authorization=no",
+    "call", "org.freedesktop.login1", "/org/freedesktop/login1",
+    "org.freedesktop.login1.Manager", "RebootWithFlags", "t", "1",
+)
+
 
 def state(active="inactive", sub="dead", job="0", result="success"):
     return dict(LoadState="loaded", ActiveState=active, SubState=sub, Job=job, Result=result)
@@ -201,7 +207,8 @@ class SafeRebootTests(unittest.TestCase):
                 reboot.worker(self.config)
         self.assertTrue((reboot.STATE / "pending").exists())
         self.assertTrue((reboot.STATE / "committed").exists())
-        self.assertEqual(self.commands.count(("systemctl", "reboot")), 1)
+        self.assertEqual(self.commands.count(REBOOT_REQUEST), 1)
+        self.assertNotIn(("systemctl", "reboot"), self.commands)
         self.assertNotIn(("systemctl", "stop", "backup.service"), self.commands)
 
     def test_final_recheck_prevents_racing_job(self):
@@ -209,7 +216,7 @@ class SafeRebootTests(unittest.TestCase):
              patch.object(reboot.time, "sleep", side_effect=InterruptedError):
             with self.assertRaises(InterruptedError):
                 reboot.worker(self.config)
-        self.assertFalse(any("reboot" in command for command in self.commands))
+        self.assertFalse(any(command[0] == "busctl" or "reboot" in command for command in self.commands))
         reboot.cleanup()
 
     def test_busy_lock_is_retried_without_reboot(self):
@@ -217,24 +224,55 @@ class SafeRebootTests(unittest.TestCase):
              patch.object(reboot.time, "sleep", side_effect=InterruptedError):
             with self.assertRaises(InterruptedError):
                 reboot.worker(self.config)
-        self.assertFalse(any("reboot" in command for command in self.commands))
+        self.assertFalse(any(command[0] == "busctl" or "reboot" in command for command in self.commands))
 
     def test_rejected_reboot_restores_timers_and_releases_locks(self):
         self.states["backup.timer"] = state("active", "waiting")
 
         def reject(*args, **kwargs):
-            if "reboot" in args:
+            result = self.run_command(*args, **kwargs)
+            if args[0] == "busctl":
                 raise reboot.RebootError("shutdown inhibited")
-            return self.run_command(*args, **kwargs)
+            return result
 
         with patch.object(reboot, "run", side_effect=reject):
             with self.assertRaisesRegex(reboot.RebootError, "inhibited"):
                 reboot.worker(self.config)
         self.assertFalse((reboot.STATE / "committed").exists())
+        self.assertEqual(self.commands.count(REBOOT_REQUEST), 1)
+        self.assertFalse(any(command[0] == "systemctl" and "reboot" in command for command in self.commands))
         with reboot.locked(reboot.WIKI_BACKUPS) as acquired:
             self.assertTrue(acquired)
         reboot.cleanup()
         self.assertIn(("systemctl", "--no-block", "start", "backup.timer"), self.commands)
+
+    def test_logind_errors_never_fall_back_to_an_unchecked_reboot(self):
+        for error in (
+            reboot.RebootError("Unknown method RebootWithFlags"),
+            reboot.RebootError("Failed to connect to bus"),
+            subprocess.TimeoutExpired("busctl", 60),
+            FileNotFoundError("busctl"),
+        ):
+            with self.subTest(error=error):
+                reboot.STATE.mkdir(exist_ok=True)
+                self.commands.clear()
+                self.states["backup.timer"] = state("active", "waiting")
+
+                def fail_logind(*args, **kwargs):
+                    result = self.run_command(*args, **kwargs)
+                    if args[0] == "busctl":
+                        raise error
+                    return result
+
+                with patch.object(reboot, "run", side_effect=fail_logind):
+                    with self.assertRaises(type(error)):
+                        reboot.worker(self.config)
+                self.assertEqual(self.commands.count(REBOOT_REQUEST), 1)
+                self.assertFalse(any(command[0] == "systemctl" and "reboot" in command for command in self.commands))
+                self.assertFalse((reboot.STATE / "committed").exists())
+                reboot.cleanup()
+                self.assertIn(("systemctl", "--no-block", "start", "backup.timer"), self.commands)
+                self.assertFalse(reboot.STATE.exists())
 
     def test_request_is_idempotent_and_cancel_is_not_shutdown_cancel(self):
         reboot.request()

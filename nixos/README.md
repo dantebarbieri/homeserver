@@ -226,9 +226,15 @@ failure handler. Review and fix a failed job before clearing its failed state.
 Backup target failures now return a failing service result, not just an alert.
 
 Once idle, it holds the existing Compose lock and an exclusive lock on the wiki
-backup directory, checks again, and requests a normal systemd reboot. logind
-still refuses it while a block inhibitor is active (`systemd-inhibit --list`),
-but logged-in users, including the SSH session that queued it, do not block it.
+backup directory, checks again, and requests an orderly reboot directly through
+logind's `RebootWithFlags` with `SD_LOGIND_ROOT_CHECK_INHIBITORS`. Shutdown
+`block` inhibitors are respected even as root (`systemd-inhibit --list`), as
+are other users' `block-weak` inhibitors. Root-owned `block-weak` inhibitors
+retain logind's same-owner exemption; root jobs needing protection must use
+`block`. Delay inhibitors retain logind's normal grace period.
+Logged-in users, including the SSH session that queued it, do not block it.
+An inhibitor denial or logind/bus error fails the request and restores timers;
+there is no unchecked `systemctl reboot` fallback.
 The wiki SQL sidecar takes a shared lock on that same directory,
 so existing dumps finish and new dumps wait through Docker shutdown. No container
 is manually stopped or removed by the command, preserving `unless-stopped`
@@ -436,3 +442,16 @@ server, synchronize real data, or build a system closure. The
 [`nixos-validate`](../.github/workflows/nixos-validate.yml) workflow runs it,
 plus a toplevel evaluation against the committed lock, on every change under
 `nixos/`.
+
+The opt-in real-logind regression runs in an isolated NixOS test VM (requires
+Linux/KVM), not on the host. It checks root/user-owned block inhibitors,
+user-owned weak inhibitors, timer recovery, and a successful guest reboot with
+another user still logged in:
+
+```bash
+nix build --impure --no-link --expr '
+  let flake = builtins.getFlake ("git+file://" + toString ./. + "?dir=nixos");
+  in import ./nixos/tests/safe-reboot-logind.nix {
+    pkgs = flake.nixosConfigurations.homeserver.pkgs;
+  }'
+```

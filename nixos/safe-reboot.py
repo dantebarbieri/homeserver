@@ -180,10 +180,14 @@ def worker(config):
                             committed = STATE / "committed"
                             committed.touch()
                             try:
-                                # Not --check-inhibitors=yes: it also refuses while
-                                # anyone is logged in (e.g. the SSH session that queued
-                                # this). logind still rejects active block inhibitors.
-                                run("systemctl", "reboot")
+                                # Check inhibitors even as root, without systemctl's
+                                # additional logged-in-user veto. No fallback on denial.
+                                # 1 = SD_LOGIND_ROOT_CHECK_INHIBITORS.
+                                run(
+                                    "busctl", "--system", "--allow-interactive-authorization=no",
+                                    "call", "org.freedesktop.login1", "/org/freedesktop/login1",
+                                    "org.freedesktop.login1.Manager", "RebootWithFlags", "t", "1",
+                                )
                             except (RebootError, subprocess.TimeoutExpired, OSError):
                                 committed.unlink()
                                 raise
