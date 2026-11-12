@@ -201,6 +201,14 @@ include `Version 0.9.5.3`, and both wiki verification dates read 2026-11-07.
 All 312 bundled pictures and both CSS files are byte-identical. No runtime
 logic, game rules, save fields, server-reachable modules, sharing or
 deployment policy changes.
+Since 672918c Mirklurk 0.9.5.5 is **Latest**, retaining the shared modeled
+0.9.5.0 rules and older-save compatibility. Saved terrain remains authoritative;
+the game's changed pit generation, fort exclusion and explicit natural
+placement are not simulated by MirkMap. Focused edit/export/reload tests retain
+saved pits, plants and unknown fields. Server-reachable release metadata changes,
+but no API, schema, sharing policy, deployment or PNG bytes change. The wiki
+catalog intentionally remains dated 2026-11-07; a separate refresh is mandatory
+after confirmed 0.9.5.5 wiki publication.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (398 files) so
@@ -224,9 +232,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `66a4baebb5be5700e98ba696b57a6d0445ee95cd`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/42324370439) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/62) has no open issues |
-| Web | `mirklurk-map:66a4bae`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:66a4bae`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `672918c0f0fb1a8b4031c85287220256d5f99e9d`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/43126518092) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/63) has no open issues |
+| Web | `mirklurk-map:672918c`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:672918c`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -238,12 +246,12 @@ not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.49ea318c9f.js` | `49ea318c9fbeda5f2e3a88168b61c2cfa35713faeabf7cf89d6434ccd6cd9f95` |
-| `edit.6b7669ee08.js` | `6b7669ee085a764c85a300a5cb4564e5951100538859c0f866cf4838b946677d` |
-| `sw.js` | `24412c4b58023a2ab75c5cdac23392c1a10ea06a0f6a427d56916aea7b360c99` |
+| `app.12cebf0e96.js` | `12cebf0e963e542a028d55eddfb1c213e99c55582acac5be4bf6f55d5999b4e1` |
+| `edit.add7580d6b.js` | `add7580d6b57888e2cd8558c278f98bc7c741f2879b51987ef064353cfd6529f` |
+| `sw.js` | `b025270a30fa512c9200a1d466299a0b3a5a58dd6a19f3f9c5e51f2cc4746d0c` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 398 entries (cache `835badd8e2`) and
+unchanged); the service worker keeps 398 entries (cache `d441f473b0`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
@@ -473,6 +481,20 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 `192.168.50.1` NAT identity; do not mistake that for the Docker proxy identity.
 
 ## Rollback
+
+Previous source: `66a4baebb5be5700e98ba696b57a6d0445ee95cd`, tags
+`mirklurk-map:66a4bae` / `mirklurk-map-uploads:66a4bae`. Preflight on
+2026-11-12 UTC observed exact running images
+`sha256:b55f7a8eb1ea789cf4840f44e8001da8e16b934495004cdfe0a8d22e44d03784`
+(web) and
+`sha256:9e08c572b1b1df04d7da082af5df603911bbfd45ae65911a5b50fda3e5b1bb94`
+(uploads). Retain and recheck both under `rollback-66a4bae-20261112-672918c`.
+The 672918c release changes release detection/shared-rule metadata reachable
+by save parsing, audit stamps and regression tests; server/API/schema/sharing,
+PNG bytes and deployment configuration are unchanged. Recreate uploads then
+web from the retained exact images under the shared lock, preserving current
+exact NPM trust and the shares volume. This restores 0.9.5.3 as Latest, not
+older sharing storage or game data.
 
 Previous source: `8999d9a0527a9ea45b50b579c39b0c11729ecd65`, tags
 `mirklurk-map:8999d9a` / `mirklurk-map-uploads:8999d9a`. Preflight on
