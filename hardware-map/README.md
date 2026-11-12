@@ -70,7 +70,7 @@ numbers are bundled.
 | User-reported | DIMMs in A1/B1/G1/H1; NH-U9 cooler fans on FAN1/FAN2; case USB 3 cable on USB3_3_4. |
 | User-reported | LAN1, LAN2 and BMC LAN connected to the switch; no other rear I/O connections except PSU power. The other rear ports are a logical group, `REAR_OTHER`, not a vendor header identifier. |
 | User-reported wiring, photographed label | Molex chain A: six BoK BDM12025S fans, 120 mm reported, 12 V / 0.10 A per label; three front plus three middle. None use motherboard headers or tach connections. |
-| User-reported wiring, uncertain label | Molex chain B: two rear BoK fans, reported label 12 V / 0.1 A / 2000 RPM. Size, thickness and exact model remain **UNVERIFIED**. The tentative reading `BDM180255` through the grille and stock chassis specifications do not establish installed dimensions. Label-rated RPM is not a measurement; no tach is connected. |
+| Manufacturer chassis specification + user-confirmed original fans | Molex chain B: two rear **80 mm** BoK fans. The [Rosewill RSV-L4500U manual](https://c1.neweggimages.com/IMAttachment/UserManual/User%20Manual-1741922402096.pdf) specifies rear 80 mm fans, and the user confirms both are factory-original. Width is specification-based, **not photo-measured**. Thickness and exact model remain **UNVERIFIED**; `BDM180255` is only a tentative transcription. Molex wiring and label 12 V / 0.1 A / 2000 RPM are reported; rated RPM is not a measurement, and no tach is connected. |
 | User-reported | HX1000i PSU-side ports used: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA. One SATA/PATA feeds all 12 HDDs, splitter topology untraced; two feed the Molex fan chains. Free: 2 SATA/PATA and 4 PCIe/CPU. These counts do not verify electrical loads or individual internal board-header wiring. |
 | User-reported | The observed case pin header is board-to-case, not a fan connector; its exact designator is unverified. |
 | Photo-inferred | Red/white/green/black flat cable along the lower board edge under the GPU is possibly internal USB 2.0. No specific header, pinout or USB identity is confirmed. |
@@ -81,8 +81,8 @@ fan-planning counts show **one confirmed-free header (FAN3), two
 photo-confirmed occupied headers (FAN1/FAN2), and four unverified headers
 (FAN4–FAN7)**. Photo-inferred empty headers do not count as verified free.
 The eight case fans use reported Molex chains, not motherboard headers.
-No new telemetry readings or replacement-fan dimensions are inferred from
-these observations.
+No new telemetry readings, rear-fan thickness or exact rear-fan model are
+inferred from these observations. HDD splitter topology remains untraced.
 
 ## Sources and interpretation
 
