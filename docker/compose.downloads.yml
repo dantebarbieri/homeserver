@@ -220,6 +220,20 @@ services:
       service: common-service
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    shm_size: 1g
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 1024
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://localhost:8191/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_HTML: ${LOG_HTML:-false}
