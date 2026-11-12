@@ -191,7 +191,7 @@ one. It assumes the normal system profile is the next boot target, not a manual
 boot-menu or one-shot override.
 
 When it reports changes, use `sudo safe-reboot` to queue a backup-aware reboot;
-`sudo safe-reboot --check` separately checks whether it is safe to proceed now.
+`sudo safe-reboot --check` separately shows whether it could proceed right now.
 
 `modules/reboot-reminder.nix` uses this same command daily at 10:00 and sends an
 ntfy "Reboot needed" notice when installed changes are waiting. Unlike the
@@ -206,10 +206,24 @@ Use the Nix-managed command instead of `sudo reboot`:
 
 ```bash
 sudo safe-reboot           # Queue now; wait as long as needed, even after SSH disconnects
-sudo safe-reboot --check   # Check current blockers without queuing a reboot
+sudo safe-reboot --check   # Dry run: list every blocker without queuing a reboot
 sudo safe-reboot --status  # Service state and recent progress
 sudo safe-reboot --cancel # Cancel while still waiting; restore previously active timers
 ```
+
+`--check` needs sudo, exits **0** when nothing would stop a reboot and **1**
+otherwise, and prints every blocker instead of stopping at the first:
+
+- `Waiting for: …` — what the queued worker would wait out: busy backup/maintenance
+  jobs, a RAID scrub/recovery, the Compose or wiki-backup lock, the deployment hold.
+- `Would refuse to reboot: …` — what would make it fail: a failed job, an unreadable
+  or degraded RAID, Docker live-restore enabled, an unhealthy wiki SQL backup, or a
+  logind shutdown inhibitor the final reboot call would deny (see below).
+
+It changes nothing; it only try-locks the Compose lock and wiki backup directory
+and releases them at once. The MirkLurk backup sidecar's first dump after a host boot
+can race `mirklurk-db` and fail, so `--check` can report the wiki SQL backup as
+unhealthy for about five minutes after every boot until the sidecar's retry succeeds.
 
 `configuration.nix` imports `modules/safe-reboot.nix`, which installs the command
 and an **on-demand**, root-owned `safe-reboot.service`. Nothing queues a reboot at
@@ -445,8 +459,9 @@ plus a toplevel evaluation against the committed lock, on every change under
 
 The opt-in real-logind regression runs in an isolated NixOS test VM (requires
 Linux/KVM), not on the host. It checks root/user-owned block inhibitors,
-user-owned weak inhibitors, timer recovery, and a successful guest reboot with
-another user still logged in:
+user-owned weak inhibitors, that `safe-reboot --check` agrees with the real
+reboot call for each of them, timer recovery, and a successful guest reboot with
+another user and a root-owned weak inhibitor present:
 
 ```bash
 nix build --impure --no-link --expr '

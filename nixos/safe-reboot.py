@@ -57,15 +57,16 @@ def busy(state):
     )
 
 
-def blockers(services):
-    reasons = []
-    for unit in services:
-        state = unit_state(unit)
-        if busy(state):
-            reasons.append(f"{unit} ({state['ActiveState']}/{state['SubState']})")
-        elif state["ActiveState"] == "failed" or state.get("Result") != "success":
-            raise RebootError(f"{unit} failed; inspect its journal and repair/reset-failed before rebooting")
+def unit_blockers(unit):
+    state = unit_state(unit)
+    if busy(state):
+        return [f"{unit} ({state['ActiveState']}/{state['SubState']})"]
+    if state["ActiveState"] == "failed" or state.get("Result") != "success":
+        raise RebootError(f"{unit} failed; inspect its journal and repair/reset-failed before rebooting")
+    return []
 
+
+def raid_blockers():
     action = (MD / "sync_action").read_text().strip()
     degraded = (MD / "degraded").read_text().strip()
     if not degraded.isdecimal():
@@ -73,12 +74,22 @@ def blockers(services):
     if action not in ("idle", "check", "repair", "resync", "recover", "reshape", "frozen"):
         raise RebootError(f"Unrecognized RAID md0 sync_action={action!r}")
     if action != "idle":
-        reasons.append(f"RAID md0 ({action})")
-    elif degraded != "0":
+        return [f"RAID md0 ({action})"]
+    if degraded != "0":
         raise RebootError(f"RAID md0 degraded={degraded!r}; investigate before rebooting")
-    if os.path.lexists(DEPLOYMENT_HOLD):
-        reasons.append(f"operator deployment hold: {DEPLOYMENT_HOLD}")
-    return reasons
+    return []
+
+
+def hold_blockers():
+    return [f"operator deployment hold: {DEPLOYMENT_HOLD}"] if os.path.lexists(DEPLOYMENT_HOLD) else []
+
+
+def host_blockers():
+    return raid_blockers() + hold_blockers()
+
+
+def blockers(services):
+    return [reason for unit in services for reason in unit_blockers(unit)] + host_blockers()
 
 
 @contextmanager
@@ -96,33 +107,87 @@ def locked(path, *, create=False, blocking=False):
         os.close(fd)
 
 
+def lock_targets():
+    return (
+        (COMPOSE_LOCK, "Compose deployment/update lock"),
+        (WIKI_BACKUPS, "MirkLurk SQL backup"),
+    )
+
+
 @contextmanager
 def maintenance_locks():
     with ExitStack() as stack:
         reasons = []
-        for path, create, label in (
-            (COMPOSE_LOCK, False, "Compose deployment/update lock"),
-            (WIKI_BACKUPS, False, "MirkLurk SQL backup"),
-        ):
-            if not stack.enter_context(locked(path, create=create)):
+        for path, label in lock_targets():
+            if not stack.enter_context(locked(path)):
                 reasons.append(label)
         yield reasons
 
 
-def verify_docker_shutdown():
+def lock_blockers(path, label):
+    with locked(path) as acquired:
+        return [] if acquired else [label]
+
+
+def verify_live_restore():
     live_restore = run("docker", "info", "--format", "{{json .LiveRestoreEnabled}}").stdout.strip()
     if live_restore != "false":
         raise RebootError("Docker live-restore is not disabled; activate the safe-reboot NixOS configuration first")
+
+
+def verify_backup_health():
     run("docker", "exec", "mirklurk-backup", "bash", "/opt/mirklurk-backup.sh", "--healthcheck")
 
 
+def verify_docker_shutdown():
+    verify_live_restore()
+    verify_backup_health()
+
+
+def shutdown_inhibitors():
+    # What RebootWithFlags(SD_LOGIND_ROOT_CHECK_INHIBITORS) refuses for root: every
+    # `block`, plus other users' `block-weak` (root's own keep the same-owner exemption).
+    result = run(
+        "busctl", "--system", "--json=short", "call", "org.freedesktop.login1",
+        "/org/freedesktop/login1", "org.freedesktop.login1.Manager", "ListInhibitors",
+    )
+    try:
+        return [
+            f"logind shutdown inhibitor by {who} (uid {uid}, pid {pid}, {mode}): {why}"
+            for what, who, why, mode, uid, pid in json.loads(result.stdout)["data"][0]
+            if "shutdown" in what.split(":") and (mode == "block" or (mode == "block-weak" and uid != 0))
+        ]
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as error:
+        raise RebootError(f"Cannot parse logind inhibitor list: {error!r}") from error
+
+
 def check(services):
-    reasons = blockers(services)
-    verify_docker_shutdown()
-    with maintenance_locks() as lock_reasons:
-        reasons += lock_reasons
-    print("Waiting for: " + "; ".join(reasons) if reasons else "No reboot blockers detected.", flush=True)
-    return 1 if reasons else 0
+    waiting, refused = [], []
+
+    def collect(into, probe, *args):
+        try:
+            into.extend(probe(*args) or [])
+        except (RebootError, OSError, subprocess.TimeoutExpired) as error:
+            refused.append(str(error))
+
+    # The worker stops at its first hard error; a dry run probes each condition
+    # separately so one failure cannot hide another.
+    for unit in services:
+        collect(waiting, unit_blockers, unit)
+    collect(waiting, raid_blockers)
+    collect(waiting, hold_blockers)
+    collect(refused, verify_live_restore)
+    collect(refused, verify_backup_health)
+    for path, label in lock_targets():
+        collect(waiting, lock_blockers, path, label)
+    collect(refused, shutdown_inhibitors)
+    if waiting:
+        print("Waiting for: " + "; ".join(waiting), flush=True)
+    if refused:
+        print("Would refuse to reboot: " + "; ".join(refused), flush=True)
+    if not (waiting or refused):
+        print("No reboot blockers detected.", flush=True)
+    return 1 if waiting or refused else 0
 
 
 def pause_timers(timers):
@@ -228,7 +293,7 @@ def main(argv=None):
     parser.add_argument("config", help=argparse.SUPPRESS)
     modes = parser.add_mutually_exclusive_group()
     for mode, help_text in (
-        ("check", "show current blockers without queuing a reboot"),
+        ("check", "dry run: show blockers, including logind shutdown inhibitors, without queuing a reboot"),
         ("status", "show the queued reboot's status and recent journal"),
         ("cancel", "cancel before shutdown begins and restore paused timers"),
         ("worker", argparse.SUPPRESS),
