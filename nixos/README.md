@@ -168,14 +168,37 @@ This keeps NVIDIA userspace and the loaded kernel module on matching versions.
 A manual `nixos-rebuild switch` after a lock update can still create a mismatch and is
 not a substitute for rebooting after a driver update.
 
-`modules/reboot-reminder.nix` keeps that from depending on memory. Daily at 10:00
-it compares `/run/booted-system` with the system profile the upgrade stages, using
-the same kernel, initrd and kernel-modules comparison as upstream's `allowReboot`,
-and sends an ntfy "Reboot pending" notice when a different kernel or driver is
-waiting, or other updates are staged but not running. It stays quiet for the first
+### Is a reboot needed?
+
+```bash
+reboot-needed             # Read-only; no sudo required
+```
+
+This checks **installed changes waiting for a reboot**, not whether a reboot is
+queued or safe to perform. It compares the booted kernel, initrd, kernel modules
+(including NVIDIA), and kernel parameters with the selected next-boot generation.
+It also detects an inactive system generation staged by `nixos-rebuild boot`.
+Kernel/driver changes still count after `nixos-rebuild switch`; a userland-only
+switch does not require rebooting merely because the booted generation is older.
+
+The command prints the reasons and exits **0** when no reboot is needed, **1**
+when one is needed, or **2** if state is missing/unreadable and it cannot determine
+the answer. It does not fetch/build updates, check remote versions, send alerts,
+inspect `safe-reboot`'s queue/blockers, or schedule a reboot. There is no uptime
+threshold or RAID-idle gate. For userland-only staged changes, rebooting is this
+server's activation policy, not a claim that every package technically requires
+one. It assumes the normal system profile is the next boot target, not a manual
+boot-menu or one-shot override.
+
+When it reports changes, use `sudo safe-reboot` to queue a backup-aware reboot;
+`sudo safe-reboot --check` separately checks whether it is safe to proceed now.
+
+`modules/reboot-reminder.nix` uses this same command daily at 10:00 and sends an
+ntfy "Reboot needed" notice when installed changes are waiting. Unlike the
+interactive check, the reminder stays quiet for the first
 7 days after a boot (the upgrade stages something most nights) and holds back while
 `md0` is running a scrub or rebuild, so it never invites a reboot that would cut
-one short (see below). It repeats daily until you reboot.
+one short (see below). It repeats daily while changes still need a reboot.
 
 ### Safe reboot
 
