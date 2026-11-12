@@ -375,7 +375,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.27** and **fd2b:92df:1a5b:1::1b**, not
+`compose_proxy` addresses **192.168.128.24** and **fd2b:92df:1a5b:1::18**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -387,6 +387,15 @@ addresses, and `immich_server` then took 192.168.128.33 / ::21; the 5515978
 release replaced them. By 2026-11-05 NPM had moved again to .27 / ::1b,
 while Dashdot owned the old .15 / ::f. The e1979ae release replaces those
 stale exact entries, without retaining them or trusting additional peers.
+On 2026-11-10 NPM was observed at .24 / ::18 after host lifecycle changes;
+Navidrome owned the stale .27 / ::1b pair. Exact-peer maintenance replaces
+both entries and removes the stale pair. Source remains 66a4bae; no app
+rebuild, uploads restart, NPM change or broader trust is required. Under the
+standard shared lock, recreate only web from its retained current image with
+`docker compose up -d --no-deps --no-build --pull never --force-recreate
+--wait --wait-timeout 90 mirklurk-map`, so its read-only bind sees the
+reviewed config inode. Verify actual NPM identity/addresses again before
+activation and complete normal public/identity acceptance afterward.
 No NPM API apply or network change is needed. A stale entry trusts
 whichever container takes that address next, so replace it; never add to it.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
