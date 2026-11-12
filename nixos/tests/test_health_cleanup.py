@@ -299,11 +299,20 @@ class HealthCleanupTests(unittest.TestCase):
         bin_dir = Path(tmp) / "bin"
         bin_dir.mkdir()
         curl = bin_dir / "curl"
-        curl.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$CURL_LOG"\n'
+        curl.write_text('#!/usr/bin/env bash\ncat >> "$CURL_CONFIG_LOG"\n'
+                        'printf "%s\\n" "$*" >> "$CURL_LOG"\n'
+                        'printf "%s" "${CURL_HTTP_STATUS:-200}"\n'
                         'exit "$CURL_STATUS"\n')
         curl.chmod(0o755)
+        fake_id = bin_dir / "id"
+        fake_id.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "${TEST_UID:-0}"\n')
+        fake_id.chmod(0o755)
+        token = Path(tmp) / "publisher-token"
+        token.write_text("tk_testpublisher\n")
         return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-                "CURL_LOG": str(Path(tmp) / "curl.log")}
+                "CURL_LOG": str(Path(tmp) / "curl.log"),
+                "CURL_CONFIG_LOG": str(Path(tmp) / "curl-config.log"),
+                "NTFY_TOKEN_FILE": str(token)}
 
     def test_undeliverable_alerts_are_queued(self):
         notify = self.config["ntfy"]["notify"]
@@ -311,9 +320,10 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertRegex(notify, r"(?m)^PATH=/nix/store/.*:\$PATH$")
         notify = re.sub(r"(?m)^PATH=.*\n", "", notify, count=1)
         self.assertIn("SPOOL=/var/lib/ntfy-spool\n", notify)
-        # (curl exit status, spool exists, expected exit status, queued)
-        for curl_status, spool_exists, expected, queued in (
-            (0, True, 0, 0), (7, True, 0, 1), (22, False, 22, 0),
+        # (curl exit status, HTTP status, spool exists, expected exit status, queued)
+        for curl_status, http_status, spool_exists, expected, queued in (
+            (0, "200", True, 0, 0), (0, "302", True, 0, 1),
+            (7, "000", True, 0, 1), (22, "500", False, 22, 0),
         ):
             with self.subTest(curl=curl_status, spool=spool_exists), \
                     tempfile.TemporaryDirectory() as tmp:
@@ -325,12 +335,16 @@ class HealthCleanupTests(unittest.TestCase):
                                                  f"SPOOL={spool}\n"))
                 result = subprocess.run(
                     ["bash", str(script), "Title", "line one\nline two", "high", "warning"],
-                    env={**self._fake_curl(tmp), "CURL_STATUS": str(curl_status)},
+                    env={**self._fake_curl(tmp), "CURL_STATUS": str(curl_status),
+                         "CURL_HTTP_STATUS": http_status},
                     capture_output=True, text=True,
                 )
                 self.assertEqual(result.returncode, expected, result.stderr)
                 entries = sorted(spool.glob("*.alert")) if spool_exists else []
                 self.assertEqual(len(entries), queued)
+                self.assertEqual(Path(tmp, "curl-config.log").read_text(),
+                                 'header = "Authorization: Bearer tk_testpublisher"\n')
+                self.assertNotIn("tk_testpublisher", Path(tmp, "curl.log").read_text())
                 if queued:
                     entry = entries[0]
                     self.assertEqual((entry / "title").read_text(), "Title")
@@ -338,6 +352,80 @@ class HealthCleanupTests(unittest.TestCase):
                     self.assertEqual((entry / "priority").read_text(), "high")
                     self.assertEqual((entry / "tags").read_text(), "warning")
                     self.assertEqual(list(spool.glob(".new.*")), [])
+
+    def test_missing_or_invalid_publisher_token_queues_alert(self):
+        notify = re.sub(r"(?m)^PATH=.*\n", "", self.config["ntfy"]["notify"], count=1)
+        for token in (None, "not-a-token", "tk_bad\ninjected"):
+            with self.subTest(token=token), tempfile.TemporaryDirectory() as tmp:
+                spool = Path(tmp) / "spool"
+                spool.mkdir()
+                env = self._fake_curl(tmp)
+                token_path = Path(env["NTFY_TOKEN_FILE"])
+                if token is None:
+                    token_path.unlink()
+                else:
+                    token_path.write_text(token)
+                script = notify.replace("SPOOL=/var/lib/ntfy-spool\n", f"SPOOL={spool}\n")
+                result = subprocess.run(
+                    ["bash", "-c", script, "--", "Title", "Message"],
+                    env={**env, "CURL_STATUS": "0"}, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(len(list(spool.glob("*.alert"))), 1)
+                self.assertFalse(Path(env["CURL_LOG"]).exists())
+                if token:
+                    self.assertNotIn(token, result.stdout + result.stderr)
+
+    def test_queue_sync_failure_is_reported_without_discarding_renamed_alert(self):
+        notify = re.sub(r"(?m)^PATH=.*\n", "", self.config["ntfy"]["notify"], count=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = Path(tmp) / "spool"
+            spool.mkdir()
+            env = self._fake_curl(tmp)
+            sync = Path(tmp) / "bin/sync"
+            sync.write_text('#!/usr/bin/env bash\n'
+                            'for last; do :; done\n'
+                            '[ "$last" != "$TEST_SPOOL" ]\n')
+            sync.chmod(0o755)
+            script = notify.replace("SPOOL=/var/lib/ntfy-spool\n", f"SPOOL={spool}\n")
+            result = subprocess.run(
+                ["bash", "-c", script, "--", "Title", "Message"],
+                env={**env, "CURL_STATUS": "7", "TEST_SPOOL": str(spool)},
+                capture_output=True, text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("alert was not delivered", result.stderr)
+            self.assertEqual(len(list(spool.glob("*.alert"))), 1)
+
+    def test_interactive_user_alert_is_queued_and_retried(self):
+        notify = re.sub(r"(?m)^PATH=.*\n", "", self.config["ntfy"]["notify"], count=1)
+        flush = self.config["ntfy"]["flush"]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            home.mkdir()
+            root_spool = Path(tmp) / "root-spool"
+            root_spool.mkdir()
+            spool = home / ".local/state/ntfy-spool"
+            env = {**self._fake_curl(tmp), "TEST_UID": "1000", "HOME": str(home), "CURL_STATUS": "7"}
+            result = subprocess.run(
+                ["bash", "-c", notify, "--", "Interactive alert", "Message"],
+                env=env, capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len(list(spool.glob("*.alert"))), 1)
+
+            runuser = Path(tmp) / "bin/runuser"
+            runuser.write_text('#!/usr/bin/env bash\n[ "$1" = -u ] && [ "$2" = danteb ] && [ "$3" = -- ] || exit 1\n'
+                               'shift 3\nexec "$@"\n')
+            runuser.chmod(0o755)
+            flush = flush.replace("/var/lib/ntfy-spool", str(root_spool))
+            flush = flush.replace("/home/danteb/.local/state/ntfy-spool", str(spool))
+            flush = re.sub(r"/nix/store/[^ ]+/bin/runuser", str(runuser), flush)
+            flush = re.sub(r"/nix/store/[^ ]+/bin/bash", "bash", flush)
+            result = subprocess.run(["bash", "-e", "-c", flush],
+                                    env={**env, "CURL_STATUS": "0"}, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(list(spool.glob("*.alert")), [])
 
     def test_queued_alerts_are_delivered_in_order_once_ntfy_is_back(self):
         flush = self.config["ntfy"]["flush"]
@@ -357,8 +445,11 @@ class HealthCleanupTests(unittest.TestCase):
                 old = time.time() - 2 * 3600
                 os.utime(stale, (old, old))
                 env = {**self._fake_curl(tmp), "CURL_STATUS": str(curl_status)}
+                safe_flush = flush.replace("/var/lib/ntfy-spool", str(spool))
+                safe_flush = safe_flush.replace("/home/danteb/.local/state/ntfy-spool",
+                                                str(Path(tmp) / "absent-user-spool"))
                 result = subprocess.run(
-                    ["bash", "-e", "-c", flush.replace("/var/lib/ntfy-spool", str(spool))],
+                    ["bash", "-e", "-c", safe_flush],
                     env=env, capture_output=True, text=True,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -374,8 +465,33 @@ class HealthCleanupTests(unittest.TestCase):
                     self.assertEqual(len(list(spool.glob("*.alert"))), 2)
                     self.assertEqual(calls.count("Title: "), 1)
 
+    def test_incomplete_queued_alert_is_retained(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = Path(tmp) / "spool"
+            entry = spool / "20261110T011100000000000-1.alert"
+            entry.mkdir(parents=True)
+            (entry / "title").write_text("first")
+            later = spool / "20261110T011200000000000-1.alert"
+            later.mkdir()
+            for field, value in (("title", "second"), ("message", "body"),
+                                 ("priority", "high"), ("tags", "warning"),
+                                 ("queued", "2026-11-10 01:12:00 UTC")):
+                (later / field).write_text(value)
+            flush = self.config["ntfy"]["flush"].replace("/var/lib/ntfy-spool", str(spool))
+            flush = flush.replace("/home/danteb/.local/state/ntfy-spool",
+                                  str(Path(tmp) / "absent-user-spool"))
+            env = {**self._fake_curl(tmp), "CURL_STATUS": "0"}
+            result = subprocess.run(["bash", "-e", "-c", flush], env=env,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("retaining it", result.stderr)
+            self.assertTrue(entry.exists())
+            self.assertFalse(later.exists())
+            self.assertIn("Title: second (delayed)", Path(env["CURL_LOG"]).read_text())
+
     def test_reboot_reminder_decisions(self):
         script = self.config["rebootReminder"]["script"]
+        script = re.sub(r"/nix/store/[^ ]+/bin/ntfy-notify", "ntfy-notify", script)
         for original, fake in (
             ("uptime_file=/proc/uptime", 'uptime_file="$TEST_ROOT/uptime"'),
             ("md_sync=/sys/block/md0/md/sync_action", 'md_sync="$TEST_ROOT/sync_action"'),
@@ -384,7 +500,7 @@ class HealthCleanupTests(unittest.TestCase):
             script = script.replace(original + "\n", fake + "\n")
         harness = (
             'reboot-needed() { printf "%s\\n" "$REBOOT_MESSAGE"; return "$REBOOT_STATUS"; }\n'
-            'curl() { printf "CURL:%s\\n" "$*"; return "$CURL_STATUS"; }\n'
+            'ntfy-notify() { printf "NTFY:%s\\n" "$*"; return "$CURL_STATUS"; }\n'
         )
 
         # (label, uptime days, reboot-needed exit status,
@@ -402,11 +518,12 @@ class HealthCleanupTests(unittest.TestCase):
              "RAID md0 is running 'recover'"),
             ("unknown state", 30, 2, "idle", 0, False, 2, "Cannot determine"),
             ("checker failed", 30, 127, "idle", 0, False, 127, "Cannot determine"),
-            ("ntfy unreachable", 30, 1, "idle", 22, True, 22, "CURL:"),
+            ("ntfy queue unavailable", 30, 1, "idle", 22, True, 22, "NTFY:"),
         ]
         for label, days, reboot_status, action, curl_status, sent, expected, text in cases:
             with self.subTest(label), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
+                (root / "publisher-token").write_text("tk_testpublisher\n")
                 (root / "uptime").write_text(f"{int(days * 86400)}.25 0.00\n")
                 if action is not None:
                     (root / "sync_action").write_text(action + "\n")
@@ -417,6 +534,7 @@ class HealthCleanupTests(unittest.TestCase):
                 result = subprocess.run(
                     ["bash", "-euo", "pipefail", "-c", harness + script],
                     env={**os.environ, "TEST_ROOT": tmp, "CURL_STATUS": str(curl_status),
+                         "NTFY_TOKEN_FILE": str(root / "publisher-token"),
                          "REBOOT_STATUS": str(reboot_status), "REBOOT_MESSAGE": message},
                     capture_output=True,
                     text=True,
@@ -424,12 +542,10 @@ class HealthCleanupTests(unittest.TestCase):
                 output = result.stdout + result.stderr
                 self.assertEqual(result.returncode, expected, output)
                 self.assertIn(text, output)
-                self.assertEqual("CURL:" in result.stdout, sent, output)
+                self.assertEqual("NTFY:" in result.stdout, sent, output)
                 if sent:
-                    self.assertIn("Title: Reboot needed on homeserver", result.stdout)
-                    self.assertIn("Tags: arrows_counterclockwise,computer", result.stdout)
-                    self.assertIn("https://ntfy.danteb.com/homeserver-alerts", result.stdout)
-                    self.assertIn("--fail-with-body --show-error --silent --max-time 30", result.stdout)
+                    self.assertIn("Reboot needed on homeserver", result.stdout)
+                    self.assertIn("arrows_counterclockwise,computer", result.stdout)
 
     def test_plex_album_check_unit_and_timer(self):
         check = self.config["plexAlbumCheck"]
@@ -446,6 +562,7 @@ class HealthCleanupTests(unittest.TestCase):
 
     def test_plex_album_check_decisions(self):
         script = self.config["plexAlbumCheck"]["script"]
+        script = re.sub(r"/nix/store/[^ ]+/bin/ntfy-notify", "ntfy-notify", script)
         state_dir = "state_dir=/var/lib/plex-album-check\n"
         self.assertIn(state_dir, script)
         script = script.replace(state_dir, 'state_dir="$TEST_ROOT/state"\n')
@@ -456,7 +573,7 @@ class HealthCleanupTests(unittest.TestCase):
             'cat > "$TEST_ROOT/docker.stdin"; '
             '[ ! -f "$TEST_ROOT/plex.json" ] || cat "$TEST_ROOT/plex.json"; '
             'return "$DOCKER_STATUS"; }\n'
-            'curl() { printf "CURL:%s\\n" "$*"; return "$CURL_STATUS"; }\n'
+            'ntfy-notify() { printf "NTFY:%s\\n" "$*"; return "$CURL_STATUS"; }\n'
         )
 
         def album(album_id, artist, name, folders):
@@ -498,6 +615,7 @@ class HealthCleanupTests(unittest.TestCase):
         def run(rows, known, alerted, docker_status, curl_status):
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
+                (root / "publisher-token").write_text("tk_testpublisher\n")
                 (root / "state").mkdir()
                 if rows is not None:
                     (root / "plex.json").write_text(json.dumps(rows))
@@ -509,6 +627,7 @@ class HealthCleanupTests(unittest.TestCase):
                     env={
                         **os.environ,
                         "TEST_ROOT": tmp,
+                        "NTFY_TOKEN_FILE": str(root / "publisher-token"),
                         "DOCKER_STATUS": str(docker_status),
                         "CURL_STATUS": str(curl_status),
                     },
@@ -540,9 +659,8 @@ class HealthCleanupTests(unittest.TestCase):
                  absent=["Hans Zimmer"], known_after=["Daft Punk - Alive"], alerted_after="fresh"),
             dict(label="new merge",
                  rows=clean + ajr, sent=True,
-                 text=[header, ajr_line, repair, "Title: Merged Plex albums on homeserver",
-                       "Tags: warning,musical_note", "https://ntfy.danteb.com/homeserver-alerts",
-                       "--fail-with-body --show-error --silent --max-time 30"],
+                 text=[header, ajr_line, repair, "Merged Plex albums on homeserver",
+                       "warning,musical_note"],
                  known_after=["AJR - Neotheater"], alerted_after="fresh"),
             dict(label="already reported",
                  rows=clean + ajr, known="AJR - Neotheater\n", alerted=1,
@@ -569,8 +687,8 @@ class HealthCleanupTests(unittest.TestCase):
                  rows=clean, known="AJR - Neotheater\n", alerted=1,
                  text=["No Plex album spans more than one folder"],
                  known_after=None, alerted_after=None),
-            dict(label="ntfy unreachable keeps the merge unreported",
-                 rows=clean + ajr, curl=22, sent=True, rc=22, text=["CURL:"],
+            dict(label="ntfy queue failure keeps the merge unreported",
+                 rows=clean + ajr, curl=22, sent=True, rc=22, text=["NTFY:"],
                  known_after=None, alerted_after=None),
             dict(label="docker failure",
                  rows=clean + ajr, docker=3, rc=3, known_after=None, alerted_after=None),
@@ -595,7 +713,7 @@ class HealthCleanupTests(unittest.TestCase):
                 )
                 output = result.stdout + result.stderr
                 self.assertEqual(result.returncode, case.get("rc", 0), output)
-                self.assertEqual("CURL:" in result.stdout, case.get("sent", False), output)
+                self.assertEqual("NTFY:" in result.stdout, case.get("sent", False), output)
                 for text in case.get("text", []):
                     self.assertIn(text, output)
                 for text in case.get("absent", []):
@@ -911,13 +1029,14 @@ class HealthCleanupTests(unittest.TestCase):
           fi
         }
         sleep() { :; }
-        curl() { printf 'CURL:%s\\n' "$*"; return "$CURL_STATUS"; }
+        ntfy-notify() { printf 'NTFY:%s\\n' "$*"; return "$CURL_STATUS"; }
         """
         script = self.config["scrubScript"].replace(
             "SYNC=/sys/block/$MD/md/sync_action", 'SYNC="$TEST_MD_DIR/sync_action"'
         ).replace(
             "MISMATCH=/sys/block/$MD/md/mismatch_cnt", 'MISMATCH="$TEST_MD_DIR/mismatch_cnt"'
         )
+        script = re.sub(r"/nix/store/[^ ]+/bin/ntfy-notify", "ntfy-notify", script)
         cases = [
             ("idle,check,check,idle", "0", 0, 0, True, "RAID Scrub Clean"),
             ("check,check,check,idle", "0", 0, 0, False, "Monitoring existing"),
@@ -928,12 +1047,13 @@ class HealthCleanupTests(unittest.TestCase):
             ("check,check,idle", "12", 0, 1, False, "RAID Scrub Found Mismatches"),
             ("check,check,idle", "invalid", 0, 1, False, "Invalid mismatch count"),
             ("check,check,idle", None, 0, 1, False, "mismatch_cnt"),
-            ("check,check,idle", "0", 22, 22, False, "CURL:"),
+            ("check,check,idle", "0", 22, 22, False, "NTFY:"),
         ]
         for actions, mismatch, curl_status, expected, started, message in cases:
             with self.subTest(actions=actions, mismatch=mismatch, curl=curl_status):
                 with tempfile.TemporaryDirectory() as md_dir:
                     md = Path(md_dir)
+                    (md / "publisher-token").write_text("tk_testpublisher\n")
                     (md / "action_index").write_text("0\n")
                     (md / "sync_action").write_text("untouched\n")
                     if mismatch is not None:
@@ -942,6 +1062,7 @@ class HealthCleanupTests(unittest.TestCase):
                         ["bash", "-euo", "pipefail", "-c", harness + script],
                         env={
                             **os.environ, "TEST_MD_DIR": md_dir, "ACTIONS": actions,
+                            "NTFY_TOKEN_FILE": str(md / "publisher-token"),
                             "CURL_STATUS": str(curl_status),
                         },
                         capture_output=True,
@@ -952,8 +1073,6 @@ class HealthCleanupTests(unittest.TestCase):
                     )
                 self.assertEqual(result.returncode, expected, result.stderr)
                 self.assertIn(message, result.stdout + result.stderr)
-                if "CURL:" in result.stdout:
-                    self.assertIn("--fail-with-body --show-error --silent --max-time 30", result.stdout)
                 if expected and curl_status == 0:
                     self.assertNotIn("RAID Scrub Clean", result.stdout)
 

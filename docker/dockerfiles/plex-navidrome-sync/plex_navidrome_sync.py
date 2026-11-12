@@ -97,15 +97,27 @@ def healthcheck():
     return 0
 
 
-def ntfy(title, body, priority="default", tags=""):
+def start_ntfy():
     if not (NTFY_URL and NTFY_TOPIC):
-        return
+        return None
     try:
-        req = urllib.request.Request(f"{NTFY_URL}/{NTFY_TOPIC}", data=body.encode(),
-                                     headers={"Title": title, "Priority": priority, "Tags": tags})
-        urllib.request.urlopen(req, timeout=15).read()
-    except Exception as e:
-        log("WARNING: ntfy send failed:", e)
+        from ntfy_auth import start_outbox
+        return start_outbox(STATE, NTFY_URL, NTFY_TOPIC)
+    except (OSError, ValueError) as e:
+        log("WARNING: ntfy outbox unavailable:", type(e).__name__)
+        return None
+
+
+def ntfy(title, body, priority="default", tags=""):
+    outbox = start_ntfy()
+    if outbox is None:
+        return False
+    try:
+        outbox.submit(title, body, priority, tags)
+        return True
+    except (OSError, ValueError) as e:
+        log("WARNING: ntfy queue failed:", type(e).__name__)
+        return False
 
 
 def http(method, url, params=None, headers=None, body=None, timeout=300):
@@ -533,6 +545,8 @@ def run(plex=None, nd=None):
 
 def main():
     signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))      # run finally blocks on docker stop
+    if not DRY and NTFY_URL and NTFY_TOPIC:
+        start_ntfy()
     if not configured():
         log("NAVIDROME_USER/NAVIDROME_PASSWORD not set in docker/.env; not syncing (see docs/MUSIC.md)")
         signal.pause() if hasattr(signal, "pause") else time.sleep(sys.maxsize)
@@ -547,13 +561,14 @@ def main():
             msg = f"{type(e).__name__}: {e}"[:300]
             last = load_state("last_error.json", last)
             if last.get("msg") != msg or time.time() - last.get("at", 0) > 6 * 3600:
-                if not DRY:
-                    ntfy("Plex/Navidrome sync failed", msg, "high", "musical_note,rotating_light")
-                last = {"msg": msg, "at": time.time()}
-                try:
-                    save_state("last_error.json", last)
-                except OSError:
-                    pass
+                if not DRY and ntfy("Plex/Navidrome sync failed",
+                                    f"{type(e).__name__}; see the sync logs.",
+                                    "high", "musical_note,rotating_light"):
+                    last = {"msg": msg, "at": time.time()}
+                    try:
+                        save_state("last_error.json", last)
+                    except OSError:
+                        pass
         if ONCE:
             return
         time.sleep(INTERVAL)

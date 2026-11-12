@@ -82,6 +82,15 @@ services:
       MAX_FAILURES: 3
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
+      NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
+    volumes:
+      - ./scripts/ntfy-curl.sh:/usr/local/lib/ntfy-curl.sh:ro
+      - ./scripts/ntfy-outbox.sh:/usr/local/lib/ntfy-outbox.sh:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
+      - bmc-ntfy-outbox:/var/lib/ntfy-outbox
+
+volumes:
+  bmc-ntfy-outbox:
 
 networks:
   ddns:

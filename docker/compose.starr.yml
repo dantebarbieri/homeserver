@@ -208,12 +208,15 @@ services:
       QBIT_PASS: ${QPASS}
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
+      NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
     networks:
       - proxy
       - starr
     volumes:
       - ${DATA}/lidarr/config/config.xml:/lidarr/config.xml:ro
       - ${DATA}/lidarr-maint:/state
+      - ./scripts/ntfy_auth.py:/app/ntfy_auth.py:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
       # Same /data paths as the *arrs; read-only because the *arrs do the imports.
       - ${RAID}/shared:/data:ro
     depends_on:
@@ -228,6 +231,8 @@ services:
     volumes:
       - ${DATA}/radarr/config/config.xml:/radarr/config.xml:ro
       - ${DATA}/radarr-maint:/state
+      - ./scripts/ntfy_auth.py:/app/ntfy_auth.py:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
       - ${RAID}/shared:/data:ro
     depends_on:
       - radarr
@@ -241,6 +246,8 @@ services:
     volumes:
       - ${DATA}/sonarr/config/config.xml:/sonarr/config.xml:ro
       - ${DATA}/sonarr-maint:/state
+      - ./scripts/ntfy_auth.py:/app/ntfy_auth.py:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
       - ${RAID}/shared:/data:ro
     depends_on:
       - sonarr

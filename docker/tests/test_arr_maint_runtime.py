@@ -146,7 +146,7 @@ class AlertTests(unittest.TestCase):
         self.assertEqual((engine.clean(None), engine.clean("plain & simple")), ("", "plain & simple"))
         self.assertEqual(engine.Arr().label([{"title": "Rock &amp; Roll"}]), "Rock & Roll")
 
-    def test_needs_attention_messages_are_readable(self):
+    def test_needs_attention_alert_does_not_expose_details(self):
         def row(i, title, media_id, state, status, messages=()):
             return {"id": i, "downloadId": f"d{i}", "title": title, "mediaId": media_id, "protocol": "torrent",
                     "trackedDownloadState": state, "trackedDownloadStatus": status,
@@ -172,10 +172,7 @@ class AlertTests(unittest.TestCase):
             app.run()
         title, body = ntfy.call_args.args[:2]
         self.assertEqual(title, "Fake: needs attention")
-        self.assertEqual(body.splitlines(), [
-            "Tiësto & Friends – On My Way: needs a human | Tiësto & Friends – On My Way",
-            'no thing match, importFailed/warning (Rock & Roll; Artist "X"): Unmatched & Co',
-            "dead torrent not matched in Fake: CloZee – Koto & More"])
+        self.assertEqual(body, "3 item(s) need attention; see the maintenance logs.")
         logged = [c.args for c in log.call_args_list]
         self.assertIn(("ACTION:", "dead torrent (stalledDL, 1%) -> blocklisted: Matched & Co"), logged)
         self.assertNotRegex(" ".join(map(str, logged)), r"&[a-z]+;")
@@ -216,7 +213,7 @@ class AlertTests(unittest.TestCase):
     def test_consecutive_failed_runs_alert_once(self):
         refused = ConnectionRefusedError("[Errno 111] Connection refused")
         ntfy, state = self.failing_main([refused, None, refused, refused, refused, refused])
-        ntfy.assert_called_once_with("Lidarr maintenance: run failed", "ConnectionRefusedError: [Errno 111] Connection refused",
+        ntfy.assert_called_once_with("Lidarr maintenance: run failed", "ConnectionRefusedError; see the maintenance logs.",
                                      "high", "musical_note,rotating_light")
         self.assertEqual(state["last_error.json"]["msg"], "ConnectionRefusedError: [Errno 111] Connection refused")
 

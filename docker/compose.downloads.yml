@@ -99,8 +99,13 @@ services:
       CHECK_INTERVAL: 300
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
+      NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
     volumes:
       - gluetun-tmp:/tmp/gluetun:ro
+      - ./scripts/ntfy-curl.sh:/usr/local/lib/ntfy-curl.sh:ro
+      - ./scripts/ntfy-outbox.sh:/usr/local/lib/ntfy-outbox.sh:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
+      - qbit-ntfy-outbox:/var/lib/ntfy-outbox
     depends_on:
       gluetun:
         condition: service_healthy
@@ -192,8 +197,13 @@ services:
       CHECK_INTERVAL: 60
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
+      NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
     volumes:
       - gluetun-slskd-tmp:/tmp/gluetun:ro
+      - ./scripts/ntfy-curl.sh:/usr/local/lib/ntfy-curl.sh:ro
+      - ./scripts/ntfy-outbox.sh:/usr/local/lib/ntfy-outbox.sh:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
+      - slskd-ntfy-outbox:/var/lib/ntfy-outbox
     depends_on:
       gluetun-slskd:
         condition: service_healthy
@@ -324,6 +334,8 @@ services:
 volumes:
   gluetun-tmp:
   gluetun-slskd-tmp:
+  qbit-ntfy-outbox:
+  slskd-ntfy-outbox:
 
 networks:
   proxy:
