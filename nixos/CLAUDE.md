@@ -14,6 +14,7 @@ This file provides guidance to Claude Code when working with the `nixos/` direct
 - `docker-functions.zsh` — Docker Compose convenience shell functions (`dci`, `dce`, `dcs`, `dcl`, `dcr`, `dcu`, `dcupdate`), sourced by `interactiveShellInit` in `modules/shell.nix`
 - `tests/test_health_cleanup.py` — Evaluates the flake and mock-runs unit scripts; run in CI by `nixos-validate.yml`.
 - `modules/safe-reboot.nix` / `safe-reboot.py` — Installs `sudo safe-reboot` plus `--check`, `--status`, `--cancel`. The opt-in systemd worker waits for backups/maintenance and RAID idle; never substitute plain `reboot` when a safe reboot is intended. `tests/test_safe_reboot.py` exercises coordination/recovery without a live server.
+- `modules/reboot-reminder.nix` / `reboot-needed.py` — Installs read-only `reboot-needed` (no sudo): compares booted components and active/staged generations, not reboot queue/safety. Exits 0 = no need, 1 = reboot needed, 2 = unknown/error. The daily reminder reuses it with its existing uptime/RAID gates. Covered by `tests/test_reboot_needed.py`.
 
 `/etc/nixos` on the server is a symlink to this directory, so `nixos-rebuild` auto-detects `flake.nix` and builds `#homeserver`.
 
@@ -133,6 +134,7 @@ reintroduce the timer just because optional `mail-config/` templates remain.
 ## Commands
 
 ```bash
+reboot-needed               # Installed updates waiting for reboot; not a safety/queue check
 sudo nixos-rebuild switch    # Apply changes (git add new files first)
 sudo nixos-rebuild boot      # Stage for next boot (driver/kernel changes)
 sudo nixos-rebuild test      # Test without persisting
