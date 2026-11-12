@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectors, connectorById, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
+import { connectors, connectorById, landscapeBounds, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
 import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, fanAvailability, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
 
 const now = "2026-11-12T21:30:00.000Z";
@@ -10,6 +10,30 @@ test("board connectors are unique and a blank annotation document has no assigne
   assert.equal(connectorById.size, connectors.length);
   const counts = connectionCounts(emptyDocument());
   assert.deepEqual(counts, { confirmed: 0, inferred: 0, unknown: connectors.length });
+});
+
+test("landscape projection rotates connector order without mutating manual geometry or pin functions", () => {
+  const original = structuredClone(connectors);
+  const board = landscapeBounds({ x: 65, y: 10, width: 675, height: 910 });
+  const cpu = landscapeBounds(connectorById.get("CPU1"));
+  const rear = landscapeBounds(connectorById.get("LAN1"));
+  const upperSlot = landscapeBounds(connectorById.get("PCIE7"));
+  const lowerSlot = landscapeBounds(connectorById.get("PCIE1"));
+  assert.ok(rear.x > cpu.x, "rear I/O must be on the chassis right");
+  assert.ok(upperSlot.y > lowerSlot.y, "manual slot order must rotate, not be renumbered");
+  for (const id of ["FAN1", "FAN2", "FAN3", "FAN4", "FAN5", "FAN6", "FAN7"]) {
+    const header = landscapeBounds(connectorById.get(id));
+    assert.ok(header.x >= board.x && header.x + header.width <= board.x + board.width);
+    assert.ok(header.y >= board.y && header.y + header.height <= board.y + board.height);
+  }
+  const fan1 = landscapeBounds(connectorById.get("FAN1"));
+  const fan3 = landscapeBounds(connectorById.get("FAN3"));
+  assert.ok(fan1.y > fan3.y, "fan upper-cluster order must rotate with the board");
+  const socket = connectorById.get("M2_1");
+  const drive = landscapeBounds({ x: socket.x + 25, y: 513, width: 40, height: 236 });
+  assert.ok(drive.height > drive.width);
+  assert.ok(upperSlot.width > upperSlot.height, "drive and PCIe axes must remain perpendicular");
+  assert.deepEqual(connectors, original);
 });
 
 test("a connection edit preserves other connectors and retains evidence on export/import", () => {

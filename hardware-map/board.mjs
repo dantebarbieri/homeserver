@@ -109,6 +109,12 @@ export const connectors = [
 
 export const connectorById = new Map(connectors.map(item => [item.id, item]));
 
+// Rotate the manual-oriented geometry 180 degrees into a front-left/rear-right chassis.
+// Unequal schematic scales reserve room for readable labels; these are not dimensions.
+export function landscapeBounds({ x, y, width, height }) {
+  return { x: 1345 - (x + width) * .72, y: 635 - (y + height) * .6, width: width * .72, height: height * .6 };
+}
+
 function observation(target, confidence, occupancy, provenance, evidence, note = "") {
   return { target, confidence, occupancy, provenance, evidence: `${snapshotDate}: ${evidence}`, note, updatedAt: null };
 }
@@ -170,7 +176,7 @@ export const components = [
   { id: "gpu", label: "Graphics", model: "GV-N2070SGAMING OC-8GD rev 1.0", capacity: "PCIE3 · 2.5-slot cooler blocks PCIE2", status: "Label photo-confirmed; slot user-confirmed / photo-consistent", note: "Fan intake directly faces the HBA in PCIE1. Shroud overhangs both M.2 drives; a few-mm gap is a photo estimate, not a measurement." },
   { id: "nvme-a", label: "NVMe A", model: "Samsung 990 EVO reported · physical socket binding unknown", capacity: "2 TB nominal", status: "Bare Samsung 2280 drives photo-confirmed in both sockets", note: "No heatsinks. Drives run perpendicular to the slots across PCIE6→PCIE2, under the GPU overhang. Clearance is unmeasured." },
   { id: "nvme-b", label: "NVMe B", model: "Samsung 990 EVO reported · physical socket binding unknown", capacity: "2 TB nominal", status: "Bare Samsung 2280 drives photo-confirmed in both sockets", note: "No heatsinks. A/B telemetry identities are not assigned to M2_1/M2_2; the observed GPU gap is not a verified heatsink allowance." },
-  { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "11 active + 1 hot spare · RAID6", status: "Reported installed" },
+  { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "12 / 15 bays populated · 3 empty", status: "12 disks and 15-bay capacity user-confirmed", note: "11 active + 1 hot spare, RAID6. No drives are being added. Individual bay assignments and the locations of the three empty bays are unknown; the diagram is a count illustration, not a physical bay map." },
   { id: "hba", label: "Storage HBA", model: "Low-profile HBA · two SFF-8643 cables", capacity: "PCIE1 · 4 connected HDDs reported", status: "Slot user-confirmed / photo-consistent; model unknown", note: "Directly at the GPU fan intake. Appearance and cable count are photo-confirmed; airflow impact is not measured." },
   { id: "case-fans", label: "Front + middle fans / chain A", model: "6 × BoK BDM12025S · 120 mm reported", capacity: "Label: 12 V / 0.10 A per fan", status: "User-reported Molex wiring; label photographed (relayed)", note: "3 front + 3 middle. None are on motherboard headers; no tach connection is reported. Actual current and RPM are not measured." },
   { id: "rear-fans", label: "Rear fans / chain B", model: "2 × 80 mm BoK · thickness and exact model UNVERIFIED", capacity: "Reported label: 12 V / 0.1 A / 2000 RPM", status: "Width: manufacturer chassis specification + user-confirmed original fans", note: "Rosewill RSV-L4500U manual specifies rear 80 mm fans; the user confirms both installed rear fans are factory-original. Width is specification-based, NOT photo-measured. Thickness and tentative model transcription BDM180255 remain unverified. Molex wiring is user-reported. Label-rated 2000 RPM is NOT a measured speed; no tach connection or board header is reported." },

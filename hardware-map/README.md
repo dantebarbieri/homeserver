@@ -22,8 +22,21 @@ node --test hardware-map/model.test.mjs
 
 ## What works
 
-- Select board connectors with the original schematic, keyboard or searchable
-  list. Fan headers have verified **logical** six-pin details.
+- Explore a wide landscape chassis view with selectable installed hardware:
+  EPYC under its NH-U9 cooler, reported populated DIMMs, GPU, HBA, bare M.2
+  drives, HX1000i, three front/three middle/two rear case fans, and 12 HDDs
+  in a 15-bay count illustration. Click hardware for its details and evidence;
+  related connector buttons open the corresponding connection record.
+- Use **Expand workspace** (Escape to exit) for a near-full-screen map and
+  details panel. Zoom is independent of annotations. On narrow screens the
+  map scrolls horizontally, with details below rather than crushed labels.
+- Compact top category buttons and connector search enter connector focus.
+  Hardware dims and is disabled for pointer/keyboard selection; nonmatching
+  connectors also dim and cannot intercept clicks. **Hardware** restores
+  component selection. Fan headers retain verified **logical** six-pin details.
+  The manual-oriented board coordinates are rotated 180 degrees so rear I/O
+  is on the right, with schematic spacing and upright labels. The landscape
+  chassis is not a physical pin-orientation reference.
 - Annotate connection target, confidence, physical occupancy (including blocked slots), evidence source
   and notes. Confirmed and inferred connections require evidence.
   Inspection defaults distinguish photo-confirmed, photo-inferred, uncertain
@@ -52,8 +65,11 @@ tab blocks saves until reload to reduce accidental overwrites.
 
 ## Cleaning inspection, November 12, 2026
 
-These are relayed observations from the coordinating session, not a new
-inspection of the actual photos by this app. No photos or identifying serial
+Inventory evidence below was relayed by the coordinating session. Private
+inspection photo sheets were also viewed for this UI revision's colors and
+general case arrangement: green PCB, black/blue slots, silver chassis and
+heatsinks, dark cards/fans/PSU, beige/brown Noctua frames. This does not upgrade
+reported connections to confirmed ones. No photos or identifying serial
 numbers are bundled.
 
 | Provenance | Observation |
@@ -74,6 +90,7 @@ numbers are bundled.
 | User-reported | HX1000i PSU-side ports used: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA. One SATA/PATA feeds all 12 HDDs, splitter topology untraced; two feed the Molex fan chains. Free: 2 SATA/PATA and 4 PCIe/CPU. These counts do not verify electrical loads or individual internal board-header wiring. |
 | User-reported | The observed case pin header is board-to-case, not a fan connector; its exact designator is unverified. |
 | Photo-inferred | Red/white/green/black flat cable along the lower board edge under the GPU is possibly internal USB 2.0. No specific header, pinout or USB identity is confirmed. |
+| User-confirmed | 12 HDDs is the true installed count; the case has 15 bays, leaving three empty. No drives are being added. Individual bay mapping and the locations of the empty bays remain unknown. |
 
 User-reported occupied headers remain inferred rather than independently
 confirmed unless explicitly user-confirmed. For an unmodified inspection map,
@@ -83,6 +100,23 @@ photo-confirmed occupied headers (FAN1/FAN2), and four unverified headers
 The eight case fans use reported Molex chains, not motherboard headers.
 No new telemetry readings, rear-fan thickness or exact rear-fan model are
 inferred from these observations. HDD splitter topology remains untraced.
+
+### Chassis drawing boundaries
+
+The front is on the left and rear I/O on the right. Component and case-part
+positions, dimensions and mounting offsets are approximate, even when the
+component's identity or electrical slot is confirmed. GPU/HBA shapes illustrate
+PCIE3/PCIE1 placement and PCIE2 blockage, not measured cooler footprints.
+Connector focus reveals sockets visually; it does not mean they are physically
+accessible beneath a card. M.2 outlines retain their perpendicular-to-slot
+direction; NVMe A/B readings are not assigned to a socket.
+
+Fan faces are unfolded for recognition, not shown at their physical mounting
+angles or as verified airflow directions. Filled/outlined drive marks illustrate
+12 occupied / three empty bays only, not a per-cage population claim. No
+cable routing, actual bay identity, splitter topology or component clearance
+is inferred from the illustration. Existing saved/imported annotations are
+preserved unchanged; this is a visual revision, not a schema migration.
 
 ## Sources and interpretation
 

@@ -13,11 +13,11 @@
 <body>
   <header class="masthead">
     <div class="brand"><span class="brand-mark" aria-hidden="true">⌘</span><div><h1>Server Atlas</h1><p>Physical context for a digital machine.</p></div></div>
-    <div class="header-meta"><span class="status-dot"></span> LOCAL WORKSPACE <span class="version">PROTOTYPE / 01</span></div>
+    <div class="header-meta"><span class="status-dot"></span> LOCAL WORKSPACE <span class="version">PROTOTYPE / 02</span></div>
   </header>
   <main>
     <section class="intro">
-      <div><p class="eyebrow">HOMESERVER / HARDWARE EXPLORER</p><h2>A map, not a guess.</h2><p class="subtitle">ASRock Rack ROMED8-2T REV 1.03 (photo-confirmed) <span>·</span> Rosewill RSV-L4500U <span>·</span> Inspection records added</p></div>
+      <div><p class="eyebrow">HOMESERVER / HARDWARE EXPLORER</p><h2>The server, laid open.</h2><p class="subtitle">ROMED8-2T REV 1.03 <span>·</span> Rosewill RSV-L4500U <span>·</span> Click hardware to inspect; focus connectors to see beneath it.</p></div>
       <div class="toolbar"><button id="export" type="button">↓ Export JSON</button><button id="import-button" type="button">↑ Import JSON</button><input id="import-file" type="file" accept=".json,application/json" hidden></div>
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
@@ -28,28 +28,30 @@
       <div class="source-summary"><span class="summary-label">REFERENCE</span><strong>Rev. 1.30</strong><small>Official ASRock Rack · April 2026</small></div>
     </section>
     <nav class="tabs" aria-label="Visualization">
-      <button id="board-tab" type="button" class="active" aria-pressed="true" aria-controls="board-view">01 <span>Motherboard & connections</span></button>
+      <button id="board-tab" type="button" class="active" aria-pressed="true" aria-controls="board-view">01 <span>Chassis & connections</span></button>
       <button id="case-tab" type="button" aria-pressed="false" aria-controls="case-view">02 <span>Case & telemetry</span></button>
     </nav>
     <section id="board-view" class="board-workspace" aria-label="Motherboard explorer">
-      <section class="fan-overview panel" aria-label="Fan planning facts">
-        <div><span class="summary-label">FAN HEADERS</span><strong>7 × 6-pin</strong><small>FAN1–FAN7 · not seven verified free sockets</small></div>
-        <div><span class="summary-label">VERIFIED FREE / OCCUPIED</span><strong id="fan-availability">0 / 0</strong><small id="fan-unverified">7 headers unverified</small></div>
-        <div><span class="summary-label">TACH ≠ FAN COUNT ≠ CONTROL GROUP</span><strong>2 tach / 1 control per header</strong><small>14 potential tach channels; firmware grouping unknown</small></div>
-        <div><span class="summary-label">MANUAL FAN MAXIMUM</span><strong>5 A / 60 W</strong><small>Per-header vs combined budget not explicit; splitter limits unknown</small></div>
-      </section>
-      <aside class="connector-nav panel">
-        <div class="panel-heading"><h3>Connectors</h3><span id="connector-total"></span></div>
-        <label class="sr-only" for="filter">Find a connector</label><input id="filter" type="search" placeholder="Find a header or slot…">
-        <label class="sr-only" for="category">Connector category</label><select id="category"><option value="">All categories</option></select>
+      <section class="connector-nav panel" aria-label="Connector focus">
+        <div class="connector-toolbar"><nav id="categories" aria-label="Connector categories"></nav><label class="sr-only" for="filter">Find a connector</label><input id="filter" type="search" placeholder="Find a header or slot…"></div>
+        <p id="focus-status" class="compact muted" role="status"></p>
         <div id="connector-list" class="connector-list"></div>
-      </aside>
+      </section>
       <div class="map-panel panel">
-        <div class="panel-heading"><div><h3 id="board-revision">ROMED8-2T</h3><p>Original schematic · top view · not to scale</p></div><div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
-        <div class="map-scroll"><svg id="board" viewBox="0 0 760 940" role="group" aria-label="Interactive original motherboard schematic"></svg></div>
-        <div class="map-caption"><span><i class="legend-dot confirmed"></i>Confirmed</span><span><i class="legend-dot inferred"></i>Inferred</span><span><i class="legend-dot unknown"></i>Unknown</span><span>← REAR I/O</span></div>
+        <div class="panel-heading"><div><h3 id="board-revision">ROMED8-2T</h3><p>Landscape top view · original schematic · approximate placement, not clearance</p></div><div class="zoom-controls"><button id="expand-map" type="button" aria-pressed="false">Expand workspace</button><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
+        <div class="map-scroll"><svg id="board" viewBox="0 0 1440 840" role="group" aria-label="Interactive Rosewill chassis and installed motherboard hardware"></svg></div>
+        <div class="map-caption"><span><i class="legend-dot confirmed"></i>Confirmed connection</span><span><i class="legend-dot inferred"></i>Inferred</span><span><i class="legend-dot unknown"></i>Unknown</span><span>FRONT ← · REAR I/O →</span></div>
       </div>
-      <aside class="details panel" aria-label="Selected connector details">
+      <aside class="details panel" aria-label="Selected hardware or connector details">
+        <section id="component-details" hidden aria-live="polite">
+          <div class="detail-title"><p class="eyebrow">INSTALLED HARDWARE / SELECTED COMPONENT</p><h3 id="component-name"></h3></div>
+          <p id="component-model" class="component-model"></p><p id="component-capacity" class="component-capacity"></p>
+          <p id="component-provenance" class="reading-note"></p><p id="component-note" class="muted"></p><p id="component-placement" class="caution"></p>
+          <p id="component-reading" class="reading-note"></p>
+          <h4>Related connectors</h4><div id="component-connectors" class="related-connectors"></div>
+          <p class="compact muted">Connector annotations, confidence and pin functions are available in connector focus. Component placement is schematic, not a wiring or fit guide.</p>
+        </section>
+        <section id="connector-details">
         <div class="detail-title"><p id="detail-category" class="eyebrow"></p><h3 id="detail-name"></h3><span id="detail-confidence" class="badge unknown">Unknown connection</span> <span id="detail-occupancy" class="badge unknown">Unverified occupancy</span></div>
         <p id="detail-provenance" class="reading-provenance"></p>
         <p id="detail-description" class="muted"></p>
@@ -69,7 +71,14 @@
           <p id="save-status" class="compact muted">Saved only in this browser. Export a backup.</p>
         </form>
         <div class="reference"><h4>Reference</h4><p id="detail-source"></p><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf" target="_blank" rel="noopener noreferrer">Open official manual ↗</a></div>
+        </section>
       </aside>
+      <details class="fan-facts panel"><summary>Fan planning / verified availability and electrical limits</summary><section class="fan-overview" aria-label="Fan planning facts">
+        <div><span class="summary-label">FAN HEADERS</span><strong>7 × 6-pin</strong><small>FAN1–FAN7 · not seven verified free sockets</small></div>
+        <div><span class="summary-label">VERIFIED FREE / OCCUPIED</span><strong id="fan-availability">0 / 0</strong><small id="fan-unverified">7 headers unverified</small></div>
+        <div><span class="summary-label">TACH ≠ FAN COUNT ≠ CONTROL GROUP</span><strong>2 tach / 1 control per header</strong><small>14 potential tach channels; firmware grouping unknown</small></div>
+        <div><span class="summary-label">MANUAL FAN MAXIMUM</span><strong>5 A / 60 W</strong><small>Per-header vs combined budget not explicit; splitter limits unknown</small></div>
+      </section></details>
     </section>
     <section id="case-view" hidden aria-label="Case and telemetry explorer">
       <div class="telemetry-toolbar"><div><h3>Same hardware. Different layers of evidence.</h3><p class="muted">Component sensors are not air-temperature probes. No live server connection.</p></div><div class="segmented" aria-label="Telemetry provenance"><button id="observed-mode" class="active" aria-pressed="true">Observed snapshot</button><button id="synthetic-mode" aria-pressed="false">Synthetic demo</button></div></div>
@@ -82,7 +91,7 @@
             <rect class="case-shell" x="30" y="35" width="940" height="300" rx="18"></rect>
             <rect id="air-field" x="42" y="47" width="916" height="276" rx="12" fill="url(#air-gradient)" opacity="0"></rect>
             <text class="case-orientation" x="55" y="20">FRONT</text><text class="case-orientation" x="900" y="20">REAR</text>
-            <rect class="case-region" x="65" y="83" width="230" height="195" rx="10"></rect><text class="case-region-title" x="88" y="115">DRIVE REGION</text><text x="88" y="148">12 × 8 TB HDDs reported</text><text x="88" y="178">8 onboard / 4 via HBA</text><text class="case-small" x="88" y="247">Actual bay identities unknown</text>
+            <rect class="case-region" x="65" y="83" width="230" height="195" rx="10"></rect><text class="case-region-title" x="88" y="115">DRIVE REGION</text><text x="88" y="148">12 HDDs / 15 bays · 3 empty</text><text x="88" y="178">8 onboard / 4 via HBA</text><text class="case-small" x="88" y="247">Actual bay identities unknown</text>
             <path class="air-path" d="M325 183 L410 183 M395 173 L410 183 L395 193"></path>
             <text class="case-small" x="315" y="242">Air direction assumed</text>
             <rect class="case-region" x="465" y="83" width="465" height="195" rx="10"></rect><text class="case-region-title" x="490" y="115">MOTHERBOARD REGION</text><text x="490" y="148">EPYC · ECC RAM · 2 × NVMe</text><text x="490" y="178">PCIE3 GPU / PCIE1 HBA (user-confirmed)</text><text class="case-small" x="490" y="247">Case fans: two Molex chains, no board tach (reported)</text>
