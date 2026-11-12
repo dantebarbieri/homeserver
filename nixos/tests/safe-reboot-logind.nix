@@ -14,10 +14,13 @@ let
     reboot = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(reboot)
     # Only the homeserver-specific prerequisites are mocked, never logind or reboot.
-    reboot.blockers = lambda services: []
+    reboot.host_blockers = lambda: []
     reboot.verify_docker_shutdown = lambda: None
     reboot.WIKI_BACKUPS = Path("/run/wiki-backups")
     sys.exit(reboot.main(sys.argv[1:]))
+  '';
+  check = pkgs.writeShellScriptBin "safe-reboot-check" ''
+    exec ${pkgs.python3}/bin/python3 ${worker} ${jobs} --check
   '';
 in
 pkgs.testers.runNixOSTest {
@@ -26,6 +29,7 @@ pkgs.testers.runNixOSTest {
   nodes.machine = {
     users.users.operator.isNormalUser = true;
     services.getty.autologinUser = "operator";
+    environment.systemPackages = [ check ];
     security.polkit.enable = true;
     security.polkit.extraConfig = ''
       polkit.addRule(function(action, subject) {
@@ -52,6 +56,8 @@ pkgs.testers.runNixOSTest {
     };
     systemd.services.root-inhibitor.serviceConfig.ExecStart =
       "${pkgs.systemd}/bin/systemd-inhibit --what=shutdown --mode=block --who=regression --why=regression ${pkgs.coreutils}/bin/sleep infinity";
+    systemd.services.root-weak-inhibitor.serviceConfig.ExecStart =
+      "${pkgs.systemd}/bin/systemd-inhibit --what=shutdown --mode=block-weak --who=regression-weak --why=regression ${pkgs.coreutils}/bin/sleep infinity";
     systemd.services.safe-reboot = {
       path = [ pkgs.systemd ];
       serviceConfig = {
@@ -71,12 +77,18 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("loginctl list-sessions --no-legend | grep operator")
     boot_id = machine.succeed("cat /proc/sys/kernel/random/boot_id").strip()
 
+    with subtest("dry run passes with the operator logged in and no inhibitors"):
+        machine.succeed("loginctl list-sessions --no-legend | grep operator")
+        assert "No reboot blockers detected." in machine.succeed("safe-reboot-check")
+
     for unit in ("root-inhibitor", "inhibitor@block", "inhibitor@block-weak"):
         with subtest(f"root service respects {unit} and restores timers"):
             machine.succeed(f"systemctl start {unit}.service")
             machine.wait_until_succeeds(
                 "systemd-inhibit --list --no-pager | grep regression", timeout=30
             )
+            report = machine.fail("safe-reboot-check")
+            assert "Would refuse to reboot: logind shutdown inhibitor by regression" in report, report
             machine.succeed("systemctl start safe-reboot.service")
             machine.wait_until_succeeds("systemctl is-failed safe-reboot.service", timeout=30)
             invocation = machine.succeed(
@@ -94,8 +106,13 @@ pkgs.testers.runNixOSTest {
                 "systemctl reset-failed safe-reboot.service"
             )
 
-    with subtest("logged-in operator does not block the root service reboot"):
+    with subtest("logged-in operator and a root block-weak inhibitor do not block the reboot"):
         machine.succeed("loginctl list-sessions --no-legend | grep operator")
+        machine.succeed("systemctl start root-weak-inhibitor.service")
+        machine.wait_until_succeeds(
+            "systemd-inhibit --list --no-pager | grep regression-weak", timeout=30
+        )
+        assert "No reboot blockers detected." in machine.succeed("safe-reboot-check")
         machine.succeed("systemctl start safe-reboot.service")
         machine.wait_for_shutdown()
         machine.start()

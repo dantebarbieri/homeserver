@@ -57,15 +57,17 @@ def busy(state):
     )
 
 
-def blockers(services):
-    reasons = []
-    for unit in services:
-        state = unit_state(unit)
-        if busy(state):
-            reasons.append(f"{unit} ({state['ActiveState']}/{state['SubState']})")
-        elif state["ActiveState"] == "failed" or state.get("Result") != "success":
-            raise RebootError(f"{unit} failed; inspect its journal and repair/reset-failed before rebooting")
+def unit_blockers(unit):
+    state = unit_state(unit)
+    if busy(state):
+        return [f"{unit} ({state['ActiveState']}/{state['SubState']})"]
+    if state["ActiveState"] == "failed" or state.get("Result") != "success":
+        raise RebootError(f"{unit} failed; inspect its journal and repair/reset-failed before rebooting")
+    return []
 
+
+def host_blockers():
+    reasons = []
     action = (MD / "sync_action").read_text().strip()
     degraded = (MD / "degraded").read_text().strip()
     if not degraded.isdecimal():
@@ -79,6 +81,10 @@ def blockers(services):
     if os.path.lexists(DEPLOYMENT_HOLD):
         reasons.append(f"operator deployment hold: {DEPLOYMENT_HOLD}")
     return reasons
+
+
+def blockers(services):
+    return [reason for unit in services for reason in unit_blockers(unit)] + host_blockers()
 
 
 @contextmanager
@@ -116,13 +122,50 @@ def verify_docker_shutdown():
     run("docker", "exec", "mirklurk-backup", "bash", "/opt/mirklurk-backup.sh", "--healthcheck")
 
 
+def shutdown_inhibitors():
+    # What RebootWithFlags(SD_LOGIND_ROOT_CHECK_INHIBITORS) refuses for root: every
+    # `block`, plus other users' `block-weak` (root's own keep the same-owner exemption).
+    result = run(
+        "busctl", "--system", "--json=short", "call", "org.freedesktop.login1",
+        "/org/freedesktop/login1", "org.freedesktop.login1.Manager", "ListInhibitors",
+    )
+    try:
+        return [
+            f"logind shutdown inhibitor by {who} (uid {uid}, pid {pid}, {mode}): {why}"
+            for what, who, why, mode, uid, pid in json.loads(result.stdout)["data"][0]
+            if "shutdown" in what.split(":") and (mode == "block" or (mode == "block-weak" and uid != 0))
+        ]
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as error:
+        raise RebootError(f"Cannot parse logind inhibitor list: {error!r}") from error
+
+
 def check(services):
-    reasons = blockers(services)
-    verify_docker_shutdown()
-    with maintenance_locks() as lock_reasons:
-        reasons += lock_reasons
-    print("Waiting for: " + "; ".join(reasons) if reasons else "No reboot blockers detected.", flush=True)
-    return 1 if reasons else 0
+    waiting, refused = [], []
+
+    def collect(into, probe, *args):
+        try:
+            into.extend(probe(*args) or [])
+        except (RebootError, OSError, subprocess.TimeoutExpired) as error:
+            refused.append(str(error))
+
+    def lock_reasons():
+        with maintenance_locks() as reasons:
+            return list(reasons)
+
+    # The worker stops at its first hard error; a dry run should show everything.
+    for unit in services:
+        collect(waiting, unit_blockers, unit)
+    collect(waiting, host_blockers)
+    collect(refused, verify_docker_shutdown)
+    collect(waiting, lock_reasons)
+    collect(refused, shutdown_inhibitors)
+    if waiting:
+        print("Waiting for: " + "; ".join(waiting), flush=True)
+    if refused:
+        print("Would refuse to reboot: " + "; ".join(refused), flush=True)
+    if not (waiting or refused):
+        print("No reboot blockers detected.", flush=True)
+    return 1 if waiting or refused else 0
 
 
 def pause_timers(timers):
@@ -228,7 +271,7 @@ def main(argv=None):
     parser.add_argument("config", help=argparse.SUPPRESS)
     modes = parser.add_mutually_exclusive_group()
     for mode, help_text in (
-        ("check", "show current blockers without queuing a reboot"),
+        ("check", "dry run: show blockers, including logind shutdown inhibitors, without queuing a reboot"),
         ("status", "show the queued reboot's status and recent journal"),
         ("cancel", "cancel before shutdown begins and restore paused timers"),
         ("worker", argparse.SUPPRESS),

@@ -1,7 +1,9 @@
 """Reboot decisions and recovery, with no real systemctl or Docker operations."""
 
+from contextlib import redirect_stdout
 import fcntl
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -20,6 +22,10 @@ REBOOT_REQUEST = (
     "busctl", "--system", "--allow-interactive-authorization=no",
     "call", "org.freedesktop.login1", "/org/freedesktop/login1",
     "org.freedesktop.login1.Manager", "RebootWithFlags", "t", "1",
+)
+LIST_INHIBITORS = (
+    "busctl", "--system", "--json=short", "call", "org.freedesktop.login1",
+    "/org/freedesktop/login1", "org.freedesktop.login1.Manager", "ListInhibitors",
 )
 
 
@@ -48,6 +54,9 @@ class SafeRebootTests(unittest.TestCase):
         self.states = {}
         self.patch("unit_state", lambda unit: self.states.get(unit, state()))
         self.commands = []
+        # Rows are logind's [what, who, why, mode, uid, pid]; raw output overrides them.
+        self.inhibitors = []
+        self.inhibitor_output = None
         self.patch("run", self.run_command)
         self.config = {"services": ["backup.service"], "timers": ["backup.timer", "disabled.timer"]}
 
@@ -62,6 +71,10 @@ class SafeRebootTests(unittest.TestCase):
             stdout = "false\n"
         elif args == ("systemctl", "is-system-running"):
             stdout = "running\n"
+        elif args == LIST_INHIBITORS:
+            stdout = self.inhibitor_output
+            if stdout is None:
+                stdout = json.dumps({"type": "a(ssssuu)", "data": [self.inhibitors]})
         else:
             stdout = ""
         return subprocess.CompletedProcess(args, 0, stdout, "")
@@ -127,14 +140,84 @@ class SafeRebootTests(unittest.TestCase):
         with reboot.locked(reboot.WIKI_BACKUPS) as acquired:
             self.assertTrue(acquired)
 
+    def run_check(self):
+        with redirect_stdout(io.StringIO()) as output:
+            status = reboot.check(self.config["services"])
+        return status, output.getvalue()
+
     def test_check_does_not_queue_or_pause_anything(self):
-        self.assertEqual(reboot.check(self.config["services"]), 0)
+        self.assertEqual(self.run_check()[0], 0)
         self.states["backup.service"] = state("activating", "start")
-        self.assertEqual(reboot.check(self.config["services"]), 1)
+        self.assertEqual(self.run_check()[0], 1)
         self.assertFalse((reboot.STATE / "pending").exists())
-        self.assertTrue(all(command[0] == "docker" for command in self.commands))
+        self.assertEqual({command[0] for command in self.commands}, {"docker", "busctl"})
+        self.assertIn(LIST_INHIBITORS, self.commands)
+        self.assertNotIn(REBOOT_REQUEST, self.commands)
         self.assertIn(("docker", "exec", "mirklurk-backup", "bash",
                        "/opt/mirklurk-backup.sh", "--healthcheck"), self.commands)
+
+    def test_shutdown_inhibitors_match_the_logind_reboot_rule(self):
+        self.inhibitors = [
+            ["shutdown", "root-block", "backup", "block", 0, 11],
+            ["shutdown:sleep", "user-block", "editing", "block", 1000, 12],
+            ["shutdown", "user-weak", "playing", "block-weak", 1000, 13],
+            ["shutdown", "root-weak", "same owner", "block-weak", 0, 14],
+            ["shutdown", "delayed", "grace period", "delay", 0, 15],
+            ["sleep:idle", "sleeper", "not shutdown", "block", 0, 16],
+        ]
+        self.assertEqual(reboot.shutdown_inhibitors(), [
+            "logind shutdown inhibitor by root-block (uid 0, pid 11, block): backup",
+            "logind shutdown inhibitor by user-block (uid 1000, pid 12, block): editing",
+            "logind shutdown inhibitor by user-weak (uid 1000, pid 13, block-weak): playing",
+        ])
+
+    def test_check_fails_only_for_inhibitors_the_reboot_would_refuse(self):
+        self.inhibitors = [
+            ["shutdown", "root-weak", "same owner", "block-weak", 0, 14],
+            ["shutdown", "delayed", "grace period", "delay", 0, 15],
+        ]
+        status, output = self.run_check()
+        self.assertEqual((status, output), (0, "No reboot blockers detected.\n"))
+        self.inhibitors.append(["shutdown", "editor", "unsaved work", "block", 1000, 17])
+        status, output = self.run_check()
+        self.assertEqual(status, 1)
+        self.assertIn("Would refuse to reboot: logind shutdown inhibitor by editor", output)
+        self.assertNotIn("Waiting for", output)
+
+    def test_check_reports_every_blocker_instead_of_stopping_at_the_first(self):
+        self.config["services"] = ["first.service", "broken.service", "last.service"]
+        self.states["first.service"] = state("activating", "start")
+        self.states["broken.service"] = state("failed", "failed", result="exit-code")
+        self.states["last.service"] = state(job="25")
+        (reboot.MD / "sync_action").write_text("resync")
+        self.inhibitors = [["shutdown", "editor", "unsaved work", "block", 1000, 17]]
+        with patch.object(reboot, "verify_docker_shutdown", side_effect=reboot.RebootError("backup unhealthy")), \
+             reboot.locked(reboot.COMPOSE_LOCK):
+            status, output = self.run_check()
+        waiting, refused = output.splitlines()
+        self.assertEqual(status, 1)
+        self.assertEqual(waiting, "Waiting for: first.service (activating/start); last.service (inactive/dead); "
+                                  "RAID md0 (resync); Compose deployment/update lock")
+        for refusal in ("broken.service failed", "backup unhealthy", "inhibitor by editor"):
+            self.assertIn(refusal, refused)
+
+    def test_check_reports_unreadable_state_and_timeouts_as_refusals(self):
+        (reboot.MD / "sync_action").unlink()
+        with patch.object(reboot, "verify_docker_shutdown", side_effect=subprocess.TimeoutExpired("docker", 60)):
+            status, output = self.run_check()
+        self.assertEqual(status, 1)
+        self.assertNotIn("Waiting for", output)
+        self.assertIn("sync_action", output)
+        self.assertIn("timed out", output)
+
+    def test_unparseable_inhibitor_list_fails_closed(self):
+        for output in ("", "not json", "{}", '{"data": []}',
+                       '{"data": [[["shutdown", "who"]]]}', '{"data": [[[1, 2, 3, 4, 5, 6]]]}'):
+            with self.subTest(output=output):
+                self.inhibitor_output = output
+                status, text = self.run_check()
+                self.assertEqual(status, 1)
+                self.assertIn("Cannot parse logind inhibitor list", text)
 
     def test_live_restore_or_docker_error_refuses_reboot(self):
         with patch.object(reboot, "run", return_value=subprocess.CompletedProcess([], 0, "true\n", "")):
