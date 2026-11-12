@@ -85,10 +85,13 @@ deliberately simplifying distances.
 
 The verified six-pin functions are: **1 ground, 2 fan supply, 3 primary tach,
 4 speed control, 5 secondary tach, 6 not connected**. The original connector
-reference visualization follows the manual's keying-ledge-above-pins-1–4
-view, with pin 1 on the right. That view does **not** establish cable mating-side
-orientation or a board-rotation instruction. Confirm the real pin-1 marking
-and keying, never shift or force a plug.
+reference visualization follows the manual's drawing, with pin 1 on the right
+and two bars along the housing's top edge: the left bar reaches just past
+pin 4's center, and the right bar starts just right of pin 3's center and ends
+at pin 1's center. Their gap is roughly one pin wide, over pin 3. The manual's
+text does **not** identify these bars as keying. Physical keying, pin-1
+orientation and the cable mating-side view remain unverified; this is not a
+board-rotation instruction. Confirm the actual header, never shift or force a plug.
 
 Pins 1–4 match the usual four-pin PWM fan signal roles; generic four-pin
 mechanical compatibility is **inferred**, not independently certified for

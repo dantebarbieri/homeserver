@@ -54,7 +54,7 @@ export const connectors = [
           ? `Right edge, upper group near the lower DIMM bank and OCuLink: ${["top", "middle", "bottom"][i]} header (FAN${i + 1}).`
           : `Right edge, lower group below SATA_4_7: position ${i - 2} of 4, counting from top to bottom (FAN${i + 1}).`,
         source: "Official manual rev. 1.30, printed p. 30 (PDF p. 37).",
-        caution: "This reference follows the manual's connector view, not a cable mating-side or board-rotation instruction. Verify the actual pin-1 marking and keying before connecting anything. Do not shift a plug onto pins 3–6 or force a connector.",
+        caution: "The two housing bars follow the manual's drawing; its text does not identify them as keying. Physical keying, pin-1 orientation and the cable mating-side view remain unverified. Check the actual header before connecting anything. Do not shift a plug onto pins 3–6 or force a connector.",
       })),
   connector("M2_2", "M2_2", "Storage", 420, 510, 90, 32,
     "M.2 socket; supported module lengths 2230 / 2242 / 2260 / 2280 / 22110. The two installed 990 EVO drives are not yet matched to physical sockets."),
