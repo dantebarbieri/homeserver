@@ -388,7 +388,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.60** and **fd2b:92df:1a5b:1::3c**, not
+`compose_proxy` addresses **192.168.128.46** and **fd2b:92df:1a5b:1::2e**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -417,6 +417,17 @@ The 2322d41 catalog rollout replaces that stale pair with only the newly
 verified NPM addresses. It does not broaden trust, pin network addresses,
 change NPM or reinstate the old pair on rollback. Recheck actual ownership
 again before activation; dynamic leases may change after future restarts.
+The 2026-11-12 ordinary updater recreated NPM at 10:08 UTC, moving it to
+.46 / ::2e; searxng acquired the stale .60 / ::3c pair. Exact-peer
+maintenance replaces both entries without retaining stale peers or
+changing the accepted 2322d41 application source/images. Under the existing
+shared lock, use a private Compose override pinning the actual current web
+image ID and recreate only web with `--no-deps --no-build --pull never
+--force-recreate --wait`. Keep uploads and every other container unchanged;
+do not apply NPM config when its supported privacy check already passes.
+Recheck actual NPM container identity and both addresses before activation,
+then verify full public bytes, client identity and spoof resistance.
+Do not restore the previous stale trust file as an image rollback.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
