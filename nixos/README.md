@@ -226,8 +226,10 @@ failure handler. Review and fix a failed job before clearing its failed state.
 Backup target failures now return a failing service result, not just an alert.
 
 Once idle, it holds the existing Compose lock and an exclusive lock on the wiki
-backup directory, checks again, and requests a normal, inhibitor-respecting
-systemd reboot. The wiki SQL sidecar takes a shared lock on that same directory,
+backup directory, checks again, and requests a normal systemd reboot. logind
+still refuses it while a block inhibitor is active (`systemd-inhibit --list`),
+but logged-in users, including the SSH session that queued it, do not block it.
+The wiki SQL sidecar takes a shared lock on that same directory,
 so existing dumps finish and new dumps wait through Docker shutdown. No container
 is manually stopped or removed by the command, preserving `unless-stopped`
 restart behavior and existing manually stopped containers.

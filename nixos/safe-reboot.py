@@ -180,7 +180,10 @@ def worker(config):
                             committed = STATE / "committed"
                             committed.touch()
                             try:
-                                run("systemctl", "--check-inhibitors=yes", "reboot")
+                                # Not --check-inhibitors=yes: it also refuses while
+                                # anyone is logged in (e.g. the SSH session that queued
+                                # this). logind still rejects active block inhibitors.
+                                run("systemctl", "reboot")
                             except (RebootError, subprocess.TimeoutExpired, OSError):
                                 committed.unlink()
                                 raise

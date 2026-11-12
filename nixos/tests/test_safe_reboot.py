@@ -201,7 +201,7 @@ class SafeRebootTests(unittest.TestCase):
                 reboot.worker(self.config)
         self.assertTrue((reboot.STATE / "pending").exists())
         self.assertTrue((reboot.STATE / "committed").exists())
-        self.assertEqual(self.commands.count(("systemctl", "--check-inhibitors=yes", "reboot")), 1)
+        self.assertEqual(self.commands.count(("systemctl", "reboot")), 1)
         self.assertNotIn(("systemctl", "stop", "backup.service"), self.commands)
 
     def test_final_recheck_prevents_racing_job(self):
