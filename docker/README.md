@@ -65,7 +65,8 @@ docker compose -f compose.gaming.yml up -d
 | **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup, mirklurk-map, mirklurk-map-uploads |
 
 Dashdot retains the upstream NVIDIA image but builds with the supported Node 24
-runtime; the scheduled build refreshes both base images.
+runtime; the build requires Node 24.22.3 and OpenSSL 3.5.9 or newer, and the
+scheduled build refreshes both base images.
 
 ## Shared Templates
 

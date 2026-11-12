@@ -1,4 +1,5 @@
-FROM node:24-bullseye-slim AS node
+FROM node:24-bookworm-slim AS node
 FROM mauricenino/dashdot:nvidia
 # Preserve upstream NVIDIA support while replacing its unsupported Node 20 runtime.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
+RUN node -e 'const [major, minor, patch] = process.versions.node.split(".").map(Number); const [a, b, c] = process.versions.openssl.split(".").map(Number); if (major !== 24 || minor < 22 || (minor === 22 && patch < 3) || a < 3 || (a === 3 && (b < 5 || (b === 5 && c < 9)))) process.exit(1)'
