@@ -66,8 +66,7 @@ def unit_blockers(unit):
     return []
 
 
-def host_blockers():
-    reasons = []
+def raid_blockers():
     action = (MD / "sync_action").read_text().strip()
     degraded = (MD / "degraded").read_text().strip()
     if not degraded.isdecimal():
@@ -75,12 +74,18 @@ def host_blockers():
     if action not in ("idle", "check", "repair", "resync", "recover", "reshape", "frozen"):
         raise RebootError(f"Unrecognized RAID md0 sync_action={action!r}")
     if action != "idle":
-        reasons.append(f"RAID md0 ({action})")
-    elif degraded != "0":
+        return [f"RAID md0 ({action})"]
+    if degraded != "0":
         raise RebootError(f"RAID md0 degraded={degraded!r}; investigate before rebooting")
-    if os.path.lexists(DEPLOYMENT_HOLD):
-        reasons.append(f"operator deployment hold: {DEPLOYMENT_HOLD}")
-    return reasons
+    return []
+
+
+def hold_blockers():
+    return [f"operator deployment hold: {DEPLOYMENT_HOLD}"] if os.path.lexists(DEPLOYMENT_HOLD) else []
+
+
+def host_blockers():
+    return raid_blockers() + hold_blockers()
 
 
 def blockers(services):
@@ -102,24 +107,41 @@ def locked(path, *, create=False, blocking=False):
         os.close(fd)
 
 
+def lock_targets():
+    return (
+        (COMPOSE_LOCK, "Compose deployment/update lock"),
+        (WIKI_BACKUPS, "MirkLurk SQL backup"),
+    )
+
+
 @contextmanager
 def maintenance_locks():
     with ExitStack() as stack:
         reasons = []
-        for path, create, label in (
-            (COMPOSE_LOCK, False, "Compose deployment/update lock"),
-            (WIKI_BACKUPS, False, "MirkLurk SQL backup"),
-        ):
-            if not stack.enter_context(locked(path, create=create)):
+        for path, label in lock_targets():
+            if not stack.enter_context(locked(path)):
                 reasons.append(label)
         yield reasons
 
 
-def verify_docker_shutdown():
+def lock_blockers(path, label):
+    with locked(path) as acquired:
+        return [] if acquired else [label]
+
+
+def verify_live_restore():
     live_restore = run("docker", "info", "--format", "{{json .LiveRestoreEnabled}}").stdout.strip()
     if live_restore != "false":
         raise RebootError("Docker live-restore is not disabled; activate the safe-reboot NixOS configuration first")
+
+
+def verify_backup_health():
     run("docker", "exec", "mirklurk-backup", "bash", "/opt/mirklurk-backup.sh", "--healthcheck")
+
+
+def verify_docker_shutdown():
+    verify_live_restore()
+    verify_backup_health()
 
 
 def shutdown_inhibitors():
@@ -148,16 +170,16 @@ def check(services):
         except (RebootError, OSError, subprocess.TimeoutExpired) as error:
             refused.append(str(error))
 
-    def lock_reasons():
-        with maintenance_locks() as reasons:
-            return list(reasons)
-
-    # The worker stops at its first hard error; a dry run should show everything.
+    # The worker stops at its first hard error; a dry run probes each condition
+    # separately so one failure cannot hide another.
     for unit in services:
         collect(waiting, unit_blockers, unit)
-    collect(waiting, host_blockers)
-    collect(refused, verify_docker_shutdown)
-    collect(waiting, lock_reasons)
+    collect(waiting, raid_blockers)
+    collect(waiting, hold_blockers)
+    collect(refused, verify_live_restore)
+    collect(refused, verify_backup_health)
+    for path, label in lock_targets():
+        collect(waiting, lock_blockers, path, label)
     collect(refused, shutdown_inhibitors)
     if waiting:
         print("Waiting for: " + "; ".join(waiting), flush=True)

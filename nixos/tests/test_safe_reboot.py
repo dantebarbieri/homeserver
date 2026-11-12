@@ -191,7 +191,7 @@ class SafeRebootTests(unittest.TestCase):
         self.states["last.service"] = state(job="25")
         (reboot.MD / "sync_action").write_text("resync")
         self.inhibitors = [["shutdown", "editor", "unsaved work", "block", 1000, 17]]
-        with patch.object(reboot, "verify_docker_shutdown", side_effect=reboot.RebootError("backup unhealthy")), \
+        with patch.object(reboot, "verify_backup_health", side_effect=reboot.RebootError("backup unhealthy")), \
              reboot.locked(reboot.COMPOSE_LOCK):
             status, output = self.run_check()
         waiting, refused = output.splitlines()
@@ -203,12 +203,33 @@ class SafeRebootTests(unittest.TestCase):
 
     def test_check_reports_unreadable_state_and_timeouts_as_refusals(self):
         (reboot.MD / "sync_action").unlink()
-        with patch.object(reboot, "verify_docker_shutdown", side_effect=subprocess.TimeoutExpired("docker", 60)):
+        with patch.object(reboot, "verify_backup_health", side_effect=subprocess.TimeoutExpired("docker", 60)):
             status, output = self.run_check()
         self.assertEqual(status, 1)
         self.assertNotIn("Waiting for", output)
         self.assertIn("sync_action", output)
         self.assertIn("timed out", output)
+
+    def test_check_failing_probe_does_not_hide_related_blockers(self):
+        (reboot.MD / "sync_action").unlink()
+        reboot.DEPLOYMENT_HOLD.touch()
+        reboot.WIKI_BACKUPS.rmdir()
+
+        def docker(*args, check=True):
+            if args[:2] == ("docker", "info"):
+                return subprocess.CompletedProcess(args, 0, "true\n", "")
+            if args[:2] == ("docker", "exec"):
+                raise reboot.RebootError("backup unhealthy")
+            return self.run_command(*args, check=check)
+
+        with patch.object(reboot, "run", side_effect=docker), reboot.locked(reboot.COMPOSE_LOCK):
+            status, output = self.run_check()
+        waiting, refused = output.splitlines()
+        self.assertEqual(status, 1)
+        self.assertEqual(waiting, f"Waiting for: operator deployment hold: {reboot.DEPLOYMENT_HOLD}; "
+                                  "Compose deployment/update lock")
+        for refusal in ("sync_action", "live-restore", "backup unhealthy", str(reboot.WIKI_BACKUPS)):
+            self.assertIn(refusal, refused)
 
     def test_unparseable_inhibitor_list_fails_closed(self):
         for output in ("", "not json", "{}", '{"data": []}',

@@ -14,8 +14,9 @@ let
     reboot = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(reboot)
     # Only the homeserver-specific prerequisites are mocked, never logind or reboot.
-    reboot.host_blockers = lambda: []
-    reboot.verify_docker_shutdown = lambda: None
+    reboot.raid_blockers = lambda: []
+    reboot.verify_live_restore = lambda: None
+    reboot.verify_backup_health = lambda: None
     reboot.WIKI_BACKUPS = Path("/run/wiki-backups")
     sys.exit(reboot.main(sys.argv[1:]))
   '';
