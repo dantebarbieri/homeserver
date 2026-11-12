@@ -52,6 +52,12 @@ class HealthCleanupTests(unittest.TestCase):
                     inherit (c.systemd.services.docker-socket-consumers)
                       wantedBy after requires partOf serviceConfig unitConfig;
                   };
+                  interruptedContainersUnit = {
+                    inherit (c.systemd.services.docker-interrupted-containers)
+                      wantedBy after requires partOf serviceConfig unitConfig script;
+                    path = map system.pkgs.lib.getName
+                      c.systemd.services.docker-interrupted-containers.path;
+                  };
                   updateScript = c.systemd.services.docker-compose-update.script;
                   updateFailure = c.systemd.services.docker-compose-update.unitConfig.OnFailure;
                   autoUpdateUnit = {
@@ -103,6 +109,12 @@ class HealthCleanupTests(unittest.TestCase):
                     dockerStopTimeout = c.systemd.services.docker.serviceConfig.TimeoutStopSec;
                     backupScripts = map (name: c.systemd.services.${name}.script)
                       [ "postgres-backup" "rclone-offsite-daily" "rclone-offsite-weekly" ];
+                  };
+                  ntfy = {
+                    notify = (builtins.head (builtins.filter
+                      (p: (p.name or "") == "ntfy-notify")
+                      c.environment.systemPackages)).text;
+                    flush = c.systemd.services.ntfy-spool-flush.script;
                   };
                   plexAlbumCheck = {
                     inherit (c.systemd.services.plex-album-check) script after wants;
@@ -230,14 +242,136 @@ class HealthCleanupTests(unittest.TestCase):
             condition = 'if [ -n "$FAILED" ]; then'
             self.assertIn(condition, script)
             tail = condition + script.rsplit(condition, 1)[1]
-            for failed, expected in (("", 0), ("failed-target", 1)):
-                with self.subTest(failed=failed, script=script[:60]):
+            # An undeliverable alert must not hide the failure from systemd.
+            for failed, notify, expected in (("", 0, 0), ("failed-target", 0, 1),
+                                             ("failed-target", 7, 1)):
+                with self.subTest(failed=failed, notify=notify, script=script[:60]):
                     result = subprocess.run(
-                        ["bash", "-eu", "-c", 'curl() { return 0; }\n' + tail],
-                        env={**os.environ, "FAILED": failed, "SUCCEEDED": "ok"},
+                        ["bash", "-eu", "-c",
+                         'ntfy-notify() { return "$NOTIFY_STATUS"; }\n' + tail],
+                        env={**os.environ, "FAILED": failed, "SUCCEEDED": "ok",
+                             "NOTIFY_STATUS": str(notify)},
                         capture_output=True, text=True,
                     )
                     self.assertEqual(result.returncode, expected, result.stderr)
+
+    def test_database_dumps_retry_and_name_stopped_containers(self):
+        script = self.config["safeReboot"]["backupScripts"][0]
+        start = script.index("dump() {")
+        dump = script[start:script.index("\n}\n", start) + 3]
+        harness = (
+            'sleep() { :; }\n'
+            'docker() { [ "$1 $2" = "inspect --format" ] && echo "$STATE"; }\n'
+            'produce() {\n'
+            '  n=$(( $(cat "$COUNTER") + 1 )); echo "$n" > "$COUNTER"\n'
+            '  case "$MODE" in\n'
+            '    fail-once) [ "$n" -gt 1 ] || return 1; seq 1 1000 ;;\n'
+            '    fail) return 1 ;;\n'
+            '    empty) ;;\n'
+            '  esac\n'
+            '}\n'
+        )
+        # (container state, dump behaviour, RESULT, dump attempts, file kept)
+        cases = [
+            ("exited", "fail-once", "not running: exited", 0, False),
+            ("running", "fail-once", "ok", 2, True),
+            ("running", "empty", "empty", 3, False),
+            ("running", "fail", "dump failed", 3, False),
+        ]
+        for state, mode, expected, attempts, kept in cases:
+            with self.subTest(state=state, mode=mode), tempfile.TemporaryDirectory() as tmp:
+                counter, out = Path(tmp) / "count", Path(tmp) / "db.sql.gz"
+                counter.write_text("0")
+                result = subprocess.run(
+                    ["bash", "-euo", "pipefail", "-c",
+                     harness + dump + 'dump db "$OUT" produce\nprintf %s "$RESULT"'],
+                    env={**os.environ, "STATE": state, "MODE": mode,
+                         "COUNTER": str(counter), "OUT": str(out)},
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected)
+                self.assertEqual(int(counter.read_text()), attempts)
+                self.assertEqual(out.exists(), kept)
+
+    def _fake_curl(self, tmp):
+        bin_dir = Path(tmp) / "bin"
+        bin_dir.mkdir()
+        curl = bin_dir / "curl"
+        curl.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$CURL_LOG"\n'
+                        'exit "$CURL_STATUS"\n')
+        curl.chmod(0o755)
+        return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+                "CURL_LOG": str(Path(tmp) / "curl.log")}
+
+    def test_undeliverable_alerts_are_queued(self):
+        notify = self.config["ntfy"]["notify"]
+        # Use the fake curl below, never a real one from the store.
+        self.assertRegex(notify, r"(?m)^PATH=/nix/store/.*:\$PATH$")
+        notify = re.sub(r"(?m)^PATH=.*\n", "", notify, count=1)
+        self.assertIn("SPOOL=/var/lib/ntfy-spool\n", notify)
+        # (curl exit status, spool exists, expected exit status, queued)
+        for curl_status, spool_exists, expected, queued in (
+            (0, True, 0, 0), (7, True, 0, 1), (22, False, 22, 0),
+        ):
+            with self.subTest(curl=curl_status, spool=spool_exists), \
+                    tempfile.TemporaryDirectory() as tmp:
+                spool = Path(tmp) / "spool"
+                if spool_exists:
+                    spool.mkdir()
+                script = Path(tmp) / "ntfy-notify"
+                script.write_text(notify.replace("SPOOL=/var/lib/ntfy-spool\n",
+                                                 f"SPOOL={spool}\n"))
+                result = subprocess.run(
+                    ["bash", str(script), "Title", "line one\nline two", "high", "warning"],
+                    env={**self._fake_curl(tmp), "CURL_STATUS": str(curl_status)},
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, expected, result.stderr)
+                entries = sorted(spool.glob("*.alert")) if spool_exists else []
+                self.assertEqual(len(entries), queued)
+                if queued:
+                    entry = entries[0]
+                    self.assertEqual((entry / "title").read_text(), "Title")
+                    self.assertEqual((entry / "message").read_text(), "line one\nline two")
+                    self.assertEqual((entry / "priority").read_text(), "high")
+                    self.assertEqual((entry / "tags").read_text(), "warning")
+                    self.assertEqual(list(spool.glob(".new.*")), [])
+
+    def test_queued_alerts_are_delivered_in_order_once_ntfy_is_back(self):
+        flush = self.config["ntfy"]["flush"]
+        for curl_status in (0, 7):
+            with self.subTest(curl=curl_status), tempfile.TemporaryDirectory() as tmp:
+                spool = Path(tmp) / "spool"
+                for name, title in (("20261110T011100000000000-2", "first"),
+                                    ("20261110T011200000000000-1", "second")):
+                    entry = spool / f"{name}.alert"
+                    entry.mkdir(parents=True)
+                    for field, value in (("title", title), ("message", f"{title} body"),
+                                         ("priority", "high"), ("tags", "warning"),
+                                         ("queued", "2026-11-10 01:11:00 UTC")):
+                        (entry / field).write_text(value)
+                stale = spool / ".new.abandoned"
+                stale.mkdir()
+                old = time.time() - 2 * 3600
+                os.utime(stale, (old, old))
+                env = {**self._fake_curl(tmp), "CURL_STATUS": str(curl_status)}
+                result = subprocess.run(
+                    ["bash", "-e", "-c", flush.replace("/var/lib/ntfy-spool", str(spool))],
+                    env=env, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(stale.exists())
+                calls = Path(env["CURL_LOG"]).read_text()
+                if curl_status == 0:
+                    self.assertEqual(list(spool.iterdir()), [])
+                    self.assertLess(calls.index("Title: first (delayed)"),
+                                    calls.index("Title: second (delayed)"))
+                    self.assertIn("Queued at 2026-11-10 01:11:00 UTC", calls)
+                else:
+                    # Stop at the first failure and keep everything queued.
+                    self.assertEqual(len(list(spool.glob("*.alert"))), 2)
+                    self.assertEqual(calls.count("Title: "), 1)
 
     def test_reboot_reminder_decisions(self):
         script = self.config["rebootReminder"]["script"]
@@ -536,6 +670,20 @@ class HealthCleanupTests(unittest.TestCase):
             unit["serviceConfig"]["WorkingDirectory"], "/srv/homeserver/docker"
         )
         self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
+
+    def test_interrupted_containers_are_restarted_after_every_daemon_start(self):
+        unit = self.config["interruptedContainersUnit"]
+        # PartOf re-runs it when dockerd restarts, including after a crash.
+        for key in ("wantedBy", "after", "requires", "partOf"):
+            self.assertIn("docker.service", unit[key])
+        self.assertEqual(unit["serviceConfig"]["Type"], "oneshot")
+        self.assertTrue(unit["serviceConfig"]["RemainAfterExit"])
+        self.assertEqual(unit["unitConfig"]["OnFailure"], "ntfy-failure@%n.service")
+        self.assertIn("restart-daemon-interrupted-containers.py", unit["script"])
+        # A pending safe reboot must not silently skip recovery; it only waits.
+        self.assertNotIn("ConditionPathExists", unit["unitConfig"])
+        for tool in ("docker", "systemd", "ntfy-notify"):
+            self.assertIn(tool, unit["path"])
 
     def test_wiki_auto_update_follows_the_updater_with_alerts_and_the_shared_hold(self):
         unit, timer = self.config["autoUpdateUnit"], self.config["autoUpdateTimer"]

@@ -441,6 +441,16 @@ every later run alerts without doing anything until an operator acts:
 Never restore the database, reverse public redirects or overwrite community
 content as part of an image recovery.
 
+A Docker daemon start that finds containers still running (a `dockerd` crash,
+or the first start after live-restore was turned off) stops them all, the
+frontend included, and Docker records those stops as manual, so restart
+policies never bring the containers back. `docker-interrupted-containers`
+(`nixos/modules/docker.nix`) then restarts the same `mirklurk` container. It
+does so only if the container runs the current `mirklurk-wiki:live` image and
+neither hold nor `backup-control/read-only` exists. Otherwise it leaves the
+frontend down and alerts; recover it by hand as described here or in
+[MIRKLURK-UPLOADS.md](MIRKLURK-UPLOADS.md).
+
 ### Historical release records
 
 The records below predate unattended updates. Their Compose image-ID pins,

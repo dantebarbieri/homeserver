@@ -3,7 +3,7 @@
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; })
-    ntfyUrl ntfyTopic smartdAlert mdadmAlert;
+    ntfyUrl ntfyTopic ntfyNotify smartdAlert mdadmAlert;
 in
 {
   # LVM + RAID
@@ -49,7 +49,7 @@ in
       Nice = 19;
       IOSchedulingClass = "idle";
     };
-    path = with pkgs; [ mdadm lvm2 curl coreutils gnugrep gawk ];
+    path = with pkgs; [ mdadm lvm2 coreutils gnugrep gawk ntfyNotify ];
     script = ''
       # ── mdadm RAID health ──
       if [ -f /proc/mdstat ]; then
@@ -57,22 +57,14 @@ in
 
         # Degraded array (underscore = missing/failed drive)
         if echo "$MDSTAT" | grep -qE '\[.*_.*\]'; then
-          curl -s \
-            -H "Title: RAID Degraded on ${config.networking.hostName}" \
-            -H "Priority: urgent" \
-            -H "Tags: rotating_light,computer" \
-            -d "$(echo "$MDSTAT" | grep -A2 '^md')" \
-            "${ntfyUrl}/${ntfyTopic}"
+          ntfy-notify "RAID Degraded on ${config.networking.hostName}" \
+            "$(echo "$MDSTAT" | grep -A2 '^md')" urgent "rotating_light,computer"
         fi
 
         # Active rebuild / resync
         if echo "$MDSTAT" | grep -qiE 'recovery|resync|reshape'; then
-          curl -s \
-            -H "Title: RAID Rebuild on ${config.networking.hostName}" \
-            -H "Priority: high" \
-            -H "Tags: construction,computer" \
-            -d "$(echo "$MDSTAT" | grep -A3 '^md')" \
-            "${ntfyUrl}/${ntfyTopic}"
+          ntfy-notify "RAID Rebuild on ${config.networking.hostName}" \
+            "$(echo "$MDSTAT" | grep -A3 '^md')" high "construction,computer"
         fi
       fi
 
@@ -80,23 +72,15 @@ in
       LVM_BAD=$(lvs --noheadings -o lv_name,vg_name,lv_health_status 2>/dev/null \
                 | awk 'NF>=3 && $3 != ""')
       if [ -n "$LVM_BAD" ]; then
-        curl -s \
-          -H "Title: LVM Health Issue on ${config.networking.hostName}" \
-          -H "Priority: urgent" \
-          -H "Tags: rotating_light,computer" \
-          -d "Unhealthy LVM volumes: $LVM_BAD" \
-          "${ntfyUrl}/${ntfyTopic}"
+        ntfy-notify "LVM Health Issue on ${config.networking.hostName}" \
+          "Unhealthy LVM volumes: $LVM_BAD" urgent "rotating_light,computer"
       fi
 
       # ── Missing LVM physical volumes ──
       PV_MISSING=$(pvs --noheadings 2>&1 | grep -i 'missing\|unknown' || true)
       if [ -n "$PV_MISSING" ]; then
-        curl -s \
-          -H "Title: LVM PV Missing on ${config.networking.hostName}" \
-          -H "Priority: urgent" \
-          -H "Tags: rotating_light,computer" \
-          -d "$PV_MISSING" \
-          "${ntfyUrl}/${ntfyTopic}"
+        ntfy-notify "LVM PV Missing on ${config.networking.hostName}" \
+          "$PV_MISSING" urgent "rotating_light,computer"
       fi
     '';
   };

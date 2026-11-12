@@ -3,7 +3,7 @@
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; })
-    mirklurkDeploymentCondition;
+    mirklurkDeploymentCondition ntfyNotify;
 in
 {
   # Docker
@@ -40,6 +40,28 @@ in
     };
     script = ''
       ${pkgs.bash}/bin/bash ${../../docker/scripts/reconcile-docker-socket-consumers.sh}
+    '';
+  };
+
+  # With live-restore off, a starting dockerd stops every container still
+  # running from before it (after a dockerd crash, or the first start after
+  # live-restore was turned off) and records the stops as manual, so
+  # `unless-stopped` never brings them back. Start exactly those again.
+  systemd.services.docker-interrupted-containers = {
+    description = "Start containers dockerd stopped during its own startup";
+    wantedBy = [ "docker.service" ];
+    after = [ "docker.service" ];
+    requires = [ "docker.service" ];
+    partOf = [ "docker.service" ];
+    unitConfig.OnFailure = "ntfy-failure@%n.service";
+    path = [ pkgs.docker pkgs.systemd ntfyNotify ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      TimeoutStartSec = "45min";
+    };
+    script = ''
+      exec ${pkgs.python3}/bin/python3 ${../../docker/scripts/restart-daemon-interrupted-containers.py}
     '';
   };
 
