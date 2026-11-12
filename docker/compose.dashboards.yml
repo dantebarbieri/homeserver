@@ -221,7 +221,10 @@ services:
     extends:
       file: compose.common.yml
       service: gpu-service
-    image: mauricenino/dashdot:nvidia
+    image: dashdot-supported-node
+    build:
+      context: dockerfiles
+      dockerfile: Dockerfile.dashdot
     container_name: dashdot
     restart: unless-stopped
     privileged: true

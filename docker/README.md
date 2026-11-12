@@ -64,6 +64,9 @@ docker compose -f compose.gaming.yml up -d
 | **Utilities** | vaultwarden, syncthing, ntfy |
 | **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup, mirklurk-map, mirklurk-map-uploads |
 
+Dashdot retains the upstream NVIDIA image but builds with the supported Node 24
+runtime; the scheduled build refreshes both base images.
+
 ## Shared Templates
 
 `compose.common.yml` provides reusable service templates:

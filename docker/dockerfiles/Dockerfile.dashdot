@@ -1,0 +1,4 @@
+FROM node:24-bullseye-slim AS node
+FROM mauricenino/dashdot:nvidia
+# Preserve upstream NVIDIA support while replacing its unsupported Node 20 runtime.
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
