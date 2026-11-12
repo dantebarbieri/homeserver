@@ -71,7 +71,14 @@ function renderBoard() {
     board.append(svgElement("path", { d: `M${x} 165 V840`, class: "board-rail" }));
   }
   board.append(svgElement("text", { x: 92, y: 38, class: "board-label" }, `ASROCK RACK / ROMED8-2T / REV ${boardRevision}`));
-  board.append(svgElement("text", { x: 145, y: 840, class: "board-caption" }, "GPU / HBA slot reports UNVERIFIED · see PCIE1 / PCIE2"));
+  board.append(svgElement("text", { x: 145, y: 840, class: "board-caption" }, "PCIE3 GPU / PCIE1 HBA · user-confirmed · PCIE2 blocked"));
+  for (const id of ["M2_2", "M2_1"]) {
+    const connector = connectorById.get(id);
+    const drive = svgElement("g", { class: "m2-drive", "aria-label": `${id}: bare 2280 drive, perpendicular to PCIe slots; GPU clearance unmeasured` });
+    drive.append(svgElement("rect", { x: connector.x + 25, y: 513, width: 40, height: 236, rx: 4 }));
+    drive.append(svgElement("text", { x: connector.x + 45, y: 631, transform: `rotate(-90 ${connector.x + 45} 631)` }, "BARE 2280 / GPU OVERHANG"));
+    board.append(drive);
+  }
   board.append(svgElement("text", { x: 92, y: 910, class: "board-label" }, "ORIGINAL LOGICAL SCHEMATIC / NOT A WIRING GUIDE"));
   for (const connector of connectors) {
     const { id, x, y, width, height } = connector;
@@ -125,6 +132,8 @@ function renderSelection() {
     const id = group.dataset.id;
     group.classList.toggle("selected", id === selectedId);
     group.dataset.confidence = connectionFor(id).confidence;
+    group.dataset.occupancy = connectionFor(id).occupancy;
+    group.querySelector("text").textContent = `${connectorById.get(id).label}${connectionFor(id).occupancy === "blocked" ? " · BLOCKED" : ""}`;
     group.setAttribute("aria-label", describeConnection(id));
     group.setAttribute("aria-pressed", String(id === selectedId));
   }
@@ -139,7 +148,7 @@ function renderSelection() {
     connector.category === "Fans" && connectionFor(connector.id).provenance === "user-reported" &&
     connectionFor(connector.id).confidence !== "confirmed" && connectionFor(connector.id).occupancy === "occupied",
   ).length;
-  $("fan-unverified").textContent = `${availability.unverified} not independently verified; ${reportedOccupied} user-reported occupied`;
+  $("fan-unverified").textContent = `${availability.unverified} not independently verified${reportedOccupied ? `; ${reportedOccupied} user-reported occupied` : ""}`;
   $("detail-category").textContent = `${connector.category.toUpperCase()} / SELECTED CONNECTOR`;
   $("detail-name").textContent = connector.id;
   $("detail-confidence").className = `badge ${connection.confidence}`;

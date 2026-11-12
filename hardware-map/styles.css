@@ -81,6 +81,9 @@ main { max-width: 1680px; margin: auto; padding: 34px 38px 24px; }
 .connector .header-pins { fill: #8099a2; }
 .connector[data-confidence="confirmed"] rect { stroke: var(--accent); }
 .connector[data-confidence="inferred"] rect { stroke: var(--amber); stroke-dasharray: 4 2; }
+.connector[data-occupancy="blocked"] rect { fill: #3d2926; stroke: #d7a080; stroke-dasharray: 5 3; }
+.m2-drive rect { fill: #19322f; stroke: #63877f; stroke-dasharray: 4 3; }
+.m2-drive text { fill: #9dc5b8; font-size: 8px; text-anchor: middle; }
 .connector.selected rect, .connector:hover rect, .connector:focus rect { fill: #24554d; stroke: var(--accent); stroke-width: 2.5; }
 .connector.selected text { fill: #d5fff2; }
 .connector[data-id="CPU1"] rect { fill: #21383b; }

@@ -24,10 +24,10 @@ node --test hardware-map/model.test.mjs
 
 - Select board connectors with the original schematic, keyboard or searchable
   list. Fan headers have verified **logical** six-pin details.
-- Annotate connection target, confidence, physical occupancy, evidence source
+- Annotate connection target, confidence, physical occupancy (including blocked slots), evidence source
   and notes. Confirmed and inferred connections require evidence.
-  Inspection defaults distinguish photo-confirmed, uncertain photo,
-  user-reported and unverified observations.
+  Inspection defaults distinguish photo-confirmed, photo-inferred, uncertain
+  photo, user-confirmed, user-reported and unverified observations.
 - Fan-planning counts separate confirmed-free, confirmed-occupied and
   unverified headers. Inferred availability and missing tach readings never
   count as verified free. Seven headers, fourteen possible tach inputs,
@@ -59,20 +59,30 @@ numbers are bundled.
 | Provenance | Observation |
 | --- | --- |
 | Photo-confirmed | Board silkscreen `ROMED8-2T REV 1.03`; GPU label `GV-N2070SGAMING OC-8GD rev 1.0`. |
-| Photo-confirmed | GPU fan side directly above a low-profile HBA with two SFF-8643 cables. This does not identify their PCIe slot numbers. |
-| Photo-confirmed | Both M.2 sockets populated without heatsinks; both onboard SATA connectors appear cabled. Logical NVMe A/B identities and cable-to-drive routing remain unknown. |
+| User-confirmed, photo-consistent | GPU in PCIE3, with its 2.5-slot cooler physically blocking PCIE2. HBA in PCIE1, directly at the GPU fan intake. This supersedes the earlier unverified GPU-in-PCIE2 report. |
+| User-reported | PCIE4–PCIE7 free. The schematic follows the manual: PCIE7 nearest CPU/DIMMs, PCIE1 at the bottom board edge. |
+| Photo-confirmed | Both M.2 sockets right of PCIE7's end contain bare Samsung 2280 drives without heatsinks. Drives run perpendicular to the slots across the PCIE6→PCIE2 rows. Both onboard SATA connectors appear cabled; logical A/B identities and cable-to-drive routing remain unknown. |
+| Photo observation, unmeasured | GPU shroud overhangs both M.2 drives with a visible gap estimated as a few mm. This is not a measured clearance or a verified heatsink allowance. Drive outlines in the schematic show orientation, not dimensions or exact shroud extent. |
 | Uncertain photo | GFX_12V1 appears empty, not certainly. It is not marked confirmed-free. |
-| User-reported, unverified slot assignment | HBA in PCIE1 and GPU in PCIE2. A dual-slot card in PCIE2 could overlap PCIE1; await a slot-label photo instead of resolving this as fact. |
+| Photo-confirmed | Existing Noctua four-pin plugs on FAN1/FAN2 are seated on pins 1–4. This verifies those particular plugs' in-situ fit, not universal compatibility or physical keying. |
+| Photo-confirmed and user-confirmed | FAN3 is empty/free; FAN3 / LED_FAN3 silkscreen is visible. |
+| Photo-inferred | FAN4–FAN7 appear empty under the GPU overhang, but are not confirmed-free. No tach reading is not itself proof of a free header. |
 | User-reported | DIMMs in A1/B1/G1/H1; NH-U9 cooler fans on FAN1/FAN2; case USB 3 cable on USB3_3_4. |
 | User-reported | LAN1, LAN2 and BMC LAN connected to the switch; no other rear I/O connections except PSU power. The other rear ports are a logical group, `REAR_OTHER`, not a vendor header identifier. |
-| User-reported | Three front plus three middle fans, likely 120 mm, daisy-chained to an unknown endpoint. Two rear 80 mm fans are Molex-powered, fixed-speed, with no tach connection. |
-| Unknown | FAN3–FAN7 occupancy; FAN4–FAN7 hidden under the GPU. The user's suspicion that they are empty and the lack of tach readings do not establish free headers. |
+| User-reported wiring, photographed label | Molex chain A: six BoK BDM12025S fans, 120 mm reported, 12 V / 0.10 A per label; three front plus three middle. None use motherboard headers or tach connections. |
+| User-reported wiring, uncertain label | Molex chain B: two rear BoK fans, reported label 12 V / 0.1 A / 2000 RPM. Size, thickness and exact model remain **UNVERIFIED**. The tentative reading `BDM180255` through the grille and stock chassis specifications do not establish installed dimensions. Label-rated RPM is not a measurement; no tach is connected. |
+| User-reported | HX1000i PSU-side ports used: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA. One SATA/PATA feeds all 12 HDDs, splitter topology untraced; two feed the Molex fan chains. Free: 2 SATA/PATA and 4 PCIe/CPU. These counts do not verify electrical loads or individual internal board-header wiring. |
+| User-reported | The observed case pin header is board-to-case, not a fan connector; its exact designator is unverified. |
+| Photo-inferred | Red/white/green/black flat cable along the lower board edge under the GPU is possibly internal USB 2.0. No specific header, pinout or USB identity is confirmed. |
 
 User-reported occupied headers remain inferred rather than independently
-confirmed. Fan-planning counts therefore still show zero verified-free
-headers, with FAN1/FAN2 explicitly labeled user-reported occupied. The eight
-case fans are not assigned to motherboard headers. Neither photo-confirmed
-M.2 occupancy nor reported cooler wiring creates new telemetry measurements.
+confirmed unless explicitly user-confirmed. For an unmodified inspection map,
+fan-planning counts show **one confirmed-free header (FAN3), two
+photo-confirmed occupied headers (FAN1/FAN2), and four unverified headers
+(FAN4–FAN7)**. Photo-inferred empty headers do not count as verified free.
+The eight case fans use reported Molex chains, not motherboard headers.
+No new telemetry readings or replacement-fan dimensions are inferred from
+these observations.
 
 ## Sources and interpretation
 
@@ -121,9 +131,10 @@ text does **not** identify these bars as keying. Physical keying, pin-1
 orientation and the cable mating-side view remain unverified; this is not a
 board-rotation instruction. Confirm the actual header, never shift or force a plug.
 
-Pins 1–4 match the usual four-pin PWM fan signal roles; generic four-pin
-mechanical compatibility is **inferred**, not independently certified for
-every plug. The manual does not explicitly specify three-pin DC speed-control
+Pins 1–4 match the usual four-pin PWM fan signal roles. Photos provide
+in-situ fit evidence for the existing Noctua plugs at FAN1/FAN2 only;
+generic mechanical compatibility and physical keying are not established
+for every plug. The manual does not explicitly specify three-pin DC speed-control
 support, independent control across seven headers, or the shared power
 budget. It states a fan maximum of **5 A / 60 W**, without explicitly resolving
 per-header versus combined limits. Cable/splitter ratings and startup current

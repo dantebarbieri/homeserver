@@ -2,7 +2,7 @@ import { boardId, connectorById, inspectionConnections, provenanceLabels } from 
 
 export const storageKey = "homeserver.hardware-map.v1";
 export const confidenceValues = ["unknown", "inferred", "confirmed"];
-export const occupancyValues = ["unverified", "occupied", "free"];
+export const occupancyValues = ["unverified", "occupied", "free", "blocked"];
 export const maxImportBytes = 256 * 1024;
 const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -46,7 +46,7 @@ export function validateDocument(input) {
       throw new Error(`${id} has an invalid evidence source.`);
     }
     if (connection.occupancy !== "unverified" && connection.confidence === "unknown") {
-      throw new Error(`${id}: occupied/free claims need inferred or confirmed confidence and evidence.`);
+      throw new Error(`${id}: occupied/free/blocked claims need inferred or confirmed confidence and evidence.`);
     }
     if (connection.occupancy === "free" && connection.target) {
       throw new Error(`${id}: a free connector cannot also have a connected target.`);
@@ -129,7 +129,8 @@ export function fanAvailability(document) {
   for (const [id, connector] of connectorById) {
     if (connector.category !== "Fans") continue;
     const connection = document.connections[id] ?? emptyConnection();
-    const occupancy = connection.confidence === "confirmed" ? connection.occupancy : "unverified";
+    const occupancy = connection.confidence === "confirmed" && ["free", "occupied"].includes(connection.occupancy)
+      ? connection.occupancy : "unverified";
     counts[occupancy] += 1;
   }
   return counts;
