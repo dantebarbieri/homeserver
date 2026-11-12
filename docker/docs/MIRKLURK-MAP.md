@@ -214,6 +214,13 @@ Since 2322d41 that separate refresh is complete: 522 titles include
 and both CSS files are unchanged. Only bundled title/date metadata and the
 existing version-link regression change; no API, server, save or game-rule
 change.
+Since 7c60d37 Mirklurk 0.9.5.6 is **Latest**, retaining the shared modeled
+0.9.5.0 rules and older-save compatibility. Release metadata is transitively
+reachable by uploads, so both exact targets are rebuilt and rolled out,
+uploads first; no API, schema, calculation, sharing policy or PNG bytes change.
+The 522-title wiki catalog remains dated 2026-11-12 and includes
+`Version 0.9.5.5`; a separate refresh is mandatory after verified 0.9.5.6
+wiki publication.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
 page, scripts, stylesheets, manifest, icons and all bundled art (398 files) so
@@ -237,9 +244,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `2322d4194c04b9d9b1e25ea3015cb912e60bc42d`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/43137086873) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/64) has no open issues |
-| Web | `mirklurk-map:2322d41`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:2322d41`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `7c60d37c1ed4563511107af6d11f5d9d8be17f65`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/43247163336) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/65) has no open issues |
+| Web | `mirklurk-map:7c60d37`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:7c60d37`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -503,6 +510,19 @@ quota bucket. LAN IPv4 hairpin requests may correctly share the router's
 `192.168.50.1` NAT identity; do not mistake that for the Docker proxy identity.
 
 ## Rollback
+
+Previous source: `2322d4194c04b9d9b1e25ea3015cb912e60bc42d`, tags
+`mirklurk-map:2322d41` / `mirklurk-map-uploads:2322d41`. Preflight on
+2026-11-12 UTC observed exact running images
+`sha256:1ba7e5e92eb4257cb0bf952dc186b4996fdd624596ec203ebd0568b3b1fb7942`
+(web) and
+`sha256:6882f5ab4e878f23e2b11bf6e28be57bc2cd614ffa7a60bb877a27f25619be30`
+(uploads). Retain and recheck both under `rollback-2322d41-20261112-7c60d37`.
+This core release updates server-reachable version metadata, not API, schema,
+calculations or sharing behavior. Recreate uploads then web from the retained
+exact images under the shared lock, preserving the shares volume and current
+freshly verified exact NPM trust. Never restore stale peers. This restores
+Latest 0.9.5.5 and its accepted 522-title catalog, not older modeled rules.
 
 Previous source: `672918c0f0fb1a8b4031c85287220256d5f99e9d`, tags
 `mirklurk-map:672918c` / `mirklurk-map-uploads:672918c`. Preflight on
