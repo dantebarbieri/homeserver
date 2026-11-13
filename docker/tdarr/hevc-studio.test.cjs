@@ -6,7 +6,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { prepare, encode, commit, encodeArgs, privateCopy, MAC_FFMPEG } = require('./hevc-studio-v1.cjs');
+const { prepare, encode, commit, encodeArgs, privateCopy, MAC_MEDIA, MAC_CACHE, MAC_FFMPEG } = require('./hevc-studio-v1.cjs');
 const { fingerprint, validate } = require('./hevc-safe-v1.cjs');
 const { internals: { runProcess } } = require('./dv5-sidecar.cjs');
 const { flowDefinition, libraryDefinition, libraryTemplate, install, FLOW_ID, LIBRARY_ID, CANARY_FOLDER } = require('./install-studio-flow.cjs');
@@ -146,7 +146,9 @@ test('native encoder uses only mapped source and expected job result', linux, as
   await assert.rejects(encode(f.args, { ...f.injected, platform: 'darwin', arch: 'arm64' }), /ticket/);
 });
 
-test('native mappings permit the macOS /var root alias but reject symlinks below mapped roots', linux, async t => {
+test('native mappings use canonical macOS roots and reject symlinks at or below them', linux, async t => {
+  assert.equal(MAC_MEDIA, '/private/var/lib/studio-worker/mounts/media');
+  assert.equal(MAC_CACHE, '/private/var/lib/studio-worker/mounts/cache');
   const f = await fixture(t);
   const alias = path.join(f.root, 'var-alias');
   await fs.symlink(f.root, alias);
@@ -157,10 +159,16 @@ test('native mappings permit the macOS /var root alias but reject symlinks below
   f.args.nodeTags = 'studio-native';
   f.args.ffmpegPath = MAC_FFMPEG;
   const injected = { ...f.injected, platform: 'darwin', arch: 'arm64', macMedia, macCache };
-  assert.equal((await encode(f.args, injected)).outputFileObj._id, path.join(macCache, f.token, 'result.mkv'));
+  await assert.rejects(encode(f.args, injected), /canonical/);
+  f.args.inputFileObj = f.args.originalLibraryFile = { _id: f.source };
+  f.args.variables.homeserverStudio.source = f.source;
+  injected.macMedia = f.media;
+  await assert.rejects(encode(f.args, injected), /canonical/);
+  injected.macCache = f.cacheRoot;
+  assert.equal((await encode(f.args, injected)).outputFileObj._id, f.output);
   await fs.rename(f.work, `${f.work}-other`);
   await fs.symlink(`${f.work}-other`, f.work);
-  await assert.rejects(encode(f.args, injected), /cache directory/);
+  await assert.rejects(encode(f.args, injected), /canonical/);
   await fs.unlink(f.source);
   await fs.writeFile(path.join(f.root, 'other.mkv'), 'other');
   await fs.symlink(path.join(f.root, 'other.mkv'), f.source);

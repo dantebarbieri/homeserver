@@ -8,8 +8,8 @@ const { internals: { inside, runProcess } } = require('./dv5-sidecar.cjs');
 
 const PRIVATE_ROOT = '/app/server/Tdarr/Custom/state/studio-native-v1';
 const CACHE_ROOT = '/temp/studio-native';
-const MAC_CACHE = '/var/lib/studio-worker/mounts/cache';
-const MAC_MEDIA = '/var/lib/studio-worker/mounts/media';
+const MAC_CACHE = '/private/var/lib/studio-worker/mounts/cache';
+const MAC_MEDIA = '/private/var/lib/studio-worker/mounts/media';
 const MAC_FFMPEG = '/opt/homebrew/bin/ffmpeg';
 const TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const assert = (ok, message) => { if (!ok) throw new Error(`Studio HEVC: ${message}`); };
@@ -128,16 +128,15 @@ async function encode(args, injected = {}) {
   const ticket = args.variables.homeserverStudio;
   assert(ticket && TOKEN.test(ticket.token) && ticket.jobId === jobId(args), 'invalid encode ticket');
   const media = injected.macMedia || MAC_MEDIA, cache = injected.macCache || MAC_CACHE;
-  const mediaRoot = await fs.realpath(media), cacheRoot = await fs.realpath(cache);
+  await directory(media);
+  await directory(cache);
   const source = ticket.source;
-  // macOS /var is normally /private/var; allow that trusted root alias, not redirects beneath it.
   assert(source === args.originalLibraryFile._id && source === args.inputFileObj._id
     && inside(media, source) && path.resolve(source) === source
-    && await fs.realpath(source) === path.join(mediaRoot, path.relative(media, source))
+    && await fs.realpath(source) === source
     && (await fs.lstat(source)).isFile(), 'invalid mapped read-only source');
   const work = path.join(cache, ticket.token);
-  assert((await fs.stat(cacheRoot)).isDirectory() && await fs.realpath(work) === path.join(cacheRoot, ticket.token)
-    && (await fs.lstat(work)).isDirectory(), 'invalid mapped cache directory');
+  await directory(work);
   const output = path.join(work, 'result.mkv');
   const seconds = Number(ticket.probe?.format?.duration);
   assert(Number.isFinite(seconds) && seconds > 0, 'invalid encode duration');
@@ -253,4 +252,4 @@ async function commit(args, injected = {}) {
   }
 }
 
-module.exports = { prepare, encode, commit, encodeArgs, privateCopy, PRIVATE_ROOT, CACHE_ROOT, MAC_FFMPEG };
+module.exports = { prepare, encode, commit, encodeArgs, privateCopy, PRIVATE_ROOT, CACHE_ROOT, MAC_MEDIA, MAC_CACHE, MAC_FFMPEG };

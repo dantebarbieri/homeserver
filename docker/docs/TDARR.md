@@ -85,19 +85,26 @@ does not create accounts, shares, transport, tags or native service units:
 
 | Linux controller/node path | Mac mapped path / access |
 |---|---|
-| `/data/media` | `/var/lib/studio-worker/mounts/media`, SMB **read-only** |
-| `/temp/studio-native` | `/var/lib/studio-worker/mounts/cache`, SMB writable |
+| `/data/media` | `/private/var/lib/studio-worker/mounts/media`, SMB **read-only** |
+| `/temp/studio-native` | `/private/var/lib/studio-worker/mounts/cache`, SMB writable |
 
 Only the latter Linux subtree is writable by the Mac; its host backing path
 is `/tmp/tdarr_transcode_cache/studio-native`. Do **not** export all of `/temp`,
-Tdarr `Custom`, its state, or original media writable. Linux roots must be
-canonical paths without symlinks. The normal macOS `/var` to `/private/var`
-root alias is supported, but symlinks below mapped roots are rejected.
-The Linux cache root and its parent must not be
+Tdarr `Custom`, its state, or original media writable. Linux and Mac mapped
+roots must be canonical paths without symlinks: use `/private/var`, not the
+macOS `/var` symlink, including in the node's path translators. Symlinks below
+the mapped roots are also rejected. The Linux cache root and its parent must not be
 replaceable by the SMB account. Permit the existing Linux Tdarr user and the
 authenticated SMB account to read/write the job directories and results
 (including group inheritance/ACLs as needed); do not solve this by opening
 the private state directory.
+
+The node's mapped path translators must map the two Linux roots to the exact
+Mac roots above in both directions. The encode step requires its input file,
+original file and ticket source to agree on the canonical Mac path; its
+`result.mkv` must translate back to exactly
+`/temp/studio-native/<job-token>/result.mkv` for the Linux commit. Confirm
+that these fields and the token survive both handoffs in the live canary.
 
 Linux needs these sibling files in `/app/server/Tdarr/Custom`:
 `hevc-studio-v1.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`,
@@ -120,6 +127,8 @@ Linux storage node and `studio-native` only to the Mac. Keep the existing
 authenticated Tdarr HTTPS endpoint; no new public proxy route is needed.
 Native encoding uses the installed Tdarr CLI helper for worker progress and
 cancellation, refusing an untracked subprocess if that helper is unavailable.
+The module require path above remains `/var/...` for compatibility with the
+already-installed flow; it is not a mapped share or an input-validation path.
 
 #### Prevent the Mac from taking existing Linux-only jobs
 
