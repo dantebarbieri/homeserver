@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.danteb.colima</string>
+    <key>UserName</key>
+    <string>dante</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/dante</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/colima</string>
+        <string>start</string>
+        <string>--foreground</string>
+        <string>--cpu</string>
+        <string>4</string>
+        <string>--memory</string>
+        <string>6</string>
+        <string>--disk</string>
+        <string>60</string>
+        <string>--vm-type</string>
+        <string>vz</string>
+        <string>--mount</string>
+        <string>/Users/dante/Services/docker-shared:w</string>
+        <string>--ssh-config=false</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/dante</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/dante/Library/Logs/studio-colima.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dante/Library/Logs/studio-colima-error.log</string>
+</dict>
+</plist>

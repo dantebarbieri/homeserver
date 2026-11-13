@@ -123,8 +123,14 @@ Run native processes as isolated `_studio`, with a private home and no admin
 keys. Begin with **one CPU transcode worker, zero GPU and zero health
 workers**; the Linux storage node still needs an available CPU worker for
 preparation and final verification. Assign `homeserver-storage` only to the
-Linux storage node and `studio-native` only to the Mac. Keep the existing
-authenticated Tdarr HTTPS endpoint; no new public proxy route is needed.
+Linux storage node and `studio-native` only to the Mac. The existing
+`https://tdarr.danteb.com` proxy serves the web UI on **8265**, not the node
+socket on **8266**; pointing the native node there returns `Invalid namespace`.
+Use `http://127.0.0.1:8266` on the Mac through the restricted SSH tunnel to a
+loopback-only fixed Linux relay targeting `tdarr:8266`. Keep the dedicated
+Tdarr API key: SSH protects the LAN hop, not application authorization. Both
+the SSH Match block and key options permit only `127.0.0.1:1445` (SMB) and
+`127.0.0.1:8266` (Tdarr); no new public proxy, LAN listener or firewall port.
 Native encoding uses the installed Tdarr CLI helper for worker progress and
 cancellation, refusing an untracked subprocess if that helper is unavailable.
 The module require path above remains `/var/...` for compatibility with the

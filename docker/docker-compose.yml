@@ -24,6 +24,7 @@ include:
   - compose.romm.yml
   - compose.searxng.yml
   - compose.starr.yml
+  - compose.studio.yml
   - compose.monitoring.yml
   - compose.utilities.yml
   - compose.websites.yml
