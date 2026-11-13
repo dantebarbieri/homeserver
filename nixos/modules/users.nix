@@ -6,7 +6,6 @@
   users = {
     defaultUserShell = pkgs.zsh;
     users.danteb = {
-      initialPassword = "changeme123!";
       isNormalUser = true;
       extraGroups = [ "docker" "wheel" ];
       openssh.authorizedKeys.keys = [

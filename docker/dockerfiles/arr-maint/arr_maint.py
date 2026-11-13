@@ -82,15 +82,28 @@ def save_state(name, value):
     os.replace(tmp, os.path.join(STATE, name))
 
 
-def ntfy(title, body, priority="default", tags=""):
+def start_ntfy():
     if not (NTFY_URL and NTFY_TOPIC):
-        return
+        log("WARNING: ntfy URL or topic is not configured")
+        return None
     try:
-        req = urllib.request.Request(f"{NTFY_URL}/{NTFY_TOPIC}", data=body.encode(),
-                                     headers={"Title": title, "Priority": priority, "Tags": tags})
-        urllib.request.urlopen(req, timeout=15).read()
-    except Exception as e:
-        log("WARNING: ntfy send failed:", e)
+        from ntfy_auth import start_outbox
+        return start_outbox(STATE, NTFY_URL, NTFY_TOPIC)
+    except (OSError, ValueError) as e:
+        log("WARNING: ntfy outbox unavailable:", type(e).__name__)
+        return None
+
+
+def ntfy(title, body, priority="default", tags=""):
+    outbox = start_ntfy()
+    if outbox is None:
+        return False
+    try:
+        outbox.submit(title, body, priority, tags)
+        return True
+    except (OSError, ValueError) as e:
+        log("WARNING: ntfy queue failed:", type(e).__name__)
+        return False
 
 
 class Qbit:
@@ -310,9 +323,13 @@ class Arr:
 
         notified = load_state("notified.json", {})
         new = [v for k, v in needs_user.items() if k not in notified]
+        delivered = False
         if new and not DRY:
-            ntfy(f"{self.name}: needs attention", "\n".join(new), "default", f"{self.tag},warning")
-        save_state("notified.json", {k: notified.get(k, now) for k in needs_user})
+            delivered = ntfy(f"{self.name}: needs attention",
+                             f"{len(new)} item(s) need attention; see the maintenance logs.",
+                             "default", f"{self.tag},warning")
+        save_state("notified.json", {k: notified.get(k, now) for k in needs_user
+                                     if k in notified or delivered})
 
 
 def report_failure(app, e, failures):
@@ -323,14 +340,17 @@ def report_failure(app, e, failures):
     err = load_state("last_error.json", {})
     msg = f"{type(e).__name__}: {e}"[:300]
     if err.get("msg") != msg or time.time() - err.get("at", 0) > 6 * 3600:
-        if not DRY:
-            ntfy(f"{app.name} maintenance: run failed", msg, "high", f"{app.tag},rotating_light")
-        save_state("last_error.json", {"msg": msg, "at": time.time()})
+        if not DRY and ntfy(f"{app.name} maintenance: run failed",
+                            f"{type(e).__name__}; see the maintenance logs.",
+                            "high", f"{app.tag},rotating_light"):
+            save_state("last_error.json", {"msg": msg, "at": time.time()})
 
 
 def main():
     app = importlib.import_module(os.environ["APP"].lower()).App()
     os.makedirs(STATE, exist_ok=True)
+    if not DRY and NTFY_URL and NTFY_TOPIC:
+        start_ntfy()
     failures = 0
     while True:
         try:

@@ -5,7 +5,7 @@
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; })
-    ntfyUrl ntfyTopic;
+    ntfyNotify;
   # The upgrade stages something almost every night, so stay quiet for this
   # long after a reboot instead of nagging about every generation.
   staleDays = 7;
@@ -55,11 +55,10 @@ in
         fi
       fi
 
-      curl --fail-with-body --show-error --silent --max-time 30 \
-        -H "Title: Reboot needed on ${config.networking.hostName}" \
-        -H "Tags: arrows_counterclockwise,computer" \
-        -d "$message Up $days days; this reminder does not queue a reboot." \
-        "${ntfyUrl}/${ntfyTopic}"
+      ${ntfyNotify}/bin/ntfy-notify \
+        "Reboot needed on ${config.networking.hostName}" \
+        "$message Up $days days; this reminder does not queue a reboot." \
+        default "arrows_counterclockwise,computer"
     '';
   };
 

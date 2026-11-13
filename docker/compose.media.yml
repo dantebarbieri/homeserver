@@ -106,10 +106,13 @@ services:
       NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD:-}
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
+      NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
     networks:
       - proxy
     volumes:
       - ${DATA}/plex-navidrome-sync:/state
+      - ./scripts/ntfy_auth.py:/app/ntfy_auth.py:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
       # Source of the Plex token.
       - "${DATA}/plex/config/Library/Application Support/Plex Media Server/Preferences.xml:/plex/Preferences.xml:ro"
     depends_on:
@@ -132,10 +135,13 @@ services:
       INTERVAL: 86400
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
+      NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
     networks:
       - music-maintenance
     volumes:
       - ${DATA}/music-cover-fallback:/state
+      - ./scripts/ntfy_auth.py:/app/ntfy_auth.py:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
       - ${DATA}/lidarr/config/config.xml:/lidarr/config.xml:ro
       - "${DATA}/plex/config/Library/Application Support/Plex Media Server/Preferences.xml:/plex/Preferences.xml:ro"
       - ${RAID}/shared/media/music:/music
@@ -155,10 +161,13 @@ services:
       ENABLED: ${MUSIC_LYRICS_FALLBACK_ENABLED:-0}
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
+      NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
     networks:
       - music-maintenance
     volumes:
       - ${DATA}/music-lyrics-fallback:/state
+      - ./scripts/ntfy_auth.py:/app/ntfy_auth.py:ro
+      - ${DATA}/ntfy/secrets/publisher-token:/run/secrets/ntfy-publisher-token:ro
       - "${DATA}/plex/config/Library/Application Support/Plex Media Server/Preferences.xml:/plex/Preferences.xml:ro"
       - ${RAID}/shared/media/music:/music
 

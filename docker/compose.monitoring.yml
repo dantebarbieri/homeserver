@@ -155,7 +155,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: gcr.io/cadvisor/cadvisor:latest
+    image: ghcr.io/google/cadvisor:latest
     container_name: cadvisor
     privileged: true
     command:

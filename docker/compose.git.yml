@@ -19,6 +19,9 @@ services:
       FORGEJO__server__LFS_START_SERVER: "true"
       FORGEJO__server__LFS_JWT_SECRET: ${LFS_JWT_SECRET}
       FORGEJO__lfs__PATH: /data/git/lfs
+      FORGEJO__openid__ENABLE_OPENID_SIGNIN: "false"
+      FORGEJO__openid__ENABLE_OPENID_SIGNUP: "false"
+      FORGEJO__service__ENABLE_OPENID_SIGNUP: "false"
       # Resolve `uses: <owner>/<repo>@<ref>` against github.com instead of
       # Forgejo's default curated mirror (https://data.forgejo.org), which
       # only hosts a small set of first-party actions. Setting this to

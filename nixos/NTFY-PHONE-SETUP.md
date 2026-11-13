@@ -44,11 +44,12 @@ homeserver-alerts
 ## When ntfy itself is down
 
 ntfy runs in Docker, so a Docker outage also takes down the alert channel.
-Alerts sent by root through `ntfy-notify` are then queued in
-`/var/lib/ntfy-spool`, and `ntfy-spool-flush` redelivers them every five
-minutes once ntfy is back, titled "… (delayed)" and noting when they were
-queued. Check the queue with `sudo ls /var/lib/ntfy-spool`. Alerts are lost
-only if the host itself is down or the queue holds 1,000 alerts.
+Alerts sent by root through `ntfy-notify` are queued in `/var/lib/ntfy-spool`;
+interactive alerts from `danteb` are queued in `~/.local/state/ntfy-spool`.
+`ntfy-spool-flush` retries both every five minutes once ntfy is back, reading
+the user queue as `danteb`. Check the queues with `sudo ls /var/lib/ntfy-spool`
+and `ls ~/.local/state/ntfy-spool`. Alerts cannot be queued if storage is full
+or inaccessible; the command reports this failure.
 
 ## Test It
 
@@ -57,9 +58,6 @@ From the server, send a test notification:
 ```bash
 # Using the ntfy-notify helper (installed system-wide)
 ntfy-notify "Test Alert" "Hello from homeserver!" default "tada"
-
-# Or with raw curl
-curl -H "Title: Test" -d "It works!" https://ntfy.danteb.com/homeserver-alerts
 ```
 
 You should receive a push notification on your phone within seconds.
@@ -78,7 +76,10 @@ and services.
 
 ## Security Note
 
-The `homeserver-alerts` topic is **open** — anyone who knows the URL can
-subscribe (read) or publish (write). If you want to restrict access,
-configure [ntfy access control](https://docs.ntfy.sh/config/#access-control)
-in your ntfy container's config at `${DATA}/ntfy/config/server.yml`.
+Subscriptions are intended to remain publicly readable, so never include
+secrets in notifications. The intended policy restricts writes to the server's
+publisher token; verify the live
+[ntfy access control](https://docs.ntfy.sh/config/#access-control) settings
+in `${DATA}/ntfy/config/server.yml` before relying on that restriction.
+`ntfy-notify` reads the token from
+`/srv/docker/data/ntfy/secrets/publisher-token`; never copy it into the repo.

@@ -1,5 +1,10 @@
 # Prowlarr custom definitions
 
+FlareSolverr is shared with Suwayomi on a dedicated network. It retains
+internet access and runs with dropped capabilities and resource limits. Its
+root filesystem stays writable because the image patches its Chromium driver
+at runtime.
+
 Two indexers use repo-managed variants of Prowlarr's upstream (Cardigann)
 definitions. Each variant is derived from the upstream definition Prowlarr has
 installed, by an awk program in `docker/prowlarr/`; only the changes below

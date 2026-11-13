@@ -24,7 +24,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Template for Hotio images (radarr, sonarr, bazarr, prowlarr, sabnzbd, seerr)
+  # Template for Hotio images (radarr, sonarr, bazarr, prowlarr, sabnzbd)
   hotio-service:
     image: alpine  # placeholder - overridden by extending service
     restart: unless-stopped

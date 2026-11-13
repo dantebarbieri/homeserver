@@ -423,7 +423,8 @@ def run(lidarr=None, sources=None, refresher=None):
         save_state("report.json", report)
         issues = sorted(r["album"] + ": " + r["reason"] for r in report if "reason" in r)
         if issues and (issues != state.get("issues") or time.time() - state.get("notified", 0) >= 7 * 86400):
-            notify("Music cover fallback needs attention", "\n".join(issues[:12]))
+            notify("Music cover fallback needs attention",
+                   f"{len(issues)} item(s) need attention; see the logs or report.json.")
             state["notified"] = time.time()
         state["issues"] = issues
         save_state("state.json", state)
@@ -438,10 +439,8 @@ def notify(title, body):
     url, topic = os.environ.get("NTFY_URL"), os.environ.get("NTFY_TOPIC")
     if not (url and topic):
         return
-    req = urllib.request.Request(url.rstrip("/") + "/" + topic, data=body.encode(),
-                                 headers={"Title": title, "Tags": "musical_note,warning"})
-    with urllib.request.urlopen(req, timeout=30):
-        pass
+    from ntfy_auth import start_outbox
+    start_outbox(STATE, url, topic).submit(title, body, tags="musical_note,warning")
 
 
 def healthcheck():
@@ -460,6 +459,12 @@ def healthcheck():
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
+    if not DRY and STATE.exists() and os.environ.get("NTFY_URL") and os.environ.get("NTFY_TOPIC"):
+        from ntfy_auth import start_outbox
+        try:
+            start_outbox(STATE, os.environ["NTFY_URL"], os.environ["NTFY_TOPIC"])
+        except OSError as error:
+            LOG.error("ntfy outbox unavailable: %s", type(error).__name__)
     if not ENABLED and not DRY:
         LOG.info("disabled; set MUSIC_COVER_FALLBACK_ENABLED=1 after previewing (docs/MUSIC.md)")
         if ONCE:

@@ -10,6 +10,9 @@ services:
       service: common-service
     image: vaultwarden/server:latest
     container_name: vaultwarden
+    environment:
+      SIGNUPS_ALLOWED: "false"
+      INVITATIONS_ALLOWED: "false"
     networks:
       - proxy
     volumes:
@@ -119,7 +122,6 @@ services:
     container_name: wg-easy
     cap_add:
       - NET_ADMIN
-      - SYS_MODULE
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv4.ip_forward=1

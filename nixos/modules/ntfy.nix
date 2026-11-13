@@ -4,7 +4,34 @@
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; })
-    ntfyUrl ntfyTopic ntfySpool ntfyNotify;
+    ntfyUrl ntfyTopic ntfySpool ntfyCurl ntfyNotify;
+  userSpool = "${config.users.users.danteb.home}/.local/state/ntfy-spool";
+  flushSpool = ''
+    spool="$1"
+    find "$spool" -mindepth 1 -maxdepth 1 -name '.new.*' -mmin +60 -exec rm -rf {} +
+    for entry in "$spool"/*.alert; do
+      [ -d "$entry" ] || continue
+      if ! title=$(cat "$entry/title") ||
+         ! message=$(cat "$entry/message") ||
+         ! priority=$(cat "$entry/priority") ||
+         ! tags=$(cat "$entry/tags") ||
+         ! queued=$(cat "$entry/queued"); then
+        echo "Cannot read queued ntfy alert in $entry; retaining it" >&2
+        continue
+      fi
+      if ntfy_curl --fail --silent --show-error --max-time 20 \
+          -H "Title: $title (delayed)" \
+          -H "Priority: $priority" \
+          -H "Tags: $tags" \
+          --data-raw "$message"$'\n\n'"Queued at $queued while ntfy was unreachable." \
+          "${ntfyUrl}/${ntfyTopic}" > /dev/null; then
+        rm -rf "$entry"
+      else
+        echo "ntfy is still unreachable; queued alerts stay in $spool" >&2
+        break
+      fi
+    done
+  '';
 in
 {
   # ── Generic ntfy failure handler ──────────────────────────────────────────
@@ -27,40 +54,28 @@ in
   };
 
   # ── Queued alert delivery ─────────────────────────────────────────────────
-  # Delivers what ntfy-notify queued while ntfy was unreachable, oldest first.
-  # It succeeds quietly while ntfy is still down: there is nothing to alert
-  # through, and the queue keeps the alerts until it is back.
+  # User-owned entries are read and sent only after dropping root privileges.
   systemd.tmpfiles.rules = [ "d ${ntfySpool} 0700 root root -" ];
 
   systemd.services.ntfy-spool-flush = {
     description = "Deliver ntfy alerts queued while ntfy was unreachable";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
-    unitConfig.ConditionDirectoryNotEmpty = ntfySpool;
     path = with pkgs; [ curl coreutils findutils ];
     serviceConfig.Type = "oneshot";
     script = ''
-      # Entries an interrupted ntfy-notify never finished writing.
-      find ${ntfySpool} -mindepth 1 -maxdepth 1 -name '.new.*' -mmin +60 -exec rm -rf {} +
-      for entry in ${ntfySpool}/*.alert; do
-        [ -d "$entry" ] || continue
-        title=$(cat "$entry/title" 2>/dev/null || echo "Homeserver Alert")
-        message=$(cat "$entry/message" 2>/dev/null || echo "No details provided")
-        priority=$(cat "$entry/priority" 2>/dev/null || echo default)
-        tags=$(cat "$entry/tags" 2>/dev/null || true)
-        queued=$(cat "$entry/queued" 2>/dev/null || echo "an unknown time")
-        if curl --fail --silent --show-error --max-time 20 \
-            -H "Title: $title (delayed)" \
-            -H "Priority: $priority" \
-            -H "Tags: $tags" \
-            --data-raw "$message"$'\n\n'"Queued at $queued while ntfy was unreachable." \
-            "${ntfyUrl}/${ntfyTopic}" > /dev/null; then
-          rm -rf "$entry"
-        else
-          echo "ntfy is still unreachable; queued alerts stay in ${ntfySpool}" >&2
-          exit 0
-        fi
-      done
+      ${ntfyCurl}
+      flush_spool() {
+        ${flushSpool}
+      }
+      flush_spool ${ntfySpool}
+      if [ -d ${userSpool} ]; then
+        ${pkgs.lib.getBin pkgs.util-linux}/bin/runuser -u danteb -- ${pkgs.bash}/bin/bash \
+          -s -- ${userSpool} <<'NTFY_FLUSH'
+      ${ntfyCurl}
+      ${flushSpool}
+      NTFY_FLUSH
+      fi
     '';
   };
 

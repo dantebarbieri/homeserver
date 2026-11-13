@@ -3,7 +3,7 @@
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; })
-    ntfyUrl ntfyTopic ntfyNotify smartdAlert mdadmAlert;
+    ntfyNotify smartdAlert mdadmAlert;
 in
 {
   # LVM + RAID
@@ -168,19 +168,15 @@ in
         exit 1
       fi
       if [ "$COUNT" = "0" ]; then
-        curl --fail-with-body --show-error --silent --max-time 30 \
-          -H "Title: RAID Scrub Clean on ${config.networking.hostName}" \
-          -H "Priority: low" \
-          -H "Tags: white_check_mark,computer" \
-          -d "Weekly parity check complete on /dev/$MD — mismatch_cnt=0" \
-          "${ntfyUrl}/${ntfyTopic}"
+        ${ntfyNotify}/bin/ntfy-notify \
+          "RAID Scrub Clean on ${config.networking.hostName}" \
+          "Weekly parity check complete on /dev/$MD — mismatch_cnt=0" \
+          low "white_check_mark,computer"
       else
-        curl --fail-with-body --show-error --silent --max-time 30 \
-          -H "Title: RAID Scrub Found Mismatches on ${config.networking.hostName}" \
-          -H "Priority: high" \
-          -H "Tags: warning,computer" \
-          -d "Parity check on /dev/$MD finished with mismatch_cnt=$COUNT — investigate" \
-          "${ntfyUrl}/${ntfyTopic}"
+        ${ntfyNotify}/bin/ntfy-notify \
+          "RAID Scrub Found Mismatches on ${config.networking.hostName}" \
+          "Parity check on /dev/$MD finished with mismatch_cnt=$COUNT — investigate" \
+          high "warning,computer"
         exit 1
       fi
     '';

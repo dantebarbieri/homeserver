@@ -4,11 +4,14 @@
 # re-checked every CHECK_INTERVAL seconds and re-applied whenever it differs.
 set -u
 
+. /usr/local/lib/ntfy-curl.sh
+. /usr/local/lib/ntfy-outbox.sh
+
 log() { echo "[$(date -Iseconds)] $*"; }
 
 ntfy() {
-  curl -s -H "Title: $1" -H "Priority: ${3:-high}" -H "Tags: ${4:-warning,computer}" \
-    -d "$2" "${NTFY_URL}/${NTFY_TOPIC}" >/dev/null || log "WARNING: ntfy send failed"
+  ntfy_outbox_queue "$1" "$2" "${3:-high}" "${4:-warning,computer}" ||
+    { log "WARNING: ntfy alert could not be queued"; return 1; }
 }
 
 api() {
@@ -22,24 +25,27 @@ PORT_ALERTED=0
 FAIL_ALERTED=0
 
 log "[slskd-port-sync] starting (host=${SLSKD_HOST}, port_file=${PORT_FILE})"
+ntfy_outbox_start || { log "ERROR: ntfy outbox unavailable"; exit 1; }
 
 while :; do
   PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
   if [ -z "$PORT" ]; then
     PORT_MISSING_COUNT=$((PORT_MISSING_COUNT + 1))
     if [ "$PORT_MISSING_COUNT" -ge "$MAX_PORT_MISSING" ] && [ "$PORT_ALERTED" -eq 0 ]; then
-      ntfy "slskd Port Sync: No Forwarded Port" \
-        "gluetun-slskd has supplied no forwarded port for $((PORT_MISSING_COUNT * 5))s -- check gluetun-slskd logs."
-      PORT_ALERTED=1
+      if ntfy "slskd Port Sync: No Forwarded Port" \
+        "gluetun-slskd has supplied no forwarded port for $((PORT_MISSING_COUNT * 5))s -- check gluetun-slskd logs."; then
+        PORT_ALERTED=1
+      fi
     fi
     sleep 5
     continue
   fi
   if [ "$PORT_ALERTED" -eq 1 ]; then
-    ntfy "slskd Port Sync: Port Restored" "gluetun-slskd is forwarding port ${PORT} again" "low" "white_check_mark"
+    if ntfy "slskd Port Sync: Port Restored" "gluetun-slskd is forwarding port ${PORT} again" "low" "white_check_mark"; then
+      PORT_ALERTED=0
+    fi
   fi
   PORT_MISSING_COUNT=0
-  PORT_ALERTED=0
 
   CURRENT="$(api "http://${SLSKD_HOST}/api/v0/options" | grep -o '"listenPort":[0-9]*' | head -n1 | cut -d: -f2)"
   if [ -z "$CURRENT" ]; then
@@ -52,8 +58,9 @@ while :; do
   else
     log "ERROR: failed to set slskd listen port to ${PORT}"
     if [ "$FAIL_ALERTED" -eq 0 ]; then
-      ntfy "slskd Port Sync: Update Failed" "Could not set slskd listen port to ${PORT}"
-      FAIL_ALERTED=1
+      if ntfy "slskd Port Sync: Update Failed" "Could not set slskd listen port to ${PORT}"; then
+        FAIL_ALERTED=1
+      fi
     fi
   fi
   sleep "${CHECK_INTERVAL}"

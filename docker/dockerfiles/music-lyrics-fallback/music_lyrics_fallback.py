@@ -442,11 +442,11 @@ def healthcheck():
 def notify_failure():
     url, topic = os.environ.get("NTFY_URL"), os.environ.get("NTFY_TOPIC")
     if url and topic:
-        req = urllib.request.Request(url.rstrip("/") + "/" + topic,
-                                     data=b"See docker logs music-lyrics-fallback. Existing audio and lyrics were not replaced.",
-                                     headers={"Title": "Music lyrics fallback failed", "Tags": "warning"})
-        with urllib.request.urlopen(req, timeout=30):
-            pass
+        from ntfy_auth import start_outbox
+        start_outbox(STATE, url, topic).submit(
+            "Music lyrics fallback failed",
+            "See docker logs music-lyrics-fallback. Existing audio and lyrics were not replaced.",
+            tags="warning")
 
 
 def main():
@@ -461,6 +461,12 @@ def main():
         parser.error("limit must be nonnegative and keys must be numeric")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     signal.signal(signal.SIGTERM, lambda *unused: sys.exit(0))
+    if not args.dry_run and STATE.exists() and os.environ.get("NTFY_URL") and os.environ.get("NTFY_TOPIC"):
+        from ntfy_auth import start_outbox
+        try:
+            start_outbox(STATE, os.environ["NTFY_URL"], os.environ["NTFY_TOPIC"])
+        except OSError as error:
+            LOG.error("ntfy outbox unavailable: %s", type(error).__name__)
     if os.environ.get("ENABLED") != "1" and not args.dry_run:
         LOG.info("disabled; set MUSIC_LYRICS_FALLBACK_ENABLED=1 after previewing")
         if args.once:

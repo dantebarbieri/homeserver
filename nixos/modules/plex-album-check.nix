@@ -7,7 +7,7 @@
 
 let
   inherit (import ../lib/shared.nix { inherit config pkgs; })
-    ntfyUrl ntfyTopic;
+    ntfyNotify;
   # A merge stays until someone repairs it, so after the first alert repeat it
   # this often instead of every night.
   remindDays = 7;
@@ -131,13 +131,10 @@ in
         'Repair: docker/docs/MUSIC.md, section "Fixing merged Plex albums".')
       echo "$message"
 
-      # Record the report only once ntfy accepted it, so a failed send is
-      # retried on the next run.
-      curl --fail-with-body --show-error --silent --max-time 30 \
-        -H "Title: Merged Plex albums on ${config.networking.hostName}" \
-        -H "Tags: warning,musical_note" \
-        -d "$message" \
-        "${ntfyUrl}/${ntfyTopic}"
+      # Record the report only once it was delivered or durably queued.
+      ${ntfyNotify}/bin/ntfy-notify \
+        "Merged Plex albums on ${config.networking.hostName}" \
+        "$message" default "warning,musical_note" || exit $?
       printf '%s\n' "$current" > "$known"
       echo "$now" > "$alerted"
     '';

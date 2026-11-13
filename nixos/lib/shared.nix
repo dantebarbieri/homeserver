@@ -13,6 +13,9 @@ let
   ntfySpool = "/var/lib/ntfy-spool";
   mirklurkDeploymentCondition = "!/var/lib/mirklurk-upload-deployment/hold";
 
+  # Read the publisher credential at runtime, never from the world-readable Nix store.
+  ntfyCurl = builtins.readFile ../../docker/scripts/ntfy-curl.sh;
+
   # General-purpose CLI helper (available in $PATH as `ntfy-notify`)
   #   Usage: ntfy-notify "Title" "Message body" [priority] [tags]
   # Succeeds once the alert is delivered or queued; exits non-zero otherwise.
@@ -22,7 +25,8 @@ let
     MESSAGE="''${2:-No details provided}"
     PRIORITY="''${3:-default}"
     TAGS="''${4:-}"
-    curl --fail --silent --show-error --max-time 20 \
+    ${ntfyCurl}
+    ntfy_curl --fail --silent --show-error --max-time 20 \
       --retry 2 --retry-delay 5 --retry-connrefused \
       -H "Title: $TITLE" \
       -H "Priority: $PRIORITY" \
@@ -30,16 +34,30 @@ let
       --data-raw "$MESSAGE" \
       "${ntfyUrl}/${ntfyTopic}" && exit 0
     status=$?
-    SPOOL=${ntfySpool}
+    if [ "$(id -u)" -eq 0 ]; then
+      SPOOL=${ntfySpool}
+    else
+      SPOOL="$HOME/.local/state/ntfy-spool"
+      umask 077
+      mkdir -p "$SPOOL" || {
+        echo "ntfy unreachable (curl exit $status); cannot create user spool" >&2
+        exit "$status"
+      }
+      sync -d "$HOME" "$HOME/.local" "$HOME/.local/state" "$SPOOL" || {
+        echo "ntfy unreachable (curl exit $status); cannot persist user spool" >&2
+        exit "$status"
+      }
+    fi
     if [ -w "$SPOOL" ] &&
-      [ "$(find "$SPOOL" -maxdepth 1 -name '*.alert' | wc -l)" -lt 1000 ] &&
       entry=$(mktemp -d "$SPOOL/.new.XXXXXX"); then
       if printf '%s' "$TITLE" > "$entry/title" &&
         printf '%s' "$MESSAGE" > "$entry/message" &&
         printf '%s' "$PRIORITY" > "$entry/priority" &&
         printf '%s' "$TAGS" > "$entry/tags" &&
         date -u '+%Y-%m-%d %H:%M:%S UTC' > "$entry/queued" &&
-        mv "$entry" "$SPOOL/$(date -u +%Y%m%dT%H%M%S%N)-$$.alert"; then
+        sync -d "$entry/title" "$entry/message" "$entry/priority" "$entry/tags" "$entry/queued" "$entry" &&
+        mv "$entry" "$SPOOL/$(date -u +%Y%m%dT%H%M%S%N)-$$.alert" &&
+        sync -d "$SPOOL"; then
         echo "ntfy unreachable (curl exit $status); alert queued in $SPOOL for redelivery" >&2
         exit 0
       fi
@@ -96,5 +114,5 @@ let
   '';
 in
 {
-  inherit ntfyUrl ntfyTopic ntfySpool mirklurkDeploymentCondition ntfyNotify smartdAlert mdadmAlert;
+  inherit ntfyUrl ntfyTopic ntfySpool ntfyCurl mirklurkDeploymentCondition ntfyNotify smartdAlert mdadmAlert;
 }

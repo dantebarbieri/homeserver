@@ -2,21 +2,31 @@
 set -eu
 
 NPM_API="http://${NPM_HOST}:${NPM_PORT}/api"
+. /usr/local/lib/ntfy-curl.sh
+. /usr/local/lib/ntfy-outbox.sh
 
 log() { echo "[$(date -Iseconds)] $*"; }
 
 ntfy() {
-  # Usage: ntfy "Title" "Message" [priority] [tags]
-  TITLE="$1"
-  MESSAGE="$2"
-  PRIORITY="${3:-default}"
-  TAGS="${4:-}"
-  curl -s \
-    -H "Title: $TITLE" \
-    -H "Priority: $PRIORITY" \
-    -H "Tags: $TAGS" \
-    -d "$MESSAGE" \
-    "${NTFY_URL}/${NTFY_TOPIC}" >/dev/null || log "WARNING: ntfy send failed"
+  ntfy_outbox_queue "$@" || { log "WARNING: ntfy alert could not be queued"; return 1; }
+}
+
+PENDING_IP_CHANGES=""
+
+notify_ip_change() {
+  if [ -n "$PENDING_IP_CHANGES" ]; then
+    PENDING_IP_CHANGES="${PENDING_IP_CHANGES}
+$1"
+  elif ! ntfy "BMC IP Changed" "$1" "default" "shuffle,computer"; then
+    PENDING_IP_CHANGES="$1"
+  fi
+}
+
+retry_ip_changes() {
+  if [ -n "$PENDING_IP_CHANGES" ] &&
+     ntfy "BMC IP Changed" "$PENDING_IP_CHANGES" "default" "shuffle,computer"; then
+    PENDING_IP_CHANGES=""
+  fi
 }
 
 npm_login() {
@@ -31,8 +41,11 @@ FAIL_COUNT=0
 MAX_FAILURES="${MAX_FAILURES:-3}"
 
 log "[bmc-ip-monitor] starting (domain=${PROXY_DOMAIN}, interval=${CHECK_INTERVAL}s, max_failures=${MAX_FAILURES})"
+ntfy_outbox_start || { log "ERROR: ntfy outbox unavailable"; exit 1; }
 
 while :; do
+  retry_ip_changes
+
   # Step 1: Get current BMC IP via IPMI system interface
   BMC_IP=$(ipmitool lan print 1 2>/dev/null \
     | grep "IP Address" | grep -v "Source" | awk '{print $NF}') || true
@@ -43,7 +56,7 @@ while :; do
     if [ "$FAIL_COUNT" -ge "$MAX_FAILURES" ]; then
       ntfy "BMC Unreachable" \
         "Could not read BMC IP for ${FAIL_COUNT} consecutive checks (~$(( FAIL_COUNT * CHECK_INTERVAL / 60 )) min)" \
-        "high" "warning,computer"
+        "high" "warning,computer" || true
     fi
     sleep "$CHECK_INTERVAL"
     continue
@@ -64,7 +77,7 @@ while :; do
   TOKEN=$(npm_login) || true
   if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
     log "ERROR: NPM API authentication failed"
-    ntfy "BMC IP Monitor: NPM Auth Failed" "Could not authenticate to NPM API" "high" "warning,computer"
+    ntfy "BMC IP Monitor: NPM Auth Failed" "Could not authenticate to NPM API" "high" "warning,computer" || true
     sleep "$CHECK_INTERVAL"
     continue
   fi
@@ -84,7 +97,7 @@ while :; do
   if [ -z "$HOST_JSON" ]; then
     log "ERROR: proxy host for ${PROXY_DOMAIN} not found in NPM"
     ntfy "BMC IP Monitor: Proxy Host Missing" \
-      "No proxy host found for ${PROXY_DOMAIN} in NPM" "high" "warning,computer"
+      "No proxy host found for ${PROXY_DOMAIN} in NPM" "high" "warning,computer" || true
     sleep "$CHECK_INTERVAL"
     continue
   fi
@@ -146,15 +159,13 @@ while :; do
     log "ERROR: failed to update NPM proxy host ${HOST_ID}"
     ntfy "BMC IP Monitor: Update Failed" \
       "Failed to update NPM proxy host for ${PROXY_DOMAIN}. BMC IP: ${BMC_IP}" \
-      "high" "warning,computer"
+      "high" "warning,computer" || true
     sleep "$CHECK_INTERVAL"
     continue
   fi
 
   log "Successfully updated NPM proxy host ${HOST_ID} to ${BMC_IP}"
-  ntfy "BMC IP Changed" \
-    "IPMI proxy updated: ${CURRENT_HOST} -> ${BMC_IP} (${PROXY_DOMAIN})" \
-    "default" "shuffle,computer"
+  notify_ip_change "IPMI proxy updated: ${CURRENT_HOST} -> ${BMC_IP} (${PROXY_DOMAIN})"
 
   LAST_IP="$BMC_IP"
   sleep "$CHECK_INTERVAL"

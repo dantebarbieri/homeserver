@@ -1,15 +1,14 @@
 #!/bin/sh
 set -eu
 
+. /usr/local/lib/ntfy-curl.sh
+. /usr/local/lib/ntfy-outbox.sh
+
 log() { echo "[$(date -Iseconds)] $*"; }
 
 ntfy() {
-  curl -s \
-    -H "Title: $1" \
-    -H "Priority: ${3:-high}" \
-    -H "Tags: ${4:-warning,computer}" \
-    -d "$2" \
-    "${NTFY_URL}/${NTFY_TOPIC}" >/dev/null || log "WARNING: ntfy send failed"
+  ntfy_outbox_queue "$1" "$2" "${3:-high}" "${4:-warning,computer}" ||
+    { log "WARNING: ntfy alert could not be queued"; return 1; }
 }
 
 API_FAIL_COUNT=0
@@ -23,6 +22,7 @@ MAX_PORT_MISSING="${MAX_PORT_MISSING:-60}"
 PORT_ALERTED=0
 
 log "[port-sync] starting (host=${QHOST}, port_file=${PORT_FILE}, max_failures=${MAX_API_FAILURES}, max_port_missing=${MAX_PORT_MISSING})"
+ntfy_outbox_start || { log "ERROR: ntfy outbox unavailable"; exit 1; }
 
 # Wait for qBittorrent API to be fully ready
 log "Waiting for qBittorrent API..."
@@ -43,11 +43,12 @@ while :; do
     log "Forwarded port is $PORT. Updating qBittorrent…"
 
     if [ "$PORT_ALERTED" -eq 1 ]; then
-      ntfy "qBit Port Sync: Port Restored" \
-        "gluetun is forwarding port ${PORT} again" "low" "white_check_mark"
+      if ntfy "qBit Port Sync: Port Restored" \
+        "gluetun is forwarding port ${PORT} again" "low" "white_check_mark"; then
+        PORT_ALERTED=0
+      fi
     fi
     PORT_MISSING_COUNT=0
-    PORT_ALERTED=0
 
     # Login
     if ! curl -sf -c /tmp/c \
@@ -57,7 +58,7 @@ while :; do
       log "ERROR: qBittorrent login failed (failure ${API_FAIL_COUNT}/${MAX_API_FAILURES})"
       if [ "$API_FAIL_COUNT" -ge "$MAX_API_FAILURES" ]; then
         ntfy "qBit Port Sync: Login Failed" \
-          "Could not authenticate to qBittorrent at ${QHOST} for ${API_FAIL_COUNT} consecutive attempts"
+          "Could not authenticate to qBittorrent at ${QHOST} for ${API_FAIL_COUNT} consecutive attempts" || true
       fi
       sleep "${CHECK_INTERVAL}"
       continue
@@ -71,7 +72,7 @@ while :; do
       "http://${QHOST}/api/v2/app/setPreferences" >/dev/null; then
       log "ERROR: setPreferences failed"
       ntfy "qBit Port Sync: Update Failed" \
-        "Could not set listen_port to ${PORT} on qBittorrent at ${QHOST}"
+        "Could not set listen_port to ${PORT} on qBittorrent at ${QHOST}" || true
       sleep "${CHECK_INTERVAL}"
       continue
     fi
@@ -83,7 +84,7 @@ while :; do
     else
       log "WARNING: listen_port not updated?"
       ntfy "qBit Port Sync: Verify Failed" \
-        "Set listen_port to ${PORT} but verification failed on ${QHOST}"
+        "Set listen_port to ${PORT} but verification failed on ${QHOST}" || true
     fi
 
     sleep "${CHECK_INTERVAL}"
@@ -91,9 +92,10 @@ while :; do
     PORT_MISSING_COUNT=$((PORT_MISSING_COUNT + 1))
     log "Port file not found/empty (${PORT_MISSING_COUNT}/${MAX_PORT_MISSING}); will retry."
     if [ "$PORT_MISSING_COUNT" -ge "$MAX_PORT_MISSING" ] && [ "$PORT_ALERTED" -eq 0 ]; then
-      ntfy "qBit Port Sync: No Forwarded Port" \
-        "gluetun has supplied no forwarded port for $((PORT_MISSING_COUNT * 5))s. VPN port forwarding is down -- check gluetun logs (expired ProtonVPN credentials do this)."
-      PORT_ALERTED=1
+      if ntfy "qBit Port Sync: No Forwarded Port" \
+        "gluetun has supplied no forwarded port for $((PORT_MISSING_COUNT * 5))s. VPN port forwarding is down -- check gluetun logs (expired ProtonVPN credentials do this)."; then
+        PORT_ALERTED=1
+      fi
     fi
     sleep 5
   fi
