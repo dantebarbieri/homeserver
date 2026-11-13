@@ -516,8 +516,12 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   function renderComponent(part, binding) {
     const container = $("component-performance"), context = performanceContext(part, binding);
     const windowGroup = context?.panel === "sensors" ? context.sensor.startsWith("fan-") ? "fans" : "temperatures" : context?.panel;
-    const key = JSON.stringify([part, binding, context, hddSensors(), settings.windows[windowGroup]]);
-    if (componentKey === key) return;
+    const key = JSON.stringify([part, binding, context, hddSensors()]);
+    if (componentKey === key) {
+      const control = container.querySelector("select");
+      if (control) control.value = String(settings.windows[windowGroup]);
+      return;
+    }
     componentKey = key;
     container.replaceChildren();
     container.hidden = !context;
