@@ -33,6 +33,11 @@ include:
 networks:
   proxy:
     enable_ipv6: true
+  studio-whisper:
+    # Default pools are exhausted; adjacent to, not overlapping, the transfer /29.
+    ipam:
+      config:
+        - subnet: 10.253.240.8/29
 
 # Centralized secrets for security visibility
 secrets:
