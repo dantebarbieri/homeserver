@@ -13,12 +13,17 @@ let zoom = 100;
 let dirty = false;
 let storageBlocked = false;
 let pendingPersistence = false;
+let discardAction = null;
+const popupContexts = new Map();
 
 function notify(message, error = false) {
-  $("notice").textContent = message;
-  $("notice").classList.toggle("error", error);
-  $("notice").setAttribute("role", error ? "alert" : "status");
-  $("notice").hidden = false;
+  for (const id of ["notice", "detail-notice", "tools-notice"]) {
+    const notice = $(id);
+    notice.textContent = message;
+    notice.classList.toggle("error", error);
+    notice.setAttribute("role", error ? "alert" : "status");
+    notice.hidden = false;
+  }
 }
 
 try {
@@ -59,22 +64,114 @@ function describeConnection(id) {
   return `${id}, ${connection.confidence} connection, ${connection.occupancy}, ${provenanceLabels[connection.provenance]}${connection.target ? ` to ${connection.target}` : ""}`;
 }
 
+function capturePopupContext() {
+  const opener = document.activeElement;
+  const map = document.querySelector(".map-scroll");
+  return {
+    opener,
+    selector: opener.matches(".connector-item") ? `.connector-item[data-id="${opener.dataset.id}"]` : null,
+    left: map.scrollLeft, top: map.scrollTop,
+  };
+}
+
+function openPopup(dialog, context = capturePopupContext()) {
+  if (dialog.open) return;
+  popupContexts.set(dialog, context);
+  dialog.showModal();
+}
+
+function withCleanForm(action, label = "Discard edits & continue") {
+  if (!dirty) {
+    action();
+    return;
+  }
+  discardAction = action;
+  $("discard-edits").textContent = label;
+  $("discard-prompt").hidden = false;
+  $("keep-editing").focus({ preventScroll: true });
+}
+
+function inspect(changeSelection) {
+  withCleanForm(() => {
+    const context = $("inspector-dialog").open ? null : capturePopupContext();
+    changeSelection();
+    renderSelection();
+    $("inspector-title").textContent = selectedPartId ? sceneParts.get(selectedPartId).label : selectedId;
+    if (!$("inspector-dialog").open) openPopup($("inspector-dialog"), context);
+    $("inspector-dialog").querySelector(".popup-body").scrollTop = 0;
+    $("close-inspector").focus({ preventScroll: true });
+  });
+}
+
+function requestPopupClose(dialog) {
+  if (dialog === $("inspector-dialog")) {
+    withCleanForm(() => dialog.close(), "Discard edits & close");
+  } else {
+    dialog.close();
+  }
+}
+
+for (const id of ["inspector-dialog", "tools-dialog"]) {
+  const dialog = $(id);
+  let backdropStart = false;
+  const outside = event => {
+    const bounds = dialog.getBoundingClientRect();
+    return event.target === dialog && (event.clientX < bounds.left || event.clientX > bounds.right ||
+      event.clientY < bounds.top || event.clientY > bounds.bottom);
+  };
+  dialog.addEventListener("pointerdown", event => { backdropStart = outside(event); });
+  dialog.addEventListener("pointerup", event => {
+    if (backdropStart && outside(event)) requestPopupClose(dialog);
+    backdropStart = false;
+  });
+  dialog.addEventListener("cancel", event => {
+    event.preventDefault();
+    requestPopupClose(dialog);
+  });
+  dialog.addEventListener("close", () => {
+    const context = popupContexts.get(dialog);
+    popupContexts.delete(dialog);
+    backdropStart = false;
+    if (dialog === $("inspector-dialog")) {
+      $("discard-prompt").hidden = true;
+      discardAction = null;
+    }
+    if (!context) return;
+    const opener = context.opener.isConnected ? context.opener : document.querySelector(context.selector ?? "#tools-button");
+    opener?.focus({ preventScroll: true });
+    document.querySelector(".map-scroll").scrollTo(context.left, context.top);
+  });
+}
+$("close-inspector").addEventListener("click", () => requestPopupClose($("inspector-dialog")));
+$("close-tools").addEventListener("click", () => requestPopupClose($("tools-dialog")));
+$("tools-button").addEventListener("click", () => {
+  $("tools-button").focus({ preventScroll: true });
+  openPopup($("tools-dialog"));
+});
+$("keep-editing").addEventListener("click", () => {
+  discardAction = null;
+  $("discard-prompt").hidden = true;
+  $("note").focus({ preventScroll: true });
+});
+$("discard-edits").addEventListener("click", () => {
+  const action = discardAction;
+  discardAction = null;
+  dirty = false;
+  $("discard-prompt").hidden = true;
+  action();
+});
+
 function selectConnector(id) {
   if (!connectorById.has(id)) return;
-  if (dirty && !window.confirm("Discard the unsaved connection changes?")) return;
-  selectedId = id;
-  selectedPartId = null;
-  if (!activeCategory) activeCategory = connectorById.get(id).category;
-  dirty = false;
-  renderSelection();
+  inspect(() => {
+    selectedId = id;
+    selectedPartId = null;
+  });
 }
 
 function selectComponent(id) {
   if (!sceneParts.has(id) || connectorFocus()) return;
-  if (dirty && !window.confirm("Discard the unsaved connection changes?")) return;
-  selectedPartId = id;
-  dirty = false;
-  renderSelection();
+  inspect(() => { selectedPartId = id; });
 }
 
 function connectorFocus() {
@@ -90,11 +187,16 @@ function matchesFocus(connector) {
 function interactiveGroup(className, id, label, onSelect) {
   const group = svgElement("g", { class: className, "data-id": id, role: "button", tabindex: "0", "aria-label": label });
   group.append(svgElement("title", {}, label));
-  group.addEventListener("click", onSelect);
+  const activate = () => {
+    if (group.getAttribute("aria-disabled") === "true") return;
+    group.focus({ preventScroll: true });
+    onSelect();
+  };
+  group.addEventListener("click", activate);
   group.addEventListener("keydown", event => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onSelect();
+      activate();
     }
   });
   return group;
@@ -269,7 +371,8 @@ function renderBoard() {
 function renderList() {
   const filtered = connectors.filter(matchesFocus);
   const list = $("connector-list");
-  list.hidden = !connectorFocus();
+  const scrollTop = list.scrollTop;
+  $("connector-picker").hidden = !connectorFocus();
   list.replaceChildren();
   for (const connector of filtered) {
     const button = element("button", {
@@ -280,10 +383,14 @@ function renderList() {
     button.append(element("i", { class: `legend-dot ${connectionFor(connector.id).confidence}`, "aria-hidden": "true" }));
     button.append(element("span", {}, connector.id));
     button.append(element("span", { class: "list-category" }, connector.category));
-    button.addEventListener("click", () => selectConnector(connector.id));
+    button.addEventListener("click", () => {
+      button.focus({ preventScroll: true });
+      selectConnector(connector.id);
+    });
     list.append(button);
   }
   if (!filtered.length) list.append(element("p", { class: "empty-list" }, "No matching connectors."));
+  list.scrollTop = scrollTop;
 }
 
 function renderFocus() {
@@ -449,14 +556,16 @@ function downloadDocument() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-$("export").addEventListener("click", () => {
+function exportAnnotations() {
   if (dirty) {
     notify("Save the current form before exporting. Unsaved fields are not included.", true);
     return;
   }
   downloadDocument();
   notify("JSON export downloaded. Treat your private notes as private; exports are not uploaded.");
-});
+}
+$("export").addEventListener("click", exportAnnotations);
+$("detail-export").addEventListener("click", exportAnnotations);
 $("import-button").addEventListener("click", () => $("import-file").click());
 $("import-file").addEventListener("change", async event => {
   const file = event.target.files[0];
@@ -498,33 +607,19 @@ for (const [category, label] of [
 ]) {
   const button = element("button", { type: "button", "data-category": category, "aria-pressed": "false" }, label);
   button.addEventListener("click", () => {
-    if (dirty && !window.confirm("Discard the unsaved connection changes?")) return;
-    dirty = false;
     activeCategory = category;
     $("filter").value = "";
-    selectedPartId = category ? null : "cpu";
-    if (category) selectedId = connectors.find(matchesFocus).id;
-    renderSelection();
+    renderFocus();
   });
   $("categories").append(button);
 }
 for (const [value, label] of Object.entries(provenanceLabels)) $("provenance").append(element("option", { value }, label));
 $("board-revision").textContent = `ROMED8-2T · REV ${boardRevision}`;
 for (const component of components) $("component-options").append(element("option", { value: component.model }));
-function expandWorkspace(expanded) {
-  document.body.classList.toggle("map-expanded", expanded);
-  for (const section of document.querySelectorAll(".masthead, main > :not(.board-workspace)")) section.inert = expanded;
-  $("expand-map").setAttribute("aria-pressed", String(expanded));
-  $("expand-map").textContent = expanded ? "Exit expanded view" : "Expand workspace";
-}
-$("expand-map").addEventListener("click", () => expandWorkspace(!document.body.classList.contains("map-expanded")));
-window.addEventListener("keydown", event => {
-  if (event.key === "Escape") expandWorkspace(false);
-});
-
 function setZoom(next) {
   zoom = Math.max(75, Math.min(175, next));
   $("board").style.width = `${zoom}%`;
+  $("board").style.height = `${zoom}%`;
   $("zoom-label").textContent = `${zoom}%`;
   $("zoom-out").disabled = zoom === 75;
   $("zoom-in").disabled = zoom === 175;
@@ -533,13 +628,13 @@ $("zoom-in").addEventListener("click", () => setZoom(zoom + 25));
 $("zoom-out").addEventListener("click", () => setZoom(zoom - 25));
 
 function setView(view) {
-  for (const id of ["board", "case"]) {
+  for (const id of ["info", "case"]) {
     $(`${id}-view`).hidden = id !== view;
     $(`${id}-tab`).classList.toggle("active", id === view);
     $(`${id}-tab`).setAttribute("aria-pressed", String(id === view));
   }
 }
-$("board-tab").addEventListener("click", () => setView("board"));
+$("info-tab").addEventListener("click", () => setView("info"));
 $("case-tab").addEventListener("click", () => setView("case"));
 
 function renderAir() {
@@ -582,7 +677,7 @@ function renderTelemetry() {
   $("reading-grid").append(unknown);
   renderAir();
   // Updating mode must not replace unsaved connection form fields.
-  if (!dirty) renderSelection();
+  if (!dirty && $("inspector-dialog").open) renderSelection();
 }
 $("observed-mode").addEventListener("click", () => { mode = "snapshot"; renderTelemetry(); });
 $("synthetic-mode").addEventListener("click", () => { mode = "synthetic"; renderTelemetry(); });

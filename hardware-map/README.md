@@ -25,15 +25,27 @@ node --test hardware-map/model.test.mjs
 - Explore a wide landscape chassis view with selectable installed hardware:
   EPYC under its NH-U9 cooler, reported populated DIMMs, GPU, HBA, bare M.2
   drives, HX1000i, three front/three middle/two rear case fans, and 12 HDDs
-  in a 15-bay count illustration. Click hardware for its details and evidence;
-  related connector buttons open the corresponding connection record.
-- Use **Expand workspace** (Escape to exit) for a near-full-screen map and
-  details panel. Zoom is independent of annotations. On narrow screens the
-  map scrolls horizontally, with details below rather than crushed labels.
+  in a 15-bay count illustration. The near-full-window map is the default:
+  no large header, status cards, navigation tabs or permanent details section.
+- Clicking hardware or a connector opens a native modal popup. **Close**,
+  **Escape** and backdrop clicks dismiss it without changing map zoom,
+  category/search or scroll position, and return focus to the opener. Related
+  connector buttons navigate within that same popup, without changing the map's
+  category. Escape does not leave the map or change visualization mode.
+  Unsaved annotation fields prompt **Keep editing** or **Discard edits & close**
+  rather than trapping the user. Saved/tab-only annotations remain intact.
+  Keyboard focus stays inside the open dialog; mobile popups scroll internally
+  and keep their close control visible.
+- **Tools & info** holds connection counts, fan-planning limits, reference and
+  inspection notes, JSON import/export, telemetry and inventory. These remain
+  available without surrounding the map. A connector popup also offers export
+  for saved/tab-only annotations, including recovery after a storage failure.
 - Compact top category buttons and connector search enter connector focus.
   Hardware dims and is disabled for pointer/keyboard selection; nonmatching
-  connectors also dim and cannot intercept clicks. **Hardware** restores
-  component selection. Fan headers retain verified **logical** six-pin details.
+  connectors also dim and cannot intercept clicks. Choosing a category only
+  filters the map; it does not open a popup. **Hardware** restores component
+  selection. The compact **Connector list** provides searchable keyboard
+  alternatives to the visual. Fan headers retain verified **logical** six-pin details.
   The manual-oriented board coordinates are rotated 180 degrees so rear I/O
   is on the right, with schematic spacing and upright labels. The landscape
   chassis is not a physical pin-orientation reference.
