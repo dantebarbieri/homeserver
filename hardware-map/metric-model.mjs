@@ -1,5 +1,5 @@
 import { linuxSnapshot } from "./linux-snapshot.mjs";
-import { buildLinuxTopology } from "./model.mjs";
+import { buildLinuxTopology, linuxNodeSummary } from "./model.mjs";
 
 export const metricGroups = {
   cpu: { label: "CPU", color: "#e9b18b" },
@@ -11,7 +11,48 @@ export const metricGroups = {
   fans: { label: "Fans", color: "#becbd3" },
 };
 export const demoProfiles = { mixed: "Mixed workload", idle: "Mostly idle", transcode: "Transcode", transfer: "Storage transfer" };
-const topology = buildLinuxTopology(linuxSnapshot);
+export const metricTopology = buildLinuxTopology(linuxSnapshot);
+const topology = metricTopology;
+export const cpuClockSpecification = { base: 3, boost: 3.7 };
+export const historyWindows = [60, 120, 300, 900, 1800, 3600, 7200, 21600, 86400];
+export const defaultHistoryWindows = { cpu: 120, gpu: 120, network: 120, memory: 900, storage: 7200, temperatures: 1800, fans: 300 };
+export const historyLabel = seconds => seconds >= 3600 ? `${seconds / 3600}h` : `${seconds / 60}m`;
+export const temperatureLevels = [
+  { label: "Cold", icon: "❄", color: "#83c9f4" }, { label: "Cool", icon: "◌", color: "#72d3cc" },
+  { label: "Moderate", icon: "●", color: "#b5d590" }, { label: "Warm", icon: "☀", color: "#eac26f" },
+  { label: "Hot", icon: "▲", color: "#ee936b" }, { label: "Dangerous", icon: "⚠", color: "#ff717f" },
+];
+export function temperatureLevel(id, value) {
+  if (!Number.isFinite(value)) return { label: "Unavailable", icon: "?", color: "#93aab9" };
+  const boundaries = id.startsWith("temp-sd") ? [20, 30, 40, 45, 55]
+    : id.includes("secondary") ? [30, 50, 70, 85, 100]
+      : id === "temp-lan" ? [30, 45, 65, 80, 95] : [25, 40, 55, 70, 85];
+  return temperatureLevels[boundaries.filter(boundary => value >= boundary).length];
+}
+export function sharedMetricScale(ids) {
+  const definitions = ids.map(id => metrics.get(id));
+  if (!definitions.length || definitions.some(definition => !definition) || new Set(definitions.map(definition => definition.unit)).size !== 1) throw new Error("A shared axis needs compatible metric units.");
+  return { minimum: Math.min(...definitions.map(d => d.minimum)), maximum: Math.max(...definitions.map(d => d.maximum)), unit: definitions[0].unit };
+}
+export function chartNumber(value, scale) {
+  if (!Number.isFinite(value)) return "Unavailable";
+  const factor = ["Mb/s", "MB/s"].includes(scale.unit) && scale.maximum >= 1000 ? 1000 : 1;
+  const unit = factor === 1 ? scale.unit : scale.unit === "Mb/s" ? "Gb/s" : "GB/s";
+  return `${(value / factor).toLocaleString("en", { maximumFractionDigits: factor === 1000 ? 3 : unit === "RPM" ? 0 : 1 })}${unit ? ` ${unit}` : ""}`;
+}
+export function storageDetails(id) {
+  const node = topology.nodes.get(id);
+  if (!node) throw new Error(`Unknown storage device: ${id}`);
+  const descendants = new Set([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const candidate of topology.nodes.values()) if (!descendants.has(candidate.id) && candidate.parents.some(parent => descendants.has(parent.id))) {
+      descendants.add(candidate.id); changed = true;
+    }
+  }
+  return { node, role: linuxNodeSummary(topology, id), layers: [...descendants].filter(child => child !== id).map(child => topology.nodes.get(child)) };
+}
 export const demoDisks = [...topology.nodes.values()].filter(node => ["Physical HDD", "Physical NVMe"].includes(node.kind));
 export const demoNics = ["bond0", "enp66s0f0", "enp66s0f1"];
 export const metrics = new Map();
@@ -23,10 +64,11 @@ metric("cpu-clock", "CPU clock", "GHz", 4, "cpu");
 metric("cpu-power", "CPU package power", "W", 200, "cpu");
 for (let i = 0; i < 32; i += 1) metric(`thread-${i}`, `Logical CPU ${i}`, "%", 100, "cpu");
 for (let i = 0; i < 16; i += 1) metric(`core-${i}`, `Core ${i}`, "%", 100, "cpu");
-for (const [id, label] of [["used", "In use · apps + kernel"], ["apps", "Applications"], ["cache", "File cache / reclaimable"], ["kernel", "Kernel"], ["free", "Free"]]) {
+for (const [id, label] of [["used", "Total RAM in use"], ["apps", "Applications"], ["cache", "File cache / reclaimable"], ["kernel", "Kernel"], ["free", "Free"]]) {
   metric(`memory-${id}`, label, "GiB", 128, "memory");
 }
 metric("swap", "Swap used", "GiB", 119.2, "memory");
+metric("gpu-util", "GPU activity", "%", 100, "gpu");
 for (const engine of ["3d", "copy", "encode", "decode"]) metric(`gpu-${engine}`, { "3d": "3D / graphics", copy: "Copy engine", encode: "Video encode", decode: "Video decode" }[engine], "%", 100, "gpu");
 metric("gpu-dedicated", "Dedicated GPU memory", "GiB", 8, "gpu");
 metric("gpu-shared", "Shared / host GPU allocations", "GiB", 8, "gpu", { note: "Illustrative host allocations, not a measured Linux shared-memory pool or an 8 GiB limit." });
@@ -40,6 +82,7 @@ for (const id of ["array", ...demoDisks.map(disk => disk.id)]) {
 }
 metric("data-used", "/data used", "TiB", 65.51, "storage");
 metric("root-used", "Root filesystem used", "TiB", 1.7, "storage");
+metric("cache-used", "Cache occupancy", "TiB", topology.nodes.get("dm-2").sizeBytes / 2 ** 40, "storage");
 for (const id of demoNics) {
   metric(`net-${id}-rx`, "Receive", "Mb/s", 10000, "network");
   metric(`net-${id}-tx`, "Send", "Mb/s", 10000, "network");
@@ -57,11 +100,11 @@ export const demoSensors = [
 ].map(([id, label, anchor]) => ({ id, label, anchor }));
 for (const sensor of demoSensors) metric(sensor.id, sensor.label, "°C", 110, "temperatures", { minimum: 20 });
 export const demoFans = [
-  ["fan-cpu1", "CPU FAN1", "cpu"],
-  ["fan-cpu2", "CPU FAN2", "cpu"],
-  ["fan-hub", "FAN3 hub · one tach", "fan-hub"],
-  ["fan-rear1", "Rear 1 · invented, no tach", "rear-fan-1"],
-  ["fan-rear2", "Rear 2 · invented, no tach", "rear-fan-2"],
+  ["fan-cpu1", "CPU FAN1 · PSU side", "cpu"],
+  ["fan-cpu2", "CPU FAN2 · GPU side", "cpu"],
+  ["fan-hub", "FAN3 · shared six-fan speed assumption", "fan-hub"],
+  ["fan-rear1", "Rear 1 · assumed constant 2000 RPM", "rear-fan-1"],
+  ["fan-rear2", "Rear 2 · assumed constant 2000 RPM", "rear-fan-2"],
 ].map(([id, label, anchor]) => ({ id, label, anchor }));
 for (const fan of demoFans) metric(fan.id, fan.label, "RPM", 2200, "fans");
 
@@ -99,12 +142,13 @@ export function demoValue(id, second, profile = "mixed") {
   if (id === "swap") return .7 + base + .12 * wave(75);
   if (id === "data-used") return 52.3 + .03 * Math.sin(second / 300);
   if (id === "root-used") return 1.08 + .002 * Math.sin(second / 300);
+  if (id === "cache-used") return 1.15 + .12 * Math.sin(second / 600);
   if (id.startsWith("gpu-")) {
     const load = { idle: 2, mixed: 43, transcode: 78, transfer: 10 }[profile];
     if (id === "gpu-dedicated") return clamp(1.2 + load * .068 + .2 * wave(38), 0, 8);
     if (id === "gpu-shared") return .15 + load * .017 + .1 * wave(30);
     if (id === "gpu-power") return 32 + load * 1.9 + 12 * wave(30);
-    const factor = { "gpu-3d": .8, "gpu-copy": .42, "gpu-encode": profile === "transcode" ? 1.08 : .65, "gpu-decode": .68 }[id];
+    const factor = { "gpu-util": .95, "gpu-3d": .8, "gpu-copy": .42, "gpu-encode": profile === "transcode" ? 1.08 : .65, "gpu-decode": .68 }[id];
     return clamp(load * factor + 17 * wave(10) - 6, 0, 100);
   }
   if (id.startsWith("disk-")) {
@@ -132,15 +176,16 @@ export function demoValue(id, second, profile = "mixed") {
     return 32 + base * 8 + 5 * wave(60);
   }
   if (id.startsWith("fan-")) {
-    if (id.startsWith("fan-rear")) return 1950 + 8 * wave(70);
+    if (id.startsWith("fan-rear")) return 2000;
     return (id === "fan-hub" ? 650 : 850) + base * 900 + 35 * wave(35);
   }
   throw new Error(`No synthetic generator for ${id}`);
 }
 
 export function demoSeries(id, second, seconds = 120, profile = "mixed") {
-  if (![60, 120, 300].includes(seconds)) throw new Error("Unsupported history window.");
-  return Array.from({ length: seconds + 1 }, (_, index) => demoValue(id, Math.max(0, second - seconds + index), profile));
+  if (!historyWindows.includes(seconds)) throw new Error("Unsupported history window.");
+  const samples = Math.min(seconds, 300);
+  return Array.from({ length: samples + 1 }, (_, index) => demoValue(id, Math.max(0, second - seconds + index / samples * seconds), profile));
 }
 export function metricPath(values, minimum, maximum, width = 300, height = 80) {
   if (![minimum, maximum, width, height].every(Number.isFinite) || !(maximum > minimum) || width <= 0 || height <= 0 || values.length < 2) throw new Error("Invalid chart bounds.");
@@ -164,9 +209,10 @@ export function metricNumber(value, unit) {
 export const metricCards = [
   { id: "cpu", group: "cpu", label: "EPYC · 16C / 32T", anchor: "cpu", x: 585, y: 535, series: ["cpu"], footer: ["cpu-clock", "cpu-power"] },
   { id: "memory", group: "memory", label: "System memory · 128 GiB", anchor: "dimm-DDR4_A1", x: 585, y: 330, series: ["memory-used"], footer: ["memory-cache"] },
-  { id: "gpu", group: "gpu", label: "RTX 2070 SUPER", anchor: "gpu", x: 585, y: 130, series: ["gpu-3d", "gpu-encode"], footer: ["gpu-dedicated"] },
-  { id: "storage", group: "storage", label: "HDD set · /data", anchor: "disk-bays", x: 180, y: 705, series: ["disk-array-read", "disk-array-write"], footer: ["data-used"] },
-  { id: "nvme", group: "storage", label: "nvme1n1 · socket unbound", anchor: "nvme-group", x: 850, y: 270, series: ["disk-nvme1n1-read", "disk-nvme1n1-write"], footer: ["disk-nvme1n1-active"] },
+  { id: "gpu", group: "gpu", label: "RTX 2070 SUPER", anchor: "gpu", x: 585, y: 130, series: ["gpu-util", "gpu-encode"], footer: ["gpu-dedicated"] },
+  { id: "storage", group: "storage", label: "HDD set · /data", anchor: "disk-bays", x: 180, y: 705, series: ["disk-array-read", "disk-array-write"], footer: [], fullness: "data-used", device: "array" },
+  { id: "nvme-root", group: "storage", label: "nvme0n1 · root + swap", anchor: "nvme-group", x: 850, y: -110, series: ["disk-nvme0n1-read", "disk-nvme0n1-write"], footer: [], fullness: "root-used", device: "nvme0n1" },
+  { id: "nvme", group: "storage", label: "nvme1n1 · /data cache + extents", anchor: "nvme-group", x: 1130, y: -110, series: ["disk-nvme1n1-read", "disk-nvme1n1-write"], footer: [], fullness: "cache-used", device: "nvme1n1" },
   { id: "network", group: "network", label: "bond0 · 10GbE active-backup", anchor: "network-ports", x: 1100, y: 270, series: ["net-bond0-rx", "net-bond0-tx"], footer: [] },
   { id: "temperatures", group: "temperatures", label: "Component temperatures", anchor: "motherboard", x: 820, y: 660, series: ["temp-cpu", "temp-gpu"], footer: [], mobileOnly: true },
   { id: "fans", group: "fans", label: "Fan speeds · synthetic", anchor: "fan-hub", x: 440, y: 705, series: ["fan-hub"], footer: [], mobileOnly: true },
@@ -176,10 +222,10 @@ export const metricBadges = [
   { id: "temp-gpu", group: "temperatures", label: "GPU", anchor: "gpu", x: 1100, y: 195 },
   { id: "temp-board", group: "temperatures", label: "Board", anchor: "motherboard", x: 820, y: 610 },
   { id: "temp-lan", group: "temperatures", label: "LAN", anchor: "network-ports", x: 1220, y: 500 },
-  { id: "temp-nvme-range", ids: ["temp-nvme0", "temp-nvme1"], group: "temperatures", label: "NVMe group*", anchor: "nvme-group", x: 820, y: 100 },
+  { id: "temp-nvme-range", ids: ["temp-nvme0", "temp-nvme1"], group: "temperatures", label: "NVMe group*", anchor: "nvme-group", x: 958, y: 332 },
   { id: "temp-hdd-range", ids: demoDisks.filter(disk => disk.kind === "Physical HDD").map(disk => `temp-${disk.id}`), group: "temperatures", label: "HDD group*", anchor: "disk-bays", x: 185, y: 105 },
   { id: "fan-cpu1", group: "fans", label: "FAN1", anchor: "cpu", x: 985, y: 590 },
   { id: "fan-cpu2", group: "fans", label: "FAN2", anchor: "cpu", x: 1120, y: 590 },
-  { id: "fan-hub", group: "fans", label: "Hub", anchor: "fan-hub", x: 580, y: 420 },
-  { id: "fan-rear1", group: "fans", label: "Rear*", anchor: "rear-fan-1", x: 1260, y: 630 },
+  { id: "fan-hub", group: "fans", label: "6 fans / hub", anchor: "fan-hub", x: 655, y: 482 },
+  { id: "fan-rear1", group: "fans", label: "Rear pair", anchor: "rear-fan-1", x: 1260, y: 630 },
 ];

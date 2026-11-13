@@ -15,7 +15,8 @@ let metricUI = null;
 const linuxTopology = buildLinuxTopology(linuxSnapshot);
 let mode = "snapshot";
 let zoom = 100;
-let fanMotionPreview = "off";
+let fanMotionPreview = "data";
+let metricFanFrame = null;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let fanRotationEnabled = !reducedMotion.matches;
 let fanRotationOverride = false;
@@ -312,28 +313,44 @@ function renderCaseFanMotion() {
     ? fanRotationEnabled ? "Your browser requests reduced motion; rotation is explicitly enabled for this session." : "Your browser requests reduced motion. Check Spin fans to explicitly enable rotation for this session."
     : fanRotationEnabled ? "Rotation enabled; frames and hubs remain stationary." : "Rotation paused; speed-line patterns remain visible.";
   const selected = fanMotionStages.find(stage => stage.id === fanMotionPreview);
+  const dataMode = fanMotionPreview === "data", snapshotMode = fanMotionPreview === "snapshot";
   for (const [index, fan] of [...$("board").querySelectorAll(".fan-face")].entries()) {
-    const stage = fanMotionPreview === "compare"
+    const rpm = snapshotMode ? index < 6 ? readingFor(observedReadings, "FAN3")?.value : 2000
+      : dataMode ? index < 6 ? metricFanFrame?.hubRpm : metricFanFrame?.rearRpm : null;
+    const stage = dataMode || snapshotMode ? fanMotionForSpeed(Number.isFinite(rpm) ? rpm / (index < 6 ? 1700 : 2000) : null) : fanMotionPreview === "compare"
       ? fanMotionStages[index < 6 ? index : index === 6 ? 2 : 5]
       : selected;
-    applyFanMotion(fan, stage?.example ?? null);
+    if ((!dataMode && !snapshotMode) || fan.dataset.motionStage !== (stage?.id ?? "unknown")) applyFanMotion(fan, stage?.example ?? null);
+    if ((dataMode || snapshotMode) && Number.isFinite(rpm)) {
+      fan.dataset.rpm = rpm;
+      fan.dataset.rpmSource = index < 6 ? snapshotMode ? "reported-shared-assumption" : "synthetic-shared-assumption" : "assumed-constant";
+      const source = index < 6 ? snapshotMode ? "REPORTED ~" : "DEMO " : "ASSUMED ";
+      fan.querySelector("title").textContent = `${source}${Math.round(rpm)} RPM. ${index < 6 ? "One hub tach applied to all six by user assumption; not six measured speeds." : "Constant 2000 RPM assumed by the user; no tach."} Artistic speed band, not physical-rate rotation.`;
+      fan.querySelector(".fan-motion-caption").textContent = `${source}${Math.round(rpm)} RPM`;
+    } else {
+      delete fan.dataset.rpm;
+      delete fan.dataset.rpmSource;
+    }
     const part = fan.closest(".hardware-part");
     const label = `${sceneParts.get(part.dataset.id).label}. ${fan.querySelector("title").textContent}`;
     part.setAttribute("aria-label", label);
     part.querySelector("title").textContent = label;
   }
-  const demo = fanMotionPreview !== "off";
-  $("fan-motion-button").textContent = demo ? "Fan motion · DEMO" : "Fan motion";
+  const demo = !["data", "snapshot", "off"].includes(fanMotionPreview);
+  $("fan-motion-button").textContent = dataMode ? "Fan motion · RPM" : snapshotMode ? "Fan motion · snapshot" : demo ? "Fan motion · DEMO" : "Fan motion";
   $("fan-motion-button").classList.toggle("demo-active", demo);
   $("fan-motion-status").textContent = demo
     ? `ANIMATION DEMO · ${selected?.label ?? "Compare all six stages"} on the map. No RPM readings or fan settings are changed.${!fanRotationEnabled ? " Rotation is paused." : ""}`
-    : "No live animation data assigned. Static artwork does not mean stopped.";
+    : dataMode ? "Animations follow displayed synthetic RPMs: one hub value for all six front/middle fans; rear fans assumed constant 2000 RPM. Spin fans controls rotation and honors Reduced Motion."
+      : snapshotMode ? "Reported snapshot: approximately 1100 RPM shared across the six hub fans; rear fans assumed constant 2000 RPM. This is not live telemetry."
+        : "No live animation data assigned. Static artwork does not mean stopped.";
   for (const button of $("fan-motion-presets").children) {
     const active = button.dataset.stage === fanMotionPreview;
     button.setAttribute("aria-pressed", String(active));
   }
   $("compare-fan-motion").setAttribute("aria-pressed", String(fanMotionPreview === "compare"));
-  $("clear-fan-motion").setAttribute("aria-pressed", String(!demo));
+  $("clear-fan-motion").setAttribute("aria-pressed", String(dataMode));
+  $("snapshot-fan-motion").setAttribute("aria-pressed", String(snapshotMode));
   renderComponentMotion();
 }
 
@@ -352,7 +369,8 @@ for (const stage of fanMotionStages) {
   $("fan-motion-presets").append(button);
 }
 $("compare-fan-motion").addEventListener("click", () => previewFanMotion("compare"));
-$("clear-fan-motion").addEventListener("click", () => previewFanMotion("off"));
+$("clear-fan-motion").addEventListener("click", () => previewFanMotion("data"));
+$("snapshot-fan-motion").addEventListener("click", () => previewFanMotion("snapshot"));
 $("fan-rotation-enabled").addEventListener("change", () => {
   fanRotationEnabled = $("fan-rotation-enabled").checked;
   fanRotationOverride = true;
@@ -973,6 +991,10 @@ for (const component of components) {
 renderBoard();
 metricUI = createMetricUI({
   openPopup, closePopup: requestPopupClose, onError: message => notify(message, true),
+  onFanFrame: frame => {
+    metricFanFrame = frame;
+    if (fanMotionPreview === "data") renderCaseFanMotion();
+  },
   isVisible: id => !connectorFocus() && (id === null || (id === "nvme-group"
     ? ["drive-M2_1", "drive-M2_2"].some(part => document.querySelector(`.hardware-part[data-id="${part}"][aria-disabled="false"]`))
     : Boolean(document.querySelector(`.hardware-part[data-id="${id}"][aria-disabled="false"]`)))),

@@ -1,4 +1,4 @@
-import { metricGroups, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber } from "./metric-model.mjs";
+import { metricGroups, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, chartNumber, temperatureLevel, temperatureLevels, storageDetails, metricTopology, cpuClockSpecification } from "./metric-model.mjs";
 
 const $ = id => document.getElementById(id);
 function el(tag, attrs = {}, text = "") {
@@ -15,34 +15,36 @@ function svg(tag, attrs = {}) {
 const preferenceKey = "homeserver.hardware-metrics.v1";
 const colors = ["#81bddf", "#e7b66b", "#b9a2df", "#77d7c1"];
 
-export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
-  let settings = { groups: Object.fromEntries(Object.keys(metricGroups).map(id => [id, true])), hidden: [], positions: {}, profile: "mixed", window: 120 };
+export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFanFrame }) {
+  let settings = { groups: Object.fromEntries(Object.keys(metricGroups).map(id => [id, true])), hidden: [], positions: {}, profile: "mixed", windows: { ...defaultHistoryWindows } };
   try {
     const saved = localStorage.getItem(preferenceKey);
     if (saved) {
       const value = JSON.parse(saved);
-      if (value.version !== 1 || !Object.hasOwn(demoProfiles, value.profile) || ![60, 120, 300].includes(value.window) ||
+      if (![1, 2].includes(value.version) || !Object.hasOwn(demoProfiles, value.profile) ||
+          (value.version === 1 ? !historyWindows.includes(value.window) : !value.windows || Object.keys(metricGroups).some(id => !historyWindows.includes(value.windows[id]))) ||
           !value.groups || Object.keys(metricGroups).some(id => typeof value.groups[id] !== "boolean") ||
           !Array.isArray(value.hidden) || value.hidden.some(id => !metricCards.some(card => card.id === id)) ||
           !value.positions || Object.entries(value.positions).some(([id, point]) =>
             !metricCards.some(card => card.id === id) || !Array.isArray(point) || point.length !== 2 ||
-            point.some((number, axis) => !Number.isFinite(number) || number < 0 || number > [1440, 840][axis]))) {
+            point.some(number => !Number.isFinite(number) || Math.abs(number) > 100000))) {
         throw new Error("Unrecognized metric layout");
       }
-      settings = value;
+      settings = { ...value, windows: value.version === 1 ? { ...defaultHistoryWindows, cpu: value.window, gpu: value.window, network: value.window } : value.windows };
+      delete settings.window;
     }
   } catch (error) {
     onError(`Metric preferences could not be loaded: ${error.message}. Default layout is in use; inspection annotations are untouched.`);
   }
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   let playing = !reducedMotion.matches, playbackChosen = false;
-  let second = 300, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores";
+  let second = 86400, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores", sensor = "all";
   let charts = [];
   const cards = new Map(), badges = new Map(), lines = new Map();
   const frame = () => ({ second, profile: settings.profile, provenance: "synthetic" });
   const value = id => demoValue(id, second, settings.profile);
   const save = () => {
-    try { localStorage.setItem(preferenceKey, JSON.stringify({ ...settings, version: 1 })); }
+    try { localStorage.setItem(preferenceKey, JSON.stringify({ ...settings, version: 2 })); }
     catch (error) { onError(`Metric layout is tab-only: ${error.message}. Inspection annotations are unaffected.`); }
   };
   const button = (text, action, attrs = {}) => {
@@ -55,13 +57,17 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
     if (visible) settings.hidden = settings.hidden.filter(card => metricCards.find(definition => definition.id === card).group !== id);
     save(); controls(); updateVisibility();
   }
-  function openPanel(id) {
+  const historyGroup = () => activePanel === "sensors" ? sensor === "fans" || sensor.startsWith("fan-") ? "fans" : "temperatures" : activePanel === "layers" ? "cpu" : activePanel;
+  function openPanel(id, context = {}) {
+    if (context.disk) disk = context.disk;
+    if (id === "sensors") sensor = context.sensor ?? "all";
     activePanel = id;
     renderPanel();
     openPopup($("metrics-dialog"));
     updateCharts();
   }
   function chart(ids, title, compact = false) {
+    const scale = sharedMetricScale(ids);
     const box = el("article", { class: `performance-chart${compact ? " mini-chart" : ""}` });
     const header = el("div", { class: "metric-chart-heading" });
     header.append(el("span", {}, title), el("span", { class: "metric-chart-values" }));
@@ -86,16 +92,19 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
     const tooltip = el("div", { class: "metric-tooltip", hidden: "" });
     plot.append(cursor);
     const footer = el("div", { class: "metric-chart-footer" });
-    box.append(header, plot, footer, tooltip);
-    const record = { box, header, plot, area, paths, footer, ids, compact, values: [] };
+    const plotArea = el("div", { class: "metric-plot" }), axis = el("div", { class: "metric-y-axis", "aria-hidden": "true" });
+    for (const number of [scale.maximum, (scale.minimum + scale.maximum) / 2, scale.minimum]) axis.append(el("span", {}, chartNumber(number, scale)));
+    plotArea.append(axis, plot);
+    box.append(header, plotArea, footer, tooltip);
+    const record = { box, header, plot, area, paths, footer, ids, compact, scale, seconds: 120, values: [] };
     plot.addEventListener("pointermove", event => {
       const bounds = plot.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-      const index = Math.round(ratio * settings.window);
+      const index = Math.round(ratio * ((record.values[0]?.length ?? 1) - 1));
       cursor.setAttribute("d", `M${ratio * 300} 0V80`);
       cursor.setAttribute("visibility", "visible");
       tooltip.hidden = false;
-      tooltip.textContent = `DEMO · −${settings.window - index}s · ${ids.map((id, i) => `${metrics.get(id).label}: ${metricNumber(record.values[i]?.[index], metrics.get(id).unit)}`).join(" / ")}`;
+      tooltip.textContent = `DEMO · −${Math.round(record.seconds * (1 - ratio))}s · ${ids.map((id, i) => `${metrics.get(id).label}: ${chartNumber(record.values[i]?.[index], scale)}`).join(" / ")}`;
     });
     plot.addEventListener("pointerleave", () => { tooltip.hidden = true; cursor.setAttribute("visibility", "hidden"); });
     charts.push(record);
@@ -114,28 +123,34 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
       const signalGroup = metrics.get(record.ids[0]).group;
       if (record.box.closest("#metric-panel") && ["temperatures", "fans"].includes(signalGroup)) record.box.hidden = !settings.groups[signalGroup];
       if (record.box.closest("[hidden]") || (record.box.closest("dialog") && !record.box.closest("dialog").open)) continue;
-      record.values = record.ids.map(id => demoSeries(id, second, settings.window, settings.profile));
+      record.seconds = settings.windows[record.compact ? signalGroup : historyGroup()];
+      record.values = record.ids.map(id => demoSeries(id, second, record.seconds, settings.profile));
       record.ids.forEach((id, i) => {
-        const definition = metrics.get(id);
-        record.paths[i].setAttribute("d", metricPath(record.values[i], definition.minimum, definition.maximum));
+        record.paths[i].setAttribute("d", metricPath(record.values[i], record.scale.minimum, record.scale.maximum));
       });
       record.area.setAttribute("d", record.values[0].every(Number.isFinite) ? `${record.paths[0].getAttribute("d")}L300,80L0,80Z` : "");
       record.header.lastChild.replaceChildren(...record.ids.map((id, index) => {
-        const node = el("span", {}, metricNumber(value(id), metrics.get(id).unit));
+        const node = el("span", {}, chartNumber(value(id), record.scale));
         if (record.ids.length > 1) node.style.color = colors[index % colors.length];
+        if (signalGroup === "temperatures") decorateTemperature(node, id, value(id), node.textContent);
         return node;
       }));
       const first = metrics.get(record.ids[0]);
       const samples = record.values[0].filter(Number.isFinite);
       record.footer.textContent = record.compact
-        ? `${settings.window / 60}m ago → now · DEMO`
-        : `${settings.window / 60}m ago → now · scale ${first.minimum}–${metricNumber(first.maximum, first.unit)} · ${record.ids.length > 1 ? `${first.label} peak` : "peak"} ${metricNumber(Math.max(...samples), first.unit)}`;
+        ? `${historyLabel(record.seconds)} · DEMO${record.ids.length > 1 ? " · shared axis" : ""}`
+        : `${historyLabel(record.seconds)} ago → now · ${record.ids.length > 1 ? "shared" : "fixed"} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${chartNumber(Math.max(...samples), record.scale)} · ${record.values[0].length} samples`;
       record.plot.setAttribute("aria-label", `${record.header.firstChild.textContent}. Synthetic, not live. ${record.header.lastChild.textContent}. ${record.footer.textContent}`);
     }
     for (const node of document.querySelectorAll("[data-metric-value]")) {
       const id = node.dataset.metricValue;
       node.textContent = metricNumber(value(id), metrics.get(id).unit);
     }
+    for (const node of document.querySelectorAll("[data-temperature]")) {
+      node.hidden = !settings.groups.temperatures;
+      decorateTemperature(node, node.dataset.temperature, value(node.dataset.temperature), metricNumber(value(node.dataset.temperature), "°C"));
+    }
+    for (const node of document.querySelectorAll("[data-clock-summary]")) node.textContent = `${value("cpu-clock").toFixed(2)} / ${cpuClockSpecification.boost} GHz boost · ${cpuClockSpecification.base} GHz base`;
     const memory = demoMemory(second, settings.profile);
     for (const node of document.querySelectorAll(".metric-composition")) {
       for (const part of node.querySelectorAll("[data-memory-part]")) {
@@ -148,24 +163,44 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
     }
     for (const node of document.querySelectorAll("[data-fullness]")) {
       const id = node.dataset.fullness, definition = metrics.get(id), used = value(id);
-      node.querySelector("span").style.width = `${used / definition.maximum * 100}%`;
-      node.querySelector("p").textContent = `${node.dataset.compact === "true" ? "" : `${definition.label}: `}${used.toFixed(2)} / ${definition.maximum} ${definition.unit} · ${(used / definition.maximum * 100).toFixed(1)}% used · DEMO`;
+      node.querySelector(".metric-capacity-bar span").style.width = `${used / definition.maximum * 100}%`;
+      node.querySelector("[data-capacity-value]").textContent = `${(used / definition.maximum * 100).toFixed(1)}%`;
+      node.querySelector("p").textContent = `${used.toFixed(2)} / ${definition.maximum.toFixed(2)} ${definition.unit} · ${(definition.maximum - used).toFixed(2)} free · DEMO`;
     }
     for (const [id, node] of badges) {
       const badge = metricBadges.find(b => b.id === id);
       const readout = badge.ids
         ? `${Math.min(...badge.ids.map(value)).toFixed(0)}–${Math.max(...badge.ids.map(value)).toFixed(0)} °C`
         : metricNumber(value(id), metrics.get(id).unit);
-      node.textContent = `${badge.label} ${readout} · DEMO`;
+      node.textContent = `${badge.label} ${readout} · ${id.startsWith("fan-rear") ? "ASSUMED" : "DEMO"}`;
+      if (id.startsWith("fan-rear")) node.title = "Both Molex rear fans are assumed constant 2000 RPM at the user's request; no tach is measured.";
+      if (badge.group === "temperatures") {
+        const ids = badge.ids ?? [badge.id], hottest = ids.reduce((a, b) => temperatureLevels.indexOf(temperatureLevel(a, value(a))) >= temperatureLevels.indexOf(temperatureLevel(b, value(b))) ? a : b);
+        decorateTemperature(node, hottest, value(hottest), node.textContent);
+      }
     }
+    onFanFrame?.({ hubRpm: value("fan-hub"), rearRpm: value("fan-rear1"), provenance: "synthetic" });
     $("metric-clock").textContent = `${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} simulated`;
     scheduleLayout();
   }
   function fullness(id, compact = false) {
     const node = el("div", { class: "metric-fullness", "data-fullness": id, "data-compact": String(compact) });
-    const bar = el("div"); bar.append(el("span"));
-    node.append(bar, el("p"));
+    const heading = el("div", { class: "metric-capacity-heading" });
+    heading.append(el("span", {}, metrics.get(id).label), el("strong", { "data-capacity-value": "" }));
+    const bar = el("div", { class: "metric-capacity-bar" }); bar.append(el("span"));
+    node.append(heading, bar, el("p"));
     return node;
+  }
+  function decorateTemperature(node, id, reading, text) {
+    const level = temperatureLevel(id, reading);
+    node.style.color = level.color;
+    node.dataset.temperatureLevel = level.label.toLowerCase();
+    node.textContent = `${level.icon} ${text}`;
+    node.title = `${level.label}. Illustrative component-specific UI band, not a verified vendor alarm threshold. Physical sensor package positions are not established.`;
+    node.setAttribute("aria-label", `${text}. ${level.label}. Synthetic temperature; illustrative band.`);
+  }
+  function temperatureButton(id) {
+    return button("", () => openPanel("sensors", { sensor: id }), { class: "metric-temperature-link", "data-temperature": id });
   }
   for (const definition of metricCards) {
     const card = el("article", { class: `metric-card${definition.mobileOnly ? " mobile-metric-card" : ""}`, "data-card": definition.id });
@@ -173,18 +208,21 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
     const heading = el("header", { class: "metric-card-heading" });
     const handle = button("⠿", () => {}, { class: "metric-drag", "aria-label": `Move ${definition.label}; arrow keys also move it`, title: "Drag to position; arrow keys move, Shift moves faster" });
     heading.append(handle, button(definition.label, () => {
-      if (definition.id === "nvme") disk = "nvme1n1";
-      if (definition.id === "storage") disk = "array";
-      openPanel(definition.group === "temperatures" || definition.group === "fans" ? "sensors" : definition.group);
+      if (definition.device) disk = definition.device;
+      openPanel(definition.group === "temperatures" || definition.group === "fans" ? "sensors" : definition.group, definition.group === "fans" ? { sensor: "fans" } : {});
     }, { class: "metric-card-title", title: definition.label }),
       button("×", () => { settings.hidden.push(definition.id); save(); updateVisibility(); $("metrics-button").focus({ preventScroll: true }); }, { class: "metric-card-close", "aria-label": `Hide ${definition.label}` }));
-    const titles = { gpu: "3D / video encode", network: "Receive / send", storage: "Read / write", nvme: "Read / write", fans: "Hub tach speed", temperatures: "Temperatures", memory: "In use" };
-    card.append(heading, chart(definition.series, titles[definition.id] ?? "Utilization", true));
-    if (definition.id === "memory") card.append(composition());
-    else if (definition.id === "storage") card.append(fullness("data-used", true));
+    const titles = { gpu: "GPU activity / encode", network: "Receive / send", storage: "Read / write", nvme: "Read / write", fans: "Hub tach speed", temperatures: "Temperatures", memory: "In use" };
+    card.append(heading);
+    if (definition.fullness) card.append(fullness(definition.fullness, true));
+    card.append(chart(definition.series, definition.group === "storage" ? "Read / write" : titles[definition.id] ?? "Utilization", true));
+    if (definition.id === "memory") card.append(composition(), fullness("swap", true));
     else if (definition.footer.length) {
       const footer = el("div", { class: "metric-card-extra" });
-      for (const id of definition.footer) footer.append(el("span", {}, `${metrics.get(id).label}: `), el("strong", { "data-metric-value": id }));
+      for (const id of definition.footer) {
+        if (id === "cpu-clock") footer.append(el("strong", { "data-clock-summary": "" }));
+        else footer.append(el("span", {}, `${metrics.get(id).label}: `), el("strong", { "data-metric-value": id }));
+      }
       card.append(footer);
     }
     $("metric-layer").append(card); cards.set(definition.id, card);
@@ -224,50 +262,63 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
     return [point.x, point.y];
   }
   function move(definition, x, y) {
-    const scale = $("board").getScreenCTM().a, card = cards.get(definition.id);
-    settings.positions[definition.id] = [Math.max(20, Math.min(1440 - card.offsetWidth / scale - 12, x)), Math.max(65, Math.min(840 - card.offsetHeight / scale - 12, y))];
+    const card = cards.get(definition.id), bounds = $("metric-layer").getBoundingClientRect();
+    const low = scenePoint(bounds.left + 8, bounds.top + 8), high = scenePoint(bounds.right - card.offsetWidth - 8, bounds.bottom - card.offsetHeight - 8);
+    settings.positions[definition.id] = [Math.max(low.x, Math.min(high.x, x)), Math.max(low.y, Math.min(high.y, y))];
     layout();
   }
   for (const definition of metricBadges) {
-    const node = button("", () => openPanel("sensors"), { class: "metric-badge", title: "Invented channel. Open all synthetic sensor graphs; * means physical binding or real telemetry support is unverified." });
+    const selection = definition.ids ? definition.anchor === "nvme-group" ? "nvme" : "hdds" : definition.id;
+    const node = button("", () => openPanel("sensors", { sensor: selection }), { class: "metric-badge", title: "Synthetic channel; * means physical binding is unverified." });
     node.style.setProperty("--metric-color", metricGroups[definition.group].color);
     $("metric-layer").append(node); badges.set(definition.id, node);
   }
   function layout() {
     const bounds = $("metric-layer").getBoundingClientRect(), matrix = $("board").getScreenCTM();
-    if (!matrix) return;
+    if (!matrix || $("metric-layer").hidden || matchMedia("(max-width: 1000px)").matches) return;
     $("metric-leaders").setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
     const point = (x, y) => {
       const p = new DOMPoint(x, y).matrixTransform(matrix);
       return { x: p.x - bounds.left, y: p.y - bounds.top };
     };
-    const automatic = new Map();
-    let stackBottom = -Infinity;
-    for (const id of ["gpu", "memory", "cpu"]) {
-      if (settings.positions[id] || cards.get(id).hidden) continue;
-      const definition = metricCards.find(card => card.id === id), p = point(definition.x, definition.y);
-      p.y = Math.max(p.y, stackBottom);
-      automatic.set(id, p);
-      stackBottom = p.y + cards.get(id).offsetHeight + 10;
-    }
-    for (const definition of metricCards) {
-      const node = cards.get(definition.id), position = settings.positions[definition.id] ?? [definition.x, definition.y];
-      const p = automatic.get(definition.id) ?? point(...position);
-      if (!settings.positions[definition.id] && !automatic.has(definition.id)) p.y = Math.min(p.y, point(1440, 840).y - node.offsetHeight - 8);
+    const occupied = [];
+    for (const definition of metricBadges) {
+      const p = point(definition.x, definition.y), node = badges.get(definition.id);
       node.style.left = `${p.x}px`; node.style.top = `${p.y}px`;
-      const anchor = anchorBounds(definition.anchor);
+      if (!node.hidden) occupied.push({ x: p.x - 4, y: p.y - 4, width: node.offsetWidth + 8, height: node.offsetHeight + 8 });
+    }
+    for (const node of document.querySelectorAll('.hardware-part[data-id*="fan-"][aria-disabled="false"], .hardware-part[data-id="disk-bays"][aria-disabled="false"]')) {
+      const rect = node.getBoundingClientRect();
+      occupied.push({ x: rect.left - bounds.left, y: rect.top - bounds.top, width: rect.width, height: rect.height });
+    }
+    const ordered = [...metricCards].sort((a, b) => Number(Boolean(settings.positions[b.id])) - Number(Boolean(settings.positions[a.id])));
+    for (const definition of ordered) {
+      const node = cards.get(definition.id), position = settings.positions[definition.id] ?? [definition.x, definition.y];
       const line = lines.get(definition.id);
+      line.style.display = node.hidden || definition.mobileOnly ? "none" : "";
+      if (node.hidden || definition.mobileOnly) continue;
+      const clampPoint = p => ({ x: Math.max(8, Math.min(bounds.width - node.offsetWidth - 8, p.x)), y: Math.max(8, Math.min(bounds.height - node.offsetHeight - 8, p.y)) });
+      let p = clampPoint(point(...position));
+      const overlap = candidate => occupied.reduce((area, rect) => area +
+        Math.max(0, Math.min(candidate.x + node.offsetWidth + 6, rect.x + rect.width) - Math.max(candidate.x - 6, rect.x)) *
+        Math.max(0, Math.min(candidate.y + node.offsetHeight + 6, rect.y + rect.height) - Math.max(candidate.y - 6, rect.y)), 0);
+      if (!settings.positions[definition.id] && overlap(p)) {
+        const preferred = p, candidates = [];
+        for (const dx of [-160, -80, -40, -20, 0, 20, 40, 80, 160]) for (const dy of [-160, -80, -40, -20, 0, 20, 40, 80, 160]) candidates.push(clampPoint({ x: preferred.x + dx, y: preferred.y + dy }));
+        for (let x = 8; x < bounds.width; x += 40) for (const y of [8, bounds.height - node.offsetHeight - 8]) candidates.push(clampPoint({ x, y }));
+        for (let y = 8; y < bounds.height; y += 40) for (const x of [8, bounds.width - node.offsetWidth - 8]) candidates.push(clampPoint({ x, y }));
+        const score = candidate => overlap(candidate) * 100000 + (candidate.x - preferred.x) ** 2 + (candidate.y - preferred.y) ** 2;
+        p = candidates.reduce((best, candidate) => score(candidate) < score(best) ? candidate : best, preferred);
+      }
+      node.style.left = `${p.x}px`; node.style.top = `${p.y}px`;
+      occupied.push({ ...p, width: node.offsetWidth, height: node.offsetHeight });
+      const anchor = anchorBounds(definition.anchor);
       if (anchor) {
         const a = point(anchor.x + anchor.width / 2, anchor.y + anchor.height / 2);
         const edge = p.x + (a.x > p.x + node.offsetWidth / 2 ? node.offsetWidth : 0), mid = p.y + Math.min(40, node.offsetHeight / 2);
         line.setAttribute("d", `M${a.x},${a.y}L${edge + (a.x > edge ? 12 : -12)},${mid}L${edge},${mid}`);
       }
-      line.hidden = node.hidden || !anchor || definition.mobileOnly;
-      line.style.display = line.hidden ? "none" : "";
-    }
-    for (const definition of metricBadges) {
-      const p = point(definition.x, definition.y), node = badges.get(definition.id);
-      node.style.left = `${p.x}px`; node.style.top = `${p.y}px`;
+      if (!anchor) line.style.display = "none";
     }
   }
   function anchorBounds(id) {
@@ -298,6 +349,8 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
     }
     for (const node of document.querySelectorAll("[data-group-check]")) node.checked = settings.groups[node.dataset.groupCheck];
     for (const node of document.querySelectorAll("[data-card-check]")) node.checked = !settings.hidden.includes(node.dataset.cardCheck);
+    $("metric-window").value = String(settings.windows[historyGroup()]);
+    $("metric-window").disabled = activePanel === "layers";
   }
   function playback() { playing = !playing; playbackChosen = true; controls(); }
   $("metric-play").addEventListener("click", playback);
@@ -320,9 +373,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
   $("metric-reset-layout").addEventListener("click", () => { settings.positions = {}; save(); updateVisibility(); renderPanel(); });
   for (const [id, label] of Object.entries(demoProfiles)) $("metric-profile").append(el("option", { value: id }, label));
   $("metric-profile").value = settings.profile;
-  $("metric-window").value = String(settings.window);
+  $("metric-window").replaceChildren(...historyWindows.map(seconds => el("option", { value: seconds }, historyLabel(seconds))));
   $("metric-profile").addEventListener("change", () => { settings.profile = $("metric-profile").value; save(); updateCharts(); });
-  $("metric-window").addEventListener("change", () => { settings.window = Number($("metric-window").value); save(); updateCharts(); });
+  $("metric-window").addEventListener("change", () => { settings.windows[historyGroup()] = Number($("metric-window").value); save(); updateCharts(); });
   const panelLabels = { layers: "Layers & layout", cpu: "CPU", memory: "Memory", storage: "Storage", gpu: "GPU", network: "Network", sensors: "Sensors & fans" };
   for (const [id, label] of Object.entries(panelLabels)) $("metric-panel-nav").append(button(label, () => { activePanel = id; renderPanel(); }, { "data-panel": id, "aria-pressed": "false" }));
   function select(options, current, action, label) {
@@ -334,6 +387,43 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
       $("metric-panel").querySelector("select")?.focus({ preventScroll: true });
     });
     return control;
+  }
+  function diskComparison() {
+    const wrapper = el("div", { class: "metric-disk-table" }), table = el("table");
+    const heading = el("tr");
+    for (const label of ["Drive / RAID role", "Temperature", "Read", "Write", "Busy"]) heading.append(el("th", { scope: "col" }, label));
+    const head = el("thead"); head.append(heading); table.append(head);
+    const body = el("tbody");
+    for (const disk of demoDisks.filter(node => node.kind === "Physical HDD")) {
+      const row = el("tr"), name = el("td"), info = storageDetails(disk.id);
+      name.append(button(disk.label, () => { diskSelection(disk.id); }), el("small", {}, info.role));
+      const temp = el("td"); temp.append(temperatureButton(`temp-${disk.id}`)); row.append(name, temp);
+      for (const field of ["read", "write", "active"]) {
+        const cell = el("td"); cell.append(el("span", { "data-metric-value": `disk-${disk.id}-${field}` })); row.append(cell);
+      }
+      body.append(row);
+    }
+    table.append(body); wrapper.append(table);
+    return wrapper;
+  }
+  function diskSelection(id) { disk = id; renderPanel(); $("metric-panel").querySelector("select")?.focus({ preventScroll: true }); }
+  function storageContext() {
+    const section = el("section", { class: "metric-storage-context" });
+    if (disk === "array") {
+      section.append(el("strong", {}, "11 RAID6 members + 1 hot spare · /dev/md0"),
+        el("p", {}, "Roles below come from the dated Linux snapshot, not this simulated workload. Per-disk counters remain available beneath mdadm; they should not be added to md0/LVM counters as if they were separate traffic."));
+    } else {
+      const info = storageDetails(disk);
+      section.append(el("strong", {}, `${info.node.label} · ${(info.node.sizeBytes / 1e12).toFixed(2)} TB raw capacity`),
+        el("p", {}, `${info.role}. ${info.node.summary ?? ""}`));
+      const layers = el("div", { class: "metric-storage-layers" });
+      for (const node of info.layers.filter(node => ["LVM volume group", "LVM / device-mapper", "Mounted XFS filesystem", "mdadm RAID6"].includes(node.kind))) {
+        const item = el("div"); item.append(el("strong", {}, node.aliases?.find(alias => alias.startsWith("/dev/vg_") || alias.startsWith("/dev/homeserver-vg/")) ?? node.label), el("span", {}, node.summary ?? node.kind)); layers.append(item);
+      }
+      section.append(layers);
+    }
+    section.append(el("p", { class: "compact muted" }, "Persistent identity: prefer a private WWN / /dev/disk/by-id or NVMe EUI/NGUID/UUID (model + serial fallback). No real identifiers are bundled. /dev/sdX and NVMe numbers are aliases; physical bays/sockets are still unbound."));
+    return section;
   }
   function renderPanel() {
     const body = $("metric-panel");
@@ -365,11 +455,12 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
         });
         label.append(input, document.createTextNode(`${definition.label}${definition.mobileOnly ? " (compact screens)" : ""}`)); body.append(label);
       }
-      body.append(el("p", { class: "metric-demo-explainer" }, "All current values and histories are fabricated. Scenarios regenerate the entire invented history. Colors identify signal families, not alarm thresholds. Sensor badges summarize groups where disk/socket mappings are unknown; a badge is not a new hardware binding. Connector inspection hides these overlays. Fan-motion studies remain independently controlled."));
+      body.append(el("p", { class: "metric-demo-explainer" }, "All current values and histories are fabricated. Scenarios regenerate the entire invented history. Drag charts anywhere in the background; automatic layouts move charts toward edges to avoid fixed sensor badges. Temperature colors are illustrative comfort bands, not verified vendor alarm limits. Disk/socket badges do not establish physical bindings. Connector inspection hides overlays. Case-fan animations follow metric RPMs unless a manual motion study or reported snapshot is selected."));
     } else if (activePanel === "cpu") {
       add(["cpu"], "Overall · 16 cores / 32 logical CPUs");
       add(["cpu-clock"], "CPU clock");
       add(["cpu-power"], "Package power");
+      for (const id of ["temp-cpu", "fan-cpu1", "fan-cpu2"]) add([id], metrics.get(id).label);
       body.append(select([["cores", "16 cores"], ["threads", "32 logical CPUs"]], cpuView, next => { cpuView = next; }, "CPU graph grouping"));
       const cores = el("div", { class: "metric-core-grid" });
       for (let i = 0; i < (cpuView === "cores" ? 16 : 32); i += 1) cores.append(chart([`${cpuView === "cores" ? "core" : "thread"}-${i}`], `${cpuView === "cores" ? "Core" : "Logical CPU"} ${i}`, true));
@@ -382,29 +473,43 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible }) {
         legend.append(item);
       }
       body.append(composition(), legend);
-      for (const id of ["memory-used", "memory-apps", "memory-cache", "memory-kernel", "memory-free", "swap"]) add([id], metrics.get(id).label);
+      for (const id of ["memory-apps", "memory-cache", "memory-kernel", "memory-free", "swap"]) add([id], metrics.get(id).label);
       body.append(grid, el("p", { class: "muted compact" }, "128 GiB illustrative accounting: in use = apps + kernel; all four composition buckets sum to capacity. A Linux collector must define non-overlapping accounting; /proc/meminfo fields cannot simply be added together."));
     } else if (activePanel === "storage") {
-      body.append(select([["array", "HDD set / data workload"], ...demoDisks.map(node => [node.id, `${node.label} · ${node.kind}`])], disk, next => { disk = next; }, "Storage device"));
+      const capacities = el("div", { class: "metric-capacity-grid" });
+      capacities.append(fullness("data-used"), fullness("root-used"));
+      if (disk === "nvme1n1") capacities.append(fullness("cache-used"));
+      body.append(capacities, select([["array", "All HDDs / md0"], ...demoDisks.map(node => [node.id, `${node.label} · ${storageDetails(node.id).role}`])], disk, next => { disk = next; }, "Storage device"), storageContext());
       add([`disk-${disk}-read`, `disk-${disk}-write`], "Read / write transfer rate");
       add([`disk-${disk}-active`], "Active time · busy, not capacity");
       add([`disk-${disk}-latency`], "Response time");
       add([`disk-${disk}-queue`], "Queue depth");
-      body.append(grid, el("h4", {}, "Filesystem fullness · not per RAID-member usage"), fullness("data-used"), fullness("root-used"),
-        el("p", { class: "muted compact" }, "Raw member disks do not each have a /data fullness percentage. Physical bays and NVMe socket bindings remain unknown. The /data LV includes ordinary NVMe extents as well as RAID and cache. Activity above is invented, not the Linux inventory snapshot."));
+      if (disk !== "array") {
+        const ids = disk.startsWith("nvme") ? [`temp-nvme${disk === "nvme0n1" ? 0 : 1}`, `temp-nvme${disk === "nvme0n1" ? 0 : 1}-secondary`] : [`temp-${disk}`];
+        for (const id of ids) add([id], metrics.get(id).label);
+      }
+      if (disk === "array") body.append(el("h4", {}, "Individual HDDs · synthetic activity / temperature"), diskComparison());
+      body.append(grid, el("div", { class: "metric-storage-layers" }, "LVM snapshot: homeserver-vg = nvme0n1p3 → root + swap. vg_redundant = md0 + nvme1n1p1 → cached /data. nvme1n1 holds cache data/metadata AND ordinary /data extents; /data is not entirely RAID-protected."),
+        el("p", { class: "muted compact" }, "Filesystem fullness is logical, not per RAID member. Cache occupancy is an invented runtime used-block count, not the NVMe's filesystem fullness or allocated-LV percentage. Actual cache mode and extent layout still require privileged LVM inspection. Individual SMART temperatures and stable disk identities belong in the future private collector."));
     } else if (activePanel === "gpu") {
-      for (const id of ["gpu-3d", "gpu-copy", "gpu-encode", "gpu-decode", "gpu-dedicated", "gpu-shared", "gpu-power", "temp-gpu"]) add([id], metrics.get(id).label);
-      body.append(grid, el("p", { class: "muted compact" }, "Task-Manager-inspired, all synthetic. 3D, copy and shared/host memory require collector-specific Linux definitions and may be unavailable. Generic NVIDIA GPU utilization must not be relabeled as 3D. Missing engines must stay unavailable, not zero. Shared/host chart scale is illustrative, not a hardware pool limit."));
+      for (const id of ["gpu-util", "gpu-3d", "gpu-copy", "gpu-encode", "gpu-decode", "gpu-dedicated", "gpu-shared", "gpu-power", "temp-gpu"]) add([id], metrics.get(id).label);
+      body.append(grid, el("p", { class: "muted compact" }, "The summary compares general GPU activity and video encode on one shared 0–100% axis: useful for this server's compute/ML versus transcoding workloads. Engines can overlap; do not sum them. Generic GPU utilization is not 3D-only activity or SM occupancy. Task-Manager-inspired, all synthetic; separate 3D/copy/shared-memory counters may be unavailable on Linux. Shared/host chart scale is not a hardware pool limit."));
     } else if (activePanel === "network") {
       body.append(select(demoNics.map(id => [id, id]), nic, next => { nic = next; }, "Network interface"));
       add([`net-${nic}-rx`, `net-${nic}-tx`], "Receive / send · separate full-duplex directions");
-      body.append(grid, el("p", { class: "muted compact" }, "10 Gb/s per direction; active-backup is not a 20 Gb/s bond. Interface names come from a separate Linux snapshot, traffic is entirely invented. LAN1/LAN2 port pairing is unassigned."));
+      add(["temp-lan"], "Onboard LAN sensor · shared context, not per-port temperature");
+      body.append(el("p", { class: "metric-storage-context" }, `${nic}: ${metricTopology.nodes.get(nic).bondRole ?? metricTopology.nodes.get(nic).summary}`), grid,
+        el("p", { class: "muted compact" }, "Receive and send share one 0–10 Gb/s axis and the same displayed units. Linux exposes per-interface counters for bond0 and each physical member via rtnetlink/sysfs; use counter deltas, handling resets. Active-backup is not a 20 Gb/s bond; avoid double-counting bond/member traffic. Prefer each NIC's permanent hardware MAC plus PCI path for identity, not its bond-assigned current MAC. Real addresses remain private/uncollected. LAN temperature is controller context; LAN1/LAN2 port pairing is unassigned."));
     } else if (activePanel === "sensors") {
       const actions = el("div", { class: "toolbar" });
       actions.append(button("Show all temperatures", () => group("temperatures", true)), button("Hide all temperatures", () => group("temperatures", false)),
         button("Show all fan speeds", () => group("fans", true)), button("Hide all fan speeds", () => group("fans", false)));
-      body.append(actions, el("p", { class: "muted compact" }, "Every channel below is fabricated, including rear fan RPMs: those fans have no tach. FAN3 represents one hub return, not six individually measured fans. Secondary NVMe channels are illustrative; real availability/meaning must be verified. No air probes or physical disk/socket bindings are invented."));
-      for (const definition of [...demoSensors, ...demoFans]) add([definition.id], definition.label);
+      const choices = [["all", "All sensors & fans"], ["nvme", "NVMe temperatures"], ["hdds", "HDD temperatures"], ["fans", "All fan speeds"], ...[...demoSensors, ...demoFans].map(item => [item.id, item.label])];
+      body.append(select(choices, sensor, next => { sensor = next; }, "Sensor selection"), actions);
+      const legend = el("div", { class: "metric-temperature-legend" });
+      for (const level of temperatureLevels) { const item = el("span", {}, `${level.icon} ${level.label}`); item.style.color = level.color; legend.append(item); }
+      body.append(legend, el("p", { class: "muted compact" }, "Illustrative, component-specific bands only, not verified vendor limits or an alarm system. Board/LAN package locations are unverified; badges are reference anchors. Every changing value is synthetic. Rear fans use your assumed constant 2000 RPM, without tach. One FAN3 return drives all six front/middle animations under your shared-speed assumption, not six independent measurements. Secondary NVMe channels are illustrative."));
+      for (const definition of [...demoSensors, ...demoFans].filter(item => sensor === "all" || sensor === item.id || sensor === "nvme" && item.id.startsWith("temp-nvme") || sensor === "hdds" && item.id.startsWith("temp-sd") || sensor === "fans" && item.id.startsWith("fan-"))) add([definition.id], definition.label);
       body.append(grid);
     }
     controls(); updateCharts();

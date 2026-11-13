@@ -49,19 +49,24 @@ node --test hardware-map\model.test.mjs hardware-map\metric-model.test.mjs
   maximum's previous timing. Frames and hubs remain stationary.
   The chooser shows animated examples, applies a stage to all eight case fans,
   or compares all stages on the map (including rear-fan examples).
-  Every applied stage is labeled **DEMO**; it is not telemetry or fan control.
-  **Clear demo** restores unknown/static artwork, not a zero-RPM claim. CPU/GPU
-  artwork, real reading labels, saved annotations and export data are untouched.
+  Manual stages are labeled **DEMO**; they are not telemetry or fan control.
+  **Use displayed RPMs** restores data-driven bands: the six front/middle fans
+  share the synthetic hub RPM under the user's shared-speed assumption, and
+  both rear fans use an explicitly assumed constant 2000 RPM. **Reported
+  ~1100 RPM snapshot** uses the existing approximate FAN3 observation instead.
+  This does not turn the other five hub fans into independently measured fans
+  or add tach monitoring to the rear pair. CPU/GPU artwork, real reading labels,
+  saved annotations and export data are untouched.
   Reduced-motion preferences initially disable rotation but retain distinct line
   patterns; **Spin fans** explicitly overrides that preference for this session.
   The same control can pause motion without changing the displayed speed stage.
   Filtered-out fans and closed chooser previews pause their animations.
   `fanMotionForSpeed` accepts a normalized RPM / rated-maximum fraction for a
-  future data adapter. Missing/invalid values stay unknown; only explicit zero
+  data adapter. Missing/invalid values stay unknown; only explicit zero
   selects stopped. Positive values choose five moving bands through maximum
   (overspeed uses the maximum illustration). These are stylized periods, not
-  physical RPM, PWM duty, airflow or a thermal simulation. No snapshot or shared
-  hub tach is automatically applied to the other five unmeasured fans.
+  physical RPM, PWM duty, airflow or a thermal simulation. Sharing the hub RPM
+  is an explicit visualization assumption and cannot detect a failed branch.
   Technique references: [rendered motion blur / exposure](https://docs.blender.org/manual/en/latest/render/cycles/render_settings/motion_blur.html)
   and [animation smear frames / multiples](https://blog.cg-wire.com/smear-frames/).
 - Compact **Hardware / Connectors** controls choose what the category chips and
@@ -262,7 +267,8 @@ client; its link is labeled download-unverified and accompanied by the exact
   BMC FAN1/FAN2 RPM identifies tach channels, not attached physical fans.
 - The later FAN3 BMC return was relayed on November 13 with no exact capture
   time. It is shown separately as approximate, not backdated to the November 12
-  sensor snapshot or copied onto six physical fans.
+  sensor snapshot. The user subsequently requested applying that return to all
+  six animations as an assumption, without claiming six measured readings.
 
 The vendor PDF and any rendered reference images stay in private session
 artifacts, not this public repository. All shipped visuals are original,
@@ -332,28 +338,58 @@ The **SIMULATED** strip toggles CPU, memory, storage, GPU, network, temperature
 and fan overlays independently. **All / None** shows or hides all layers;
 **Metrics - DEMO** opens the performance lab, including explicit show/hide-all
 temperature controls, individual chart visibility and layout reset. Drag a
-card's grip, or focus it and use arrow keys (Shift moves farther). Compact
+card's grip, or focus it and use arrow keys (Shift moves farther). Charts can
+move anywhere inside the visible background, including beyond the chassis and
+SVG drawing bounds. Default placement avoids fixed sensor badges and case fans,
+moving charts toward edges as needed; temperature badges stay by their reference
+hardware. The board and LAN sensor's actual package locations remain unverified.
+Compact
 screens dock cards in a horizontally scrollable tray. Hardware filters retain
 only relevant overlays; connector inspection hides the overlay hit targets.
 Click a chart title, sensor badge, or a component's performance button for
 detailed graphs in a dismissible dialog.
 
 The lab includes CPU totals and 16-core/32-thread views, non-overlapping memory
-composition and swap, physical-disk busy time/read/write/latency/queue depth,
-separate filesystem fullness, GPU graphics/copy/encode/decode/dedicated and
+composition and swap (including a swap bar on the memory card), physical-disk
+busy time/read/write/latency/queue depth and a twelve-HDD comparison table,
+prominent filesystem fullness, GPU graphics/copy/encode/decode/dedicated and
 host-allocation graphs, network receive/send, and illustrative sensor/fan
 histories. Hover a plot to inspect past samples. Choose mixed, idle, transcode
-or transfer scenarios and 1/2/5-minute windows; changing scenarios regenerates
+or transfer scenarios and windows from 1 minute to 24 hours; changing scenarios regenerates
 the entire invented history. **Play / Pause** controls one-second updates.
 Reduced Motion starts playback paused; Play is an explicit opt-in. Hidden
-browser tabs do not advance the simulated clock. Fan-animation studies remain
-independently controlled.
+browser tabs do not advance the simulated clock. Default histories are CPU/GPU/
+network 2 minutes, memory 15 minutes, temperatures 30 minutes, fans 5 minutes,
+and storage 2 hours. Choices persist per view family rather than changing all
+graphs together. Long histories use at most 301 point samples, not peak-preserving
+aggregation or real retained measurements. A production collector should use
+appropriate downsampling and retention; these synthetic histories need no server.
+
+RX/TX and GPU-activity/encode overlays each share one explicit y-axis and
+consistent displayed units. GPU activity plus encode is the server-oriented
+summary; 3D/copy/decode remain separate detail plots. General GPU utilization
+is neither 3D-only activity nor SM occupancy, and different engines must not be
+summed. CPU details include temperature plus FAN1 (PSU side) and FAN2 (GPU side);
+the card compares clock with the rated 3.7 GHz boost ceiling and 3 GHz base,
+not a guaranteed all-core frequency. Network details include the shared onboard
+LAN sensor, not invented per-port temperatures.
+
+Two NVMe cards distinguish root/swap from `/data` cache **and ordinary extents**.
+Both anchor to the M.2 group, without guessing socket assignments. Cache
+occupancy is a synthetic used-block metric, not filesystem fullness or LV
+allocation. Storage details trace the existing snapshot's partitions, mdadm,
+volume groups, internal cache/origin LVs and mounts, preserving spare/member
+roles. Raw HDDs have no individual filesystem-fullness percentage.
+
+Temperature badges/plots use icons and colors for cold, cool, moderate, warm,
+hot and dangerous. These component-specific **illustrative UI bands are not
+verified vendor operating limits, calibrated warnings or a safety system**.
 
 All performance values and histories are **synthetic, not live**. Linux names
 come from the separate inventory snapshot, not fresh collection. HDD and NVMe
 badges show group temperature ranges without assigning devices to bays/sockets.
-FAN3 is one hub-return channel, not six individual readings; rear RPMs are
-invented even though those fans have no tach. Shared/host GPU memory uses an
+FAN3 is one hub-return channel applied to six animations by user assumption;
+rear RPMs are assumed constant, with no tach. Shared/host GPU memory uses an
 illustrative graph scale, not a physical pool limit. Generic NVIDIA utilization
 cannot be relabeled as 3D; unsupported Linux counters must remain unavailable.
 There is no polling, collector, production service, fan control or deployment.
@@ -363,6 +399,18 @@ accounting, history generation and plotting/formatting helpers; `metrics.mjs`
 owns the map/lab controls. Plotting preserves missing samples as gaps, not
 zeroes. Preferences use the separate `homeserver.hardware-metrics.v1` browser
 key: annotation storage, import/export and the observed snapshot are untouched.
+Preference payload v2 migrates the existing visibility/layout choices without
+changing inspection annotations.
+
+Linux collection references: [per-interface statistics](https://docs.kernel.org/networking/statistics.html)
+(including physical bond members) and [per-block-device I/O counters](https://docs.kernel.org/admin-guide/iostats.html)
+(including mdadm's underlying disks). Rates require deltas and reset handling;
+do not double-count stacked logical/physical layers. Future private identities
+should prefer disk WWN/by-id or NVMe namespace identifiers, with serial/model
+fallback, and each NIC's permanent hardware MAC plus PCI path rather than its
+current bond-assigned MAC. Actual identifiers and SMART temperatures are not
+newly collected or published here. [AMD's 7313P specification](https://www.amd.com/en/products/processors/server/epyc/7003-series/amd-epyc-7313p.html)
+confirms the clock reference.
 
 ## Persistent-product foundation
 

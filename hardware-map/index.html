@@ -100,7 +100,7 @@
     <div class="metric-lab-controls">
       <button id="metric-play-dialog" type="button">Play demo</button>
       <label>Scenario<select id="metric-profile"></select></label>
-      <label>History<select id="metric-window"><option value="60">1 minute</option><option value="120" selected>2 minutes</option><option value="300">5 minutes</option></select></label>
+      <label>History · this view<select id="metric-window"></select></label>
       <button id="metric-reset-layout" type="button">Reset chart positions</button>
       <output id="metric-clock"></output>
     </div>
@@ -111,13 +111,13 @@
   <dialog id="fan-motion-dialog" class="popup" aria-labelledby="fan-motion-title">
     <header class="popup-heading"><h2 id="fan-motion-title">Case fan motion study</h2><button id="close-fan-motion" type="button" autofocus>Close ×</button></header>
     <div class="popup-body">
-      <p class="muted compact">Choose a variant to preview on all eight case fans, or compare the stages together. These are animation demos, not measured speeds or fan controls. CPU and GPU artwork is unchanged.</p>
+      <p class="muted compact">By default, the six front/middle fans follow the displayed synthetic hub RPM; both rear fans use your assumed constant 2000 RPM. Use the reported snapshot or override with an artistic stage below. None of these controls changes real fan settings. CPU/GPU artwork is unchanged.</p>
       <label class="fan-rotation-toggle"><input id="fan-rotation-enabled" type="checkbox" aria-describedby="fan-motion-preference">Spin fans</label>
       <p id="fan-motion-preference" class="muted compact"></p>
       <div id="fan-motion-presets" class="fan-motion-presets" role="group" aria-label="Fan speed animation variants"></div>
-      <div class="toolbar fan-motion-actions"><button id="compare-fan-motion" type="button">Compare on map</button><button id="clear-fan-motion" type="button">Clear demo</button></div>
+      <div class="toolbar fan-motion-actions"><button id="compare-fan-motion" type="button">Compare on map</button><button id="clear-fan-motion" type="button">Use displayed RPMs</button><button id="snapshot-fan-motion" type="button">Reported ~1100 RPM snapshot</button></div>
       <p id="fan-motion-status" class="reading-note" role="status"></p>
-      <p class="muted compact">Faster stages use repeated blade impressions (animation multiples), not actual blade counts. Rotation is stylized, not physical RPM or PWM duty. Reduced-motion preferences pause rotation unless you explicitly enable Spin fans. No live speed is connected yet; static unknown fans are not zero-RPM readings.</p>
+      <p class="muted compact">Faster stages use repeated blade impressions (animation multiples), not actual blade counts. RPM selects a speed band, not physical-rate rotation or PWM duty. Reduced-motion preferences pause rotation unless you explicitly enable Spin fans. The reported snapshot is approximate and undated; there is still no live collector. A shared-speed assumption cannot detect one failed hub fan.</p>
     </div>
   </dialog>
   <dialog id="tools-dialog" class="popup tools-popup" aria-labelledby="tools-title">

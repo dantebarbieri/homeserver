@@ -278,7 +278,7 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .metric-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 #metric-leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .metric-leader { fill: none; stroke-width: 1; stroke-dasharray: 3 4; opacity: .6; }
-.metric-card { position: absolute; width: 196px; padding: 8px 10px; border: 1px solid #3b4a50; border-top: 2px solid var(--metric-color); border-radius: 8px; background: #101b24f2; box-shadow: 0 5px 18px #0005; color: #dce5eb; pointer-events: auto; }
+.metric-card { position: absolute; z-index: 1; width: 206px; padding: 8px 10px; border: 1px solid #3b4a50; border-top: 2px solid var(--metric-color); border-radius: 8px; background: #101b24f2; box-shadow: 0 5px 18px #0005; color: #dce5eb; pointer-events: auto; }
 .metric-card-heading { display: grid; grid-template-columns: 16px minmax(0, 1fr) 17px; align-items: center; gap: 2px; margin-bottom: 5px; }
 .metric-card-heading button { background: transparent; border: 0; padding: 0; border-radius: 3px; }
 .metric-drag { cursor: grab; color: #788d9d; touch-action: none; font-size: 15px; }
@@ -287,12 +287,17 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .metric-card-close { color: #8193a2; font-size: 15px; }
 .metric-card-extra { font-size: 8px; line-height: 1.6; display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 3px; color: #9daeba; }
 .metric-card-extra strong { font-weight: 500; color: #dce5eb; }
-.metric-badge { position: absolute; font-size: 9px; padding: 4px 7px; color: var(--metric-color); background: #111c25f2; border-color: #475252; white-space: nowrap; pointer-events: auto; box-shadow: 0 2px 5px #0004; }
+.metric-badge { position: absolute; z-index: 2; font-size: 9px; padding: 4px 7px; color: var(--metric-color); background: #111c25f2; border-color: #475252; white-space: nowrap; pointer-events: auto; box-shadow: 0 2px 5px #0004; }
 .mobile-metric-card { display: none; }
 .performance-chart { position: relative; min-width: 0; border: 1px solid #2c3b48; border-radius: 8px; padding: 12px; background: #101b26; }
 .metric-chart-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; font-size: 11px; color: #acbfce; }
 .metric-chart-values { color: #e1e9ed; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 8px; }
 .performance-chart svg { width: 100%; height: 110px; display: block; overflow: visible; }
+.metric-plot { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 6px; }
+.metric-y-axis { display: flex; flex-direction: column; justify-content: space-between; text-align: right; color: #93aab9; font-size: 8px; font-variant-numeric: tabular-nums; }
+.mini-chart .metric-plot { grid-template-columns: 37px minmax(0, 1fr); gap: 4px; }
+.mini-chart .metric-y-axis { font-size: 7px; }
+.mini-chart .metric-y-axis span:nth-child(2) { display: none; }
 .metric-gridline { stroke: #2a3a47; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .7; }
 .metric-trace { stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .metric-cursor { stroke: #e2ebf0; stroke-width: 1; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
@@ -311,9 +316,34 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .metric-composition { margin-top: 8px; }
 .metric-composition-label { font-size: 9px; color: #a9bdcb; margin-top: 5px; }
 .metric-fullness { margin-top: 7px; }
-.metric-fullness > div { height: 4px; border-radius: 2px; overflow: hidden; background: #293d4d; }
-.metric-fullness span { display: block; height: 100%; background: #81bddf; }
-.metric-fullness p { font-size: 9px; color: #a9bdcb; margin-top: 5px; }
+.metric-capacity-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; color: #c9dce8; }
+.metric-capacity-heading strong { color: #a2d8ee; font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.metric-capacity-bar { height: 12px; margin-top: 6px; border-radius: 3px; overflow: hidden; background: #293d4d; }
+.metric-capacity-bar span { display: block; height: 100%; background: #81bddf; }
+.metric-fullness p { font-size: 12px; color: #b6cad8; margin-top: 6px; }
+.metric-fullness[data-compact="true"] { margin: 7px 0 10px; }
+.metric-fullness[data-compact="true"] .metric-capacity-heading { font-size: 10px; }
+.metric-fullness[data-compact="true"] .metric-capacity-heading strong { font-size: 18px; }
+.metric-fullness[data-compact="true"] .metric-capacity-bar { height: 7px; }
+.metric-fullness[data-compact="true"] p { font-size: 9px; line-height: 1.5; }
+.metric-capacity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 0 20px; }
+.metric-capacity-grid .metric-fullness { background: #101b26; border: 1px solid #3d5264; border-radius: 8px; padding: 14px; margin: 0; }
+.metric-storage-context { font-size: 12px; line-height: 1.7; padding: 12px 14px; border-left: 2px solid #81bddf; background: #152430; margin: 10px 0 18px; }
+.metric-storage-context p { margin-top: 8px; }
+.metric-storage-layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 12px 0; font-size: 11px; line-height: 1.6; }
+.metric-storage-layers > div { display: grid; gap: 5px; background: #182b36; border-radius: 5px; padding: 10px; }
+.metric-storage-layers strong { font-size: 11px; overflow-wrap: anywhere; color: #c5dcea; }
+.metric-storage-layers span { color: #9eb4c4; }
+.metric-disk-table { overflow-x: auto; margin: 14px 0; }
+.metric-disk-table table { width: 100%; border-collapse: collapse; min-width: 570px; text-align: left; font-size: 11px; }
+.metric-disk-table th, .metric-disk-table td { padding: 9px 8px; border-bottom: 1px solid #2c3b48; }
+.metric-disk-table th { color: #9eb4c4; font-weight: 500; }
+.metric-disk-table td:not(:first-child) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.metric-disk-table small { display: block; color: #96acba; font-size: 9px; margin-top: 4px; }
+.metric-disk-table button { font-size: 11px; padding: 4px 6px; }
+.metric-temperature-link { background: transparent; padding: 3px 4px; border: 0; font-size: 11px; white-space: nowrap; }
+.metric-temperature-legend { display: flex; flex-wrap: wrap; gap: 8px 15px; margin: 14px 0; font-size: 11px; }
+.fan-motion-actions { flex-wrap: wrap; }
 .metrics-popup { width: min(1120px, calc(100vw - 24px)); }
 .metrics-popup .popup-heading h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .metric-lab-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; padding: 12px 18px 4px; flex-shrink: 0; }
@@ -342,9 +372,9 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .metrics-popup .toolbar button { font-size: 11px; padding: 7px 10px; }
 @media (max-width: 1200px) and (min-width: 1001px) { .metric-card { width: 176px; padding: 7px; } .metric-card-title { font-size: 9px; } .metric-chart-values { font-size: 11px; } .metric-badge { font-size: 8px; } }
 @media (max-width: 1000px) {
-  .metric-layer { top: auto; bottom: 8px; left: 8px; right: 8px; height: 178px; display: flex; align-items: start; gap: 8px; overflow-x: auto; overflow-y: hidden; pointer-events: auto; scrollbar-width: thin; }
-  .metric-card { position: relative; left: auto !important; top: auto !important; flex: 0 0 186px; }
-  .map-scroll { padding-bottom: 185px; }
+  .metric-layer { top: auto; bottom: 8px; left: 8px; right: 8px; height: 238px; display: flex; align-items: start; gap: 8px; overflow-x: auto; overflow-y: auto; pointer-events: auto; scrollbar-width: thin; }
+  .metric-card { position: relative; left: auto !important; top: auto !important; flex: 0 0 220px; }
+  .map-scroll { padding-bottom: 245px; }
   .mobile-metric-card { display: block; }
   .metric-badge, #metric-leaders, .metric-drag { display: none; }
   .metric-card-heading { grid-template-columns: minmax(0, 1fr) 17px; }
@@ -352,6 +382,7 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
   .metric-controls button { font-size: 9px; padding: 5px; }
   .metric-controls .metric-provenance { font-size: 8px; letter-spacing: .3px; }
   .metric-detail-grid { grid-template-columns: 1fr; }
+  .metric-capacity-grid { grid-template-columns: 1fr; }
   .metric-core-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .metric-lab-controls { gap: 8px; padding: 10px 14px 4px; }
   .metric-panel-nav { padding: 8px 14px; }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber } from "./metric-model.mjs";
+import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, chartNumber, temperatureLevel, storageDetails } from "./metric-model.mjs";
 
 test("synthetic channels are deterministic and remain inside their declared graph ranges", () => {
   for (const profile of Object.keys(demoProfiles)) {
@@ -59,6 +59,51 @@ test("history windows keep their exact endpoints and regenerate for the selected
     assert.equal(values.at(-1), demoValue("cpu", 400, "transcode"));
   }
   assert.notDeepEqual(demoSeries("cpu", 300, 60, "idle"), demoSeries("cpu", 300, 60, "transcode"));
+});
+
+test("multi-hour histories retain full lookback with a bounded render cost", () => {
+  for (const seconds of [900, 1800, 3600, 7200, 21600, 86400]) {
+    const series = demoSeries("temp-cpu", 86400, seconds);
+    assert.equal(series.length, 301);
+    assert.equal(series[0], demoValue("temp-cpu", 86400 - seconds));
+    assert.equal(series.at(-1), demoValue("temp-cpu", 86400));
+    assert.equal(series[150], demoValue("temp-cpu", 86400 - seconds / 2));
+  }
+});
+
+test("overlaid traffic series use one shared domain and consistent units", () => {
+  const scale = sharedMetricScale(["net-bond0-rx", "net-bond0-tx"]);
+  assert.deepEqual(scale, { minimum: 0, maximum: 10000, unit: "Mb/s" });
+  assert.equal(chartNumber(1500, scale), "1.5 Gb/s");
+  assert.equal(chartNumber(700, scale), "0.7 Gb/s");
+  assert.equal(chartNumber(null, scale), "Unavailable");
+  assert.throws(() => sharedMetricScale(["cpu", "temp-cpu"]));
+  assert.throws(() => sharedMetricScale([]));
+});
+
+test("temperature bands distinguish component contexts and missing sensors", () => {
+  assert.deepEqual([10, 30, 45, 60, 75, 90].map(value => temperatureLevel("temp-cpu", value).label),
+    ["Cold", "Cool", "Moderate", "Warm", "Hot", "Dangerous"]);
+  assert.equal(temperatureLevel("temp-sda", 44).label, "Warm");
+  assert.equal(temperatureLevel("temp-sda", 45).label, "Hot");
+  assert.equal(temperatureLevel("temp-gpu", 45).label, "Moderate");
+  assert.equal(temperatureLevel("temp-cpu", null).label, "Unavailable");
+});
+
+test("storage details trace root, swap, cache and ordinary extents without losing RAID roles", () => {
+  const root = storageDetails("nvme0n1").layers.map(node => node.id);
+  assert.ok(root.includes("homeserver-vg") && root.includes("dm-0") && root.includes("dm-1"));
+  assert.ok(!root.includes("vg_redundant"));
+  const cache = storageDetails("nvme1n1").layers.map(node => node.id);
+  for (const id of ["vg_redundant", "dm-2", "dm-3", "dm-4", "dm-5", "data-filesystem"]) assert.ok(cache.includes(id), id);
+  assert.ok(!cache.includes("homeserver-vg"));
+  assert.match(storageDetails("sde").role, /HOT SPARE/);
+  assert.match(storageDetails("sda").role, /Array member/);
+  assert.throws(() => storageDetails("unknown"));
+  for (const profile of Object.keys(demoProfiles)) for (const second of [0, 300, 86400]) {
+    assert.equal(demoValue("fan-rear1", second, profile), 2000);
+    assert.equal(demoValue("fan-rear2", second, profile), 2000);
+  }
 });
 
 test("chart gaps remain unavailable, zero stays valid, and invalid bounds are rejected", () => {
