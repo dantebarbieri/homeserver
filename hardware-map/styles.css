@@ -121,8 +121,9 @@ main { width: 100%; }
 .connector text { fill: #e0e5d7; font-size: 10px; text-anchor: middle; pointer-events: none; }
 .connector circle { pointer-events: none; }
 .connector .header-pins { fill: #8099a2; }
-.connector[data-id^="DDR4"] rect, .connector[data-id^="PCIE"] rect { fill: #1c2921; stroke: #cbcfc0; }
-.connector[data-id="PCIE3"] rect, .connector[data-id="PCIE5"] rect, .connector[data-id="DDR4_A1"] rect, .connector[data-id="DDR4_H1"] rect { fill: #253f67; }
+.connector[data-id^="DDR4"] rect { fill: #1c2921; stroke: #cbcfc0; }
+.connector[data-id^="PCIE"] rect { fill: #1c2021; stroke: #cbcfc0; }
+.connector[data-id="DDR4_A1"] rect, .connector[data-id="DDR4_H1"] rect { fill: #253f67; }
 .connector[data-id^="FAN"] rect { fill: #c4c4a9; }
 .connector[data-id^="FAN"] text { fill: #18221e; }
 .connector[data-id^="LAN"] rect, .connector[data-id="IPMI_LAN1"] rect, .connector[data-id="REAR_OTHER"] rect { fill: #a4aca5; stroke: #56665c; }
