@@ -170,7 +170,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       node.querySelector(".metric-capacity-bar span").style.width = `${used / definition.maximum * 100}%`;
       node.querySelector("[data-capacity-value]").textContent = `${(used / definition.maximum * 100).toFixed(1)}%`;
       node.querySelector("[data-capacity-used]").textContent = `${used.toFixed(2)} / ${definition.maximum.toFixed(2)} ${definition.unit}`;
-      node.querySelector("[data-capacity-free]").textContent = `${(definition.maximum - used).toFixed(2)} free · DEMO`;
+      node.querySelector("[data-capacity-free]").textContent = `${(definition.maximum - used).toFixed(2)} ${definition.unit} free · DEMO`;
     }
     for (const [id, node] of badges) {
       const badge = metricBadges.find(b => b.id === id);
