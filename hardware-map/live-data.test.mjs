@@ -2,6 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { LiveData, historyValues } from "./live-data.mjs";
 
+test("the browser fetch implementation retains its required global receiver", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async function () {
+    assert.equal(this, globalThis);
+    return { ok: true, json: async () => ({ version: 1, mode: "live", capturedAt: new Date().toISOString(), intervalSeconds: 5, metrics: { cpu: 17 } }) };
+  };
+  try {
+    const source = new LiveData({ enabled: true });
+    await source.poll();
+    assert.equal(source.error, "");
+    assert.equal(source.value("cpu"), 17);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("live zero remains valid while missing, failed and stale readings never become demo values", async () => {
   let now = 100000;
   let fail = false;

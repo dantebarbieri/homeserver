@@ -388,6 +388,27 @@ class Collector:
             lvm = json.loads(self.runner("lvs"))["report"]
         except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
             issues.append(f"lvs: metadata unavailable ({type(error).__name__}); kernel dependencies only")
+        mapper_nodes = {}
+        for name, node in nodes.items():
+            path = self.sys / "class" / "block" / name / "dm" / "name"
+            if path.exists():
+                mapper = self.text(path)
+                mapper_nodes[mapper] = name
+                node["aliases"] = ["/dev/mapper/" + mapper]
+        logical_volumes = {}
+        for report in lvm or []:
+            for volume in report.get("lv", []):
+                group = str(volume.get("vg_name", "")).strip()
+                name = str(volume.get("lv_name", "")).strip().strip("[]")
+                logical_volumes.setdefault((group, name), []).append(volume)
+                mapper = group.replace("-", "--") + "-" + name.replace("-", "--")
+                node = nodes.get(mapper_nodes.get(mapper))
+                if node is not None:
+                    alias = f"/dev/{group}/{name}"
+                    if alias not in node["aliases"]:
+                        node["aliases"].append(alias)
+                    segment = f"{group}/{name} · {str(volume.get('segtype', '')).strip()} · {str(volume.get('devices', '')).strip()}"
+                    node["summary"] = " · ".join(filter(None, [node["summary"], segment]))
         for mount, name in mounts.items():
             filesystem_id = "root-filesystem" if mount == "/" else "data-filesystem"
             nodes[filesystem_id] = {"id": filesystem_id, "label": mount, "kind": "Mounted filesystem",
@@ -408,11 +429,35 @@ class Collector:
             return found
 
         root_backing = ancestors(mounts["/"]) if "/" in mounts else set()
+        def volume_backing(group, name, visited=None):
+            visited = set() if visited is None else visited
+            key = (group, name)
+            if key in visited:
+                return set()
+            visited.add(key)
+            backing = set()
+            for volume in logical_volumes.get(key, []):
+                for device in str(volume.get("devices", "")).split(","):
+                    device = re.sub(r"\(\d+\)$", "", device.strip())
+                    if device.startswith("/dev/"):
+                        target = device.rsplit("/", 1)[-1]
+                        target = mapper_nodes.get(target, target)
+                        if target in nodes:
+                            backing.update(ancestors(target))
+                    elif device:
+                        backing.update(volume_backing(group, device.strip("[]"), visited))
+            return backing
+
         cache_backing = set()
         for report in lvm or []:
             for logical_volume in report.get("lv", []):
                 if str(logical_volume.get("segtype", "")).strip() != "cache-pool":
                     continue
+                # --readonly intentionally reports kernel numbers as -1 on some
+                # LVM versions; follow on-disk segment references in that case.
+                cache_backing.update(volume_backing(
+                    str(logical_volume.get("vg_name", "")).strip(),
+                    str(logical_volume.get("lv_name", "")).strip().strip("[]")))
                 major = str(logical_volume.get("lv_kernel_major", "")).strip()
                 minor = str(logical_volume.get("lv_kernel_minor", "")).strip()
                 if major.isdigit() and minor.isdigit():

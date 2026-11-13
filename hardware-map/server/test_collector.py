@@ -213,6 +213,28 @@ class AssignmentTests(WorkspaceTest):
             release.set()
             instance.close()
 
+    def test_readonly_lvm_cache_segments_work_without_kernel_device_numbers(self):
+        devices = [{"name": "nvme7n1", "type": "disk", "serial": "SYNTH-CACHE",
+                    "children": [{"name": "nvme7n1p1", "type": "part", "children": [
+                        {"name": "cache-data", "kname": "dm-2", "type": "lvm"}]}]}]
+        rows = [
+            {"vg_name": "vg-test", "lv_name": "[cache-pool]", "segtype": "cache-pool",
+             "lv_kernel_major": "-1", "lv_kernel_minor": "-1", "devices": "cache-data(0)"},
+            {"vg_name": "vg-test", "lv_name": "[cache-data]", "segtype": "linear",
+             "lv_kernel_major": "-1", "lv_kernel_minor": "-1", "devices": "/dev/nvme7n1p1(11)"},
+        ]
+        self.write("sys/class/block/dm-2/dm/name", "vg--test-cache--data")
+
+        def runner(source):
+            return json.dumps({"blockdevices": devices} if source == "lsblk" else {"report": [{"lv": rows}]})
+
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        self.assertEqual(inventory["disks"][0]["role"], "cache")
+        node = next(n for n in inventory["snapshot"]["nodes"] if n["id"] == "dm-2")
+        self.assertIn("/dev/vg-test/cache-data", node["aliases"])
+        self.assertIn("linear", node["summary"])
+
     def test_smart_rejects_identity_change_and_has_no_wakeup_retry(self):
         calls = []
 

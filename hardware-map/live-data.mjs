@@ -10,7 +10,7 @@ export function historyValues(points, end, seconds, step) {
 }
 
 export class LiveData {
-  constructor({ enabled, fetcher = fetch, clock = () => Date.now() }) {
+  constructor({ enabled, fetcher = (...args) => globalThis.fetch(...args), clock = () => Date.now() }) {
     this.mode = enabled ? "live" : "demo";
     this.fetcher = fetcher;
     this.clock = clock;
