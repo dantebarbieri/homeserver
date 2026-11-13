@@ -45,6 +45,138 @@ integrity checks as everything else. These checks detect damage, not perceptual
 quality loss; compare representative samples before changing CRF or bit depth.
 HandBrake `--scan` health checks are not a substitute for complete decoding.
 
+### Native Mac Studio offload (disabled canary, not migrated)
+
+`homeserver-hevc-studio-v1` is a **separate versioned flow** for Tdarr
+3.07.00 on Linux and native `darwin_arm64` on the Studio. The three active TV
+libraries remain on `homeserver-hevc-cpu-v1`; neither that module/flow nor the
+Linux NVIDIA DV5 flow is modified. No Pro license is required: the Mac must be
+a **mapped** node, not an unmapped uploader.
+
+The flow hands off with the upstream `tagsWorkerType` plugin (required
+worker type `CPU`, `queueTags` requeueing):
+
+1. `homeserver-storage`: eligibility, source fingerprint and stream contract
+   are captured on Linux in a private per-job manifest.
+2. `studio-native`: software `libx265`, `slow`, the existing library `crf`
+   variable (20 for the new canary), `pools=4`, and the source pixel format.
+   All streams are mapped, non-video streams copied, metadata/chapters copied
+   and dispositions explicitly preserved. No VideoToolbox, GPU decode,
+   resizing, HDR conversion or audio/subtitle re-encoding is introduced.
+3. `homeserver-storage`: accept only the manifest's exact job/token/output
+   path. Open the untrusted cache directory and file with pinned Linux
+   `/proc/self/fd` handles and `O_NOFOLLOW`; reject symlinks, non-regular
+   files, hardlinks, empty files, and outputs larger than twice the source.
+   Copy those opened bytes into Linux-private staging **before** any probe or
+   decode. Returned variables cannot replace the authoritative source
+   identity or stream contract. The unchanged `hevc-safe-v1.cjs` then validates
+   and publishes only the private bytes, including its full decode, source
+   fingerprint checks, 5% savings requirement and recoverable atomic
+   publication. Only successful publication reaches the existing Sonarr
+   notification; benign skips retain the original and do not notify.
+
+#### Deployment contract
+
+The parent deployment must provision these boundaries first; the installer
+does not create accounts, shares, transport, tags or native service units:
+
+| Linux controller/node path | Mac mapped path / access |
+|---|---|
+| `/data/media` | `/var/lib/studio-worker/mounts/media`, SMB **read-only** |
+| `/temp/studio-native` | `/var/lib/studio-worker/mounts/cache`, SMB writable |
+
+Only the latter Linux subtree is writable by the Mac; its host backing path
+is `/tmp/tdarr_transcode_cache/studio-native`. Do **not** export all of `/temp`,
+Tdarr `Custom`, its state, or original media writable. Linux roots must be
+canonical paths without symlinks. The normal macOS `/var` to `/private/var`
+root alias is supported, but symlinks below mapped roots are rejected.
+The Linux cache root and its parent must not be
+replaceable by the SMB account. Permit the existing Linux Tdarr user and the
+authenticated SMB account to read/write the job directories and results
+(including group inheritance/ACLs as needed); do not solve this by opening
+the private state directory.
+
+Linux needs these sibling files in `/app/server/Tdarr/Custom`:
+`hevc-studio-v1.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`,
+`install-studio-flow.cjs`, and the existing `install-flow.cjs`. Private state
+is `Custom/state/studio-native-v1`, owned by the Linux Tdarr user, **0700**;
+manifests, locks, outcomes and staged files are **0600**. It must remain outside
+every Mac-writable export. The helper also checks actual platform, CPU worker
+type and tags at runtime; tags alone are scheduling, not filesystem isolation.
+
+On the Mac, install `hevc-studio-v1.cjs` and its builtins-only dependency
+`dv5-sidecar.cjs` as sibling files at
+`/var/lib/studio-worker/tdarr/Custom/`. Configure the native node's
+`ffmpegPath` explicitly as `/opt/homebrew/bin/ffmpeg` (with the sibling
+`ffprobe`; checked installation: FFmpeg 9.0.2 / x265 4.3).
+Run native processes as isolated `_studio`, with a private home and no admin
+keys. Begin with **one CPU transcode worker, zero GPU and zero health
+workers**; the Linux storage node still needs an available CPU worker for
+preparation and final verification. Assign `homeserver-storage` only to the
+Linux storage node and `studio-native` only to the Mac. Keep the existing
+authenticated Tdarr HTTPS endpoint; no new public proxy route is needed.
+Native encoding uses the installed Tdarr CLI helper for worker progress and
+cancellation, refusing an untracked subprocess if that helper is unavailable.
+
+Authenticated Tdarr API access, node identity, installed plugins and both node
+processes remain trusted. The private-copy boundary prevents shared-cache path
+redirection and mutable-byte publication; it is **not a sandbox for malicious
+Tdarr plugins** or a proof of perceptual quality/encoder provenance.
+
+#### Canary and later activation
+
+After deploying the files and share permissions, preview, then explicitly
+create the disabled canary (run as the existing Linux Tdarr user):
+
+```bash
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/install-studio-flow.cjs
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/install-studio-flow.cjs --apply
+```
+
+The installer backs up live flows/libraries/variables to a sensitive 0600
+`Custom/backups/studio-flow-*.json`, creates only the new immutable flow,
+`homeserver-hevc-studio-canary-v1` library and its own CRF 20 variable, then
+reads the records back. There is deliberately **no `--enable` mode**. Existing
+versioned flows must match exactly, and an already-enabled canary is rejected
+rather than overwritten. Workers, global scheduling, real libraries and
+existing CRFs are never updated.
+
+Place a **disposable copy**, not a hardlink, of representative eligible SDR
+media in `/data/media/tdarr-studio-canary` on Linux. That directory must not
+be watched by any other library, and the copy must have settled for three
+minutes (the prepare helper also rejects sources newer than two minutes).
+The parent operator can then explicitly enable only canary processing, scan
+that folder and queue one file, keeping watchers/startup scans/health checks
+off. Confirm both handoffs in the job report, the Homebrew software encode,
+the private manifest/outcome on Linux, complete Linux decode, expected savings,
+tracks/chapters/metadata, playback and visual quality. Verify the Mac cannot
+write originals or read private state. Stop the canary after the sample.
+
+This repository's automated tests exercise real Linux descriptor/path
+boundaries and private-copy publication with mocked probes/decodes. They do
+not replace the parent's **actual cross-node media canary**: mapped path
+translation, persistent `job.jobId`/flow variables across requeue, native
+process cancellation, SMB permissions and the installed FFmpeg build must
+be checked end-to-end before migration.
+
+For any later real-library activation, snapshot library/flow/variable/node
+settings first; guard/pause new work, drain active jobs, and deliberately
+change only the intended libraries' flow IDs. Preserve their existing `crf`
+variables and retain both old flows/modules until all old jobs finish.
+Rollback is an explicit restoration of the saved settings after draining
+native jobs, not rerunning this installer. Do not edit a versioned module
+while its jobs are active.
+
+Successful jobs and no-saving skips unlink only the known shared result and
+remove its now-empty job directory through pinned handles. Cleanup failures
+are logged without misreporting a completed publication. Failed jobs retain
+their shared output and private manifest/commit lock for diagnosis; private
+staging is removed. Locks prevent replay/parallel commits: inspect originals,
+outcomes and any `.partial.old` recovery files before retrying as a **new job**.
+Never blindly delete a lock to resume a possibly published job. Retire only
+finished, positively identified job directories/manifests after draining work;
+monitor cache capacity and private-state retention.
+
 For existing size-policy errors, first preview, then deliberately apply:
 
 ```bash
