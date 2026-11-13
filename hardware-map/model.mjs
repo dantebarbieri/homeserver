@@ -9,9 +9,9 @@ const isRecord = value => value !== null && typeof value === "object" && !Array.
 export const fanMotionStages = [
   { id: "stopped", label: "Stopped", example: 0, ceiling: 0, period: 0, bladeOpacity: 1, rings: 0, segments: 0, sweep: 0 },
   { id: "slow", label: "Slow", example: .12, ceiling: .2, period: 10, bladeOpacity: 1, rings: 0, segments: 0, sweep: 0 },
-  { id: "medium", label: "Medium", example: .35, ceiling: .45, period: 4, bladeOpacity: .92, rings: 1, segments: 6, sweep: 24 },
-  { id: "fast", label: "Fast", example: .6, ceiling: .7, period: 2, bladeOpacity: .68, rings: 2, segments: 6, sweep: 34 },
-  { id: "very-fast", label: "Very fast", example: .82, ceiling: .9, period: 1.2, bladeOpacity: .48, rings: 3, segments: 8, sweep: 31 },
+  { id: "medium", label: "Medium", example: .35, ceiling: .45, period: 2.2, bladeOpacity: .92, smear: 12, rings: 1, segments: 6, sweep: 24 },
+  { id: "fast", label: "Fast", example: .6, ceiling: .7, period: 1.25, bladeOpacity: .68, smear: 25, rings: 2, segments: 6, sweep: 34 },
+  { id: "very-fast", label: "Very fast", example: .82, ceiling: .9, period: .9, bladeOpacity: .48, smear: 38, rings: 3, segments: 8, sweep: 31 },
   { id: "max", label: "Maximum", example: 1, ceiling: 1, period: .75, bladeOpacity: .28, rings: 3, segments: 12, sweep: 24 },
 ];
 

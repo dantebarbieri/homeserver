@@ -246,7 +246,6 @@ function drawFan(parent, x, y, size, redux = false, fraction = null) {
   const rotor = svgElement("g", { class: "fan-rotor" });
   for (let angle = 0; angle < 360; angle += 60) {
     rotor.append(svgElement("path", {
-      d: `M${x + size * .5} ${y + size * .49} Q${x + size * .07} ${y + size * .18} ${x + size * .45} ${y + size * .08} Q${x + size * .77} ${y + size * .09} ${x + size * .57} ${y + size * .48} Z`,
       transform: `rotate(${angle} ${x + size / 2} ${y + size / 2})`, class: "fan-blade",
     }));
   }
@@ -268,10 +267,18 @@ function applyFanMotion(fan, fraction) {
   const size = Number(fan.dataset.size);
   const cx = Number(fan.dataset.centerX);
   const cy = Number(fan.dataset.centerY);
+  const x = cx - size / 2, y = cy - size / 2;
+  const smear = stage?.smear ?? 0;
+  const point = (radius, angle) => `${cx + size * radius * Math.cos(angle * Math.PI / 180)} ${cy + size * radius * Math.sin(angle * Math.PI / 180)}`;
+  const blade = smear
+    ? `M${point(.13, -135)} Q${point(.32, -150 - smear * .3)} ${point(.42, -104 - smear)} A${size * .42} ${size * .42} 0 0 1 ${point(.42, -74 + smear * .15)} Q${point(.32, -45)} ${point(.13, -30)} Z`
+    : `M${x + size * .5} ${y + size * .49} Q${x + size * .07} ${y + size * .18} ${x + size * .45} ${y + size * .08} Q${x + size * .77} ${y + size * .09} ${x + size * .57} ${y + size * .48} Z`;
+  for (const path of fan.querySelectorAll(".fan-blade")) path.setAttribute("d", blade);
+  fan.style.setProperty("--fan-line-opacity", smear ? .42 : .72);
   for (let ring = 0; ring < (stage?.rings ?? 0); ring += 1) {
-    const radius = size * (.24 + ring * .075);
+    const radius = size * (smear ? .34 + ring * .035 : .24 + ring * .075);
     for (let segment = 0; segment < stage.segments; segment += 1) {
-      const start = (segment * 360 / stage.segments + ring * 13) * Math.PI / 180;
+      const start = (segment * 360 / stage.segments + (smear ? -96 - stage.sweep + ring * 7 : ring * 13)) * Math.PI / 180;
       const end = start + stage.sweep * Math.PI / 180;
       lines.append(svgElement("path", {
         d: `M${cx + Math.cos(start) * radius} ${cy + Math.sin(start) * radius} A${radius} ${radius} 0 0 1 ${cx + Math.cos(end) * radius} ${cy + Math.sin(end) * radius}`,

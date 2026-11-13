@@ -42,7 +42,9 @@ node --test hardware-map/model.test.mjs
   for saved/tab-only annotations, including recovery after a storage failure.
 - **Fan motion** previews six artistic case-fan stages: stopped, slow, medium,
   fast, very fast and maximum. The slow stage uses unchanged blades with gentle
-  rotation; faster stages shorten the visual rotation period and add 6/12/24/36
+  rotation; medium/fast/very-fast widen the blades into swept motion smears with
+  softer tip streaks, rotating once per 2.2/1.25/0.9 seconds. Maximum retains its
+  0.75-second rotation and dense speed-line look. Higher stages add 6/12/24/36
   curved speed lines while fading the blades. Frames and hubs remain stationary.
   The chooser shows animated examples, applies a stage to all eight case fans,
   or compares all stages on the map (including rear-fan examples).

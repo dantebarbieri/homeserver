@@ -103,7 +103,7 @@ main { width: 100%; }
 .fan-rotor, .fan-speed-lines { transform-box: fill-box; transform-origin: center; }
 .fan-rotor { opacity: var(--fan-blade-opacity, 1); }
 .fan-rotation-enabled .fan-face[data-spinning="true"] .fan-rotor, .fan-rotation-enabled .fan-face[data-spinning="true"] .fan-speed-lines { animation: fan-whirl var(--fan-period) linear infinite; }
-.fan-speed-line { fill: none; stroke: #a8b8b5; stroke-width: 1.2; stroke-linecap: round; opacity: .72; }
+.fan-speed-line { fill: none; stroke: #a8b8b5; stroke-width: 1.2; stroke-linecap: round; opacity: var(--fan-line-opacity, .72); }
 .fan-motion-caption { fill: #283d38; font-size: 10px; font-weight: 600; }
 .fan-rotation-enabled .hardware-part[aria-disabled="true"] .fan-rotor, .fan-rotation-enabled .hardware-part[aria-disabled="true"] .fan-speed-lines,
 #fan-motion-dialog:not([open]) .fan-rotor, #fan-motion-dialog:not([open]) .fan-speed-lines { animation-play-state: paused; }
