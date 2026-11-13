@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { connectors, connectorById, landscapeBounds, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, fanAvailability, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
+import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, fanAvailability, matchesHardware, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
 
 const now = "2026-11-12T21:30:00.000Z";
 const annotation = { target: "CPU cooler via splitter", confidence: "confirmed", occupancy: "occupied", evidence: "Cable physically traced; example test evidence", note: "Both branches checked" };
@@ -10,6 +10,25 @@ test("board connectors are unique and a blank annotation document has no assigne
   assert.equal(connectorById.size, connectors.length);
   const counts = connectionCounts(emptyDocument());
   assert.deepEqual(counts, { confirmed: 0, inferred: 0, unknown: connectors.length });
+});
+
+test("hardware filters include off-board parts, overlapping categories and model search", () => {
+  const fan = { id: "middle-fan-3", componentId: "case-fans", label: "Middle fan 3", model: "Noctua NF-P12 redux-1700 PWM" };
+  const hub = { id: "fan-hub", componentId: "fan-hub", label: "Thermalright hub" };
+  const drive = { id: "drive-M2_1", componentId: null, label: "M2_1", model: "Samsung 990 EVO" };
+  assert.ok(matchesHardware(fan, "Cooling", " REDUX "));
+  assert.ok(matchesHardware(fan, "*", "middle-fan-3"));
+  assert.ok(matchesHardware(fan, "*", "cooling"));
+  assert.equal(matchesHardware(fan, "Storage", "redux"), false);
+  assert.equal(matchesHardware(fan, "Cooling", "Samsung"), false);
+  assert.ok(matchesHardware(hub, "Cooling"));
+  assert.ok(matchesHardware(hub, "Power"));
+  assert.ok(matchesHardware({ id: "psu", label: "HX1000i" }, "Power"));
+  assert.ok(matchesHardware({ id: "chassis", label: "Rosewill" }, "Chassis"));
+  assert.ok(matchesHardware({ id: "disk-bays", componentId: "disks", label: "12 HDDs" }, "Storage"));
+  assert.ok(matchesHardware(drive, "Storage", "990 EVO"));
+  assert.equal(matchesHardware(drive, "Memory"), false);
+  assert.equal(matchesHardware(fan, "Fans"), false, "connector categories are separate from hardware categories");
 });
 
 test("landscape projection rotates connector order without mutating manual geometry or pin functions", () => {

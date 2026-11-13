@@ -257,6 +257,17 @@ const nvmeReference = {
   url: "https://download.semiconductor.samsung.com/resources/data-sheet/samsung_nvme_ssd_990_evo_datasheet_rev.1.1.pdf",
   note: "Revision 1.1; covers the confirmed MZ-V9E2T0B family. Specifications are not live measurements.",
 };
+export const hardwareCategories = {
+  Compute: ["cpu", "gpu"],
+  Memory: ["memory"],
+  Storage: ["disks", "nvme-a", "nvme-b", "drive-M2_1", "drive-M2_2", "hba"],
+  Cooling: ["cpu", "case-fans", "rear-fans", "fan-hub"],
+  Expansion: ["gpu", "hba"],
+  Power: ["psu", "fan-hub"],
+  Chassis: ["chassis"],
+  Motherboard: ["board"],
+};
+
 export const partReferences = {
   board: [motherboardReference],
   chassis: [chassisReference],

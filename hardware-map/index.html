@@ -15,12 +15,16 @@
     <section id="board-view" class="board-workspace" aria-label="Server hardware map">
       <header class="map-toolbar">
         <h1>Server Atlas</h1>
-        <label class="sr-only" for="filter">Find a connector</label><input id="filter" type="search" placeholder="Find a header or slot…">
+        <label id="filter-label" class="sr-only" for="filter">Find hardware</label><input id="filter" type="search" placeholder="Find a component…">
         <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
         <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">Tools & info</button>
       </header>
-      <section class="connector-nav panel" aria-label="Connector focus">
-        <nav id="categories" aria-label="Connector categories"></nav>
+      <section class="connector-nav panel" aria-label="Hardware and connector filters">
+        <div id="focus-modes" role="group" aria-label="Inspect">
+          <button type="button" data-mode="hardware" aria-pressed="true">Hardware</button>
+          <button type="button" data-mode="connectors" aria-pressed="false">Connectors</button>
+        </div>
+        <nav id="categories" aria-label="Hardware categories"></nav>
         <p id="focus-status" class="sr-only" role="status"></p>
         <details id="connector-picker" hidden><summary>Connector list</summary><div id="connector-list" class="connector-list"></div></details>
       </section>

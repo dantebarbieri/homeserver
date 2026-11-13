@@ -40,8 +40,15 @@ node --test hardware-map/model.test.mjs
   inspection notes, JSON import/export, telemetry and inventory. These remain
   available without surrounding the map. A connector popup also offers export
   for saved/tab-only annotations, including recovery after a storage failure.
-- Compact top category buttons and connector search enter connector focus.
-  Hardware dims and is disabled for pointer/keyboard selection; nonmatching
+- Compact **Hardware / Connectors** controls choose what the category chips and
+  search filter. Hardware categories cover compute, memory, storage, cooling,
+  expansion cards, power, chassis and motherboard, including off-board parts.
+  A part can belong to multiple categories (for example the HBA is storage and
+  expansion). Nonmatching parts dim and cannot intercept pointer/keyboard
+  selection; matching parts still open their details. **All hardware** restores
+  all component targets. Search matches part labels, models and categories.
+  **Connectors** retains the motherboard's original category filters and search.
+  In connector mode, hardware dims and is disabled for pointer/keyboard selection; nonmatching
   connectors also dim and cannot intercept clicks. Choosing a category only
   filters the map; it does not open a popup. **Hardware** restores component
   selection. The compact **Connector list** provides searchable keyboard

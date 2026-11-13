@@ -39,7 +39,10 @@ main { width: 100%; }
 .summary > div:nth-child(2) strong { color: var(--amber); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; }
 .board-workspace { height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 8px; padding: 10px; }
-.connector-nav { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px; flex-shrink: 0; }
+.connector-nav { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px; flex-shrink: 0; }
+#focus-modes { display: flex; gap: 3px; flex-shrink: 0; border-right: 1px solid var(--line); padding-right: 8px; }
+#focus-modes button { font-size: 10px; padding: 7px 8px; }
+#focus-modes button.active { background: #243f36; color: #baebcf; border-color: #5e8a70; }
 .fan-overview { display: grid; grid-template-columns: 1fr 1fr 1.35fr 1.3fr; gap: 20px; padding: 18px; }
 .fan-overview > div { display: grid; gap: 7px; align-content: start; }
 .fan-overview strong { font-size: 15px; color: #b7dfd4; font-weight: 500; }
@@ -47,7 +50,7 @@ main { width: 100%; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .panel-heading p { font-size: 10px; color: var(--muted); margin-top: 5px; }
 .panel-heading > span { font-size: 10px; color: #8096a9; }
-#categories { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+#categories { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; }
 #categories button { font-size: 10px; padding: 7px 10px; background: transparent; border-color: transparent; }
 #categories button.active { background: #243f36; color: #baebcf; border-color: #5e8a70; }
 #connector-picker summary { cursor: pointer; padding: 7px; color: var(--muted); font-size: 10px; white-space: nowrap; }
@@ -128,7 +131,8 @@ main { width: 100%; }
 .connector[data-id^="FAN"] text { fill: #18221e; }
 .connector[data-id^="LAN"] rect, .connector[data-id="IPMI_LAN1"] rect, .connector[data-id="REAR_OTHER"] rect { fill: #a4aca5; stroke: #56665c; }
 .connector[data-id^="LAN"] text, .connector[data-id="IPMI_LAN1"] text, .connector[data-id="REAR_OTHER"] text { fill: #182c24; }
-.connector-focus .connector.out-of-focus { opacity: .13; pointer-events: none; }
+.connector.out-of-focus { opacity: .13; }
+.connector[aria-disabled="true"] { pointer-events: none; }
 .connector-focus .connector:not(.out-of-focus) rect { stroke-width: 2; }
 .connector[data-confidence="confirmed"] rect { stroke: var(--accent); }
 .connector[data-confidence="inferred"] rect { stroke: var(--amber); stroke-dasharray: 4 2; }
@@ -226,4 +230,5 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .inspection h3 { margin-top: 9px; line-height: 1.5; }
 .inspection > p { font-size: 12px; line-height: 1.9; color: var(--muted); }
 @media (max-width: 880px) { .fan-overview { grid-template-columns: 1fr 1fr; } .reading-grid, .inventory-grid { grid-template-columns: repeat(2, 1fr); } .case-layout { grid-template-columns: 1fr; } .inspection { grid-template-columns: 1fr; gap: 12px; } .telemetry-toolbar { align-items: start; flex-direction: column; } }
+@media (max-width: 540px) { #categories { flex-basis: 100%; } #focus-modes { border-right: 0; padding-right: 0; } }
 @media (max-width: 540px) { .board-workspace { padding: 6px; gap: 6px; } .map-toolbar { flex-wrap: wrap; gap: 8px; } .map-toolbar input { order: 4; width: 100%; margin: 0; } .map-toolbar .zoom-controls { margin-left: auto; } #categories button { padding: 7px 8px; } .connector-nav { align-items: start; } #connector-picker summary { font-size: 9px; padding: 7px 3px; } .summary { grid-template-columns: 1fr; } .popup-body { padding: 16px; } .popup-heading { padding: 10px 14px; } .popup-heading h2 { font-size: 15px; } .air-controls { grid-template-columns: 1fr; gap: 8px; } .air-controls output { text-align: left; } .fan-overview { padding: 10px 0; gap: 15px; } }

@@ -1,11 +1,12 @@
-import { connectors, connectorById, components, partReferences, boardRevision, landscapeBounds, inspectionConnections, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, connectionCounts, fanAvailability, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
+import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, inspectionConnections, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
+import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, connectionCounts, fanAvailability, matchesHardware, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
 let selectedId = "FAN1";
 let selectedPartId = "cpu";
-let activeCategory = "";
+let focusMode = "hardware";
+let activeCategory = "*";
 const componentById = new Map(components.map(component => [component.id, component]));
 const sceneParts = new Map();
 let mode = "snapshot";
@@ -185,13 +186,18 @@ function selectComponent(id) {
 }
 
 function connectorFocus() {
-  return Boolean(activeCategory || $("filter").value.trim());
+  return focusMode === "connectors";
 }
 
 function matchesFocus(connector) {
   const search = $("filter").value.trim().toLowerCase();
-  return (!activeCategory || activeCategory === "*" || connector.category === activeCategory) &&
+  return (activeCategory === "*" || connector.category === activeCategory) &&
     `${connector.id} ${connector.label} ${connector.category}`.toLowerCase().includes(search);
+}
+
+function matchesPart(part) {
+  const component = componentById.get(part.componentId);
+  return matchesHardware({ ...part, model: component?.model ?? part.model }, activeCategory, $("filter").value);
 }
 
 function interactiveGroup(className, id, label, onSelect) {
@@ -213,7 +219,7 @@ function interactiveGroup(className, id, label, onSelect) {
 }
 
 function hardwarePart(id, componentId, label, placement, connectorIds = [], extra = {}) {
-  sceneParts.set(id, { componentId, label, placement, connectorIds, ...extra });
+  sceneParts.set(id, { id, componentId, label, placement, connectorIds, ...extra });
   return interactiveGroup("hardware-part", id, label, () => {
     if (connectorFocus()) return;
     selectComponent(id);
@@ -381,7 +387,7 @@ function renderBoard() {
   hba.append(svgElement("text", { x: 1193, y: hbaSlot.y + 12, class: "hardware-label" }, "HBA / PCIE1"));
   hardware.append(hba);
   hardware.append(svgElement("text", { x: 590, y: 742, class: "scene-note" }, "COMPONENT OUTLINES ≠ MEASURED FOOTPRINTS"));
-  hardware.append(svgElement("text", { x: 590, y: 761, class: "scene-note" }, "SELECT A CONNECTOR CATEGORY TO SEE THROUGH HARDWARE"));
+  hardware.append(svgElement("text", { x: 590, y: 761, class: "scene-note" }, "HARDWARE FILTERS PARTS · CONNECTORS REVEAL HEADERS"));
   board.append(hardware);
 }
 
@@ -413,26 +419,32 @@ function renderList() {
 function renderFocus() {
   const focused = connectorFocus();
   $("board").classList.toggle("connector-focus", focused);
+  for (const button of $("focus-modes").children) {
+    const active = button.dataset.mode === focusMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
   for (const button of $("categories").children) {
-    const active = button.dataset.category === activeCategory && (button.dataset.category !== "" || !focused);
+    const active = button.dataset.category === activeCategory;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   }
   for (const group of $("board").querySelectorAll(".hardware-part")) {
-    group.setAttribute("tabindex", focused ? "-1" : "0");
-    group.setAttribute("aria-disabled", String(focused));
+    const available = !focused && matchesPart(sceneParts.get(group.dataset.id));
+    group.setAttribute("tabindex", available ? "0" : "-1");
+    group.setAttribute("aria-disabled", String(!available));
     group.classList.toggle("selected", group.dataset.id === selectedPartId);
     group.setAttribute("aria-pressed", String(group.dataset.id === selectedPartId));
   }
   for (const group of $("board").querySelectorAll(".connector")) {
     const available = focused && matchesFocus(connectorById.get(group.dataset.id));
-    group.classList.toggle("out-of-focus", focused && !available);
-    group.setAttribute("aria-disabled", String(focused && !available));
+    group.classList.toggle("out-of-focus", focused ? !available : activeCategory !== "*" || Boolean($("filter").value.trim()));
+    group.setAttribute("aria-disabled", String(!available));
     group.setAttribute("tabindex", available ? "0" : "-1");
   }
   $("focus-status").textContent = focused
     ? `${connectors.filter(matchesFocus).length} / ${connectors.length} connectors shown · hardware dimmed and disabled; outlines do not verify physical access.`
-    : "Hardware mode · click an installed component for details. Connector categories reveal headers beneath hardware.";
+    : `${[...sceneParts.values()].filter(matchesPart).length} / ${sceneParts.size} hardware parts shown · click a matching component for details. Switch to Connectors to inspect motherboard headers.`;
   renderList();
 }
 
@@ -629,18 +641,37 @@ window.addEventListener("storage", event => {
   }
 });
 $("filter").addEventListener("input", renderFocus);
-for (const [category, label] of [
-  ["", "Hardware"], ["*", "All connectors"],
-  ...[...new Set(connectors.map(connector => connector.category))].map(category => [category, category]),
-]) {
-  const button = element("button", { type: "button", "data-category": category, "aria-pressed": "false" }, label);
+function renderCategories() {
+  const focused = connectorFocus();
+  const categories = focused
+    ? [...new Set(connectors.map(connector => connector.category))]
+    : Object.keys(hardwareCategories);
+  $("categories").replaceChildren();
+  $("categories").setAttribute("aria-label", focused ? "Connector categories" : "Hardware categories");
+  $("filter-label").textContent = focused ? "Find a connector" : "Find hardware";
+  $("filter").placeholder = focused ? "Find a header or slot…" : "Find a component…";
+  $("connector-picker").open = false;
+  for (const category of ["*", ...categories]) {
+    const label = category === "*" ? focused ? "All connectors" : "All hardware" : category;
+    const button = element("button", { type: "button", "data-category": category, "aria-pressed": "false" }, label);
+    button.addEventListener("click", () => {
+      activeCategory = category;
+      $("filter").value = "";
+      renderFocus();
+    });
+    $("categories").append(button);
+  }
+}
+for (const button of $("focus-modes").children) {
   button.addEventListener("click", () => {
-    activeCategory = category;
+    focusMode = button.dataset.mode;
+    activeCategory = "*";
     $("filter").value = "";
+    renderCategories();
     renderFocus();
   });
-  $("categories").append(button);
 }
+renderCategories();
 for (const [value, label] of Object.entries(provenanceLabels)) $("provenance").append(element("option", { value }, label));
 $("board-revision").textContent = `ROMED8-2T · REV ${boardRevision}`;
 for (const component of components) $("component-options").append(element("option", { value: component.model }));

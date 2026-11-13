@@ -1,10 +1,19 @@
-import { boardId, connectorById, inspectionConnections, provenanceLabels } from "./board.mjs";
+import { boardId, connectorById, hardwareCategories, inspectionConnections, provenanceLabels } from "./board.mjs";
 
 export const storageKey = "homeserver.hardware-map.v1";
 export const confidenceValues = ["unknown", "inferred", "confirmed"];
 export const occupancyValues = ["unverified", "occupied", "free", "blocked"];
 export const maxImportBytes = 256 * 1024;
 const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
+
+export function matchesHardware(part, category, query = "") {
+  const categories = Object.entries(hardwareCategories)
+    .filter(([, ids]) => ids.includes(part.componentId ?? part.id))
+    .map(([name]) => name);
+  return (category === "*" || categories.includes(category)) &&
+    `${part.id} ${part.label} ${part.model ?? ""} ${categories.join(" ")}`
+      .toLowerCase().includes(query.trim().toLowerCase());
+}
 
 export function emptyDocument() {
   return { schemaVersion: 1, boardId, connections: {} };
