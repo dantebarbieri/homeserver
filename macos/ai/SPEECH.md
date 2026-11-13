@@ -65,6 +65,35 @@ sentence for the Japanese greeting. It returned text only; no subtitle timing
 was tested. These checks do not measure comparative accuracy, subtitle boundary
 error, film dialogue, songs, noisy mixes, or long audio.
 
+## Full-episode Whisper baseline
+
+The `_studio` MLX large-v3 adapter was exercised on separate local copies of
+three episodes against existing English subtitles. These are exploratory
+comparisons, not a speaker-reviewed accuracy assessment:
+
+* English transcription took 70 seconds for a 22m50s episode. A repeated
+  punctuation-only output loop spanned roughly 98–288 seconds and overlapped
+  about 90 word-bearing reference cues without word-bearing output. Processing
+  the same 200-second section independently recovered speech in both the
+  original mono mix and a separately extracted center-channel control. This
+  makes long-form decoder state a concern; it does not prove a specific cause.
+  A full-episode experiment with `condition_on_previous_text=False` eliminated
+  the punctuation loop and improved word-bearing reference-cue overlap from
+  527/630 to 623/630. It is not proof of semantic correctness, and has not
+  established whether that setting is preferable for other languages.
+* Japanese-to-English translation took 104 seconds for a 22m51s anime episode.
+  Dialogue-only reference cues overlapped most generated cues, but overlap
+  does not establish translation correctness or exclude hallucinations.
+* Telugu-to-English translation took 196 seconds for a 46m36s episode. Its
+  SRT contained two reversed-duration cues, one backward start time, and
+  repeated identical cues. The adapter now rejects invalid SRT timing rather
+  than returning it as a successful subtitle.
+
+The reference subtitles are not guaranteed verbatim transcripts; their timing
+and phrasing can differ legitimately from speech. A fluent human needs to
+review the content, including names, omissions and hallucinations. Do not
+enable production subtitle generation based on timing overlap or API success.
+
 ## Before selecting a default
 
 Use locally held, short, representative clips with trusted human transcripts,

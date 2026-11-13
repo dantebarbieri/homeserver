@@ -1,11 +1,11 @@
 # Mac Studio local AI
 
 The Studio can run Whisper with Apple MLX and Ollama natively, not in Colima.
-Nothing here changes the homeserver's existing Whisper endpoint. Open WebUI
-and an HTTP adapter for Whisper are not installed; no Bazarr compatibility is
-claimed. Whisper large-v3 is a comparison baseline, **not an established
-best model** for the target media. See [speech model evaluation](SPEECH.md)
-before choosing a subtitle or translation workflow.
+Nothing here changes the homeserver's existing Whisper endpoint or Bazarr
+settings. Open WebUI is not installed. Whisper large-v3 is a comparison
+baseline, **not an established best model** for the target media. See
+[speech model evaluation](SPEECH.md) before choosing a subtitle or translation
+workflow.
 
 ## Provisioning
 
@@ -70,6 +70,79 @@ sends only synthetic diagnostic text. Ollama's schema constrains output shape,
 not truth or safety: automation must independently validate all outputs and
 initially produce read-only shadow recommendations. Never give the model shell,
 deletion or restart authority.
+
+## Experimental Bazarr-compatible adapter
+
+The adapter implements the Bazarr Whisper provider's raw 16 kHz, mono,
+signed 16-bit little-endian PCM uploads: `POST /asr?task=transcribe|translate
+&language=<input-code>&output=srt&encode=false` and
+`POST /detect-language?encode=false`. Its optional `video_file` query value is
+ignored, never opened or logged. Other formats, encoded uploads, arbitrary
+models and arbitrary paths are not supported. The only model is the offline
+large-v3 snapshot at revision `49e6aa286ad60c14352c404340ded53710378a11`.
+It is a baseline to compare, not a promise of Telugu translation quality.
+
+The daemon listens on `127.0.0.1:9000`, does not authenticate clients, disables
+HTTP access logs, and runs as `_studio`. One job is accepted at a time; busy
+requests fail with 503. Each job loads a short-lived model process, which exits
+afterward so its memory can be reclaimed. Raw audio is limited to two hours
+(230,400,000 bytes), upload time to two minutes, and inference time to two
+hours. Temporary audio is private to the service account and removed after
+the job in normal operation; an abrupt process or system termination can
+leave private temporary files that require cleanup. Allow enough free disk for
+two copies of the upload and enough unified memory for Whisper, the audio and
+other workloads. Invalid, reversed or out-of-order SRT timestamps fail the
+request rather than being saved; this does not detect missing speech or
+hallucinations.
+
+Prepare the isolated account's model cache, including the pinned snapshot and
+all referenced blobs, as described above. Ensure `_studio` can read/traverse
+the shared Homebrew runtime without admin membership. From a trusted staging
+directory containing `pyproject.toml`, `uv.lock`, `whisper_adapter.py`,
+`whisper_worker.py` and the plist:
+
+```sh
+sudo install -d -o _studio -g staff -m 700 /var/lib/studio-worker/ai /var/lib/studio-worker/tmp /var/lib/studio-worker/logs
+sudo install -o _studio -g staff -m 600 pyproject.toml uv.lock whisper_adapter.py whisper_worker.py /var/lib/studio-worker/ai/
+sudo -u _studio env HOME=/var/lib/studio-worker TMPDIR=/var/lib/studio-worker/tmp PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin uv sync --project /var/lib/studio-worker/ai --frozen --no-dev
+sudo install -o root -g wheel -m 644 com.danteb.studio-whisper.plist /Library/LaunchDaemons/com.danteb.studio-whisper.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.danteb.studio-whisper.plist
+```
+
+`uv.lock` includes all dependencies; synchronization may download packages but
+model inference is offline. Restart by booting out the system job, replacing
+its files and bootstrapping it again. The service is experimental: do not
+change Bazarr to use it until a full episode is evaluated against independently
+verified reference subtitles, including translation meaning, omissions,
+hallucinations and timing.
+
+Bazarr has no dedicated authentication header for this provider. A later
+integration needs a restricted authenticated transport from Bazarr's container
+to the Studio's loopback listener (for example a dedicated SSH forwarding
+identity and tightly restricted local gateway). A host-loopback tunnel alone
+is not automatically reachable from a container. Do not expose port 9000 on
+the LAN or WAN, and do not assume DNS itself authenticates traffic. Verify the
+installed provider's error handling first: provider versions that save
+non-2xx response bodies as subtitles can turn overload or inference errors
+into invalid subtitle files. No live cutover or tunnel is configured here.
+
+`bazarr-whisper-status.patch` is a narrow compatibility patch for the installed
+Bazarr provider inspected during this evaluation. It rejects non-2xx responses
+from both endpoints without following redirects, before logging or saving their
+contents. It is not installed automatically. Apply it only to a disposable
+copy of the exact provider first, using `git apply --unidiff-zero` (the final
+hunk has no trailing context), and run
+`uv run --no-project python check-bazarr-whisper-patch.py <patched-copy>`; fail
+closed if the patch no longer applies or the checks fail. A deployment needs a
+version-pinned, repeatable way to deliver and revalidate the patch on every
+Bazarr update. Do not edit the running container or enable the provider until
+that deployment and the subtitle quality evaluation are complete.
+
+For multi-audio files, the inspected provider defaults to the first audio
+stream when translating and no audio language matches the requested subtitle
+language. For example, Vishnu Puran S01E01 has Hindi first and Telugu third;
+an explicit Telugu benchmark does not prove that Bazarr will select Telugu.
+Do not silently change global audio-language preferences to work around this.
 
 ## Whisper baseline CLI
 

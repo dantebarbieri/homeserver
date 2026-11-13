@@ -1,0 +1,25 @@
+--- a/whisperai.py
++++ b/whisperai.py
+@@ -12,3 +12,3 @@
+ from requests import Session
+-from requests.exceptions import JSONDecodeError
++from requests.exceptions import HTTPError, JSONDecodeError
+ from subliminal import __short_version__
+@@ -513,5 +513,7 @@
+             r = self.session.post(f"{self.endpoint}/detect-language",
+                                 params={'encode': 'false', 'video_file': video_name},
+                                 files={'audio_file': out},
+-                                timeout=(self.response, self.timeout))
++                                timeout=(self.response, self.timeout), allow_redirects=False)
++            if not 200 <= r.status_code < 300:
++                raise HTTPError(f"WhisperAI request failed with HTTP {r.status_code}")
+             results = r.json()
+@@ -700,5 +702,7 @@
+         r = self.session.post(f"{self.endpoint}/asr",
+                               params={'task': subtitle.task, 'language': input_language, 'output': 'srt', 'encode': 'false',
+                                       'video_file': video_name},
+                               files={'audio_file': out},
+-                              timeout=(self.response, self.timeout))
++                              timeout=(self.response, self.timeout), allow_redirects=False)
++        if not 200 <= r.status_code < 300:
++            raise HTTPError(f"WhisperAI request failed with HTTP {r.status_code}")
