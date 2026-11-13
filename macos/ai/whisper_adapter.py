@@ -13,10 +13,15 @@ from fastapi.responses import Response
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
 
-MAX_AUDIO = 2 * 60 * 60 * 16000 * 2
+from whisper_worker import uses_faster_whisper
+
+# Long Telugu mythological films run well past three hours.
+MAX_AUDIO = 4 * 60 * 60 * 16000 * 2
 MAX_BODY = MAX_AUDIO + 256 * 1024
 UPLOAD_TIMEOUT = 120
 JOB_TIMEOUT = 2 * 60 * 60
+# Server-equivalent Telugu decoding runs on the CPU at roughly real time.
+CPU_JOB_TIMEOUT_PER_AUDIO_SECOND = 2
 LANGUAGES = frozenset(
     "en zh de es ru ko fr ja pt tr pl ca nl ar sv it id hi fi vi he uk el ms "
     "cs ro da hu ta no th ur hr bg lt la mi ml cy sk te fa lv bn sr az sl kn "
@@ -61,13 +66,19 @@ async def bound_request(request, call_next):
         job_lock.release()
 
 
-async def run_worker(mode, path, language):
+def job_timeout(mode, language, audio_bytes):
+    if uses_faster_whisper(mode, language):
+        return max(JOB_TIMEOUT, CPU_JOB_TIMEOUT_PER_AUDIO_SECOND * audio_bytes // 32000)
+    return JOB_TIMEOUT
+
+
+async def run_worker(mode, path, language, timeout=JOB_TIMEOUT):
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-I", str(WORKER), mode, path, language or "",
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     try:
-        async with asyncio.timeout(JOB_TIMEOUT):
+        async with asyncio.timeout(timeout):
             output, diagnostic = await proc.communicate()
     except (TimeoutError, asyncio.CancelledError):
         if proc.returncode is None:
@@ -121,14 +132,16 @@ async def process(request, mode, language=None):
         if audio.size is None or audio.size == 0 or audio.size % 2:
             raise HTTPException(400, "Expected nonempty 16-bit PCM")
         if audio.size > MAX_AUDIO:
-            raise HTTPException(413, "Audio exceeds two hours")
+            raise HTTPException(413, "Audio exceeds four hours")
         with tempfile.TemporaryDirectory(prefix="speech-") as directory:
             path = os.path.join(directory, "audio.pcm")
             with open(path, "xb") as target:
                 while chunk := await audio.read(1024 * 1024):
                     target.write(chunk)
             try:
-                return await run_worker(mode, path, language)
+                return await run_worker(
+                    mode, path, language, job_timeout(mode, language, audio.size)
+                )
             except TimeoutError:
                 logger.error("Speech worker timed out")
                 raise HTTPException(504, "Speech worker timed out")

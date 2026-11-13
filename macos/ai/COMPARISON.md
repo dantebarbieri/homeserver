@@ -5,8 +5,10 @@ not a replacement for good human subtitles. Neither deployed stack is good
 enough for unattended Japanese-to-English subtitles in this test. Studio's
 Telugu API initially failed closed; a later timing-repair rerun returned
 valid SRT but was substantially more repetitive than the server's already
-unreliable translation. Keep existing reference subtitles and do not cut
-over Bazarr on this evidence.
+unreliable translation. A later Studio CPU run copying the server's
+faster-whisper decoding tracked the server closely
+([below](#telugu-with-faster-whisper-on-the-cpu)). Dante then decided to move
+Bazarr to the Studio. Keep existing reference subtitles where they exist.
 
 ## What was tested
 
@@ -257,9 +259,22 @@ Do not switch Bazarr based on this run. No endpoint configuration, global
 audio-language preference, production subtitle queue, or server Whisper
 service was changed. Raw rerun output, HTTP metadata and metrics remain private
 at `~/Services/ai-staging/telugu-repair-20261113-v2/`; the earlier failed API
-result remains unchanged in `comparison-20261113/`. A safe later cutover still
-requires explicit approval, authenticated transport, the status-handling
-patch and review of audio-stream selection.
+result remains unchanged in `comparison-20261113/`. Dante later approved the
+cutover; its transport and status-handling patch are in the
+[README](README.md#bazarr-transport-and-cutover), and audio-stream selection
+was left unchanged.
+
+## Telugu with faster-whisper on the CPU
+
+MLX Whisper has no beam search, so the Studio's Telugu route was changed to
+the server's own engine: faster-whisper with the same snapshot and beam size
+5, on the CPU in float32 because CTranslate2 has no Apple GPU backend. On the
+same PCM it produced 547 cues; 304/319 reference word cues overlap generated
+words. It has seven runs of three or more identical cues, like the server,
+against 23 for the MLX rerun, and needed no timing repair. It took 2,535
+seconds, about real time, against 344 seconds on the server GPU. See
+[SPEECH.md](SPEECH.md#telugu-on-the-cpu) for the full table. These are
+statistics, not a word review; no text review was repeated for this run.
 
 ## Operational limits and reproduction
 

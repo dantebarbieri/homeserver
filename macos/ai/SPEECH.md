@@ -3,13 +3,16 @@
 The target is Telugu/Indian-language mythological film, Japanese anime and
 English, including English subtitles with reliable timing. Do not select a
 model based on size, a clean-English leaderboard or the server's settings.
-No Mac-to-Bazarr cutover has been made.
+Dante decided on 2026-11-13 to move Bazarr's Whisper work to the Studio; the
+cutover waits for the server-side
+[transport](README.md#bazarr-transport-and-cutover).
 
-**Installed candidate:** MLX Whisper large-v3, with previous-text conditioning
-disabled only for English transcription. Ollama's separate `qwen3:8b` model is
-for future text automations, not speech recognition. Qwen3-ASR, its aligner
-and SeamlessM4T were comparisons, not selected services; their benchmark
-installations have been removed. No production speech default has been chosen.
+**Installed:** MLX Whisper large-v3, with previous-text conditioning disabled
+only for English transcription, except for Telugu input, which runs the
+server's faster-whisper model on the CPU ([Telugu on the CPU](#telugu-on-the-cpu)).
+Ollama's separate `qwen3:8b` model is for future text automations, not speech
+recognition. Qwen3-ASR, its aligner and SeamlessM4T were comparisons, not
+selected services; their benchmark installations have been removed.
 
 The initial private benchmark subtitles remain on the Studio; their audio and
 duplicate scripts were cleaned up with permission. The subsequent comparison
@@ -20,7 +23,8 @@ See the [same-input server-versus-Studio comparison](COMPARISON.md) for a
 subsequent full-episode agent review of the words, endpoint failures and
 practical per-language readiness, beyond timing-overlap statistics. A later
 Studio-only Telugu rerun repaired the SRT timing but was materially more
-repetitive than the server output; it did not meet the comparison gate.
+repetitive than the server output; it did not meet the comparison gate. A
+CPU run copying the server's decoding then tracked the server's output closely.
 
 Large-v3 was initially chosen because it was already available, supports both
 target languages and direct translation, and had an MLX CLI that could be
@@ -29,14 +33,14 @@ best Mac model or justify copying the server's settings.
 
 ## Provisional routing
 
-* **Telugu to English subtitles:** retain MLX Whisper large-v3 only as the
-  working timing/transcription baseline while evaluating alternatives.
-  Its translation is not reliably English: on one clean synthetic Telugu
-  greeting it produced a transliteration instead. SeamlessM4T v2 translated
-  that greeting correctly in an initial local test, so it is the leading
-  **candidate to evaluate**, not a proven default. Compare it with Telugu ASR
-  plus a Telugu-capable text translator on actual film clips. Neither route
-  has been validated for this workload or integrated into a subtitle pipeline.
+* **Telugu to English subtitles:** faster-whisper large-v3 on the CPU, copying
+  the server ([below](#telugu-on-the-cpu)). This matches the server's quality,
+  which is itself unreliable, rather than improving on it. SeamlessM4T v2
+  translated a synthetic Telugu greeting correctly where MLX Whisper
+  transliterated it, so it remains a **candidate to evaluate** for better
+  translation, along with Telugu ASR plus a Telugu-capable text translator.
+  Neither has been validated on film clips or integrated into a subtitle
+  pipeline.
 * **Japanese and English transcription:** evaluate Qwen3-ASR 1.7B plus its
   forced aligner in MLX against Whisper large-v3. Qwen's published ASR and
   aligner lists include Japanese and English, but not Telugu; it is a
@@ -48,6 +52,46 @@ best Mac model or justify copying the server's settings.
   transcription; translation is unnecessary. Parakeet v3 is another option for
   English transcription and timestamps, but its official 25-language list
   does not include Telugu or Japanese and it is not the common solution here.
+
+## Telugu on the CPU
+
+MLX Whisper's Telugu output repeated itself far more than the server's
+([comparison](COMPARISON.md#telugu-timing-repair-rerun)), and MLX Whisper has
+no beam search. The server's `whisperasr` runs faster-whisper 1.2.1 on
+CTranslate2 4.8.1 with `Systran/faster-whisper-large-v3` revision `edaa852`,
+beam size 5, in CUDA float16. CTranslate2 has no Apple GPU backend, so the
+Studio runs the same versions, snapshot and decoding on 12 CPU threads in
+float32. Only `language=te` requests use it.
+
+On the same 2,789-second Vishnu Puran (2003) S01E01 audio as the comparison,
+scored against the same 319-cue English reference:
+
+| | Studio CPU, faster-whisper | Server GPU, faster-whisper | Studio MLX rerun |
+| --- | --- | --- | --- |
+| Inference time | 2,535 s (0.91× real time) | 344 s | 255 s |
+| Cues | 547 | 528 | 708 |
+| Reference word cues overlapped | 304 | 310 | 308 |
+| Runs of 3+ identical cues | 7, longest 30 | 7, longest 30 | 23, longest 32 |
+| Cues under 0.5 s | 0 | 1 | 15 |
+| Cues over 25 characters/s | 51 | 44 | 85 |
+| Word-sequence similarity to the server | 0.59 | — | 0.38 |
+| Server cue texts reproduced exactly | 149 | — | 62 |
+
+The CPU output needed no timing repair. It has the server's repetition
+profile and similar coverage. It is not identical because CPU float32 and GPU
+float16 arithmetic differ slightly, and decoding diverges after small
+differences. The server's translation was already unreliable; nobody has
+reviewed the CPU output's words beyond these statistics. A two-minute clip
+through the deployed adapter returned 32 cues in 153 seconds, including model
+loading.
+
+The cost is speed: about real time, against about six minutes on the server
+GPU. A three-hour film takes about three hours and blocks other Studio speech
+jobs meanwhile, so the adapter gives Telugu jobs twice the audio's duration,
+up to eight hours at the four-hour upload limit. int8 was roughly a third
+faster in short probes, but its quality is untested; float32 is deployed.
+Dante chose this route on 2026-11-13, accepting the slowdown and some Telugu
+loss.
 
 ## Candidates and constraints
 

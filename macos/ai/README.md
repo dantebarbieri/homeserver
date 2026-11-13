@@ -2,8 +2,11 @@
 
 The Studio runs Whisper with Apple MLX and Ollama natively (MLX needs macOS
 Metal, so they cannot run in a Linux container or VM).
-Nothing here changes the homeserver's existing Whisper endpoint or Bazarr
-settings. Open WebUI is not installed. Whisper large-v3 is a comparison
+Dante decided to move Bazarr's Whisper subtitles from the server's GPU
+`whisperasr` to this adapter, accepting that Telugu may come out somewhat
+worse than the server's, since Telugu is a minority of the subtitles. See
+[Bazarr transport and cutover](#bazarr-transport-and-cutover) for the
+connection and its status. Open WebUI is not installed. Whisper large-v3 is a
 baseline, **not an established best model** for the target media. See
 [speech model evaluation](SPEECH.md) before choosing a subtitle or translation
 workflow.
@@ -72,26 +75,41 @@ not truth or safety: automation must independently validate all outputs and
 initially produce read-only shadow recommendations. Never give the model shell,
 deletion or restart authority.
 
-## Experimental Bazarr-compatible adapter
+## Bazarr-compatible adapter
 
 The adapter implements the Bazarr Whisper provider's raw 16 kHz, mono,
 signed 16-bit little-endian PCM uploads: `POST /asr?task=transcribe|translate
 &language=<input-code>&output=srt&encode=false` and
 `POST /detect-language?encode=false`. Its optional `video_file` query value is
 ignored, never opened or logged. Other formats, encoded uploads, arbitrary
-models and arbitrary paths are not supported. The only model is the offline
-large-v3 snapshot at revision `49e6aa286ad60c14352c404340ded53710378a11`.
-It is a baseline to compare, not a promise of Telugu translation quality.
-Explicit English transcription disables previous-text conditioning to reduce
-an observed repetition loop; other tasks retain the upstream default. This can
-change consistency between audio windows and has not been speaker-reviewed.
+models and arbitrary paths are not supported.
+
+Two engines serve requests, each from an offline, pinned snapshot:
+
+- **Telugu input (`language=te`)** copies the server's approach:
+  faster-whisper 1.2.1 and CTranslate2 4.8.1 with the server's
+  `Systran/faster-whisper-large-v3` snapshot
+  `edaa852ec7e145841d8ffdb056a99866b5f0a478`, beam size 5 and otherwise
+  default decoding. MLX Whisper has no beam search, and its Telugu output was
+  much more repetitive than the server's. CTranslate2 has no Apple GPU
+  backend, so this runs on 12 CPU threads in float32 and is far slower than
+  the server's GPU (see [SPEECH.md](SPEECH.md#telugu-on-the-cpu)).
+- **Everything else**, including `/detect-language`, uses MLX Whisper with
+  `mlx-community/whisper-large-v3-mlx` snapshot
+  `49e6aa286ad60c14352c404340ded53710378a11`. Explicit English
+  transcription disables previous-text conditioning to reduce an observed
+  repetition loop; other tasks retain the upstream default. This can change
+  consistency between audio windows and has not been speaker-reviewed.
+
+Neither engine promises good translation quality.
 
 The daemon listens on `127.0.0.1:9000`, does not authenticate clients, disables
 HTTP access logs, and runs as `_studio`. One job is accepted at a time; busy
 requests fail with 503. Each job loads a short-lived model process, which exits
-afterward so its memory can be reclaimed. Raw audio is limited to two hours
-(230,400,000 bytes), upload time to two minutes, and inference time to two
-hours. Temporary audio is private to the service account and removed after
+afterward so its memory can be reclaimed. Raw audio is limited to four hours
+(460,800,000 bytes) because long Telugu mythological films run past three
+hours, and upload time to two minutes. Inference is limited to two hours, or
+for Telugu to twice the audio's duration. Temporary audio is private to the service account and removed after
 the job in normal operation; an abrupt process or system termination can
 leave private temporary files that require cleanup. Allow enough free disk for
 two copies of the upload and enough unified memory for Whisper, the audio and
@@ -101,8 +119,10 @@ repair counts without subtitle text; unparseable, extreme, or unsalvageable
 timings still fail the request. Reordering and estimated ends are not verified
 against the audio, and repairs cannot fix missing or hallucinated speech.
 
-Prepare the isolated account's model cache, including the pinned snapshot and
-all referenced blobs, as described above. Ensure `_studio` can read/traverse
+Prepare the isolated account's model cache with both pinned snapshots and all
+their referenced blobs, as described above. The faster-whisper snapshot is the
+same `Systran/faster-whisper-large-v3` revision the server's `whisperasr`
+uses. Ensure `_studio` can read/traverse
 the shared Homebrew runtime without admin membership. From a trusted staging
 directory containing `pyproject.toml`, `uv.lock`, `whisper_adapter.py`,
 `whisper_worker.py` and the plist:
@@ -116,33 +136,87 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/com.danteb.studio-whisper
 ```
 
 `uv.lock` includes all dependencies; synchronization may download packages but
-model inference is offline. Restart by booting out the system job, replacing
-its files and bootstrapping it again. The service is experimental: do not
-change Bazarr to use it until a full episode is evaluated against independently
-verified reference subtitles, including translation meaning, omissions,
-hallucinations and timing.
+model inference is offline. Run `uv` as `_studio` from a directory it can read
+(for example `cd /var/lib/studio-worker/ai` first): started from a private
+staging directory it fails with `Permission denied`. Restart by booting out the
+system job, replacing its files and bootstrapping it again.
 
-Bazarr has no dedicated authentication header for this provider. A later
-integration needs a restricted authenticated transport from Bazarr's container
-to the Studio's loopback listener (for example a dedicated SSH forwarding
-identity and tightly restricted local gateway). A host-loopback tunnel alone
-is not automatically reachable from a container. Do not expose port 9000 on
-the LAN or WAN, and do not assume DNS itself authenticates traffic. Verify the
-installed provider's error handling first: provider versions that save
-non-2xx response bodies as subtitles can turn overload or inference errors
-into invalid subtitle files. No live cutover or tunnel is configured here.
+## Bazarr transport and cutover
 
-`bazarr-whisper-status.patch` is a narrow compatibility patch for the installed
-Bazarr provider inspected during this evaluation. It rejects non-2xx responses
-from both endpoints without following redirects, before logging or saving their
-contents. It is not installed automatically. Apply it only to a disposable
-copy of the exact provider first, using `git apply --unidiff-zero` (the final
-hunk has no trailing context), and run
-`uv run --no-project python check-bazarr-whisper-patch.py <patched-copy>`; fail
-closed if the patch no longer applies or the checks fail. A deployment needs a
-version-pinned, repeatable way to deliver and revalidate the patch on every
-Bazarr update. Do not edit the running container or enable the provider until
-that deployment and the subtitle quality evaluation are complete.
+Bazarr's Whisper provider cannot authenticate, so it reaches the adapter
+through an SSH tunnel at `http://studio-whisper:9000`. The server's
+`studio-whisper` container ([`docker/dockerfiles/studio-whisper-tunnel`](../../docker/dockerfiles/studio-whisper-tunnel),
+defined in `docker/compose.ai.yml`) holds one SSH local forward from its port
+9000 to the Studio's `127.0.0.1:9000`, logging in as the forward-only account
+`_bazarr`. It runs as the server's `HOST_UID` with a read-only root
+filesystem, no capabilities and a read-only `/state` holding its key and the
+pinned Studio host key. Only Bazarr shares its Docker network; no port is
+published and NPM does not proxy it. Anything on that network can use the
+unauthenticated adapter, so attach nothing else to it. Never expose port 9000
+on the LAN or WAN; a private DNS name does not authenticate anyone.
+
+On the Studio, `_bazarr` is a hidden standard account with no password, shell
+or home (`/var/empty`), outside `admin` and `wheel`. Its public key is the
+only line of the root-owned `/etc/ssh/bazarr-forwarding-keys`, restricted to
+the server's address and to forwarding `127.0.0.1:9000`.
+[`002-bazarr-forwarding.conf`](002-bazarr-forwarding.conf) applies the same
+policy in sshd: public keys from that file only, local forwards to
+`127.0.0.1:9000` only, and no remote or socket forwards, TTY, agent, X11,
+tunnel, rc file or command. Remote Login admits only `com.apple.access_ssh`
+members, so the account joins that group. This path is separate from the
+Studio-to-server Tdarr transfer tunnel; neither depends on the other.
+
+Set it up in this order, keeping an admin SSH session to the Studio open:
+
+1. On the server, as the `HOST_UID` account (`danteb`), create the client
+   key and pin the Studio's host key, read over the already-verified admin
+   SSH connection rather than `ssh-keyscan`:
+
+   ```sh
+   sudo install -d -o danteb -m 700 /srv/docker/data/studio-whisper-tunnel
+   ssh-keygen -t ed25519 -N '' -C bazarr-whisper@homeserver -f /srv/docker/data/studio-whisper-tunnel/id_ed25519
+   ssh studio cat /etc/ssh/ssh_host_ed25519_key.pub | awk '{print "ai-studio", $1, $2}' > /srv/docker/data/studio-whisper-tunnel/known_hosts
+   ```
+
+2. Copy `id_ed25519.pub` (public only) to the Studio and, from a trusted
+   checkout of this directory, run
+   `sudo ./provision-bazarr-forwarding.sh id_ed25519.pub`. The script creates
+   or reuses `_bazarr`, then checks a candidate sshd configuration (syntax,
+   `_bazarr`'s effective forwarding policy, and that `dante`'s policy is
+   unchanged) before installing anything. It re-checks the live
+   configuration afterwards and removes the drop-in if that fails. macOS
+   starts sshd per connection, so a bad drop-in would block new SSH logins.
+3. Deploy from `main` (the daily update or `docker compose up -d
+   studio-whisper bazarr`), then check `docker compose logs studio-whisper`.
+4. In Bazarr's Whisper provider settings, set the endpoint to
+   `http://studio-whisper:9000` and the transcription/translation timeout to
+   `30000` seconds; leave the connection timeout alone. Bazarr waits for the
+   whole response within this read timeout, and a four-hour Telugu film can
+   take up to eight hours on the CPU. The values are `whisperai.endpoint` and
+   `whisperai.timeout` in `${DATA}/bazarr/config/config/config.yaml`.
+
+To roll back, point the endpoint back at the server's `whisperasr` and
+restore its timeout. To remove the transport, delete the `studio-whisper`
+service and network from `compose.ai.yml` and `compose.starr.yml`, delete
+`/srv/docker/data/studio-whisper-tunnel`, and on the Studio run
+`sudo dseditgroup -o edit -d _bazarr -t user com.apple.access_ssh`, delete
+`/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf` and
+`/etc/ssh/bazarr-forwarding-keys`, then `sudo dscl . -delete /Users/_bazarr`.
+
+Bazarr's image is built from [`docker/dockerfiles/bazarr`](../../docker/dockerfiles/bazarr).
+It patches the upstream Whisper provider to reject non-2xx responses from
+both endpoints without following redirects, before logging or saving their
+contents (upstream saves error bodies as subtitles). Every edit must match
+exactly once, and the build then exercises the patched methods with
+synthetic 200, 302, 400 and 503 responses. Any upstream change that breaks
+either step fails the build, so the daily update keeps the previous Bazarr
+container and reports the failure. Test a change against a provider file
+before committing:
+
+```sh
+uv run --no-project python docker/dockerfiles/bazarr/patch_whisperai.py <copy-of-whisperai.py>
+uv run --no-project python docker/dockerfiles/bazarr/check_whisperai.py <copy-of-whisperai.py>
+```
 
 For multi-audio files, the inspected provider defaults to the first audio
 stream when translating and no audio language matches the requested subtitle

@@ -94,5 +94,5 @@ def check(path):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        raise SystemExit("Usage: check-bazarr-whisper-patch.py <patched-whisperai.py>")
+        raise SystemExit("Usage: check_whisperai.py <patched-whisperai.py>")
     check(sys.argv[1])

@@ -1,5 +1,6 @@
 # AI services stack
-# whisperasr (speech-to-text; used by Bazarr for subtitle generation)
+# whisperasr (GPU speech-to-text; Bazarr's previous Whisper endpoint)
+# studio-whisper (tunnel to the Mac Studio's Whisper API for Bazarr)
 
 services:
   whisperasr:
@@ -16,5 +17,29 @@ services:
     networks:
       - starr
 
+  # Bazarr's SSH-authenticated path to the Mac Studio's loopback-only Whisper
+  # API (http://studio-whisper:9000). Only Bazarr shares its network; no port
+  # is published. Setup: macos/ai/README.md (Bazarr transport).
+  studio-whisper:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: studio-whisper-tunnel
+    build:
+      context: dockerfiles/studio-whisper-tunnel
+      pull: true
+      args:
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
+    container_name: studio-whisper
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ${DATA}/studio-whisper-tunnel:/state:ro
+    networks:
+      - studio-whisper
+
 networks:
   starr:
+  studio-whisper:

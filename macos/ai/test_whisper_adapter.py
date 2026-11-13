@@ -2,6 +2,7 @@ import asyncio
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -9,7 +10,10 @@ import numpy as np
 from fastapi import HTTPException
 
 import whisper_adapter
-from whisper_worker import decoding_options, read_pcm, repair_srt, validate_srt
+from whisper_worker import (
+    decoding_options, read_pcm, repair_srt, segments_to_srt, uses_faster_whisper,
+    validate_srt,
+)
 
 
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -26,8 +30,8 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_pcm_srt_and_opaque_video_label(self):
         raw = b"\x00\x80\x00\x00\xff\x7f"
 
-        async def fake_worker(mode, path, language):
-            self.assertEqual((mode, language), ("translate", "te"))
+        async def fake_worker(mode, path, language, timeout):
+            self.assertEqual((mode, language, timeout), ("translate", "te", 7200))
             with open(path, "rb") as audio:
                 self.assertEqual(audio.read(), raw)
             return b"1\n00:00:00,000 --> 00:00:01,000\nHello.\n\n"
@@ -45,7 +49,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("00:00:00,000 --> 00:00:01,000", response.text)
 
     async def test_detect_language_response(self):
-        async def fake_worker(mode, path, language):
+        async def fake_worker(mode, path, language, timeout):
             self.assertEqual((mode, language), ("detect", None))
             return b'{"language_code":"ja","detected_language":"japanese","confidence":0.9}'
 
@@ -96,7 +100,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
         finish = asyncio.Event()
 
-        async def fake_worker(mode, path, language):
+        async def fake_worker(mode, path, language, timeout):
             started.set()
             await finish.wait()
             return b'{"language_code":"en","detected_language":"english"}'
@@ -114,7 +118,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await first).status_code, 200)
 
     async def test_worker_failure_is_not_subtitle_success(self):
-        async def fail(mode, path, language):
+        async def fail(mode, path, language, timeout):
             raise HTTPException(500, "Speech worker failed")
 
         with patch.object(whisper_adapter, "run_worker", fail):
@@ -151,6 +155,14 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private transcript text", logs.output[0])
 
 
+    def test_cpu_telugu_jobs_get_audio_scaled_timeout(self):
+        two_hours = 2 * 60 * 60 * 16000 * 2
+        self.assertEqual(whisper_adapter.job_timeout("translate", "te", two_hours), 4 * 60 * 60)
+        self.assertEqual(whisper_adapter.job_timeout("translate", "te", 32000), 2 * 60 * 60)
+        self.assertEqual(whisper_adapter.job_timeout("translate", "ja", two_hours), 2 * 60 * 60)
+        self.assertEqual(whisper_adapter.job_timeout("detect", None, two_hours), 2 * 60 * 60)
+
+
 class WorkerTests(unittest.TestCase):
     def test_signed_little_endian_pcm_normalization(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -168,6 +180,25 @@ class WorkerTests(unittest.TestCase):
                                ("translate", "te"), ("transcribe", "ja"),
                                ("transcribe", "")):
             self.assertEqual(decoding_options(mode, language), {})
+
+    def test_only_explicit_telugu_speech_uses_server_equivalent_decoder(self):
+        self.assertTrue(uses_faster_whisper("translate", "te"))
+        self.assertTrue(uses_faster_whisper("transcribe", "te"))
+        for mode, language in (("detect", "te"), ("translate", "ta"),
+                               ("translate", ""), ("transcribe", "en")):
+            self.assertFalse(uses_faster_whisper(mode, language))
+
+    def test_segments_use_webservice_srt_format_without_empty_cues(self):
+        srt = segments_to_srt([
+            SimpleNamespace(start=0.0, end=1.2344, text=" Hello --> there "),
+            SimpleNamespace(start=1.5, end=2.0, text="  "),
+            SimpleNamespace(start=3661.0, end=3662.5, text=" Goodbye"),
+        ])
+        self.assertEqual(srt, (
+            "1\n00:00:00,000 --> 00:00:01,234\nHello -> there\n\n"
+            "2\n01:01:01,000 --> 01:01:02,500\nGoodbye\n"
+        ))
+        validate_srt(srt)
 
     def test_srt_timing_is_validated_without_rewriting(self):
         validate_srt(

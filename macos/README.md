@@ -4,8 +4,9 @@ The Studio runs native speech inference, an advisory local model, and a
 **native CPU/x265 Tdarr node that is disabled** (see
 [Operations and rollout gates](#operations-and-rollout-gates)). Docker (Colima)
 has been removed until a service needs it; see [Docker](DECISIONS.md#docker).
-This setup does not move production Bazarr or authorize Tdarr to
-replace original media.
+Bazarr's Whisper subtitles are moving to the Studio
+([status](ai/README.md#bazarr-transport-and-cutover)). Nothing here authorizes
+Tdarr to replace original media.
 
 See [speech setup](ai/README.md), [model comparisons and limitations](ai/SPEECH.md),
 and [Tdarr's storage-authoritative flow](../docker/docs/TDARR.md). Start with
@@ -21,6 +22,7 @@ pieces an agent chose, and how to remove each piece.
 | Linux SSH transport | `studio-tunnel`, nologin, dedicated key, no shell/PTY/SFTP, reverse/agent/Unix-socket forwarding |
 | Linux SMB account | `studio`; original media read-only, only the dedicated native job cache writable |
 | Linux fixed TCP relays | UID/GID 65534, read-only root, no capabilities, no-new-privileges, no mounts or credentials |
+| Bazarr → Mac speech | Mac `_bazarr`: hidden, no password/shell/home, outside admin/wheel; key restricted to the server's address and a local forward to `127.0.0.1:9000`. Linux `studio-whisper` container: `HOST_UID`, read-only root, no capabilities, network shared only with Bazarr |
 
 `provision-worker.sh` creates or checks the isolated Mac account and generates
 its transport key locally. `001-studio-worker.conf` denies incoming SSH to that
@@ -168,8 +170,10 @@ this is not a malicious-node sandbox.
 
 Speech and Ollama remain loopback-only under `_studio`. Speech timing checks
 and automatic overlap metrics are not human-reviewed translation accuracy.
-Production Bazarr still needs the provider-status patch, authenticated
-transport, multi-audio integration, and quality approval before any switch.
+Bazarr reaches the speech adapter only through the forward-only `_bazarr`
+SSH account and the server's `studio-whisper` container; see
+[Bazarr transport and cutover](ai/README.md#bazarr-transport-and-cutover).
+Multi-audio selection still follows Bazarr's provider defaults.
 
 `home.arpa` belongs at `/etc/resolver/home.arpa`, root-owned and LF-terminated.
 It scopes resolution to the homeserver's DNS; AdGuard provides

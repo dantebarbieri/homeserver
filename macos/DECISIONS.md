@@ -109,6 +109,10 @@ requirement.
   `authorized_keys` and declared in `users.nix`.
 - The worker account `_studio` cannot log in over SSH
   ([`001-studio-worker.conf`](001-studio-worker.conf)).
+- Bazarr's forward-only account `_bazarr` can log in only with the server's
+  key from the server's address, and can only forward to the Whisper adapter
+  ([`ai/002-bazarr-forwarding.conf`](ai/002-bazarr-forwarding.conf),
+  [setup](ai/README.md#bazarr-transport-and-cutover)).
 - Alternative Dante raised: reach the Studio only through the server
   (`ProxyJump`).
 
@@ -171,8 +175,10 @@ Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
 
 ## Exposing Studio services
 
-Recommendation, not yet applied (Dante asked whether to use SSH tunnels or a
-real reverse proxy). DNS naming and transport are independent: use
+Dante asked whether to use SSH tunnels or a real reverse proxy. Bazarr's
+Whisper connection now uses a server-only SSH forward
+([below](#offload-speech-to-text-whisper)); the rest is a recommendation not
+yet applied. DNS naming and transport are independent: use
 `home.arpa` with either. A private DNS name does not authenticate clients.
 
 - **Web UIs for people:** an NPM proxy host pointing at
@@ -187,8 +193,8 @@ real reverse proxy). DNS naming and transport are independent: use
 - **SSH tunnels** remain appropriate for private non-HTTP resources (today:
   Samba and the Tdarr node port); an HTTP reverse proxy does not replace them.
 
-Today Whisper and Ollama listen only on the Studio's loopback, so nothing else
-can use them yet.
+Today Whisper and Ollama listen only on the Studio's loopback. Only Bazarr
+reaches Whisper, through its SSH forward; nothing reaches Ollama.
 
 ## Offload speech-to-text (Whisper)
 
@@ -197,7 +203,9 @@ good results for Dante's media: English, Japanese anime and Telugu mythological
 films. Dante asked to try all three languages.
 
 **Installed:** `mlx-whisper` 0.4.3 with `mlx-community/whisper-large-v3-mlx`
-(pinned revision `49e6aa2`), behind an experimental Bazarr-compatible adapter:
+(pinned revision `49e6aa2`), plus faster-whisper 1.2.1 with the server's
+`Systran/faster-whisper-large-v3` (revision `edaa852`) for Telugu, behind a
+Bazarr-compatible adapter:
 LaunchDaemon `com.danteb.studio-whisper` as `_studio` on `127.0.0.1:9000`. It
 turns off `condition_on_previous_text` for English transcription only.
 The worker now applies bounded SRT timing repair (reordering, overlap trimming
@@ -231,14 +239,30 @@ repetition, omitted dialogue and additional meaning reversals. The original
 422 evidence is preserved separately. This is AI review against subtitle
 references, not listening-based multilingual verification.
 
-**Decision so far:** no Studio production default and no Bazarr cutover.
-Dante authorized migration if the repaired Studio output was at least about
-as good as the server; the Telugu rerun did not meet that condition. Bazarr
-and server Whisper remain unchanged. Timing overlap and API success are not
-quality approval. Production use still needs content-quality improvements
-and audio-grounded review, a way for Bazarr to reach the service
-([above](#exposing-studio-services)), multi-audio handling and the provider
-patch in [`ai/`](ai/).
+**Decision (*Dante*, 2026-11-13):** move Bazarr's Whisper work to the
+Studio. English and Japanese were about as good or better there; for Telugu,
+copy the server's approach to get as close as possible, and accept some loss
+because "Telugu is a minority of subs". This supersedes his earlier condition
+that Telugu first match the server.
+
+**Current (agent-chosen):**
+
+- Telugu input runs faster-whisper on the CPU with the server's model
+  snapshot and decoding (beam size 5); MLX Whisper has no beam search.
+  Everything else stays on MLX. Results: [Telugu on the CPU](ai/SPEECH.md#telugu-on-the-cpu).
+- Bazarr uses a patched image ([`docker/dockerfiles/bazarr`](../docker/dockerfiles/bazarr))
+  that rejects HTTP errors instead of saving them as subtitles. The build
+  fails, keeping the previous container, if the patch stops matching upstream.
+- Bazarr reaches the Studio's loopback adapter through the server's
+  `studio-whisper` SSH forward as the forward-only Mac account `_bazarr`
+  ([transport](ai/README.md#bazarr-transport-and-cutover)). An
+  authenticated TLS proxy would also work; SSH reuses existing tooling and
+  needs no certificates.
+- Bazarr still picks the first audio stream of multi-audio files when no
+  audio language matches; audio-language preferences were not changed.
+
+Timing overlap and API success are not quality approval, and this is AI
+review against subtitle references, not listening-based verification.
 
 [`ai/compare_speech.py`](ai/compare_speech.py) computes these scores. The
 reference and generated subtitles stay private on the Studio in
@@ -390,8 +414,10 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, Tdarr launcher and plists |
 | `macos/install/` | Historical one-time installers from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
-| `macos/ai/` | Whisper adapter, Ollama and Whisper plists, Bazarr patch, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
+| `macos/ai/` | Whisper adapter, Ollama and Whisper plists, `_bazarr` sshd drop-in and provisioning script, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
+| `docker/compose.ai.yml`, `docker/dockerfiles/studio-whisper-tunnel/` | Bazarr's SSH forward to the Studio's Whisper adapter |
+| `docker/dockerfiles/bazarr/` | Patched Bazarr image (rejects Whisper HTTP errors) |
 | `docker/tdarr/` | Studio flow, its installer and the node restriction script |
 | `nixos/modules/ssh.nix`, `users.nix` | `studio-tunnel` restrictions and the Studio's admin key |
 
@@ -401,6 +427,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 |---|---|---|
 | Admin setup | `/etc/ssh/sshd_config.d/000-studio-hardening.conf`, `/etc/resolver/home.arpa`, dotfiles, `~/.ssh` | Keep unless replacing |
 | Whisper, Ollama | `com.danteb.studio-whisper`, `com.danteb.studio-ollama`; models in the worker home | `sudo launchctl bootout system/<label>`, delete the plist and worker data |
+| Bazarr forwarding account | `_bazarr`, `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf`, `/etc/ssh/bazarr-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#bazarr-transport-and-cutover) |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
 | Isolated Tdarr lab (removed 2026-11-13) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-media.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Removed after explicit authorization. Preflight found regular files/directories only, no symlinks or special files; post-check confirmed all five targets absent |
@@ -408,6 +435,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Initial benchmark subtitles (keep) | `~/Services/ai-staging/benchmark-20261113/`, `baseline/`, `qwen/`, and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in these initial test directories | Keep until a speech default is chosen |
 | Same-input comparison evidence | `~/Services/ai-staging/comparison-20261113/`: re-extracted PCM, references, endpoint outputs/errors, source manifest, timings and runtime fingerprints | Keep private for review; do not overwrite previous outcomes |
 | Telugu timing-repair rerun | `~/Services/ai-staging/telugu-repair-20261113-v2/`: new response, HTTP metadata and review metrics; previous adapter/worker backups in `/var/lib/studio-worker/ai-tests/telugu-repair-20261113/` | Keep private and separate from the initial failed request |
+| Telugu faster-whisper route | Model in the worker's Hugging Face cache (`models--Systran--faster-whisper-large-v3`, 2.9 GiB); pre-route adapter code in `/var/lib/studio-worker/ai-tests/deploy-20261113-backup/`; trial outputs, plus a duplicate admin copy of the model in `hf/`, in `~/Services/ai-staging/telugu-faster-whisper-20261113/`; deployment staging in `~/Services/ai-staging/deploy-20261113/` | Restore the backup and `uv sync` to roll back. With approval, delete the trial's `hf/` and the deployment staging once results are recorded |
 
 Deleted with Dante's approval on 2026-11-13: the admin's Hugging Face and uv
 download caches, the worker's uv cache, the duplicate Tdarr download, staging
@@ -431,6 +459,7 @@ is not a leftover model download.
 | sshd | `/etc/ssh/sshd_config` is a root-owned copy shadowing the Nix symlink, plus a `studio-tunnel` Match block; backups in `/var/backups/studio-transfer/` | Restore the Nix symlink and reload sshd. Once `ssh.nix` with the same Match block is on `main`, a NixOS activation does this and keeps the tunnel; before that, activation drops the block (the tunnel fails closed) |
 | Tunnel account | `studio-tunnel`, `/etc/ssh/studio-transfer-keys` | `userdel`, delete the file, drop it from `users.nix`/`ssh.nix` |
 | Studio admin key | `~/.ssh/authorized_keys`, `users.nix` | Delete the line |
+| Bazarr's Whisper link | `studio-whisper` container; key and pinned Studio host key in `/srv/docker/data/studio-whisper-tunnel`; Bazarr's `whisperai` endpoint and timeout | Point Bazarr back at `whisperasr`, then [remove the transport](ai/README.md#bazarr-transport-and-cutover) |
 | Tdarr | `Studio-Native` node, canary library and flow, dedicated API key, snapshots in `/srv/docker/data/tdarr/server/Tdarr/Custom/backups/` (mode 0600; may hold credentials) | Delete in the UI and revoke the key |
 | AdGuard | Two `home.arpa` rewrites | AdGuard UI, DNS rewrites |
 
@@ -440,10 +469,11 @@ is not a leftover model download.
 2. Prune retired SSH keys on the Studio (and the server if retired there too).
 3. Use `home.arpa` for future service integrations. Admin SSH migration is
    complete on the reachable hosts; the MacBook is intentionally unchanged.
-4. Speech: keep Bazarr on server Whisper; the repaired Studio Telugu rerun
-   failed the comparability condition. English remains a proofread fallback
-   candidate; Japanese/Telugu need substantive quality improvements and
-   audio-grounded review, not more overlap scoring.
+4. Speech: finish the Bazarr cutover
+   ([steps](ai/README.md#bazarr-transport-and-cutover)) and decide whether to
+   stop the server's `whisperasr` afterwards. English remains a proofread
+   fallback; Japanese and Telugu still need audio-grounded review, not more
+   overlap scoring.
 5. Ollama: pick a first automation, or remove it.
 6. Tdarr: keep production activation blocked. The current unlicensed setup
    ignores custom node tags; staged-job exclusions are also bypassed. Find a
