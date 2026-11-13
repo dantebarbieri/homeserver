@@ -143,6 +143,16 @@ system job, replacing its files and bootstrapping it again.
 
 ## Bazarr transport and cutover
 
+**Live since 2026-11-13.** Bazarr's endpoint is
+`http://studio-whisper:9000`, job timeout `30000`, and its pre-existing
+connection timeout `60` is unchanged. The real provider in the running
+patched Bazarr container completed `/detect-language`, English transcription
+(8.88 seconds of synthetic audio, 3 cues in 1.45 seconds) and Telugu-to-English
+translation (a 30-second retained-audio excerpt, 6 cues in 29.78 seconds).
+All three requests returned HTTP 200; both SRTs had valid, nonoverlapping
+timing. No library media/subtitle files or audio-language preferences changed.
+This proves the configured request path, not translation quality.
+
 Bazarr's Whisper provider cannot authenticate, so it reaches the adapter
 through an SSH tunnel at `http://studio-whisper:9000`. The server's
 `studio-whisper` container ([`docker/dockerfiles/studio-whisper-tunnel`](../../docker/dockerfiles/studio-whisper-tunnel),
@@ -160,7 +170,7 @@ The main Compose file reserves `10.253.240.8/29` for this network because the
 default Docker pools are exhausted; it does not overlap the transfer network's
 `10.253.240.0/29` or the host's other routes.
 
-On the Studio, `_bazarr` is a hidden standard account with no password or
+On the Studio, `_bazarr` is a hidden standard account with no usable password or
 usable home (`/var/empty`), outside `admin` and `wheel`. macOS PAM requires
 its account shell to be `/bin/sh` even for forwarding-only logins;
 `MaxSessions 0` denies all SSH shell, command and subsystem channels,
@@ -194,8 +204,11 @@ Set it up in this order, keeping an admin SSH session to the Studio open:
    unchanged) before installing anything. It re-checks the live
    configuration afterwards and removes the drop-in if that fails. macOS
    starts sshd per connection, so a bad drop-in would block new SSH logins.
-3. Deploy from `main` (the daily update or `docker compose up -d
-   studio-whisper bazarr`), then check `docker compose logs studio-whisper`.
+3. Deploy from `main` through the main Compose entry point: build with
+   `docker compose build --pull studio-whisper bazarr`, then
+   `docker compose up -d --no-deps studio-whisper bazarr`.
+   Check `docker compose logs studio-whisper` and reach the adapter from
+   Bazarr. A GET to `/asr` returns 405; only POST invokes inference.
 4. In Bazarr's Whisper provider settings, set the endpoint to
    `http://studio-whisper:9000` and the transcription/translation timeout to
    `30000` seconds; leave the connection timeout alone. Bazarr waits for the
@@ -203,9 +216,18 @@ Set it up in this order, keeping an admin SSH session to the Studio open:
    take up to eight hours on the CPU. The values are `whisperai.endpoint` and
    `whisperai.timeout` in `${DATA}/bazarr/config/config/config.yaml`.
 
-To roll back, point the endpoint back at the server's `whisperasr` and
-restore its timeout. To remove the transport, delete the `studio-whisper`
+To roll back, point the endpoint back at `http://whisperasr:9000` and
+restore its previous `10800`-second job timeout (connection timeout `60`).
+The server service remains running. The private
+`/srv/docker/data/bazarr/config/studio-migration-20261113/` directory holds
+the pre-cutover config, a consistent SQLite backup and aggregate request
+results; the original image is tagged `bazarr-before-studio:20261113`.
+Those backups contain credentials: never commit or print them. A normal
+endpoint rollback does not require restoring the database.
+
+To remove the transport, delete the `studio-whisper`
 service and network from `compose.ai.yml` and `compose.starr.yml`, delete
+its IPAM definition from `docker-compose.yml`, delete
 `/srv/docker/data/studio-whisper-tunnel`, and on the Studio run
 `sudo dseditgroup -o edit -d _bazarr -t user com.apple.access_ssh`, delete
 `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf` and

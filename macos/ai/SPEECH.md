@@ -3,9 +3,10 @@
 The target is Telugu/Indian-language mythological film, Japanese anime and
 English, including English subtitles with reliable timing. Do not select a
 model based on size, a clean-English leaderboard or the server's settings.
-Dante decided on 2026-11-13 to move Bazarr's Whisper work to the Studio; the
-cutover waits for the server-side
-[transport](README.md#bazarr-transport-and-cutover).
+Dante decided on 2026-11-13 to move Bazarr's Whisper work to the Studio.
+Bazarr now uses the authenticated Studio
+[transport](README.md#bazarr-transport-and-cutover); the server's Whisper
+service remains running for rollback.
 
 **Installed:** MLX Whisper large-v3, with previous-text conditioning disabled
 only for English transcription, except for Telugu input, which runs the
