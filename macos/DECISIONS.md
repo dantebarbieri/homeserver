@@ -16,6 +16,10 @@ the same change as any Studio change. Server cooling and hardware are in
   agent chose it and it is not a requirement. Replace it whenever something
   better meets the intent: remove the old pieces instead of layering on top,
   then update this file.
+- Approval of an agent-offered implementation does not make that mechanism
+  an enduring requirement. Dante clarified this for service isolation and
+  container tooling: the goals are secure services and suitable container
+  management, not a particular account, tunnel or runtime.
 
 > "If in the future, an agent can better solve one of my requests, it should be
 > allowed to clean up your work without feeling like I had my heart set on doing
@@ -39,10 +43,10 @@ Dante bought this Mac Studio as a compute companion for the homeserver.
 
 | From | How | Key |
 |---|---|---|
-| Windows PC | `ssh ai-studio` (`hosts` maps the name to the IP) | `~/.ssh/id_ed25519` |
-| MacBook Pro | Same `ai-studio` SSH profile (copied by *Dante*); Screen Sharing app | The MacBook's own key |
-| Homeserver (`danteb`) | `ssh studio` | `~/.ssh/id_ed25519_studio` |
-| Studio | `ssh homeserver` | `~/.ssh/id_ed25519` |
+| Windows PC | `ssh ai-studio` -> `ai-studio.home.arpa` (*Dante* updated the profile) | `~/.ssh/id_ed25519` |
+| MacBook Pro | Existing `ai-studio` SSH profile; Screen Sharing app. Left unchanged at *Dante's* request | The MacBook's own key |
+| Homeserver (`danteb`) | `ssh studio` -> `ai-studio.home.arpa` | `~/.ssh/id_ed25519_studio` |
+| Studio | `ssh homeserver` -> `homeserver.home.arpa` (port 28) | `~/.ssh/id_ed25519` |
 
 ## Facts any replacement must handle
 
@@ -142,18 +146,28 @@ don't need to save random IPs in the server or the Mac".
   sends only that suffix to AdGuard.
 - Verified resolving on Windows, the server host, Docker containers (Bazarr,
   NPM) and the Mac.
+- Admin SSH profiles now use the names on Windows, the Studio and the
+  homeserver. The MacBook profile was deliberately left unchanged. This
+  migration does not change the worker tunnel or any service endpoint.
+  The Studio and server each retain their previous admin profile at
+  `~/.ssh/config.before-home-arpa-20261113`.
 
 **Guidance:** use these names in new configuration (web services, Bazarr's
 Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
 
 - AdGuard runs on the server, so anything needed to repair the server should
-  keep an IP or `hosts` fallback.
+  keep an IP fallback. From the Studio:
+  `ssh -o HostName=192.168.50.100 homeserver`. From the server:
+  `ssh -o HostName=192.168.50.140 studio`. From Windows:
+  `ssh -o HostName=192.168.50.140 ai-studio`.
 - Windows also lists 1.1.1.1 as a DNS server, which cannot answer `home.arpa`,
-  so lookups can fail intermittently. The `hosts` entry covers `ai-studio`.
-- When an SSH alias moves from an IP to a name, keep `HostKeyAlias` so the
-  pinned host key still matches.
-
-Not done: SSH aliases on all machines still use IPs.
+  so lookups can fail intermittently. Its old short-name `hosts` entry does
+  not cover the new FQDN; the explicit IP override above bypasses DNS.
+- Keep host-key verification when changing names. Windows retains
+  `HostKeyAlias ai-studio`, the server retains `HostKeyAlias studio`, and the
+  Studio uses `HostKeyAlias [192.168.50.100]:28` to match its existing
+  port-qualified known-host entry. That last value is the pinned identity,
+  not the network destination; `HostName` controls DNS resolution.
 
 ## Exposing Studio services
 
@@ -271,19 +285,24 @@ Sources: [HandBrake encoder comparison](https://handbrake.fr/docs/en/latest/tech
 - The native daemon is disabled (`launchctl disable`). Keep it off on the
   shared controller.
 
-**To retry, Dante chooses one:** a separate canary-only Tdarr controller with
-disposable media; a verified upstream fix covering both fresh and staged
-selection; or no Mac encoding (cap or schedule the server's encoders for heat
-instead). Any retry needs a negative test with an eligible decoy job. Do not
-drain or retag shared staging or pause production as a workaround.
+**Next:** Dante requested further work toward functioning Mac offload, not
+abandonment or a particular isolation design. Agents may choose a secure
+approach; candidates include a separate controller tested with disposable
+media or a verified upstream fix covering both fresh and staged selection.
+Any retry needs a completed encode/validation path and a negative test with an
+eligible decoy job before production activation. Do not drain or retag shared
+staging or pause production as a workaround.
 
 ## Isolating untrusted media work
 
-FFmpeg and Tdarr parse untrusted media. *Dante* chose, from options an agent
-offered: an SSH-protected media share (over Tdarr Pro or unmapped transfer),
-the private Tdarr port forward, account isolation with Samba restrictions, and
-the restricted launcher. Everything else here is agent or reviewer design and
-the largest elaboration beyond the requests.
+**Intent:** services in general should be secure. This applies to FFmpeg and
+Tdarr because they parse untrusted media, but is not limited to them.
+
+**Current:** agents and a security reviewer chose the SSH-protected share,
+private Tdarr port forward, account isolation, Samba restrictions and restricted
+launcher. Dante approved the offered options without intending to prescribe
+those mechanisms. All are replaceable if another approach meets the security
+and data-preservation goals more simply.
 
 - Mac `_studio` (UID 499, private home `/var/lib/studio-worker`, no shell or
   SSH) runs Whisper, Ollama, the tunnel and Tdarr. `allow-worker-tools.sh`
@@ -302,9 +321,10 @@ them.
 
 ## Docker
 
-**Intent:** be ready to move services that suit the Studio, but "perhaps best
-to remove Colima until we have a service that we want to run in Docker".
-*Dante* prefers Colima to Docker Desktop.
+**Intent:** use the best suitable way to manage containers on the Studio when
+there is a service that needs them. Colima was an agent recommendation, not
+Dante's preference over Docker Desktop or other runtimes. Dante requested its
+removal until there is an actual container workload.
 
 **Current:** removed on 2026-11-13. Before removal, the VM had no containers or
 volumes, only the `hello-world` smoke-test image; no service depended on it.
@@ -313,12 +333,13 @@ Colima, Docker CLI, Compose, Buildx and Lima, plus their Studio-specific
 configuration, shared directory, cache and logs. No Colima/Lima processes
 remain. Native Whisper and Ollama remain installed and working.
 
-When a service is chosen, reinstall with `brew install colima docker docker-compose`
-(old LaunchDaemon: `git show 7253f89:macos/com.danteb.colima.plist`). Share only
-what the service needs, never the worker's home, admin SSH keys or production
-media. MLX/Metal work cannot run inside Colima's Linux VM, so keep it native.
-An agent suggested keeping storage, databases, *arr apps, DNS, NPM and auth on
-the server.
+When a service is chosen, evaluate its needs and the available runtimes rather
+than automatically restoring Colima. If Colima is still appropriate, the old
+LaunchDaemon is recoverable with
+`git show 7253f89:macos/com.danteb.colima.plist`. Share only what the service
+needs, never admin SSH keys or unrelated production media. MLX/Metal work
+cannot run inside Colima's Linux VM, so keep it native. An agent suggested
+keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 
 ## Where everything lives
 
@@ -376,12 +397,15 @@ and is not a leftover model download.
 
 1. Cold-boot test, including the FileVault pre-boot SSH unlock.
 2. Prune retired SSH keys on the Studio (and the server if retired there too).
-3. Move SSH aliases and other configs to `home.arpa` names.
-4. Speech: human review, then decide the Bazarr cutover and how Bazarr reaches
-   the Studio.
+3. Use `home.arpa` for future service integrations. Admin SSH migration is
+   complete on the reachable hosts; the MacBook is intentionally unchanged.
+4. Speech: compare the deployed server and Studio stacks on identical episode
+   audio, including AI review of words/meaning against references, not just
+   timing overlap. That review is not audio-grounded proof of translation
+   accuracy. Then decide the Bazarr cutover and how Bazarr reaches the Studio.
 5. Ollama: pick a first automation, or remove it.
-6. Tdarr: choose a retry option or abandon it. If abandoned, remove Tdarr, the
-   tunnel, mounts, relays and Samba.
+6. Tdarr: pursue a secure, validated Mac offload path, keeping the known-unsafe
+   shared-controller node disabled during the retry.
 7. Review [#205](https://github.com/dantebarbieri/homeserver/pull/205). The docs
    are already pushed on `dantebarbieri-server-cooling` and accessible from
    other machines; merging makes them available on the default branch. After
