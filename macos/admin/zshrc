@@ -1,0 +1,34 @@
+WORDCHARS=${WORDCHARS//[\/]}
+HISTFILE=~/.histfile
+HISTSIZE=20000
+SAVEHIST=10000
+setopt AUTO_CD APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_ALL_DUPS
+setopt HIST_FIND_NO_DUPS HIST_IGNORE_SPACE SHARE_HISTORY
+bindkey -e
+
+ZSH_AUTOSUGGEST_MANUAL_REBIND=1
+ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets)
+ZIM_HOME=${HOME}/.zim
+if [[ ! ${ZIM_HOME}/init.zsh -nt ${HOME}/.zimrc ]]; then
+  source /opt/homebrew/opt/zimfw/share/zimfw.zsh init
+fi
+source ${ZIM_HOME}/init.zsh
+
+zmodload -F zsh/terminfo +p:terminfo
+for key ('^[[A' '^P' ${terminfo[kcuu1]}) bindkey ${key} history-substring-search-up
+for key ('^[[B' '^N' ${terminfo[kcud1]}) bindkey ${key} history-substring-search-down
+for key ('k') bindkey -M vicmd ${key} history-substring-search-up
+for key ('j') bindkey -M vicmd ${key} history-substring-search-down
+unset key
+
+eval "$(/opt/homebrew/bin/zoxide init zsh)"
+if [[ -r ~/.iterm2_shell_integration.zsh ]]; then
+  source ~/.iterm2_shell_integration.zsh
+fi
+if [[ -r ~/.zshrc.local ]]; then
+  source ~/.zshrc.local
+fi
+
+if [[ -o login && -t 1 ]]; then
+  /opt/homebrew/bin/fastfetch
+fi

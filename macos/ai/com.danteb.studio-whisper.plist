@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.danteb.studio-whisper</string>
+    <key>UserName</key>
+    <string>_studio</string>
+    <key>WorkingDirectory</key>
+    <string>/var/lib/studio-worker/ai</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/var/lib/studio-worker/ai/.venv/bin/python</string>
+        <string>-m</string>
+        <string>uvicorn</string>
+        <string>whisper_adapter:app</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>9000</string>
+        <string>--no-access-log</string>
+        <string>--limit-concurrency</string>
+        <string>8</string>
+        <string>--timeout-graceful-shutdown</string>
+        <string>10</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/var/lib/studio-worker</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HF_HUB_OFFLINE</key>
+        <string>1</string>
+        <key>TMPDIR</key>
+        <string>/var/lib/studio-worker/tmp</string>
+    </dict>
+    <key>Umask</key>
+    <integer>63</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/lib/studio-worker/logs/whisper.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/lib/studio-worker/logs/whisper-error.log</string>
+</dict>
+</plist>

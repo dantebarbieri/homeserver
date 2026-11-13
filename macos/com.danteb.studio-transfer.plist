@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.danteb.studio-transfer</string>
+    <key>UserName</key>
+    <string>_studio</string>
+    <key>WorkingDirectory</key>
+    <string>/var/lib/studio-worker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/ssh</string>
+        <string>-F</string>
+        <string>/var/lib/studio-worker/.ssh/config</string>
+        <string>-NT</string>
+        <string>-L</string>
+        <string>127.0.0.1:1445:127.0.0.1:1445</string>
+        <string>-L</string>
+        <string>127.0.0.1:8266:127.0.0.1:8266</string>
+        <string>studio-transfer</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>Umask</key>
+    <integer>63</integer>
+    <key>StandardOutPath</key>
+    <string>/var/lib/studio-worker/logs/transfer.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/lib/studio-worker/logs/transfer-error.log</string>
+</dict>
+</plist>

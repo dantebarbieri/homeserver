@@ -45,6 +45,285 @@ integrity checks as everything else. These checks detect damage, not perceptual
 quality loss; compare representative samples before changing CRF or bit depth.
 HandBrake `--scan` health checks are not a substitute for complete decoding.
 
+### Native Mac Studio offload (disabled canary, not migrated)
+
+**Blocked: do not activate the native node on the shared production controller.**
+The copied-media canary exposed a staged-job isolation failure in installed
+3.07.00; library exclusions and node tags are insufficient. The native daemon
+is stopped and persistently disabled. The implementation below remains
+experimental, not an approved migration procedure.
+
+`homeserver-hevc-studio-v1` is a **separate versioned flow** for Tdarr
+3.07.00 on Linux and native `darwin_arm64` on the Studio. The three active TV
+libraries remain on `homeserver-hevc-cpu-v1`; neither that module/flow nor the
+Linux NVIDIA DV5 flow is modified. **The intended cross-node routing is not
+available on this unlicensed server.** `Tags: Worker Type` / `Tags: Requeue`
+custom node-tag routing requires Tdarr Pro; without Pro the server matches
+worker type and automatic `mapped`/`unmapped` tags but ignores custom node
+tags. Being a mapped node avoids the unmapped-uploader limitation; it does not
+enable custom-tag routing. The maintainer confirms the Pro requirement
+([#1484](https://github.com/HaveAGitGat/Tdarr/issues/1484#issuecomment-6418340922))
+and says 3.08 reports when custom tags are ignored
+([clarification](https://github.com/HaveAGitGat/Tdarr/issues/1484#issuecomment-6847553728)).
+The existing 3.07 staged-job exclusion bypass is a separate blocker even if
+tag routing becomes available.
+
+The experimental flow was designed to hand off with the upstream
+`tagsWorkerType` plugin (required worker type `CPU`, `queueTags` requeueing),
+but must not be used on the shared production controller:
+
+1. `homeserver-storage`: eligibility, source fingerprint and stream contract
+   are captured on Linux in a private per-job manifest.
+2. `studio-native`: software `libx265`, `slow`, the existing library `crf`
+   variable (20 for the new canary), `pools=4`, and the source pixel format.
+   All streams are mapped, non-video streams copied, metadata/chapters copied
+   and dispositions explicitly preserved. No VideoToolbox, GPU decode,
+   resizing, HDR conversion or audio/subtitle re-encoding is introduced.
+3. `homeserver-storage`: accept only the manifest's exact job/token/output
+   path. Open the untrusted cache directory and file with pinned Linux
+   `/proc/self/fd` handles and `O_NOFOLLOW`; reject symlinks, non-regular
+   files, hardlinks, empty files, and outputs larger than twice the source.
+   Copy those opened bytes into Linux-private staging **before** any probe or
+   decode. The private output's ffprobe and full FFmpeg decode both force the
+   Matroska demuxer before opening it, rejecting disguised playlists rather
+   than following external media; original source probing still autodetects
+   its format. Returned variables cannot replace the authoritative source
+   identity or stream contract. The unchanged `hevc-safe-v1.cjs` then validates
+   and publishes only the private bytes, including its full decode, source
+   fingerprint checks, 5% savings requirement and recoverable atomic
+   publication. Only successful publication reaches the existing Sonarr
+   notification; benign skips retain the original and do not notify.
+
+#### Deployment contract
+
+The parent deployment must provision these boundaries first; the installer
+does not create accounts, shares, transport, tags or native service units:
+
+| Linux controller/node path | Mac mapped path / access |
+|---|---|
+| `/data/media` | `/private/var/lib/studio-worker/mounts/media`, SMB **read-only** |
+| `/temp/studio-native` | `/private/var/lib/studio-worker/mounts/cache`, SMB writable |
+
+Only the latter Linux subtree is writable by the Mac; its host backing path
+is `/tmp/tdarr_transcode_cache/studio-native`. Do **not** export all of `/temp`,
+Tdarr `Custom`, its state, or original media writable. Linux and Mac mapped
+roots must be canonical paths without symlinks: use `/private/var`, not the
+macOS `/var` symlink, including in the node's path translators. Symlinks below
+the mapped roots are also rejected. The Linux cache root and its parent must not be
+replaceable by the SMB account. Permit the existing Linux Tdarr user and the
+authenticated SMB account to read/write the job directories and results
+(including group inheritance/ACLs as needed); do not solve this by opening
+the private state directory.
+
+The node's mapped path translators must map the two Linux roots to the exact
+Mac roots above in both directions. The encode step requires its input file,
+original file and ticket source to agree on the canonical Mac path; its
+`result.mkv` must translate back to exactly
+`/temp/studio-native/<job-token>/result.mkv` for the Linux commit. Confirm
+that these fields and the token survive both handoffs in the live canary.
+
+Linux needs these sibling files in `/app/server/Tdarr/Custom`:
+`hevc-studio-v1.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`,
+`install-studio-flow.cjs`, and the existing `install-flow.cjs`. Private state
+is `Custom/state/studio-native-v1`, owned by the Linux Tdarr user, **0700**;
+manifests, locks, outcomes and staged files are **0600**. It must remain outside
+every Mac-writable export. The helper also checks actual platform, CPU worker
+type and tags at runtime; tags alone are scheduling, not filesystem isolation.
+
+On the Mac, install `hevc-studio-v1.cjs` and its builtins-only dependency
+`dv5-sidecar.cjs` as sibling files at
+`/var/lib/studio-worker/tdarr/Custom/`. Configure the native node's
+`ffmpegPath` explicitly as `/opt/homebrew/bin/ffmpeg` (with the sibling
+`ffprobe`; checked installation: FFmpeg 9.0.2 / x265 4.3).
+Run native processes as isolated `_studio`, with a private home and no admin
+keys. Begin with **one CPU transcode worker, zero GPU and zero health
+workers**; the Linux storage node still needs an available CPU worker for
+preparation and final verification. Assign `homeserver-storage` only to the
+Linux storage node and `studio-native` only to the Mac. The existing
+`https://tdarr.danteb.com` proxy serves the web UI on **8265**, not the node
+socket on **8266**; pointing the native node there returns `Invalid namespace`.
+Use `http://127.0.0.1:8266` on the Mac through the restricted SSH tunnel to a
+loopback-only fixed Linux relay targeting `tdarr:8266`. Keep the dedicated
+Tdarr API key: SSH protects the LAN hop, not application authorization. Both
+the SSH Match block and key options permit only `127.0.0.1:1445` (SMB) and
+`127.0.0.1:8266` (Tdarr); no new public proxy, LAN listener or firewall port.
+Native encoding uses the installed Tdarr CLI helper for worker progress and
+cancellation, refusing an untracked subprocess if that helper is unavailable.
+The module require path above remains `/var/...` for compatibility with the
+already-installed flow; it is not a mapped share or an input-validation path.
+
+#### Prevent the Mac from taking existing Linux-only jobs
+
+**Keep the native daemon stopped/disabled on the shared controller.** On
+2026-11-13 at approximately 13:39:10-13:39:58 UTC, a copied-media attempt
+admitted 23 existing staged jobs from `Io-wVbVRh` (TV Shows) to `Studio-Native`,
+despite all production library exclusions being true in both live and
+persisted settings. No canary encode started. Every affected job resumed
+`homeserver-hevc-cpu-v1` at preparation and failed creating its unmapped Mac
+`/temp/tdarr-workDir2-*` directory (read-only filesystem, then ENOENT).
+Earlier Linux steps were only input/routing; no encode or publication step
+ran on the Mac and no subsequent Linux publisher execution was recorded.
+All 23 became `Transcode error`; none remained in staging. Original sizes
+matched database records, timestamps matched within one microsecond of JSON
+floating-point precision, and all source change times preceded the attempt.
+This is metadata/report evidence, not a pre/post cryptographic comparison.
+The disposable sample's original SHA256 was reverified unchanged.
+
+After private snapshots and explicit user approval, exactly those 23
+file-table records were returned to `Queued` at 13:59 UTC through the
+existing CRUD API, changing only `TranscodeDecisionMaker`. There were no
+staged rows to retry, so `transcode-user-verdict` was not used. Reports were
+retained and no cache files were deleted. The canary and all production
+library controls, HomeServer tags and worker limits were restored to their
+pre-attempt values; only HomeServer remained connected. Both temporary root
+shells were exited and their cached sudo credentials invalidated.
+
+Read-only inspection of the installed Rust server explains the bypass:
+`get_next_task_inner` applies `librariesToNotProcess` through
+`get_queued_files::libraries_to_not_process_where`, but
+`get_staged_files::StagedSelectionContext` and `matching_staged_bucket` do
+not apply that exclusion map. Staged selection checks worker/GPU bucket,
+required tags and the library schedule instead. Its tag matcher immediately
+accepts an empty job-tag list; an extra `studio-native` node tag does not
+restrict untagged old jobs. A new guard in the current flow cannot protect
+already-staged continuations.
+
+The prior recommendation to verify exclusions and freeze library additions
+before unpausing is **withdrawn**. Neither settings readback, a fixed library
+inventory nor a one-worker limit establishes scheduling isolation. A new
+attempt needs explicit approval for a separate canary-only controller/state
+with dedicated Linux worker and only disposable media/cache exported, or a
+verified upstream fix covering fresh and staged selection, including
+untagged retry/resume and tag handoffs. Include an eligible disposable decoy
+that the native node must not accept. Do not drain/retag shared production
+staging or globally pause production as an implicit workaround.
+
+`restrict-studio-node.cjs` remains a **settings-only helper**, not an activation
+gate. `librariesToNotProcess` uses `true` to exclude a library from fresh
+selection; `false` or a missing key allows it, so new libraries also default
+allowed. For an otherwise approved isolated setup, deploy the helper beside
+the Linux installer and substitute the exact connected native node name:
+
+```bash
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/restrict-studio-node.cjs --node-name StudioNative
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/restrict-studio-node.cjs --node-name StudioNative --apply
+```
+
+The first command is read-only. The explicit apply backs up settings (0600),
+requires the native-tagged node and canary to remain paused/disabled, checks
+at most one CPU worker and no GPU/health workers, and sends **only**
+`librariesToNotProcess` through the supported `update-node` API. It checks
+inventory again before/after, verifies the map in `get-nodes` and the
+`NodeJSONDB` record keyed by node name, and never changes pause state, tags
+or worker limits. Successful readback proves storage only, **not staged-job
+enforcement**. Keep the node paused; do not reconnect it to the shared
+controller merely to rerun this utility.
+
+The API payload is
+`{data:{nodeID:<current connected ID>,nodeUpdates:{librariesToNotProcess:<map>}}}`.
+The map uses library `_id`, **not** flow IDs or node names. For the native
+canary, all three TV libraries, the production DV5 library and any retired
+DV5 canary must be excluded; only `homeserver-hevc-studio-canary-v1` is
+allowed. The Linux storage node must still be allowed to process the native
+canary so both storage steps can execute.
+
+#### Isolated lab follow-up (2026-11-13)
+
+The disposable lab confirmed that the shared scheduler still cannot perform
+the intended cross-node handoffs: every handoff needed a manual node-pause
+gate, and a tagged staged item resumed on the Linux storage node instead of
+the Studio. The filesystem/network sandbox denied an eligible decoy, but a
+separate queued/staged-decoy scheduler test was **not** performed. This does
+not validate production routing or activation.
+
+The full-episode Mac encode took 39m18s and produced 582,779 KiB from a
+498,226,784-byte source. Linux validation correctly kept the original because
+the output was larger; the original SHA-256 remained unchanged. A 31-second
+excerpt encoded from 11,687,533 bytes of real content padded to 134,217,728
+bytes, producing a 10,673,016-byte result that passed private-copy,
+validation, full decode and publication. The apparent savings are caused by
+padding and are not representative compression evidence.
+
+No production library, queue or service was changed. The temporary server
+containers, networks, copied media/cache/state and SSH forward were removed;
+production mounts remain and the Studio Tdarr daemon is disabled. Privileged
+cleanup removed the three lab LaunchDaemon plists and the two exact lab
+directories/logs listed in [`macos/DECISIONS.md`](../../macos/DECISIONS.md#on-the-studio).
+Preflight found regular files/directories only, with no symlinks or special
+files; post-check confirmed all five targets absent and no lab Tdarr process.
+Production SMB mounts remained mounted, production Tdarr remained disabled,
+and the server's production Tdarr and relay containers remained running.
+
+Authenticated Tdarr API access, node identity, installed plugins and both node
+processes remain trusted. The private-copy boundary prevents shared-cache path
+redirection and mutable-byte publication; it is **not a sandbox for malicious
+Tdarr plugins** or a proof of perceptual quality/encoder provenance.
+
+#### Canary and later activation (blocked pending isolation)
+
+The following describes the disabled installer and future acceptance checks,
+not permission to retry against production. After an explicitly approved
+isolated deployment and share permissions, preview, then explicitly
+create the disabled canary (run as the existing Linux Tdarr user):
+
+```bash
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/install-studio-flow.cjs
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/install-studio-flow.cjs --apply
+```
+
+The installer backs up live flows/libraries/variables to a sensitive 0600
+`Custom/backups/studio-flow-*.json`, creates only the new immutable flow,
+`homeserver-hevc-studio-canary-v1` library and its own CRF 20 variable, then
+reads the records back. There is deliberately **no `--enable` mode**. Existing
+versioned flows must match exactly, and an already-enabled canary is rejected
+rather than overwritten. Workers, global scheduling, real libraries and
+existing CRFs are never updated.
+Tdarr 3.07's packaged Rust runtime no longer supplies the old
+`srcug/commonModules/jobs/libraryDefaults` JavaScript module. The installer
+therefore clones the existing safe-v1 TV library's schema (without changing
+that record), clears its folder exclusions and resets processing/watcher/
+scan toggles, counters, paths and flow assignment for the isolated canary.
+
+Place a **disposable copy**, not a hardlink, of representative eligible SDR
+media in `/data/media/tdarr-studio-canary` on Linux. That directory must not
+be watched by any other library, and the copy must have settled for three
+minutes (the prepare helper also rejects sources newer than two minutes).
+Only after the scheduling boundary above is resolved may the operator
+explicitly enable canary processing and ingest one exact file with
+`scanFolderWatcher` and a one-element path array, keeping watchers/startup
+scans/health checks off. Export only that disposable subtree and dedicated
+cache to the Mac, with matching path translations; the production-wide media
+mapping above is not sufficient canary containment. Confirm both handoffs in
+the job report, the Homebrew software encode,
+the private manifest/outcome on Linux, complete Linux decode, expected savings,
+tracks/chapters/metadata, playback and visual quality. Verify the Mac cannot
+write originals or read private state. Stop the canary after the sample.
+
+This repository's automated tests exercise real Linux descriptor/path
+boundaries and private-copy publication with mocked probes/decodes. They do
+not replace the parent's **actual cross-node media canary**: mapped path
+translation, persistent `job.jobId`/flow variables across requeue, native
+process cancellation, SMB permissions and the installed FFmpeg build must
+be checked end-to-end before migration.
+
+For any later real-library activation, snapshot library/flow/variable/node
+settings first; guard/pause new work, drain active jobs, and deliberately
+change only the intended libraries' flow IDs. Preserve their existing `crf`
+variables and retain both old flows/modules until all old jobs finish.
+Rollback is an explicit restoration of the saved settings after draining
+native jobs, not rerunning this installer. Do not edit a versioned module
+while its jobs are active.
+
+Successful jobs and no-saving skips unlink only the known shared result and
+remove its now-empty job directory through pinned handles. Cleanup failures
+are logged without misreporting a completed publication. Failed jobs retain
+their shared output and private manifest/commit lock for diagnosis; private
+staging is removed. Locks prevent replay/parallel commits: inspect originals,
+outcomes and any `.partial.old` recovery files before retrying as a **new job**.
+Never blindly delete a lock to resume a possibly published job. Retire only
+finished, positively identified job directories/manifests after draining work;
+monitor cache capacity and private-state retention.
+
 For existing size-policy errors, first preview, then deliberately apply:
 
 ```bash

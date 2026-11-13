@@ -1,0 +1,262 @@
+import asyncio
+import os
+import tempfile
+import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+import httpx
+import numpy as np
+from fastapi import HTTPException
+
+import whisper_adapter
+from whisper_worker import (
+    decoding_options, read_pcm, repair_srt, segments_to_srt, uses_faster_whisper,
+    validate_srt,
+)
+
+
+class AdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        whisper_adapter.job_lock = asyncio.Lock()
+        self.client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=whisper_adapter.app),
+            base_url="http://127.0.0.1",
+        )
+
+    async def asyncTearDown(self):
+        await self.client.aclose()
+
+    async def test_pcm_srt_and_opaque_video_label(self):
+        raw = b"\x00\x80\x00\x00\xff\x7f"
+
+        async def fake_worker(mode, path, language, timeout):
+            self.assertEqual((mode, language, timeout), ("translate", "te", 7200))
+            with open(path, "rb") as audio:
+                self.assertEqual(audio.read(), raw)
+            return b"1\n00:00:00,000 --> 00:00:01,000\nHello.\n\n"
+
+        with patch.object(whisper_adapter, "run_worker", fake_worker):
+            response = await self.client.post(
+                "/asr",
+                params={
+                    "task": "translate", "language": "te", "output": "srt",
+                    "encode": "false", "video_file": "/unreadable/private/path",
+                },
+                files={"audio_file": ("audio", raw, "application/octet-stream")},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("00:00:00,000 --> 00:00:01,000", response.text)
+
+    async def test_detect_language_response(self):
+        async def fake_worker(mode, path, language, timeout):
+            self.assertEqual((mode, language), ("detect", None))
+            return b'{"language_code":"ja","detected_language":"japanese","confidence":0.9}'
+
+        with patch.object(whisper_adapter, "run_worker", fake_worker):
+            response = await self.client.post(
+                "/detect-language?encode=false",
+                files={"audio_file": ("audio", b"\x01\x00")},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["language_code"], "ja")
+        self.assertEqual(response.json()["detected_language"], "japanese")
+
+    async def test_invalid_inputs_are_rejected(self):
+        cases = [
+            ("/asr?task=bad&output=srt&encode=false", b"\x00\x00"),
+            ("/asr?task=transcribe&language=../x&output=srt&encode=false", b"\x00\x00"),
+            ("/asr?task=transcribe&output=json&encode=false", b"\x00\x00"),
+            ("/detect-language?encode=true", b"\x00\x00"),
+            ("/detect-language?encode=false", b""),
+            ("/detect-language?encode=false", b"\x00"),
+        ]
+        with patch.object(whisper_adapter, "run_worker") as worker:
+            for url, raw in cases:
+                with self.subTest(url=url, size=len(raw)):
+                    response = await self.client.post(
+                        url, files={"audio_file": ("audio", raw)}
+                    )
+                    self.assertEqual(response.status_code, 400)
+            worker.assert_not_called()
+        with patch.object(whisper_adapter, "MAX_AUDIO", 2):
+            response = await self.client.post(
+                "/detect-language?encode=false", files={"audio_file": ("audio", b"\0" * 4)}
+            )
+        self.assertEqual(response.status_code, 413)
+        response = await self.client.post(
+            "/detect-language?encode=false", data={"audio_file": "not a file"}
+        )
+        self.assertEqual(response.status_code, 415)
+
+    async def test_declared_body_limit_is_enforced(self):
+        with patch.object(whisper_adapter, "MAX_BODY", 32):
+            response = await self.client.post(
+                "/detect-language?encode=false", files={"audio_file": ("audio", b"\0\0")}
+            )
+        self.assertEqual(response.status_code, 413)
+
+    async def test_busy_rejects_without_launching_another_job(self):
+        started = asyncio.Event()
+        finish = asyncio.Event()
+
+        async def fake_worker(mode, path, language, timeout):
+            started.set()
+            await finish.wait()
+            return b'{"language_code":"en","detected_language":"english"}'
+
+        with patch.object(whisper_adapter, "run_worker", fake_worker):
+            first = asyncio.create_task(self.client.post(
+                "/detect-language?encode=false", files={"audio_file": ("audio", b"\0\0")}
+            ))
+            await started.wait()
+            second = await self.client.post(
+                "/detect-language?encode=false", files={"audio_file": ("audio", b"\0\0")}
+            )
+            self.assertEqual(second.status_code, 503)
+            finish.set()
+            self.assertEqual((await first).status_code, 200)
+
+    async def test_worker_failure_is_not_subtitle_success(self):
+        async def fail(mode, path, language, timeout):
+            raise HTTPException(500, "Speech worker failed")
+
+        with patch.object(whisper_adapter, "run_worker", fail):
+            response = await self.client.post(
+                "/detect-language?encode=false", files={"audio_file": ("audio", b"\0\0")}
+            )
+            self.assertEqual(response.status_code, 500)
+        self.assertFalse(whisper_adapter.job_lock.locked())
+
+    async def test_invalid_srt_worker_exit_is_explicit(self):
+            process = AsyncMock()
+            process.returncode = 65
+            process.communicate.return_value = (b"", b"")
+            with patch("whisper_adapter.asyncio.create_subprocess_exec", return_value=process):
+                with self.assertRaises(HTTPException) as error:
+                    await whisper_adapter.run_worker("transcribe", "audio.pcm", "en")
+            self.assertEqual(error.exception.status_code, 422)
+            self.assertEqual(error.exception.detail, "Speech worker produced invalid SRT")
+
+    async def test_only_safe_repair_diagnostics_are_logged(self):
+        process = AsyncMock()
+        process.returncode = 0
+        process.communicate.return_value = (
+            b"valid result",
+            b"private transcript text\n"
+            b'SRT timing repair: {"reordered": 3, "invalid_duration": 2, '
+            b'"overlap": 1, "shifted": 0}\n',
+        )
+        with patch("whisper_adapter.asyncio.create_subprocess_exec", return_value=process):
+            with self.assertLogs("studio_whisper", level="WARNING") as logs:
+                await whisper_adapter.run_worker("translate", "audio.pcm", "te")
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('"reordered": 3', logs.output[0])
+        self.assertNotIn("private transcript text", logs.output[0])
+
+
+    def test_cpu_telugu_jobs_get_audio_scaled_timeout(self):
+        two_hours = 2 * 60 * 60 * 16000 * 2
+        self.assertEqual(whisper_adapter.job_timeout("translate", "te", two_hours), 4 * 60 * 60)
+        self.assertEqual(whisper_adapter.job_timeout("translate", "te", 32000), 2 * 60 * 60)
+        self.assertEqual(whisper_adapter.job_timeout("translate", "ja", two_hours), 2 * 60 * 60)
+        self.assertEqual(whisper_adapter.job_timeout("detect", None, two_hours), 2 * 60 * 60)
+
+
+class WorkerTests(unittest.TestCase):
+    def test_signed_little_endian_pcm_normalization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "audio.pcm")
+            with open(path, "wb") as audio:
+                audio.write(b"\x00\x80\x00\x00\xff\x7f")
+            np.testing.assert_allclose(read_pcm(path), [-1.0, 0.0, 32767 / 32768])
+            self.assertEqual(len(read_pcm(path, 1)), 1)
+
+    def test_decoder_reset_is_limited_to_explicit_english_transcription(self):
+        self.assertEqual(
+            decoding_options("transcribe", "en"), {"condition_on_previous_text": False}
+        )
+        for mode, language in (("translate", "en"), ("translate", "ja"),
+                               ("translate", "te"), ("transcribe", "ja"),
+                               ("transcribe", "")):
+            self.assertEqual(decoding_options(mode, language), {})
+
+    def test_only_explicit_telugu_speech_uses_server_equivalent_decoder(self):
+        self.assertTrue(uses_faster_whisper("translate", "te"))
+        self.assertTrue(uses_faster_whisper("transcribe", "te"))
+        for mode, language in (("detect", "te"), ("translate", "ta"),
+                               ("translate", ""), ("transcribe", "en")):
+            self.assertFalse(uses_faster_whisper(mode, language))
+
+    def test_segments_use_webservice_srt_format_without_empty_cues(self):
+        srt = segments_to_srt([
+            SimpleNamespace(start=0.0, end=1.2344, text=" Hello --> there "),
+            SimpleNamespace(start=1.5, end=2.0, text="  "),
+            SimpleNamespace(start=3661.0, end=3662.5, text=" Goodbye"),
+        ])
+        self.assertEqual(srt, (
+            "1\n00:00:00,000 --> 00:00:01,234\nHello -> there\n\n"
+            "2\n01:01:01,000 --> 01:01:02,500\nGoodbye\n"
+        ))
+        validate_srt(srt)
+
+    def test_srt_timing_is_validated_without_rewriting(self):
+        validate_srt(
+            "1\n00:00:00,000 --> 00:00:02,000\nHello\n\n"
+            "2\n00:00:01,500 --> 00:00:03,000\nWorld\n"
+        )
+        for text in (
+            "1\n00:00:02,000 --> 00:00:01,000\nHello\n",
+            "1\n00:00:02,000 --> 00:00:02,000\nHello\n",
+            "1\n00:00:02,000 --> 00:00:03,000\nHello\n\n"
+            "2\n00:00:01,000 --> 00:00:04,000\nWorld\n",
+            "1\n00:60:00,000 --> 01:00:01,000\nHello\n",
+        ):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                validate_srt(text)
+
+    def test_repairs_reversed_backwards_and_overlapping_cues_without_losing_text(self):
+        text = (
+            "1\n00:00:02,000 --> 00:00:03,000\nFirst\n\n"
+            "2\n00:00:04,000 --> 00:00:01,000\nSecond\n\n"
+            "3\n00:00:01,000 --> 00:00:02,500\nThird\n"
+        )
+        repaired, counts = repair_srt(text, 6000)
+        self.assertEqual(counts["reordered"], 1)
+        self.assertEqual(counts["invalid_duration"], 1)
+        self.assertEqual(counts["overlap"], 1)
+        self.assertEqual(repaired, (
+            "1\n00:00:01,000 --> 00:00:02,000\nThird\n\n"
+            "2\n00:00:02,000 --> 00:00:03,000\nFirst\n\n"
+            "3\n00:00:04,000 --> 00:00:06,000\nSecond\n"
+        ))
+
+    def test_equal_starts_are_separated(self):
+        text = ("1\n00:00:01,000 --> 00:00:02,000\nFirst\n\n"
+                "2\n00:00:01,000 --> 00:00:02,000\nSecond\n")
+        repaired, counts = repair_srt(text, 3000)
+        self.assertIn("00:00:01,000 --> 00:00:01,100", repaired)
+        self.assertIn("00:00:01,100 --> 00:00:02,000", repaired)
+        self.assertEqual(counts["shifted"], 1)
+
+    def test_rejects_unsalvageable_and_malformed_timing(self):
+        for text, duration in (
+            ("1\n00:01:00,000 --> 00:00:01,000\nBad\n", 120000),
+            ("1\n00:00:05,000 --> 00:00:06,000\nBad\n", 5000),
+            ("1\n00:00:01,000 --> 00:00:01,010\nA\n\n"
+             "2\n00:00:01,000 --> 00:00:01,010\nB\n", 1050),
+            ("1\n00:60:00,000 --> 00:00:01,000\nBad\n", 3000),
+        ):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                repair_srt(text, duration)
+
+    def test_existing_short_nonoverlapping_cues_are_preserved(self):
+        text = ("1\n00:00:01,000 --> 00:00:01,040\nA\n\n"
+                "2\n00:00:01,050 --> 00:00:01,080\nB\n")
+        repaired, counts = repair_srt(text, 3000)
+        self.assertEqual(repaired, text)
+        self.assertFalse(any(counts.values()))
+
+
+if __name__ == "__main__":
+    unittest.main()
