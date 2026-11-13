@@ -81,7 +81,9 @@ comparisons, not a speaker-reviewed accuracy assessment:
   the punctuation loop and improved word-bearing reference-cue overlap from
   527/630 to 623/630. It is not proof of semantic correctness, and has not
   established whether that setting is preferable for other languages. The
-  experimental adapter applies it only to explicitly English transcription.
+  experimental adapter applies it only to explicitly English transcription;
+  a repeat through the installed service took 53 seconds, with 621/630
+  word-bearing reference cues overlapping word-bearing output.
 * Japanese-to-English translation took 104 seconds for a 22m51s anime episode.
   Dialogue-only reference cues overlapped most generated cues, but overlap
   does not establish translation correctness or exclude hallucinations.
