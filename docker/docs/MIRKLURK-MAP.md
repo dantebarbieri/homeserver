@@ -399,7 +399,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.46** and **fd2b:92df:1a5b:1::2e**, not
+`compose_proxy` addresses **192.168.128.23** and **fd2b:92df:1a5b:1::17**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -439,6 +439,15 @@ do not apply NPM config when its supported privacy check already passes.
 Recheck actual NPM container identity and both addresses before activation,
 then verify full public bytes, client identity and spoof resistance.
 Do not restore the previous stale trust file as an image rollback.
+The 2026-11-13 ordinary updater recreated NPM at 10:10 UTC; its verified
+addresses are now .23 / ::17, while Forgejo owns the stale .46 / ::2e pair.
+Apply the same reviewed exact-peer-only procedure, removing both stale entries
+and rechecking exclusive ownership before merge and activation. Preserve the
+accepted 21abd3a map source and both immutable images, uploads and all other
+containers, including the scheduled 0111204 wiki runtime. Recreate only web
+using its actual image-ID override; do not rebuild, pull, rerun the wiki
+updater or change NPM. Revalidate complete IPv4/IPv6 bytes, protections,
+actual client identities, spoof resistance and one sharing/cleanup lifecycle.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
