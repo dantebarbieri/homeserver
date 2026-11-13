@@ -158,18 +158,20 @@ Not done: SSH aliases on all machines still use IPs.
 ## Exposing Studio services
 
 Recommendation, not yet applied (Dante asked whether to use SSH tunnels or a
-real reverse proxy):
+real reverse proxy). DNS naming and transport are independent: use
+`home.arpa` with either. A private DNS name does not authenticate clients.
 
 - **Web UIs for people:** an NPM proxy host pointing at
   `http://ai-studio.home.arpa:<port>`, with Authelia when the app has no login.
   This matches the server's convention, and NPM resolves `home.arpa`.
 - **APIs for machines** (Whisper for Bazarr, Ollama for automations): these
-  apps have no authentication. Listen on the LAN but allow only the server's IP
-  (macOS `pf`), or put a small reverse proxy that requires an API key in front.
-  Authelia's login flow does not suit API clients.
-- **SSH tunnels** only for server-only resources the Studio must not expose on
-  the LAN (today: Samba and the Tdarr node port). For ordinary HTTP they add
-  moving parts.
+  apps have no authentication. Prefer an authenticated TLS reverse proxy for
+  shared HTTP access; an API key or client certificate can suit clients that
+  cannot use Authelia's interactive login. A server-only SSH tunnel is also a
+  secure option while there is just one consumer. An IP allowlist alone does
+  not encrypt traffic or authenticate individual clients.
+- **SSH tunnels** remain appropriate for private non-HTTP resources (today:
+  Samba and the Tdarr node port); an HTTP reverse proxy does not replace them.
 
 Today Whisper and Ollama listen only on the Studio's loopback, so nothing else
 can use them yet.
@@ -225,21 +227,30 @@ exists.
 quality. *Dante* keeps quality-first CPU `libx265` encoding and cares about the
 result, not the configuration.
 
-**"Hardware encoders are not equivalent quality per byte"** is true:
+**Encoder fact-check:** do not assume equal quality per byte, but there is no
+universal software > NVIDIA > Apple ranking.
 
-- At the same bitrate, slow software x265 beats hardware encoders. Recent NVENC
-  (including the server's RTX 2070 SUPER) is roughly comparable to faster
-  software presets.
-- Apple's VideoToolbox does not improve on NVENC. Comparisons rank x265, then
-  NVENC, then VideoToolbox at equal bitrate. Its strengths are speed and low
-  power; it has few tuning options, and HandBrake notes its scaler is less
-  sharp. No M5-specific measurement was found.
-- So the Studio plan used CPU `libx265` slow, not the media engine, matching
-  [why the server uses CPU](../docker/docs/TDARR.md#why-cpu-libx265-instead-of-nvenc).
+- Slow software HEVC encoding generally favors compression efficiency over
+  hardware encoding's speed and power advantages. HandBrake's controlled
+  comparison illustrates that tradeoff, but uses an older GTX 1060, not this
+  server's RTX 2070 SUPER (Turing). It is not a measurement of these machines.
+- An M1 Pro comparison found better detail from x265 at similar output size
+  for one clip. It did not test NVENC or the Studio's M5 Max. **Whether the
+  Studio's hardware encoder improves on this NVENC is unverified**, not a
+  demonstrated yes or no.
+- Results depend on codec, chip generation, encoder settings, content and
+  bitrate. HandBrake documents limited VideoToolbox tuning and a different
+  scaler; scaler sharpness is not evidence of encoder compression quality.
+- The current plan retains CPU `libx265` slow, matching
+  [the server's configuration](../docker/docs/TDARR.md#why-cpu-libx265-instead-of-nvenc).
+  To reconsider, compare identical clips at matched video bitrate, resolution
+  and bit depth without scaling or tone-map differences; inspect the picture
+  as well as metrics such as VMAF. CRF/CQ numbers are not interchangeable
+  across encoders. No such local comparison has been run.
 
-Sources: [HandBrake on VideoToolbox](https://handbrake.fr/docs/en/latest/technical/video-videotoolbox.html),
-[M1 Pro `hevc_videotoolbox` vs `libx265`](https://yre.jp/en/post/m1mac_h265/),
-[VMAF comparison of all three (Chinese)](https://blog.csdn.net/a18302465887/article/details/164360115).
+Sources: [HandBrake encoder comparison](https://handbrake.fr/docs/en/latest/technical/performance.html#performance-comparison-between-video-encoders),
+[HandBrake on VideoToolbox](https://handbrake.fr/docs/en/latest/technical/video-videotoolbox.html),
+[M1 Pro `hevc_videotoolbox` vs `libx265`](https://yre.jp/en/post/m1mac_h265/).
 
 **Current: not working, disabled.**
 
@@ -295,18 +306,12 @@ them.
 to remove Colima until we have a service that we want to run in Docker".
 *Dante* prefers Colima to Docker Desktop.
 
-**Current:** being removed; nothing ever ran in it. Dante asked on 2026-11-13
-to remove Colima, the Docker CLI and the `com.danteb.colima` LaunchDaemon. If
-`command -v colima` still prints a path, finish the removal:
-
-```sh
-sudo launchctl bootout system/com.danteb.colima
-sudo rm -f /Library/LaunchDaemons/com.danteb.colima.plist
-colima delete --force --data
-brew uninstall colima docker docker-compose docker-buildx && brew autoremove
-rm -rf ~/.colima ~/.docker ~/Services/docker-shared ~/Library/Caches/colima \
-  ~/Library/Logs/studio-colima*.log
-```
+**Current:** removed on 2026-11-13. Before removal, the VM had no containers or
+volumes, only the `hello-world` smoke-test image; no service depended on it.
+Removed the `com.danteb.colima` LaunchDaemon and plist, VM and data disk,
+Colima, Docker CLI, Compose, Buildx and Lima, plus their Studio-specific
+configuration, shared directory, cache and logs. No Colima/Lima processes
+remain. Native Whisper and Ollama remain installed and working.
 
 When a service is chosen, reinstall with `brew install colima docker docker-compose`
 (old LaunchDaemon: `git show 7253f89:macos/com.danteb.colima.plist`). Share only
@@ -323,7 +328,7 @@ the server.
 |---|---|
 | `macos/admin/` | sshd hardening and dotfiles |
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, Tdarr launcher and plists |
-| `macos/install/` | The one-time installers as run on 2026-11-13 (they read from the deleted `~/Services/ai-staging`; the files they staged are in `macos/` and `macos/ai/`) |
+| `macos/install/` | Historical one-time installers from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
 | `macos/ai/` | Whisper adapter, Ollama and Whisper plists, Bazarr patch, `compare_speech.py`, `condition_false.py`, model evaluation |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
@@ -339,13 +344,22 @@ the server.
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
 | Worker account | `_studio`, `/var/lib/studio-worker`, `001-studio-worker.conf`, ACLs from `allow-worker-tools.sh` | Last: remove the ACLs (`ls -le`), `sudo dscl . -delete /Users/_studio`, delete the home and conf |
-| Benchmark subtitles (keep) | `~/Services/ai-staging/` (only `.srt`/`.ass` remain: `benchmark-20261113/`, `baseline/`, `qwen/`); inputs for re-runs in the worker's `ai-tests/benchmark-20261113/` | Keep until a speech default is chosen |
-| Qwen comparison (needs sudo to remove) | Worker `ai-tests/models/` and its `mlx-qwen3-asr` uv tool | `sudo rm -rf /var/lib/studio-worker/ai-tests/models` and `sudo -u _studio env HOME=/var/lib/studio-worker /opt/homebrew/bin/uv tool uninstall mlx-qwen3-asr` |
+| Benchmark subtitles (keep) | `~/Services/ai-staging/` (`benchmark-20261113/`, `baseline/`, `qwen/`) and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in both trees | Keep until a speech default is chosen |
 
-Deleted with Dante's approval on 2026-11-13 (about 16 GB): the admin's Hugging
-Face and uv caches, the duplicate Tdarr download, and the staging folder's
-venv, audio and script copies (scripts not already in git were moved to
-`macos/install/`, `macos/checks/` and `macos/ai/`).
+Deleted with Dante's approval on 2026-11-13: the admin's Hugging Face and uv
+download caches, the worker's uv cache, the duplicate Tdarr download, staging
+venv, benchmark audio, and duplicate scripts. Reusable scripts are in
+`macos/install/`, `macos/checks/` and `macos/ai/`. The worker's
+`ai-tests/models/asr` and `ai-tests/models/aligner` (6.1 GiB combined) and
+`mlx-qwen3-asr` uv tool were also removed. This Qwen speech experiment is
+separate from Ollama's **retained `qwen3:8b`** language model. The worker's
+Whisper model, service environment and `mlx-whisper` tool are retained.
+
+All 28 subtitle files across the two trees retained their SHA-256 hashes
+through cleanup. To repeat inference benchmarks, re-extract the input audio
+from the original private media; the subtitle-overlap scorer still works on
+the retained outputs. An empty uv cache/lock directory may be recreated by uv
+and is not a leftover model download.
 
 ### On the homeserver
 
@@ -368,8 +382,8 @@ venv, audio and script copies (scripts not already in git were moved to
 5. Ollama: pick a first automation, or remove it.
 6. Tdarr: choose a retry option or abandon it. If abandoned, remove Tdarr, the
    tunnel, mounts, relays and Samba.
-7. Finish removing Colima, and the Qwen comparison if not needed (both need
-   sudo; see [Docker](#docker) and the table above).
-8. Merge [#205](https://github.com/dantebarbieri/homeserver/pull/205) so agents
-   elsewhere can find this, then check the server's sshd file is the Nix symlink
-   and reconcile the private Compose overlay with `compose.studio.yml`.
+7. Review [#205](https://github.com/dantebarbieri/homeserver/pull/205). The docs
+   are already pushed on `dantebarbieri-server-cooling` and accessible from
+   other machines; merging makes them available on the default branch. After
+   deployment, check the server's sshd file is the Nix symlink and reconcile
+   the private Compose overlay with `compose.studio.yml`.

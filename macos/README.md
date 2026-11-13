@@ -3,7 +3,7 @@
 The Studio runs native speech inference, an advisory local model, and a
 **native CPU/x265 Tdarr node that is disabled** (see
 [Operations and rollout gates](#operations-and-rollout-gates)). Docker (Colima)
-is being removed until a service needs it; see [Docker](DECISIONS.md#docker).
+has been removed until a service needs it; see [Docker](DECISIONS.md#docker).
 This setup does not move production Bazarr or authorize Tdarr to
 replace original media.
 

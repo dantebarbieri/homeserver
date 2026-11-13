@@ -40,7 +40,7 @@ configuration was changed.
 | First response | Clean out dust, give the closet clearance, add controllable fans | Evidence pointed to airflow plus sustained CPU encoding, not a failing part | Agent advice; Dante cleaned and moved the server |
 | Fans | The Noctua fans and hub above | Molex fans cannot be controlled or monitored | Dante bought and installed them (an agent had suggested a SilverStone CPF04 hub) |
 | HDDs | No new drives | Only three free bays; 12 drives is the intended count | Dante |
-| Encoding | Keep quality-first CPU `libx265` | [Hardware encoders give less quality per byte](../macos/DECISIONS.md#offload-video-encoding-tdarr) | Dante |
+| Encoding | Keep quality-first CPU `libx265` | [Compression-efficiency tradeoff; local hardware comparison still unmeasured](../macos/DECISIONS.md#offload-video-encoding-tdarr) | Dante |
 
 ## Incident: drives lost power after the fan install
 

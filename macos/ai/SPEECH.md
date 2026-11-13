@@ -5,6 +5,17 @@ English, including English subtitles with reliable timing. Do not select a
 model based on size, a clean-English leaderboard or the server's settings.
 No Mac-to-Bazarr cutover has been made.
 
+**Installed candidate:** MLX Whisper large-v3, with previous-text conditioning
+disabled only for English transcription. Ollama's separate `qwen3:8b` model is
+for future text automations, not speech recognition. Qwen3-ASR, its aligner
+and SeamlessM4T were comparisons, not selected services; their benchmark
+installations have been removed. No production speech default has been chosen.
+
+The private benchmark subtitles remain on the Studio; benchmark audio and
+duplicate scripts were cleaned up with permission. Re-extract the original
+audio before repeating inference. See the [retained inventory](../DECISIONS.md#on-the-studio)
+and the full-episode results below.
+
 Large-v3 was initially chosen because it was already available, supports both
 target languages and direct translation, and had an MLX CLI that could be
 tested immediately. That established a baseline; it did not establish the
