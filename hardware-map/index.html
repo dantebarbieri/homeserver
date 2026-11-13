@@ -17,6 +17,7 @@
         <h1>Server Atlas</h1>
         <label id="filter-label" class="sr-only" for="filter">Find hardware</label><input id="filter" type="search" placeholder="Find a component…">
         <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
+        <button id="fan-motion-button" type="button" aria-haspopup="dialog" aria-controls="fan-motion-dialog">Fan motion</button>
         <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">Tools & info</button>
       </header>
       <section class="connector-nav panel" aria-label="Hardware and connector filters">
@@ -47,6 +48,7 @@
           <p id="component-model" class="component-model"></p><p id="component-capacity" class="component-capacity"></p>
           <p id="component-provenance" class="reading-note"></p><p id="component-note" class="muted"></p><p id="component-placement" class="caution"></p>
           <p id="component-reading" class="reading-note"></p>
+          <p id="component-motion" class="reading-note" hidden></p>
           <div class="reference"><h4>Manuals & specifications</h4><div id="component-reference-links"></div></div>
           <h4>Related connectors</h4><div id="component-connectors" class="related-connectors"></div>
           <p class="compact muted">Connector annotations, confidence and pin functions are available in connector focus. Component placement is schematic, not a wiring or fit guide.</p>
@@ -73,6 +75,18 @@
         </form>
         <div class="reference"><h4>Reference</h4><p id="detail-source"></p><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf" target="_blank" rel="noopener noreferrer">Open official manual ↗</a></div>
         </section>
+    </div>
+  </dialog>
+  <dialog id="fan-motion-dialog" class="popup" aria-labelledby="fan-motion-title">
+    <header class="popup-heading"><h2 id="fan-motion-title">Case fan motion study</h2><button id="close-fan-motion" type="button" autofocus>Close ×</button></header>
+    <div class="popup-body">
+      <p class="muted compact">Choose a variant to preview on all eight case fans, or compare the stages together. These are animation demos, not measured speeds or fan controls. CPU and GPU artwork is unchanged.</p>
+      <label class="fan-rotation-toggle"><input id="fan-rotation-enabled" type="checkbox">Spin fans</label>
+      <p id="fan-motion-preference" class="muted compact"></p>
+      <div id="fan-motion-presets" class="fan-motion-presets" role="group" aria-label="Fan speed animation variants"></div>
+      <div class="toolbar fan-motion-actions"><button id="compare-fan-motion" type="button">Compare on map</button><button id="clear-fan-motion" type="button">Clear demo</button></div>
+      <p id="fan-motion-status" class="reading-note" role="status"></p>
+      <p class="muted compact">Speed lines become denser as speed rises. Rotation is stylized, not physical RPM or PWM duty. Reduced-motion preferences pause rotation unless you explicitly enable Spin fans. No live speed is connected yet; static unknown fans are not zero-RPM readings.</p>
     </div>
   </dialog>
   <dialog id="tools-dialog" class="popup tools-popup" aria-labelledby="tools-title">

@@ -24,6 +24,7 @@ main { width: 100%; }
 .map-toolbar h1 { font-size: 15px; color: #c6d9cd; white-space: nowrap; }
 .map-toolbar input { width: 220px; margin-left: auto; font-size: 11px; padding: 7px 10px; }
 .map-toolbar > button { font-size: 11px; padding: 7px 11px; white-space: nowrap; }
+.map-toolbar > button.demo-active { color: var(--amber); border-color: var(--amber); }
 .eyebrow { font-size: 10px; letter-spacing: 1.6px; color: var(--accent); font-weight: 600; }
 .toolbar { display: flex; gap: 8px; padding-bottom: 4px; flex-shrink: 0; font-size: 12px; }
 .notice { border: 1px solid #42715f; background: #172f28; color: #b7ead8; border-radius: 7px; padding: 12px 16px; font-size: 12px; line-height: 1.6; }
@@ -99,6 +100,23 @@ main { width: 100%; }
 .fan-face.redux .fan-ring { fill: #494f4f; stroke: #b8b9b7; }
 .fan-face.redux .fan-blade { fill: #717877; stroke: #494f4f; }
 .fan-face.redux .fan-hub { fill: #5d6464; stroke: #7e8282; }
+.fan-rotor, .fan-speed-lines { transform-box: fill-box; transform-origin: center; }
+.fan-rotor { opacity: var(--fan-blade-opacity, 1); }
+.fan-rotation-enabled .fan-face[data-spinning="true"] .fan-rotor, .fan-rotation-enabled .fan-face[data-spinning="true"] .fan-speed-lines { animation: fan-whirl var(--fan-period) linear infinite; }
+.fan-speed-line { fill: none; stroke: #a8b8b5; stroke-width: 1.2; stroke-linecap: round; opacity: .72; }
+.fan-motion-caption { fill: #283d38; font-size: 10px; font-weight: 600; }
+.fan-rotation-enabled .hardware-part[aria-disabled="true"] .fan-rotor, .fan-rotation-enabled .hardware-part[aria-disabled="true"] .fan-speed-lines,
+#fan-motion-dialog:not([open]) .fan-rotor, #fan-motion-dialog:not([open]) .fan-speed-lines { animation-play-state: paused; }
+@keyframes fan-whirl { to { transform: rotate(360deg); } }
+.fan-rotation-toggle { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: 12px; }
+.fan-rotation-toggle input { width: auto; }
+.fan-motion-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.fan-motion-presets button { display: grid; justify-items: center; gap: 6px; min-width: 0; padding: 10px; font-size: 12px; }
+.fan-motion-presets svg { width: 100%; max-width: 100px; }
+.fan-motion-presets small { font-size: 10px; }
+.fan-motion-presets button[aria-pressed="true"], .fan-motion-actions button[aria-pressed="true"] { border-color: var(--accent); background: #243f36; }
+.fan-motion-actions { flex-wrap: wrap; margin-bottom: 10px; }
+@media (max-width: 540px) { .fan-motion-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .psu-body { fill: #242a2c; stroke: #454c4c; stroke-width: 2; }
 .psu-grille { fill: none; stroke: #5a6061; stroke-width: 2; }
 .psu-label { fill: #eeeee3; font-size: 27px; font-weight: 600; }

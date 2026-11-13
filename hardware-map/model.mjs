@@ -6,6 +6,21 @@ export const occupancyValues = ["unverified", "occupied", "free", "blocked"];
 export const maxImportBytes = 256 * 1024;
 const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
 
+export const fanMotionStages = [
+  { id: "stopped", label: "Stopped", example: 0, ceiling: 0, period: 0, bladeOpacity: 1, rings: 0, segments: 0, sweep: 0 },
+  { id: "slow", label: "Slow", example: .12, ceiling: .2, period: 10, bladeOpacity: 1, rings: 0, segments: 0, sweep: 0 },
+  { id: "medium", label: "Medium", example: .35, ceiling: .45, period: 4, bladeOpacity: .92, rings: 1, segments: 6, sweep: 24 },
+  { id: "fast", label: "Fast", example: .6, ceiling: .7, period: 2, bladeOpacity: .68, rings: 2, segments: 6, sweep: 34 },
+  { id: "very-fast", label: "Very fast", example: .82, ceiling: .9, period: 1.2, bladeOpacity: .48, rings: 3, segments: 8, sweep: 31 },
+  { id: "max", label: "Maximum", example: 1, ceiling: 1, period: .75, bladeOpacity: .28, rings: 3, segments: 12, sweep: 24 },
+];
+
+// Fraction of rated maximum RPM, not PWM duty. Null means unavailable, never stopped.
+export function fanMotionForSpeed(fraction) {
+  if (!Number.isFinite(fraction) || fraction < 0) return null;
+  return fanMotionStages.find(stage => fraction <= stage.ceiling) ?? fanMotionStages.at(-1);
+}
+
 export function matchesHardware(part, category, query = "") {
   const categories = Object.entries(hardwareCategories)
     .filter(([, ids]) => ids.includes(part.componentId ?? part.id))

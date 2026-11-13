@@ -1,5 +1,5 @@
 import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, inspectionConnections, occupancyLabels, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
+import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -11,6 +11,10 @@ const componentById = new Map(components.map(component => [component.id, compone
 const sceneParts = new Map();
 let mode = "snapshot";
 let zoom = 100;
+let fanMotionPreview = "off";
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+let fanRotationEnabled = !reducedMotion.matches;
+let fanRotationOverride = false;
 let dirty = false;
 let storageBlocked = false;
 let pendingPersistence = false;
@@ -122,7 +126,7 @@ function requestPopupClose(dialog) {
   }
 }
 
-for (const id of ["inspector-dialog", "tools-dialog"]) {
+for (const id of ["inspector-dialog", "tools-dialog", "fan-motion-dialog"]) {
   const dialog = $(id);
   let backdropStart = false;
   const outside = event => {
@@ -155,6 +159,11 @@ for (const id of ["inspector-dialog", "tools-dialog"]) {
 }
 $("close-inspector").addEventListener("click", () => requestPopupClose($("inspector-dialog")));
 $("close-tools").addEventListener("click", () => requestPopupClose($("tools-dialog")));
+$("close-fan-motion").addEventListener("click", () => requestPopupClose($("fan-motion-dialog")));
+$("fan-motion-button").addEventListener("click", () => {
+  $("fan-motion-button").focus({ preventScroll: true });
+  openPopup($("fan-motion-dialog"));
+});
 $("tools-button").addEventListener("click", () => {
   $("tools-button").focus({ preventScroll: true });
   openPopup($("tools-dialog"));
@@ -226,19 +235,120 @@ function hardwarePart(id, componentId, label, placement, connectorIds = [], extr
   });
 }
 
-function drawFan(parent, x, y, size, redux = false) {
-  const fan = svgElement("g", { class: `fan-face${redux ? " redux" : ""}` });
+function drawFan(parent, x, y, size, redux = false, fraction = null) {
+  const fan = svgElement("g", {
+    class: `fan-face${redux ? " redux" : ""}`, "data-size": size,
+    "data-center-x": x + size / 2, "data-center-y": y + size / 2, "aria-hidden": "true",
+  });
+  fan.append(svgElement("title", {}));
   fan.append(svgElement("rect", { x, y, width: size, height: size, rx: 5, class: "fan-frame" }));
   fan.append(svgElement("circle", { cx: x + size / 2, cy: y + size / 2, r: size * .43, class: "fan-ring" }));
+  const rotor = svgElement("g", { class: "fan-rotor" });
   for (let angle = 0; angle < 360; angle += 60) {
-    fan.append(svgElement("path", {
+    rotor.append(svgElement("path", {
       d: `M${x + size * .5} ${y + size * .49} Q${x + size * .07} ${y + size * .18} ${x + size * .45} ${y + size * .08} Q${x + size * .77} ${y + size * .09} ${x + size * .57} ${y + size * .48} Z`,
       transform: `rotate(${angle} ${x + size / 2} ${y + size / 2})`, class: "fan-blade",
     }));
   }
+  fan.append(rotor, svgElement("g", { class: "fan-speed-lines" }));
   fan.append(svgElement("circle", { cx: x + size / 2, cy: y + size / 2, r: size * .15, class: "fan-hub" }));
+  if (parent.dataset.id) fan.append(svgElement("text", { x: x + size / 2, y: y + size + 15, class: "fan-motion-caption centered" }));
+  applyFanMotion(fan, fraction);
   parent.append(fan);
 }
+
+function applyFanMotion(fan, fraction) {
+  const stage = fanMotionForSpeed(fraction);
+  fan.dataset.motionStage = stage?.id ?? "unknown";
+  fan.dataset.spinning = String(Boolean(stage?.period));
+  fan.style.setProperty("--fan-period", `${stage?.period ?? 0}s`);
+  fan.style.setProperty("--fan-blade-opacity", stage?.bladeOpacity ?? 1);
+  const lines = fan.querySelector(".fan-speed-lines");
+  lines.replaceChildren();
+  const size = Number(fan.dataset.size);
+  const cx = Number(fan.dataset.centerX);
+  const cy = Number(fan.dataset.centerY);
+  for (let ring = 0; ring < (stage?.rings ?? 0); ring += 1) {
+    const radius = size * (.24 + ring * .075);
+    for (let segment = 0; segment < stage.segments; segment += 1) {
+      const start = (segment * 360 / stage.segments + ring * 13) * Math.PI / 180;
+      const end = start + stage.sweep * Math.PI / 180;
+      lines.append(svgElement("path", {
+        d: `M${cx + Math.cos(start) * radius} ${cy + Math.sin(start) * radius} A${radius} ${radius} 0 0 1 ${cx + Math.cos(end) * radius} ${cy + Math.sin(end) * radius}`,
+        class: "fan-speed-line",
+      }));
+    }
+  }
+  fan.querySelector("title").textContent = stage ? `Animation demo: ${stage.label}. Not a measured speed.` : "No live speed assigned. Static artwork is not a stopped-fan reading.";
+  const caption = fan.querySelector(".fan-motion-caption");
+  if (caption) caption.textContent = stage ? `DEMO · ${stage.label}` : "";
+}
+
+function renderComponentMotion() {
+  const fan = selectedPartId ? $("board").querySelector(`.hardware-part[data-id="${selectedPartId}"] .fan-face`) : null;
+  $("component-motion").hidden = !fan;
+  if (fan) {
+    $("component-motion").textContent = `${fan.querySelector("title").textContent}${!fanRotationEnabled ? " Rotation is paused." : ""}`;
+  }
+}
+
+function renderCaseFanMotion() {
+  document.documentElement.classList.toggle("fan-rotation-enabled", fanRotationEnabled);
+  $("fan-rotation-enabled").checked = fanRotationEnabled;
+  $("fan-motion-preference").textContent = reducedMotion.matches
+    ? fanRotationEnabled ? "Your browser requests reduced motion; rotation is explicitly enabled for this session." : "Your browser requests reduced motion. Check Spin fans to explicitly enable rotation for this session."
+    : fanRotationEnabled ? "Rotation enabled; frames and hubs remain stationary." : "Rotation paused; speed-line patterns remain visible.";
+  const selected = fanMotionStages.find(stage => stage.id === fanMotionPreview);
+  for (const [index, fan] of [...$("board").querySelectorAll(".fan-face")].entries()) {
+    const stage = fanMotionPreview === "compare"
+      ? fanMotionStages[index < 6 ? index : index === 6 ? 2 : 5]
+      : selected;
+    applyFanMotion(fan, stage?.example ?? null);
+    const part = fan.closest(".hardware-part");
+    const label = `${sceneParts.get(part.dataset.id).label}. ${fan.querySelector("title").textContent}`;
+    part.setAttribute("aria-label", label);
+    part.querySelector("title").textContent = label;
+  }
+  const demo = fanMotionPreview !== "off";
+  $("fan-motion-button").textContent = demo ? "Fan motion · DEMO" : "Fan motion";
+  $("fan-motion-button").classList.toggle("demo-active", demo);
+  $("fan-motion-status").textContent = demo
+    ? `ANIMATION DEMO · ${selected?.label ?? "Compare all six stages"} on the map. No RPM readings or fan settings are changed.${!fanRotationEnabled ? " Rotation is paused." : ""}`
+    : "No live animation data assigned. Static artwork does not mean stopped.";
+  for (const button of $("fan-motion-presets").children) {
+    const active = button.dataset.stage === fanMotionPreview;
+    button.setAttribute("aria-pressed", String(active));
+  }
+  $("compare-fan-motion").setAttribute("aria-pressed", String(fanMotionPreview === "compare"));
+  $("clear-fan-motion").setAttribute("aria-pressed", String(!demo));
+  renderComponentMotion();
+}
+
+function previewFanMotion(stage) {
+  fanMotionPreview = stage;
+  renderCaseFanMotion();
+  requestPopupClose($("fan-motion-dialog"));
+}
+
+for (const stage of fanMotionStages) {
+  const button = element("button", { type: "button", "data-stage": stage.id, "aria-pressed": "false", "aria-label": `Preview ${stage.label} animation on all case fans` });
+  const preview = svgElement("svg", { viewBox: "0 0 100 100", "aria-hidden": "true" });
+  drawFan(preview, 3, 3, 94, true, stage.example);
+  button.append(preview, element("strong", {}, stage.label), element("small", {}, `${Math.round(stage.example * 100)}% demo`));
+  button.addEventListener("click", () => previewFanMotion(stage.id));
+  $("fan-motion-presets").append(button);
+}
+$("compare-fan-motion").addEventListener("click", () => previewFanMotion("compare"));
+$("clear-fan-motion").addEventListener("click", () => previewFanMotion("off"));
+$("fan-rotation-enabled").addEventListener("change", () => {
+  fanRotationEnabled = $("fan-rotation-enabled").checked;
+  fanRotationOverride = true;
+  renderCaseFanMotion();
+});
+reducedMotion.addEventListener("change", () => {
+  if (!fanRotationOverride) fanRotationEnabled = !reducedMotion.matches;
+  renderCaseFanMotion();
+});
 
 function renderBoard() {
   const board = $("board");
@@ -466,6 +576,7 @@ function renderComponentDetails() {
   $("component-provenance").textContent = component.status;
   $("component-note").textContent = component.note ?? "";
   $("component-placement").textContent = part.placement;
+  renderComponentMotion();
   $("component-reference-links").replaceChildren();
   appendReferences($("component-reference-links"), partReferences[part.componentId ?? selectedPartId] ?? []);
   const reading = part.readingId ? readingFor(currentReadings(), part.readingId) : null;
@@ -749,6 +860,7 @@ for (const component of components) {
   $("inventory-grid").append(card);
 }
 renderBoard();
+renderCaseFanMotion();
 renderSelection();
 renderTelemetry();
 document.documentElement.dataset.ready = "true";

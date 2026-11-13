@@ -40,6 +40,25 @@ node --test hardware-map/model.test.mjs
   inspection notes, JSON import/export, telemetry and inventory. These remain
   available without surrounding the map. A connector popup also offers export
   for saved/tab-only annotations, including recovery after a storage failure.
+- **Fan motion** previews six artistic case-fan stages: stopped, slow, medium,
+  fast, very fast and maximum. The slow stage uses unchanged blades with gentle
+  rotation; faster stages shorten the visual rotation period and add 6/12/24/36
+  curved speed lines while fading the blades. Frames and hubs remain stationary.
+  The chooser shows animated examples, applies a stage to all eight case fans,
+  or compares all stages on the map (including rear-fan examples).
+  Every applied stage is labeled **DEMO**; it is not telemetry or fan control.
+  **Clear demo** restores unknown/static artwork, not a zero-RPM claim. CPU/GPU
+  artwork, real reading labels, saved annotations and export data are untouched.
+  Reduced-motion preferences initially disable rotation but retain distinct line
+  patterns; **Spin fans** explicitly overrides that preference for this session.
+  The same control can pause motion without changing the displayed speed stage.
+  Filtered-out fans and closed chooser previews pause their animations.
+  `fanMotionForSpeed` accepts a normalized RPM / rated-maximum fraction for a
+  future data adapter. Missing/invalid values stay unknown; only explicit zero
+  selects stopped. Positive values choose five moving bands through maximum
+  (overspeed uses the maximum illustration). These are stylized periods, not
+  physical RPM, PWM duty, airflow or a thermal simulation. No snapshot or shared
+  hub tach is automatically applied to the other five unmeasured fans.
 - Compact **Hardware / Connectors** controls choose what the category chips and
   search filter. Hardware categories cover compute, memory, storage, cooling,
   expansion cards, power, chassis and motherboard, including off-board parts.

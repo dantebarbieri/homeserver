@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { connectors, connectorById, landscapeBounds, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, occupancyCounts, fanAvailability, matchesHardware, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
+import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
 
 const now = "2026-11-12T21:30:00.000Z";
 const annotation = { target: "CPU cooler via splitter", confidence: "confirmed", occupancy: "occupied", evidence: "Cable physically traced; example test evidence", note: "Both branches checked" };
@@ -29,6 +29,27 @@ test("hardware filters include off-board parts, overlapping categories and model
   assert.ok(matchesHardware(drive, "Storage", "990 EVO"));
   assert.equal(matchesHardware(drive, "Memory"), false);
   assert.equal(matchesHardware(fan, "Fans"), false, "connector categories are separate from hardware categories");
+});
+
+test("fan animation distinguishes unavailable speed from stopped and selects proportional speed bands", () => {
+  for (const speed of [null, undefined, NaN, Infinity, -1, "0"]) assert.equal(fanMotionForSpeed(speed), null);
+  assert.equal(fanMotionForSpeed(0).id, "stopped");
+  assert.equal(fanMotionForSpeed(.001).id, "slow");
+  assert.equal(fanMotionForSpeed(.2).id, "slow");
+  assert.equal(fanMotionForSpeed(.201).id, "medium");
+  assert.equal(fanMotionForSpeed(.45).id, "medium");
+  assert.equal(fanMotionForSpeed(.451).id, "fast");
+  assert.equal(fanMotionForSpeed(.7).id, "fast");
+  assert.equal(fanMotionForSpeed(.701).id, "very-fast");
+  assert.equal(fanMotionForSpeed(.9).id, "very-fast");
+  assert.equal(fanMotionForSpeed(.901).id, "max");
+  assert.equal(fanMotionForSpeed(1).id, "max");
+  assert.equal(fanMotionForSpeed(1.2).id, "max");
+  const moving = fanMotionStages.filter(stage => stage.period > 0);
+  for (let i = 1; i < moving.length; i += 1) {
+    assert.ok(moving[i].period < moving[i - 1].period, "higher bands must rotate faster");
+    assert.ok(moving[i].rings * moving[i].segments > moving[i - 1].rings * moving[i - 1].segments, "higher bands must add speed lines");
+  }
 });
 
 test("landscape projection rotates connector order without mutating manual geometry or pin functions", () => {
