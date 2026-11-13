@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <g id="fan">
+      <circle r="4" fill="#4a5555" stroke="#7b8886" stroke-width="1.5"/>
+      <path d="M0 0C-3-1-4-3-1-3C1-3 2-1 0 0M0 0C2-2 4-2 3 1C2 3 0 3 0 0M0 0C1 3 0 4-2 2C-4 0-2-1 0 0" fill="#a2ada5"/>
+      <circle r="1" fill="#39433e"/>
+    </g>
+  </defs>
+  <rect x="2" y="9" width="60" height="46" rx="6" fill="#b7beb8" stroke="#e4ece5" stroke-width="2"/>
+  <rect x="37" y="14" width="21" height="29" rx="2" fill="#315e42"/>
+  <use href="#fan" x="10" y="21"/>
+  <use href="#fan" x="10" y="32"/>
+  <use href="#fan" x="10" y="43"/>
+  <use href="#fan" x="31" y="21"/>
+  <use href="#fan" x="31" y="32"/>
+  <use href="#fan" x="31" y="43"/>
+  <g fill="#39433e">
+    <rect x="17" y="16" width="8" height="9" rx="1"/>
+    <rect x="17" y="28" width="8" height="9" rx="1"/>
+    <rect x="17" y="40" width="8" height="9" rx="1"/>
+  </g>
+  <path d="M19 19h4m-4 12h4m-4 12h4" stroke="#d1d9cc" stroke-width="2"/>
+  <rect x="39" y="17" width="18" height="7" rx="1" fill="#26343a"/>
+  <path d="M41 27h13m-13 13h13" stroke="#93ad73" stroke-width="2"/>
+  <rect x="42" y="29" width="11" height="9" rx="1" fill="#d0d5ca" stroke="#a39473" stroke-width="2"/>
+  <path d="M45 30v7m3-7v7m3-7v7" stroke="#8a9994"/>
+  <rect x="39" y="46" width="18" height="6" rx="1" fill="#253239"/>
+</svg>
