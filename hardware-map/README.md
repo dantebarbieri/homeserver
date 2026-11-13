@@ -99,12 +99,14 @@ FAN3 tach is a relayed BMC observation, not an independent cable trace.
 | Uncertain photo | GFX_12V1 appears empty, not certainly. It is not marked confirmed-free. |
 | Photo-confirmed | Existing Noctua four-pin plugs on FAN1/FAN2 are seated on pins 1–4. This verifies those particular plugs' in-situ fit, not universal compatibility or physical keying. |
 | Historical photo-confirmed and user-confirmed | FAN3 was empty/free in the cleaning photo; FAN3 / LED_FAN3 silkscreen is visible. Superseded by the subsequently reported hub connection below. |
-| Photo-inferred | FAN4–FAN7 appear empty under the GPU overhang, but are not confirmed-free. No tach reading is not itself proof of a free header. |
+| User-confirmed, November 13 | FAN4–FAN7 are all visibly empty. This supersedes the earlier photo-inferred empty status; the confirmation is from physical inspection/photos, not missing tach readings. |
 | User-reported | DIMMs in A1/B1/G1/H1; NH-U9 cooler fans on FAN1/FAN2; case USB 3 cable on USB3_3_4. |
 | User-reported | LAN1, LAN2 and BMC LAN connected to the switch; no other rear I/O connections except PSU power. The other rear ports are a logical group, `REAR_OTHER`, not a vendor header identifier. |
 | Historical user-reported wiring, photographed label | Former Molex chain A: six BoK BDM12025S fans, 120 mm reported, 12 V / 0.10 A per label; three front plus three middle. Replaced on November 12; no longer the installed front/middle inventory. |
-| User-installed and reported, November 12 | Six Noctua **NF-P12 redux-1700 PWM**, **120 × 25 mm**, three front plus three middle. Rated maximum **1700 RPM / 0.09 A** per fan; specifications are not measurements. Micro Center SKU 062398. Exact per-position placement remains untraced. Redux light-grey frames/darker cool-grey blades follow the supplied product photo; the beige/brown CPU cooler and the rear pair retain their prior appearance. No vendor photo is bundled. |
-| User-installed and reported | All six redux fans use a **Thermalright ARGB 8 Group Fan HUB/Controller**, Mfr part **ARGB FAN HUB X8**, Micro Center product 710163 / SKU 025247. PSU SATA power; PWM/tach lead on **FAN3**. Hub position, per-port mapping and upstream harness routing remain untraced. The product name does not establish an RGB connection. |
+| User-installed and reported, November 12 | Six Noctua **NF-P12 redux-1700 PWM**, **120 × 25 mm**, three front plus three middle. Rated maximum **1700 RPM / 0.09 A** per fan; specifications are not measurements. Micro Center SKU 062398. Hub-port mapping beyond the subsequently identified tach-return fan remains untraced. Redux light-grey frames/darker cool-grey blades follow the supplied product photo; the beige/brown CPU cooler and the rear pair retain their prior appearance. No vendor photo is bundled. |
+| User-installed and reported | All six redux fans use a **Thermalright ARGB 8 Group Fan HUB/Controller**, Mfr part **ARGB FAN HUB X8**, Micro Center product 710163 / SKU 025247. PSU SATA power; PWM/tach lead on **FAN3**. Hub position, other per-port mappings and upstream harness routing remain untraced. The product name does not establish an RGB connection. |
+| User-confirmed, November 13 | The hub lead is on FAN3, seated like the FAN1/FAN2 plugs with two of six pins exposed. The PSU-side middle fan, **middle-fan-3**, supplies the hub's single tach return. Only that physical fan is bound to the FAN3 snapshot in its popup; the other five speeds remain unmeasured. Other hub-port assignments remain untraced. In-situ fit does not establish universal keying. |
+| User-confirmed, November 13 | All six redux fans blow front to rear. Both rear fans exhaust out the back. Both CPU-cooler fans are the originals supplied with the NH-U9 TR4-SP3 and move air **from the PSU side toward the GPU side**, not front to rear. These are confirmed orientations, not measured airflow rates or thermal simulation results. |
 | Relayed BMC observation | FAN3 is approximately **1100 RPM**; the hub passes back **one tach**, not six individually measured fan speeds. Exact capture time is unavailable; the relay was received November 13. BMC lower alarm is reported as **100 RPM**. No live query or control change was made for this update. |
 | Manufacturer chassis specification + user-confirmed original fans | Molex chain B: two rear **80 mm** BoK fans. The [Rosewill RSV-L4500U manual](https://c1.neweggimages.com/IMAttachment/UserManual/User%20Manual-1741922402096.pdf) specifies rear 80 mm fans, and the user confirms both are factory-original. Width is specification-based, **not photo-measured**. Thickness and exact model remain **UNVERIFIED**; `BDM180255` is only a tentative transcription. Molex wiring and label 12 V / 0.1 A / 2000 RPM are reported; rated RPM is not a measurement, and no tach is connected. |
 | Historical user report + reported fan replacement | HX1000i pre-replacement PSU-side ports used: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA; two SATA/PATA fed the former Molex chains. Pre-replacement free count: 2 SATA/PATA and 4 PCIe/CPU. The six-fan hub now uses SATA power; the rear pair stays on Molex. Current harness/port allocation is not retraced. User suspects one SATA/PATA harness powers all 12 HDDs; upstream routing and splitter topology remain untraced. These counts do not verify electrical loads or individual internal board-header wiring. |
@@ -114,11 +116,13 @@ FAN3 tach is a relayed BMC observation, not an independent cable trace.
 
 User-reported occupied headers remain inferred rather than independently
 confirmed unless explicitly user-confirmed. For an unmodified inspection map,
-fan-planning counts now show **zero confirmed-free headers, two photo-confirmed
-occupied headers (FAN1/FAN2), and five not independently verified**:
-FAN3 is **user-reported occupied by the hub**, while FAN4–FAN7 remain
-photo-inferred empty. A BMC tach does not independently verify which six fans
-are wired to that hub. Photo-inferred empty headers do not count as verified free.
+fan-planning counts now show **four confirmed-free headers (FAN4–FAN7),
+three confirmed occupied headers (FAN1–FAN3), and none with unverified occupancy**.
+FAN1/FAN2 plugs are photo-confirmed; the user explicitly confirms FAN3's hub
+lead and FAN4–FAN7's empty state in the November 13 walkthrough. The one hub
+tach is bound to middle-fan-3 using the user's physical identification, not
+deduced from the RPM reading. Electrical limits, universal connector keying
+and independent BMC control groups are still not established by occupancy.
 The six front/middle fans use reported SATA hub power plus FAN3 control/tach;
 the unchanged rear pair remains unmonitored on Molex chain B.
 Aside from the relayed FAN3 tach, no new telemetry, rear-fan thickness or exact

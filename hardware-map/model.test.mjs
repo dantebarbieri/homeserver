@@ -46,7 +46,7 @@ test("a connection edit preserves other connectors and retains evidence on expor
   assert.equal(first.connections.FAN2, undefined);
 });
 
-test("inspection defaults distinguish cooler plugs, reported FAN3 hub and inferred empty headers", () => {
+test("inspection defaults distinguish confirmed occupied and confirmed free fan headers", () => {
   const document = withInspectionDefaults(emptyDocument());
   for (const id of ["M2_1", "M2_2", "SATA_0_3", "SATA_4_7", "FAN1", "FAN2"]) {
     assert.equal(document.connections[id].confidence, "confirmed");
@@ -58,17 +58,17 @@ test("inspection defaults distinguish cooler plugs, reported FAN3 hub and inferr
     assert.equal(document.connections[id].confidence, "inferred");
     assert.equal(document.connections[id].occupancy, "occupied");
   }
-  assert.equal(document.connections.FAN3.confidence, "inferred");
+  assert.equal(document.connections.FAN3.confidence, "confirmed");
   assert.equal(document.connections.FAN3.occupancy, "occupied");
-  assert.equal(document.connections.FAN3.provenance, "user-reported");
+  assert.equal(document.connections.FAN3.provenance, "user-confirmed");
   for (const id of ["FAN4", "FAN5", "FAN6", "FAN7"]) {
-    assert.equal(document.connections[id].confidence, "inferred");
+    assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].occupancy, "free");
-    assert.equal(document.connections[id].provenance, "photo-inferred");
+    assert.equal(document.connections[id].provenance, "user-confirmed");
   }
   assert.equal(document.connections.GFX_12V1.provenance, "photo-uncertain");
   assert.equal(document.connections.GFX_12V1.confidence, "inferred");
-  assert.deepEqual(fanAvailability(document), { free: 0, occupied: 2, unverified: 5 });
+  assert.deepEqual(fanAvailability(document), { free: 4, occupied: 3, unverified: 0 });
   assert.deepEqual(parseDocument(serializeDocument(document)), document);
 });
 

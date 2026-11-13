@@ -299,7 +299,9 @@ function renderBoard() {
   hardware.append(disks);
   for (const [region, x] of [["front", 60], ["middle", 440]]) {
     for (let i = 0; i < 3; i += 1) {
-      const fan = hardwarePart(`${region}-fan-${i + 1}`, "case-fans", `${region === "front" ? "Front" : "Middle"} Noctua NF-P12 redux-1700 PWM ${i + 1} · shared FAN3 hub`, "Three front and three middle fans are user-installed/reported. Exact per-position placement and hub-port mapping are untraced. Fan faces are unfolded into this view; drawn order is not a cable or airflow trace.", ["FAN3"]);
+      const id = `${region}-fan-${i + 1}`;
+      const returnsTach = componentById.get("case-fans").tachPartId === id;
+      const fan = hardwarePart(id, "case-fans", `${region === "front" ? "Front" : "Middle"} Noctua NF-P12 redux-1700 PWM ${i + 1} · ${returnsTach ? "FAN3 tach return" : "shared FAN3 hub"}`, `User confirms all six blow front to rear. ${returnsTach ? "This is the PSU-side middle fan supplying the hub's single tach return (user-confirmed 2026-11-13)." : "No individual RPM reading or hub-port assignment is known for this fan."} Positions are schematic and fan faces are unfolded, not a cable or measured airflow trace.`, ["FAN3"], returnsTach ? { readingId: "FAN3" } : {});
       drawFan(fan, x, 159 + i * 196, 94, true);
       hardware.append(fan);
     }
