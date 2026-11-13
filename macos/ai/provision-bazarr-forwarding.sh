@@ -42,7 +42,10 @@ if ! awk '{print $1}' <<<"$users" | grep -qx "$account"; then
     dscl . -create "/Users/$account" Password '*'
     dscl . -create "/Users/$account" IsHidden 1
 fi
-[[ "$(dscl . -read "/Users/$account" UserShell)" == "UserShell: /usr/bin/false" ]]
+case "$(dscl . -read "/Users/$account" UserShell)" in
+    "UserShell: /usr/bin/false"|"UserShell: /bin/sh") ;;
+    *) echo "Refusing an unexpected forwarding account shell." >&2; exit 1 ;;
+esac
 if id -Gn "$account" | tr ' ' '\n' | grep -Eq '^(admin|wheel)$'; then
     echo "Refusing a privileged forwarding account." >&2
     exit 1
@@ -64,7 +67,7 @@ effective() {
     /usr/sbin/sshd -T -f "$1" -C "user=$2,host=homeserver,addr=$server" |
         # OpenSSH 10.5 prints canonical-case keywords; older releases use lowercase.
         awk '{ $1 = tolower($1); print }' |
-        grep -E '^(allowtcpforwarding|permitopen|permitlisten|permittty|forcecommand|authorizedkeysfile) ' |
+        grep -E '^(allowtcpforwarding|permitopen|permitlisten|permittty|forcecommand|authorizedkeysfile|maxsessions) ' |
         sort
 }
 check() {
@@ -72,6 +75,7 @@ check() {
     [[ "$(effective "$1" "$account")" == "allowtcpforwarding local
 authorizedkeysfile $keys
 forcecommand /usr/bin/false
+maxsessions 0
 permitlisten none
 permitopen 127.0.0.1:9000
 permittty no" ]] &&
@@ -90,5 +94,8 @@ check /etc/ssh/sshd_config || {
     echo "Live sshd check failed; removed $dropin." >&2
     exit 1
 }
+# macOS PAM rejects /usr/bin/false even for ssh -N. Block session channels in
+# sshd before assigning a PAM-accepted shell; forwarding needs no session.
+dscl . -create "/Users/$account" UserShell /bin/sh
 dseditgroup -o edit -a "$account" -t user com.apple.access_ssh
 printf '%s can forward only to 127.0.0.1:9000 from %s.\n' "$account" "$server"

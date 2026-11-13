@@ -155,8 +155,11 @@ published and NPM does not proxy it. Anything on that network can use the
 unauthenticated adapter, so attach nothing else to it. Never expose port 9000
 on the LAN or WAN; a private DNS name does not authenticate anyone.
 
-On the Studio, `_bazarr` is a hidden standard account with no password, shell
-or home (`/var/empty`), outside `admin` and `wheel`. Its public key is the
+On the Studio, `_bazarr` is a hidden standard account with no password or
+usable home (`/var/empty`), outside `admin` and `wheel`. macOS PAM requires
+its account shell to be `/bin/sh` even for forwarding-only logins;
+`MaxSessions 0` denies all SSH shell, command and subsystem channels,
+with `ForceCommand /usr/bin/false` as an additional restriction. Its public key is the
 only line of the root-owned `/etc/ssh/bazarr-forwarding-keys`, restricted to
 the server's address and to forwarding `127.0.0.1:9000`.
 [`002-bazarr-forwarding.conf`](002-bazarr-forwarding.conf) applies the same
