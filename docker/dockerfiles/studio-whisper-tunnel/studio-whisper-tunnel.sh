@@ -28,4 +28,4 @@ exec ssh -F /dev/null -N -T \
     -o ForwardAgent=no \
     -o ForwardX11=no \
     -L 0.0.0.0:9000:127.0.0.1:9000 \
-    "${STUDIO_USER:-_bazarr}@${STUDIO_HOST:-192.168.50.140}"
+    "${STUDIO_USER:-_bazarr}@${STUDIO_HOST:-ai-studio.home.arpa}"

@@ -62,6 +62,8 @@ grep -qx "Include $work/sshd_config.d/\*" "$work/sshd_config"
 
 effective() {
     /usr/sbin/sshd -T -f "$1" -C "user=$2,host=homeserver,addr=$server" |
+        # OpenSSH 10.5 prints canonical-case keywords; older releases use lowercase.
+        awk '{ $1 = tolower($1); print }' |
         grep -E '^(allowtcpforwarding|permitopen|permitlisten|permittty|forcecommand|authorizedkeysfile) ' |
         sort
 }

@@ -34,8 +34,9 @@ best Mac model or justify copying the server's settings.
 ## Provisional routing
 
 * **Telugu to English subtitles:** faster-whisper large-v3 on the CPU, copying
-  the server ([below](#telugu-on-the-cpu)). This matches the server's quality,
-  which is itself unreliable, rather than improving on it. SeamlessM4T v2
+  the server ([below](#telugu-on-the-cpu)). Its repetition and timing metrics
+  are closer to the server's; comparable translation quality is not yet
+  established, and the server itself is unreliable. SeamlessM4T v2
   translated a synthetic Telugu greeting correctly where MLX Whisper
   transliterated it, so it remains a **candidate to evaluate** for better
   translation, along with Telugu ASR plus a Telugu-capable text translator.
