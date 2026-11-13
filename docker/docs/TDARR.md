@@ -47,6 +47,12 @@ HandBrake `--scan` health checks are not a substitute for complete decoding.
 
 ### Native Mac Studio offload (disabled canary, not migrated)
 
+**Blocked: do not activate the native node on the shared production controller.**
+The copied-media canary exposed a staged-job isolation failure in installed
+3.07.00; library exclusions and node tags are insufficient. The native daemon
+is stopped and persistently disabled. The implementation below remains
+experimental, not an approved migration procedure.
+
 `homeserver-hevc-studio-v1` is a **separate versioned flow** for Tdarr
 3.07.00 on Linux and native `darwin_arm64` on the Studio. The three active TV
 libraries remain on `homeserver-hevc-cpu-v1`; neither that module/flow nor the
@@ -138,24 +144,55 @@ already-installed flow; it is not a mapped share or an input-validation path.
 
 #### Prevent the Mac from taking existing Linux-only jobs
 
-**Keep the new node paused from its first connection.** A `studio-native`
-node tag does not exclude it from untagged existing CPU flows. In installed
-Tdarr 3.07.00, Node Options -> Libraries to process writes
-`librariesToNotProcess`: `true` excludes a library; `false` or a missing key
-allows it. This is an ordinary authenticated node setting, not the Pro-only
-unmapped-node feature. The installed UI and live/persisted node settings
-expose it; the server's packaged scheduler references the same field.
+**Keep the native daemon stopped/disabled on the shared controller.** On
+2026-11-13 at approximately 13:39:10-13:39:58 UTC, a copied-media attempt
+admitted 23 existing staged jobs from `Io-wVbVRh` (TV Shows) to `Studio-Native`,
+despite all production library exclusions being true in both live and
+persisted settings. No canary encode started. Every affected job resumed
+`homeserver-hevc-cpu-v1` at preparation and failed creating its unmapped Mac
+`/temp/tdarr-workDir2-*` directory (read-only filesystem, then ENOENT).
+Earlier Linux steps were only input/routing; no encode or publication step
+ran on the Mac and no subsequent Linux publisher execution was recorded.
+All 23 became `Transcode error`; none remained in staging. Original sizes
+matched database records, timestamps matched within one microsecond of JSON
+floating-point precision, and all source change times preceded the attempt.
+This is metadata/report evidence, not a pre/post cryptographic comparison.
+The disposable sample's original SHA256 was reverified unchanged.
 
-There is **no fail-closed allowlist** here: newly added libraries default
-allowed. For a bounded canary, freeze library additions, exclude **every
-current library except the isolated canary**, and verify the live and
-persisted map before unpausing. Do not rely on tags alone, a single TV
-exclusion, or a stale list of library IDs. If library inventory cannot be
-held stable, leave the Mac paused; this denylist is not a permanent
-allowlist substitute.
+After private snapshots and explicit user approval, exactly those 23
+file-table records were returned to `Queued` at 13:59 UTC through the
+existing CRUD API, changing only `TranscodeDecisionMaker`. There were no
+staged rows to retry, so `transcode-user-verdict` was not used. Reports were
+retained and no cache files were deleted. The canary and all production
+library controls, HomeServer tags and worker limits were restored to their
+pre-attempt values; only HomeServer remained connected. Both temporary root
+shells were exited and their cached sudo credentials invalidated.
 
-Deploy `restrict-studio-node.cjs` beside the Linux installer, then substitute
-the exact connected native node name:
+Read-only inspection of the installed Rust server explains the bypass:
+`get_next_task_inner` applies `librariesToNotProcess` through
+`get_queued_files::libraries_to_not_process_where`, but
+`get_staged_files::StagedSelectionContext` and `matching_staged_bucket` do
+not apply that exclusion map. Staged selection checks worker/GPU bucket,
+required tags and the library schedule instead. Its tag matcher immediately
+accepts an empty job-tag list; an extra `studio-native` node tag does not
+restrict untagged old jobs. A new guard in the current flow cannot protect
+already-staged continuations.
+
+The prior recommendation to verify exclusions and freeze library additions
+before unpausing is **withdrawn**. Neither settings readback, a fixed library
+inventory nor a one-worker limit establishes scheduling isolation. A new
+attempt needs explicit approval for a separate canary-only controller/state
+with dedicated Linux worker and only disposable media/cache exported, or a
+verified upstream fix covering fresh and staged selection, including
+untagged retry/resume and tag handoffs. Include an eligible disposable decoy
+that the native node must not accept. Do not drain/retag shared production
+staging or globally pause production as an implicit workaround.
+
+`restrict-studio-node.cjs` remains a **settings-only helper**, not an activation
+gate. `librariesToNotProcess` uses `true` to exclude a library from fresh
+selection; `false` or a missing key allows it, so new libraries also default
+allowed. For an otherwise approved isolated setup, deploy the helper beside
+the Linux installer and substitute the exact connected native node name:
 
 ```bash
 docker exec --user abc tdarr node /app/server/Tdarr/Custom/restrict-studio-node.cjs --node-name StudioNative
@@ -168,9 +205,9 @@ at most one CPU worker and no GPU/health workers, and sends **only**
 `librariesToNotProcess` through the supported `update-node` API. It checks
 inventory again before/after, verifies the map in `get-nodes` and the
 `NodeJSONDB` record keyed by node name, and never changes pause state, tags
-or worker limits. Readback failure is a blocker, not permission to unpause.
-Preview again before any later unpause and refresh exclusions whenever
-libraries change.
+or worker limits. Successful readback proves storage only, **not staged-job
+enforcement**. Keep the node paused; do not reconnect it to the shared
+controller merely to rerun this utility.
 
 The API payload is
 `{data:{nodeID:<current connected ID>,nodeUpdates:{librariesToNotProcess:<map>}}}`.
@@ -185,9 +222,11 @@ processes remain trusted. The private-copy boundary prevents shared-cache path
 redirection and mutable-byte publication; it is **not a sandbox for malicious
 Tdarr plugins** or a proof of perceptual quality/encoder provenance.
 
-#### Canary and later activation
+#### Canary and later activation (blocked pending isolation)
 
-After deploying the files and share permissions, preview, then explicitly
+The following describes the disabled installer and future acceptance checks,
+not permission to retry against production. After an explicitly approved
+isolated deployment and share permissions, preview, then explicitly
 create the disabled canary (run as the existing Linux Tdarr user):
 
 ```bash
@@ -212,9 +251,13 @@ Place a **disposable copy**, not a hardlink, of representative eligible SDR
 media in `/data/media/tdarr-studio-canary` on Linux. That directory must not
 be watched by any other library, and the copy must have settled for three
 minutes (the prepare helper also rejects sources newer than two minutes).
-The parent operator can then explicitly enable only canary processing, scan
-that folder and queue one file, keeping watchers/startup scans/health checks
-off. Confirm both handoffs in the job report, the Homebrew software encode,
+Only after the scheduling boundary above is resolved may the operator
+explicitly enable canary processing and ingest one exact file with
+`scanFolderWatcher` and a one-element path array, keeping watchers/startup
+scans/health checks off. Export only that disposable subtree and dedicated
+cache to the Mac, with matching path translations; the production-wide media
+mapping above is not sufficient canary containment. Confirm both handoffs in
+the job report, the Homebrew software encode,
 the private manifest/outcome on Linux, complete Linux decode, expected savings,
 tracks/chapters/metadata, playback and visual quality. Verify the Mac cannot
 write originals or read private state. Stop the canary after the sample.

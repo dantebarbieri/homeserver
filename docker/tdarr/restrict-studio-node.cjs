@@ -38,7 +38,7 @@ async function restrict({ crud, request, nodeName, apply = false, io = fs, log =
   pausedNativeNode(node);
   const desired = exclusions(libraries, node.librariesToNotProcess);
   log(JSON.stringify({ nodeName, nodeID, apply, librariesToNotProcess: desired }));
-  log('Denylist only: future libraries default allowed. Keep the node paused until verified; freeze library additions during the canary.');
+  log('WARNING: Tdarr 3.07 staged jobs bypass this denylist, and untagged jobs match any node. Settings readback is not isolation. Keep the native daemon disabled on the shared controller; future libraries also default allowed.');
   if (!apply) return desired;
 
   const persisted = await crud('NodeJSONDB', 'getById', { docID: nodeName });
@@ -74,7 +74,7 @@ async function restrict({ crud, request, nodeName, apply = false, io = fs, log =
     assert.deepEqual(updated[key], node[key], `Live ${key} changed`);
     assert.deepEqual(stored[key], persisted[key], `Persisted ${key} changed`);
   }
-  log(`Verified current-library exclusions live and persisted. Node remains paused. Sensitive backup: ${backup}`);
+  log(`Verified exclusion storage only, not staged scheduling enforcement. Node remains paused. Sensitive backup: ${backup}`);
   return desired;
 }
 

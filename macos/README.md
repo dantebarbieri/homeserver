@@ -114,7 +114,9 @@ with direct database edits. A separate key is revocable, not demonstrated
 per-node least privilege. For rotation/revocation, first stop the native node;
 do not assume an established socket is immediately invalidated.
 
-Load the transport daemon before the Tdarr daemon. `start-tdarr.sh` verifies
+For a future approved isolated deployment, load the transport daemon before
+the Tdarr daemon. **The installed native Tdarr daemon is currently disabled;
+do not enable it against the shared production controller.** `start-tdarr.sh` verifies
 both mounts, supplies base64-encoded canonical path mappings, and starts paused
 with one CPU transcode worker and zero GPU/health workers. Confirm actual
 real/effective UID and the server's live pause/worker settings after startup.
@@ -140,12 +142,25 @@ symlink. Merge and activate its declarative Nix changes before relying on a
 future Nix activation to preserve transport. Setup does not perform that
 activation, restart Docker/Tdarr, or reboot either host.
 
-Keep the native node paused until its `studio-native` tag and current-library
-exclusions are verified live and persisted. New libraries default allowed:
-this is **not a permanent allowlist**. Freeze library additions for a bounded
-copied-media canary, verify both cross-node path translations, and keep original
-media outside the experiment. Trusted Tdarr controllers/plugins remain part
-of the boundary; this is not a malicious-node sandbox.
+**Native Tdarr rollout is blocked by the installed 3.07 staged scheduler.**
+The copied-media attempt admitted 23 staged production TV jobs despite verified
+live/persisted library exclusions. They failed before encoding when the Mac
+could not create the unmapped `/temp/tdarr-workDir2-*` directories. The native
+daemon was stopped and persistently disabled; the canary was disabled and the
+temporary HomeServer tag restored. No successful canary encode or handoff
+was demonstrated. See [the incident and scheduling boundary](../docker/docs/TDARR.md#prevent-the-mac-from-taking-existing-linux-only-jobs).
+
+`librariesToNotProcess` filters fresh queued selection, **not staged selection**;
+untagged staged work matches any node's tags. A frozen library inventory,
+one worker, or successful settings readback therefore cannot authorize unpause.
+Keep the native daemon disabled on the shared controller. A new attempt needs
+explicit approval for either a separate canary-only controller/state and
+dedicated Linux worker, or a verified scheduler fix covering both selection
+paths. Export only disposable copied media/cache for that experiment, never the
+whole production media tree, and include an eligible disposable decoy as a
+negative scheduling test. New flow guards cannot protect already-staged old
+continuations. Trusted Tdarr controllers/plugins remain part of the boundary;
+this is not a malicious-node sandbox.
 
 Speech and Ollama remain loopback-only under `_studio`. Speech timing checks
 and automatic overlap metrics are not human-reviewed translation accuracy.
