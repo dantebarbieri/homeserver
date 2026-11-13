@@ -266,3 +266,95 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 @media (max-width: 880px) { .fan-overview { grid-template-columns: 1fr 1fr; } .reading-grid, .inventory-grid { grid-template-columns: repeat(2, 1fr); } .case-layout { grid-template-columns: 1fr; } .inspection { grid-template-columns: 1fr; gap: 12px; } .telemetry-toolbar { align-items: start; flex-direction: column; } }
 @media (max-width: 540px) { #categories { flex-basis: 100%; } #focus-modes { border-right: 0; padding-right: 0; } }
 @media (max-width: 540px) { .board-workspace { padding: 6px; gap: 6px; } .map-toolbar { flex-wrap: wrap; gap: 8px; } .map-toolbar input { order: 4; width: 100%; margin: 0; } .map-toolbar .zoom-controls { margin-left: auto; } #categories button { padding: 7px 8px; } .connector-nav { align-items: start; } #connector-picker summary { font-size: 9px; padding: 7px 3px; } .summary { grid-template-columns: 1fr; } .popup-body { padding: 16px; } .popup-heading { padding: 10px 14px; } .popup-heading h2 { font-size: 15px; } .air-controls { grid-template-columns: 1fr; gap: 8px; } .air-controls output { text-align: left; } .fan-overview { padding: 10px 0; gap: 15px; } }
+
+.map-panel { position: relative; }
+.metric-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 2px 3px; }
+.metric-controls button { font-size: 10px; padding: 5px 8px; white-space: nowrap; }
+.metric-provenance { color: #e7b66b; font-size: 9px; font-weight: 600; letter-spacing: 1px; white-space: nowrap; }
+#metric-group-controls { display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: thin; flex: 1; }
+#metric-group-controls button { border-color: transparent; background: transparent; color: var(--muted); }
+#metric-group-controls button[aria-pressed="true"] { border-color: color-mix(in srgb, var(--metric-color) 45%, transparent); color: var(--metric-color); background: #18252b; }
+.metrics-context-hidden #metric-group-controls { opacity: .5; }
+.metric-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+#metric-leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.metric-leader { fill: none; stroke-width: 1; stroke-dasharray: 3 4; opacity: .6; }
+.metric-card { position: absolute; width: 196px; padding: 8px 10px; border: 1px solid #3b4a50; border-top: 2px solid var(--metric-color); border-radius: 8px; background: #101b24f2; box-shadow: 0 5px 18px #0005; color: #dce5eb; pointer-events: auto; }
+.metric-card-heading { display: grid; grid-template-columns: 16px minmax(0, 1fr) 17px; align-items: center; gap: 2px; margin-bottom: 5px; }
+.metric-card-heading button { background: transparent; border: 0; padding: 0; border-radius: 3px; }
+.metric-drag { cursor: grab; color: #788d9d; touch-action: none; font-size: 15px; }
+.metric-drag:active { cursor: grabbing; }
+.metric-card-title { min-width: 0; color: var(--metric-color); text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; font-weight: 600; }
+.metric-card-close { color: #8193a2; font-size: 15px; }
+.metric-card-extra { font-size: 8px; line-height: 1.6; display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 3px; color: #9daeba; }
+.metric-card-extra strong { font-weight: 500; color: #dce5eb; }
+.metric-badge { position: absolute; font-size: 9px; padding: 4px 7px; color: var(--metric-color); background: #111c25f2; border-color: #475252; white-space: nowrap; pointer-events: auto; box-shadow: 0 2px 5px #0004; }
+.mobile-metric-card { display: none; }
+.performance-chart { position: relative; min-width: 0; border: 1px solid #2c3b48; border-radius: 8px; padding: 12px; background: #101b26; }
+.metric-chart-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; font-size: 11px; color: #acbfce; }
+.metric-chart-values { color: #e1e9ed; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 8px; }
+.performance-chart svg { width: 100%; height: 110px; display: block; overflow: visible; }
+.metric-gridline { stroke: #2a3a47; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .7; }
+.metric-trace { stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.metric-cursor { stroke: #e2ebf0; stroke-width: 1; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+.metric-chart-footer { display: flex; justify-content: space-between; color: #8198a8; font-size: 9px; margin-top: 8px; line-height: 1.5; }
+.mini-chart { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.mini-chart .metric-chart-heading { gap: 3px; font-size: 9px; margin-bottom: 5px; }
+.mini-chart .metric-chart-values { font-size: 12px; }
+.mini-chart svg { height: 38px; }
+.mini-chart .metric-chart-footer { font-size: 8px; margin-top: 4px; }
+.metric-tooltip { position: absolute; z-index: 2; left: 0; right: 0; bottom: 25px; padding: 6px 8px; background: #050c13ed; border: 1px solid #617588; border-radius: 4px; font-size: 10px; line-height: 1.5; pointer-events: none; }
+.metric-memory-bar { display: flex; height: 9px; overflow: hidden; border-radius: 3px; background: #263646; }
+.metric-memory-bar span[data-memory-part="apps"], [data-memory-label="apps"]::before { background: #b9a2df; }
+.metric-memory-bar span[data-memory-part="cache"], [data-memory-label="cache"]::before { background: #7c9fa7; }
+.metric-memory-bar span[data-memory-part="kernel"], [data-memory-label="kernel"]::before { background: #d8ad89; }
+.metric-memory-bar span[data-memory-part="free"], [data-memory-label="free"]::before { background: #263646; }
+.metric-composition { margin-top: 8px; }
+.metric-composition-label { font-size: 9px; color: #a9bdcb; margin-top: 5px; }
+.metric-fullness { margin-top: 7px; }
+.metric-fullness > div { height: 4px; border-radius: 2px; overflow: hidden; background: #293d4d; }
+.metric-fullness span { display: block; height: 100%; background: #81bddf; }
+.metric-fullness p { font-size: 9px; color: #a9bdcb; margin-top: 5px; }
+.metrics-popup { width: min(1120px, calc(100vw - 24px)); }
+.metrics-popup .popup-heading h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.metric-lab-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; padding: 12px 18px 4px; flex-shrink: 0; }
+.metric-lab-controls label { display: grid; gap: 5px; font-size: 10px; color: #93aab9; }
+.metric-lab-controls select, .metric-lab-controls button { font-size: 11px; padding: 7px 9px; width: auto; }
+#metric-clock { margin: auto 0 auto auto; font-size: 10px; color: #91a1b2; font-variant-numeric: tabular-nums; }
+.metric-playback-note { font-size: 10px; color: #91a1b2; padding: 5px 18px; flex-shrink: 0; }
+.metric-panel-nav { display: flex; overflow-x: auto; gap: 4px; padding: 9px 18px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.metric-panel-nav button { font-size: 11px; padding: 7px 11px; white-space: nowrap; }
+.metric-panel-nav button[aria-pressed="true"] { background: #243f36; border-color: #5e8a70; color: #baebcf; }
+.metric-source-note { color: #deb97a; background: #29241c; border-left: 2px solid #b78e4a; padding: 8px 12px; font-size: 11px; line-height: 1.65; margin-bottom: 18px; }
+#metric-panel > h3 { margin-bottom: 14px; }
+#metric-panel > select { max-width: 420px; margin-bottom: 16px; }
+.metric-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 12px 0 16px; }
+.metric-core-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.metric-core-grid .mini-chart { background: #101b26; border: 1px solid #2c3b48; padding: 9px; border-radius: 6px; }
+.metric-layer-checks { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 18px 0; }
+.metric-layer-checks label, .metric-card-check { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.metric-layer-checks input, .metric-card-check input { width: auto; }
+.metric-card-check { margin: 12px 0; }
+.metric-demo-explainer, .metric-memory-legend { font-size: 11px; color: #91a1b2; line-height: 1.8; margin: 18px 0; }
+.metric-memory-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.metric-memory-legend > span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border: 1px solid #637385; border-radius: 2px; }
+.metric-memory-legend strong { color: #dce5eb; font-weight: 500; }
+.metrics-popup .toolbar { flex-wrap: wrap; }
+.metrics-popup .toolbar button { font-size: 11px; padding: 7px 10px; }
+@media (max-width: 1200px) and (min-width: 1001px) { .metric-card { width: 176px; padding: 7px; } .metric-card-title { font-size: 9px; } .metric-chart-values { font-size: 11px; } .metric-badge { font-size: 8px; } }
+@media (max-width: 1000px) {
+  .metric-layer { top: auto; bottom: 8px; left: 8px; right: 8px; height: 178px; display: flex; align-items: start; gap: 8px; overflow-x: auto; overflow-y: hidden; pointer-events: auto; scrollbar-width: thin; }
+  .metric-card { position: relative; left: auto !important; top: auto !important; flex: 0 0 186px; }
+  .map-scroll { padding-bottom: 185px; }
+  .mobile-metric-card { display: block; }
+  .metric-badge, #metric-leaders, .metric-drag { display: none; }
+  .metric-card-heading { grid-template-columns: minmax(0, 1fr) 17px; }
+  .metric-controls { gap: 3px; }
+  .metric-controls button { font-size: 9px; padding: 5px; }
+  .metric-controls .metric-provenance { font-size: 8px; letter-spacing: .3px; }
+  .metric-detail-grid { grid-template-columns: 1fr; }
+  .metric-core-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .metric-lab-controls { gap: 8px; padding: 10px 14px 4px; }
+  .metric-panel-nav { padding: 8px 14px; }
+  .metric-playback-note { padding: 5px 14px; }
+  #metric-clock { display: none; }
+}

@@ -17,7 +17,7 @@ the app uses native JavaScript modules. Any static HTTP server works.
 Tests require Node.js and no packages:
 
 ```powershell
-node --test hardware-map/model.test.mjs
+node --test hardware-map\model.test.mjs hardware-map\metric-model.test.mjs
 ```
 
 ## What works
@@ -325,6 +325,44 @@ With the system powered off and unplugged, photograph rather than rewire:
    count, DIMM population, front-panel cables and any thermal probes.
 
 Serial numbers are unnecessary. Leave untraced connections unknown.
+
+## Synthetic performance study
+
+The **SIMULATED** strip toggles CPU, memory, storage, GPU, network, temperature
+and fan overlays independently. **All / None** shows or hides all layers;
+**Metrics - DEMO** opens the performance lab, including explicit show/hide-all
+temperature controls, individual chart visibility and layout reset. Drag a
+card's grip, or focus it and use arrow keys (Shift moves farther). Compact
+screens dock cards in a horizontally scrollable tray. Hardware filters retain
+only relevant overlays; connector inspection hides the overlay hit targets.
+Click a chart title, sensor badge, or a component's performance button for
+detailed graphs in a dismissible dialog.
+
+The lab includes CPU totals and 16-core/32-thread views, non-overlapping memory
+composition and swap, physical-disk busy time/read/write/latency/queue depth,
+separate filesystem fullness, GPU graphics/copy/encode/decode/dedicated and
+host-allocation graphs, network receive/send, and illustrative sensor/fan
+histories. Hover a plot to inspect past samples. Choose mixed, idle, transcode
+or transfer scenarios and 1/2/5-minute windows; changing scenarios regenerates
+the entire invented history. **Play / Pause** controls one-second updates.
+Reduced Motion starts playback paused; Play is an explicit opt-in. Hidden
+browser tabs do not advance the simulated clock. Fan-animation studies remain
+independently controlled.
+
+All performance values and histories are **synthetic, not live**. Linux names
+come from the separate inventory snapshot, not fresh collection. HDD and NVMe
+badges show group temperature ranges without assigning devices to bays/sockets.
+FAN3 is one hub-return channel, not six individual readings; rear RPMs are
+invented even though those fans have no tach. Shared/host GPU memory uses an
+illustrative graph scale, not a physical pool limit. Generic NVIDIA utilization
+cannot be relabeled as 3D; unsupported Linux counters must remain unavailable.
+There is no polling, collector, production service, fan control or deployment.
+
+`metric-model.mjs` owns deterministic signals, channel metadata/ranges,
+accounting, history generation and plotting/formatting helpers; `metrics.mjs`
+owns the map/lab controls. Plotting preserves missing samples as gaps, not
+zeroes. Preferences use the separate `homeserver.hardware-metrics.v1` browser
+key: annotation storage, import/export and the observed snapshot are untouched.
 
 ## Persistent-product foundation
 

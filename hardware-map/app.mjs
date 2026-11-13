@@ -1,6 +1,7 @@
 import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, inspectionConnections, occupancyLabels, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
 import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
 import { linuxSnapshot } from "./linux-snapshot.mjs";
+import { createMetricUI } from "./metrics.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -10,6 +11,7 @@ let focusMode = "hardware";
 let activeCategory = "*";
 const componentById = new Map(components.map(component => [component.id, component]));
 const sceneParts = new Map();
+let metricUI = null;
 const linuxTopology = buildLinuxTopology(linuxSnapshot);
 let mode = "snapshot";
 let zoom = 100;
@@ -129,7 +131,7 @@ function requestPopupClose(dialog) {
   }
 }
 
-for (const id of ["inspector-dialog", "tools-dialog", "fan-motion-dialog"]) {
+for (const id of ["inspector-dialog", "tools-dialog", "fan-motion-dialog", "metrics-dialog"]) {
   const dialog = $(id);
   let backdropStart = false;
   const outside = event => {
@@ -574,6 +576,7 @@ function renderFocus() {
     ? `${connectors.filter(matchesFocus).length} / ${connectors.length} connectors shown · hardware dimmed and disabled; outlines do not verify physical access.`
     : `${[...sceneParts.values()].filter(matchesPart).length} / ${sceneParts.size} hardware parts shown · click a matching component for details. Switch to Connectors to inspect motherboard headers.`;
   renderList();
+  metricUI?.updateVisibility();
 }
 
 function appendReferences(container, references) {
@@ -596,6 +599,7 @@ function renderComponentDetails() {
   $("component-placement").textContent = part.placement;
   renderComponentMotion();
   renderLinuxAssociation(selectedPartId);
+  $("component-metrics-button").hidden = !metricUI?.panelFor(selectedPartId);
   $("component-reference-links").replaceChildren();
   appendReferences($("component-reference-links"), partReferences[part.componentId ?? selectedPartId] ?? []);
   const reading = part.readingId ? readingFor(currentReadings(), part.readingId) : null;
@@ -899,6 +903,7 @@ function setZoom(next) {
   $("zoom-label").textContent = `${zoom}%`;
   $("zoom-out").disabled = zoom === 75;
   $("zoom-in").disabled = zoom === 175;
+  metricUI?.layout();
 }
 $("zoom-in").addEventListener("click", () => setZoom(zoom + 25));
 $("zoom-out").addEventListener("click", () => setZoom(zoom - 25));
@@ -966,6 +971,13 @@ for (const component of components) {
   $("inventory-grid").append(card);
 }
 renderBoard();
+metricUI = createMetricUI({
+  openPopup, closePopup: requestPopupClose, onError: message => notify(message, true),
+  isVisible: id => !connectorFocus() && (id === null || (id === "nvme-group"
+    ? ["drive-M2_1", "drive-M2_2"].some(part => document.querySelector(`.hardware-part[data-id="${part}"][aria-disabled="false"]`))
+    : Boolean(document.querySelector(`.hardware-part[data-id="${id}"][aria-disabled="false"]`)))),
+});
+$("component-metrics-button").addEventListener("click", () => metricUI.openPanel(metricUI.panelFor(selectedPartId)));
 renderCaseFanMotion();
 renderSelection();
 renderTelemetry();
