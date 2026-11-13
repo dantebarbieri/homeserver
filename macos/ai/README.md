@@ -1,9 +1,11 @@
 # Mac Studio local AI
 
-The Studio runs Whisper with Apple MLX and Ollama natively, not in Colima.
+The Studio can run Whisper with Apple MLX and Ollama natively, not in Colima.
 Nothing here changes the homeserver's existing Whisper endpoint. Open WebUI
 and an HTTP adapter for Whisper are not installed; no Bazarr compatibility is
-claimed.
+claimed. Whisper large-v3 is a comparison baseline, **not an established
+best model** for the target media. See [speech model evaluation](SPEECH.md)
+before choosing a subtitle or translation workflow.
 
 ## Provisioning
 
@@ -69,7 +71,7 @@ not truth or safety: automation must independently validate all outputs and
 initially produce read-only shadow recommendations. Never give the model shell,
 deletion or restart authority.
 
-## Whisper CLI
+## Whisper baseline CLI
 
 ```sh
 sudo -u _studio env HOME=/var/lib/studio-worker PATH=/var/lib/studio-worker/.local/bin:/opt/homebrew/bin:/usr/bin:/bin mlx_whisper /path/to/audio.wav --model mlx-community/whisper-large-v3-mlx --language en --task transcribe --output-format srt --output-dir /path/to/output
