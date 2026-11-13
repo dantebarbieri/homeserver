@@ -93,6 +93,8 @@ def main():
     parser.add_argument("kind", choices=("english", "japanese", "telugu"))
     parser.add_argument("--windows", action="store_true")
     parser.add_argument("--engine", choices=("studio", "server", "all"), default="all")
+    parser.add_argument("--studio-file", type=Path,
+                        help="Studio API SRT from a separate comparison run")
     parser.add_argument("--raw-studio", type=Path,
                         help="Separately labelled diagnostic rerun, not a successful API result")
     parser.add_argument("--start", type=int, default=0)
@@ -100,13 +102,16 @@ def main():
     parser.add_argument("--step", type=int, default=120)
     args = parser.parse_args()
     root, kind = args.directory, args.kind
+    if args.studio_file is not None and not args.studio_file.is_file():
+        parser.error("Studio API subtitle file does not exist")
     extension = "srt" if kind == "english" else "ass"
     reference = read_cues(root / f"{kind}-reference.{extension}")
     files = {"reference": reference}
     for engine in ("studio", "server"):
         if args.engine not in {engine, "all"}:
             continue
-        path = root / f"{kind}-{engine}.srt"
+        path = (args.studio_file if engine == "studio" and args.studio_file is not None
+                else root / f"{kind}-{engine}.srt")
         if path.exists():
             files[engine] = read_cues(path)
     if args.raw_studio is not None:

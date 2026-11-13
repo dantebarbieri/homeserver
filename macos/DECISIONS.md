@@ -200,6 +200,10 @@ films. Dante asked to try all three languages.
 (pinned revision `49e6aa2`), behind an experimental Bazarr-compatible adapter:
 LaunchDaemon `com.danteb.studio-whisper` as `_studio` on `127.0.0.1:9000`. It
 turns off `condition_on_previous_text` for English transcription only.
+The worker now applies bounded SRT timing repair (reordering, overlap trimming
+and estimated ends) with sanitized repair counts; excessive or unsalvageable
+timing defects still fail closed. These repairs do not verify audio alignment
+or correct the words.
 
 **Initial Studio-only tests on full episodes.** The score is how many word-bearing reference
 subtitle cues overlap generated words. It measures timing coverage, not
@@ -219,13 +223,20 @@ Brooklyn Nine-Nine S01E01 (English), Parasyte S01E01 (Japanese), and Vishnu
 Puran (2003) S01E01 (explicit Telugu audio). Studio English was faster
 (54.8 vs 106.0 seconds) and the preferable proofread fallback draft in this
 test. Neither Japanese output was good enough unattended. Studio Telugu
-returned HTTP 422 for invalid timing; the server returned materially
-unreliable translation despite HTTP 200. This is AI review against subtitle
+initially returned HTTP 422 for invalid timing; the server returned materially
+unreliable translation despite HTTP 200. After the timing repair, a Studio-only
+rerun on the same PCM returned valid SRT in 254.9 seconds, but its translation
+was materially worse than the server's on this episode: substantially more
+repetition, omitted dialogue and additional meaning reversals. The original
+422 evidence is preserved separately. This is AI review against subtitle
 references, not listening-based multilingual verification.
 
-**Decision so far:** no production default and no Bazarr cutover. Timing
-overlap and API success are not quality approval. Production use still needs
-content-quality decisions, a way for Bazarr to reach the service
+**Decision so far:** no Studio production default and no Bazarr cutover.
+Dante authorized migration if the repaired Studio output was at least about
+as good as the server; the Telugu rerun did not meet that condition. Bazarr
+and server Whisper remain unchanged. Timing overlap and API success are not
+quality approval. Production use still needs content-quality improvements
+and audio-grounded review, a way for Bazarr to reach the service
 ([above](#exposing-studio-services)), multi-audio handling and the provider
 patch in [`ai/`](ai/).
 
@@ -377,6 +388,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Worker account | `_studio`, `/var/lib/studio-worker`, `001-studio-worker.conf`, ACLs from `allow-worker-tools.sh` | Last: remove the ACLs (`ls -le`), `sudo dscl . -delete /Users/_studio`, delete the home and conf |
 | Initial benchmark subtitles (keep) | `~/Services/ai-staging/benchmark-20261113/`, `baseline/`, `qwen/`, and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in these initial test directories | Keep until a speech default is chosen |
 | Same-input comparison evidence | `~/Services/ai-staging/comparison-20261113/`: re-extracted PCM, references, endpoint outputs/errors, source manifest, timings and runtime fingerprints | Keep private for review; do not overwrite previous outcomes |
+| Telugu timing-repair rerun | `~/Services/ai-staging/telugu-repair-20261113-v2/`: new response, HTTP metadata and review metrics; previous adapter/worker backups in `/var/lib/studio-worker/ai-tests/telugu-repair-20261113/` | Keep private and separate from the initial failed request |
 
 Deleted with Dante's approval on 2026-11-13: the admin's Hugging Face and uv
 download caches, the worker's uv cache, the duplicate Tdarr download, staging
@@ -409,9 +421,10 @@ is not a leftover model download.
 2. Prune retired SSH keys on the Studio (and the server if retired there too).
 3. Use `home.arpa` for future service integrations. Admin SSH migration is
    complete on the reachable hosts; the MacBook is intentionally unchanged.
-4. Speech: act on the completed comparison before any Bazarr cutover. English
-   remains a proofread fallback candidate; Japanese/Telugu need substantive
-   quality improvements and audio-grounded review, not more overlap scoring.
+4. Speech: keep Bazarr on server Whisper; the repaired Studio Telugu rerun
+   failed the comparability condition. English remains a proofread fallback
+   candidate; Japanese/Telugu need substantive quality improvements and
+   audio-grounded review, not more overlap scoring.
 5. Ollama: pick a first automation, or remove it.
 6. Tdarr: pursue a secure, validated Mac offload path, keeping the known-unsafe
    shared-controller node disabled during the retry.

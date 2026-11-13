@@ -18,7 +18,9 @@ re-extracted audio into a separate private directory. See the
 
 See the [same-input server-versus-Studio comparison](COMPARISON.md) for a
 subsequent full-episode agent review of the words, endpoint failures and
-practical per-language readiness, beyond timing-overlap statistics.
+practical per-language readiness, beyond timing-overlap statistics. A later
+Studio-only Telugu rerun repaired the SRT timing but was materially more
+repetitive than the server output; it did not meet the comparison gate.
 
 Large-v3 was initially chosen because it was already available, supports both
 target languages and direct translation, and had an MLX CLI that could be
@@ -108,8 +110,8 @@ comparisons, not a speaker-reviewed accuracy assessment:
   setting globally.
 * Telugu-to-English translation took 196 seconds for a 46m36s episode. Its
   SRT contained two reversed-duration cues, one backward start time, and
-  repeated identical cues. The adapter now rejects invalid SRT timing rather
-  than returning it as a successful subtitle. Disabling previous-text
+  repeated identical cues. The adapter at that time rejected invalid SRT
+  rather than returning it as a successful subtitle. Disabling previous-text
   conditioning eliminated the timestamp errors, but reduced word-bearing
   reference-cue overlap from 313/319 to 301/319 and left repeated output,
   including one cue repeated 45 times without reference overlap.

@@ -3,9 +3,10 @@
 **Practical assessment:** Studio English is a useful proofread fallback draft,
 not a replacement for good human subtitles. Neither deployed stack is good
 enough for unattended Japanese-to-English subtitles in this test. Studio's
-Telugu API failed closed; the server returned readable SRT but materially
-unreliable translation. Keep existing reference subtitles and do not cut over
-Bazarr on this evidence.
+Telugu API initially failed closed; a later timing-repair rerun returned
+valid SRT but was substantially more repetitive than the server's already
+unreliable translation. Keep existing reference subtitles and do not cut
+over Bazarr on this evidence.
 
 ## What was tested
 
@@ -151,11 +152,11 @@ was faster here, not reliably better in meaning.
 
 ### Telugu: endpoint failure and unreliable server translation
 
-Studio returned an explicit invalid-SRT error. No fresh Studio Telugu
-transcript was returned to compare word-for-word. Its earlier retained raw
-outputs are historical context, **not** a checksum-attested transcript from
-this endpoint run. A separately labelled isolated diagnostic rerun needs
-privileged access and scheduling; it must not replace the recorded HTTP 422.
+The initial Studio request returned an explicit invalid-SRT error and no
+transcript to compare word-for-word. Its earlier retained raw outputs are
+historical context, **not** a checksum-attested transcript from that
+endpoint run. The later repaired API rerun is documented separately below;
+it does not replace the recorded HTTP 422.
 
 The server's output often follows the broad creation-story sequence and gets
 some lamp/perfection metaphors and later court discussion approximately
@@ -179,8 +180,86 @@ and the reference can itself be imperfect. Those caveats do not justify
 silently accepting changes to agency, negation, duties or family relations.
 
 **Judgement:** no unattended Telugu-to-English approval for either stack.
-The server returning HTTP 200 is not a quality pass; Studio's fail-closed
-behaviour is safer than saving invalid SRT but does not solve translation.
+The server returning HTTP 200 is not a quality pass; Studio's initial
+fail-closed behaviour was safer than saving invalid SRT but did not solve
+translation. The subsequent repaired-output result is assessed below.
+
+## Telugu timing-repair rerun
+
+The original API returned 422 and discarded the raw SRT, so its precise
+offending cue cannot be identified retrospectively. A separate earlier
+retained Telugu run had two reversed-duration cues and a roughly 21-second
+backward start reset; it is evidence of a possible failure mode, not proof of
+what happened in the rejected request.
+
+The isolated Studio worker was updated to sort bounded out-of-order cue
+starts, trim overlaps, and estimate up to two seconds for invalid ends;
+extreme, unparseable or unsalvageable cases still fail closed. Reordering
+can change dialogue order and an estimated end is **not audio alignment**.
+The adapter logs only sanitized repair counts. Service account, model, input
+language, decoder settings and loopback binding were unchanged. Previous
+worker files were backed up privately before the authorized service restart.
+
+The installed repair matches these SHA-256 fingerprints:
+
+- `whisper_adapter.py`: `7a26efeac715f42b61aa46c2e00a59328bc63faf20d3bb7bde81ec39bfa18b41`
+- `whisper_worker.py`: `02802882f6b5aa1752feff859d4474d82c998034447284145696b562f151387c`
+
+Previous files remain at
+`/var/lib/studio-worker/ai-tests/telugu-repair-20261113/`.
+
+One new Studio-only Telugu API request used the same independently
+checksum-verified 89,245,696-byte PCM as the original comparison; no server
+or other-language inference was repeated. It returned HTTP 200 in 254.9s.
+The new request's sanitized log recorded one backward-order cue, two
+invalid-duration cues, two trimmed overlaps and two shifted starts. These
+are defects in the **rerun**, not a recovered diagnosis of the old 422.
+Its 708 cues had no reversed duration, backward starts or overlapping
+intervals and ended within the 2,788.928s audio; 308/319 reference word cues
+overlap generated words.
+The prior server result has 528 cues and 310/319 overlap. These are validity
+and temporal-coverage checks, not translation accuracy. Studio has 85 cues
+over 25 characters/second versus the server's 44 and 15 cues under half a
+second versus the server's one.
+
+The agent read the entire new Studio output alongside the same English
+reference and server output in two-minute windows. This was text comparison,
+not independent listening or Telugu fluency validation. In this single
+nondeterministic run **Studio was materially worse**, despite some shared
+errors and occasional better individual phrases:
+
+* Around 04-08m, one identical cue recurs 32 times across roughly 199 seconds.
+  The reference does not cover every sound or song, so repetition alone does
+  not establish which individual lines are invented.
+* Around 21-23m, two consecutive loops each last roughly 56-58 seconds;
+  repetition displaces the reference's discussion of creation and the sages'
+  educational purpose. The server also mangles this material but carries more
+  of the scene.
+* Around 26-28m, both mistake a duty to protect another person for
+  self-protection; Studio adds further unrelated material.
+* Around 30-32m, Studio misses the extended comparison praising a voice
+  that the server attempts but reverses in meaning. Neither is reliable.
+* Around 34-36m, Studio says wars ended where the reference says they began;
+  the server gets that direction right, although both distort other details.
+* Around 38-42m, Studio adds extended unrelated family/clothing material and
+  repeats unrelated instructions through the mother-and-son exchange. Both
+  versions confuse some relationships and rights.
+* Around 44m, Studio omits the selected queen's name, while the server gets it.
+
+There are 23 Studio runs of at least three consecutive identical cues,
+versus seven on the server. These counts include possible songs or chants,
+so they are not by themselves a hallucination rate. Along with the specific
+reference-overlapping omissions and meaning reversals, they support the
+judgement that Studio's Telugu output is **not comparable for this episode**.
+The server is also not a trustworthy translation gold standard.
+
+Do not switch Bazarr based on this run. No endpoint configuration, global
+audio-language preference, production subtitle queue, or server Whisper
+service was changed. Raw rerun output, HTTP metadata and metrics remain private
+at `~/Services/ai-staging/telugu-repair-20261113-v2/`; the earlier failed API
+result remains unchanged in `comparison-20261113/`. A safe later cutover still
+requires explicit approval, authenticated transport, the status-handling
+patch and review of audio-stream selection.
 
 ## Operational limits and reproduction
 
@@ -191,18 +270,22 @@ server inference, GPU utilisation sampled 0%, but Tdarr was using roughly
 the GPU sampled roughly 88-90% utilisation and Whisper about one CPU core.
 This comparison can raise fans; model inference is real GPU work.
 
-All six endpoint attempts finished. A later user fan concern/SSH reservation
-paused further SSH and diagnostic work; no additional jobs were started.
-No production service was restarted or reconfigured, and no queued Bazarr
-subtitle work was submitted.
+All six initial endpoint attempts finished. A subsequent user fan concern/SSH
+reservation paused further work until the Studio-only Telugu rerun was
+separately authorized and scheduled, as recorded above.
+No server service was restarted or reconfigured, and no queued Bazarr
+subtitle work was submitted. Only the experimental Studio Whisper service
+was restarted to deploy the timing repair.
 
 `compare_engines.py` extracts inputs and records endpoint outcomes without
 overwriting old files. `prepare --sources PRIVATE_MANIFEST_JSON` reads the
 private manifest's `episodes` mapping, including each source `path`,
 `audio_stream`, `language`, `task`, `reference_format`, and (for embedded
 subtitles) `reference_stream`. The retained `manifest.json` has these fields;
-full library paths are not embedded in the checked-in helper. It does not
-choose a safe scheduling window for you.
+full library paths are not embedded in the checked-in helper. For a separately
+authorized rerun, `--output-directory` selects an existing private Studio
+directory for new outputs while retaining the original PCM and manifest.
+It does not choose a safe scheduling window for you.
 `review_speech.py` checks validity, readability and temporal overlap and
 prints private review windows. Keep its transcript output off Git.
 `capture_speech.py` is an optional service-account-only raw diagnostic, not

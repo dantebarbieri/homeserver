@@ -9,7 +9,7 @@ import numpy as np
 from fastapi import HTTPException
 
 import whisper_adapter
-from whisper_worker import decoding_options, read_pcm, validate_srt
+from whisper_worker import decoding_options, read_pcm, repair_srt, validate_srt
 
 
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -127,12 +127,28 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_srt_worker_exit_is_explicit(self):
             process = AsyncMock()
             process.returncode = 65
-            process.communicate.return_value = (b"", None)
+            process.communicate.return_value = (b"", b"")
             with patch("whisper_adapter.asyncio.create_subprocess_exec", return_value=process):
                 with self.assertRaises(HTTPException) as error:
                     await whisper_adapter.run_worker("transcribe", "audio.pcm", "en")
             self.assertEqual(error.exception.status_code, 422)
             self.assertEqual(error.exception.detail, "Speech worker produced invalid SRT")
+
+    async def test_only_safe_repair_diagnostics_are_logged(self):
+        process = AsyncMock()
+        process.returncode = 0
+        process.communicate.return_value = (
+            b"valid result",
+            b"private transcript text\n"
+            b'SRT timing repair: {"reordered": 3, "invalid_duration": 2, '
+            b'"overlap": 1, "shifted": 0}\n',
+        )
+        with patch("whisper_adapter.asyncio.create_subprocess_exec", return_value=process):
+            with self.assertLogs("studio_whisper", level="WARNING") as logs:
+                await whisper_adapter.run_worker("translate", "audio.pcm", "te")
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('"reordered": 3', logs.output[0])
+        self.assertNotIn("private transcript text", logs.output[0])
 
 
 class WorkerTests(unittest.TestCase):
@@ -167,6 +183,48 @@ class WorkerTests(unittest.TestCase):
         ):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 validate_srt(text)
+
+    def test_repairs_reversed_backwards_and_overlapping_cues_without_losing_text(self):
+        text = (
+            "1\n00:00:02,000 --> 00:00:03,000\nFirst\n\n"
+            "2\n00:00:04,000 --> 00:00:01,000\nSecond\n\n"
+            "3\n00:00:01,000 --> 00:00:02,500\nThird\n"
+        )
+        repaired, counts = repair_srt(text, 6000)
+        self.assertEqual(counts["reordered"], 1)
+        self.assertEqual(counts["invalid_duration"], 1)
+        self.assertEqual(counts["overlap"], 1)
+        self.assertEqual(repaired, (
+            "1\n00:00:01,000 --> 00:00:02,000\nThird\n\n"
+            "2\n00:00:02,000 --> 00:00:03,000\nFirst\n\n"
+            "3\n00:00:04,000 --> 00:00:06,000\nSecond\n"
+        ))
+
+    def test_equal_starts_are_separated(self):
+        text = ("1\n00:00:01,000 --> 00:00:02,000\nFirst\n\n"
+                "2\n00:00:01,000 --> 00:00:02,000\nSecond\n")
+        repaired, counts = repair_srt(text, 3000)
+        self.assertIn("00:00:01,000 --> 00:00:01,100", repaired)
+        self.assertIn("00:00:01,100 --> 00:00:02,000", repaired)
+        self.assertEqual(counts["shifted"], 1)
+
+    def test_rejects_unsalvageable_and_malformed_timing(self):
+        for text, duration in (
+            ("1\n00:01:00,000 --> 00:00:01,000\nBad\n", 120000),
+            ("1\n00:00:05,000 --> 00:00:06,000\nBad\n", 5000),
+            ("1\n00:00:01,000 --> 00:00:01,010\nA\n\n"
+             "2\n00:00:01,000 --> 00:00:01,010\nB\n", 1050),
+            ("1\n00:60:00,000 --> 00:00:01,000\nBad\n", 3000),
+        ):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                repair_srt(text, duration)
+
+    def test_existing_short_nonoverlapping_cues_are_preserved(self):
+        text = ("1\n00:00:01,000 --> 00:00:01,040\nA\n\n"
+                "2\n00:00:01,050 --> 00:00:01,080\nB\n")
+        repaired, counts = repair_srt(text, 3000)
+        self.assertEqual(repaired, text)
+        self.assertFalse(any(counts.values()))
 
 
 if __name__ == "__main__":

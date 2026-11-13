@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 
@@ -63,16 +64,33 @@ async def bound_request(request, call_next):
 async def run_worker(mode, path, language):
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-I", str(WORKER), mode, path, language or "",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     try:
         async with asyncio.timeout(JOB_TIMEOUT):
-            output, _ = await proc.communicate()
+            output, diagnostic = await proc.communicate()
     except (TimeoutError, asyncio.CancelledError):
         if proc.returncode is None:
             proc.kill()
         await proc.wait()
         raise
+    for line in diagnostic.decode("utf-8", errors="replace").splitlines():
+        if re.fullmatch(
+            r'SRT timing repair: \{"reordered": \d+, "invalid_duration": \d+, '
+            r'"overlap": \d+, "shifted": \d+\}', line
+        ):
+            logger.warning("%s", line)
+        elif line in {
+            "SRT timing rejected: Invalid SRT cue",
+            "SRT timing rejected: Invalid SRT timestamp",
+            "SRT timing rejected: SRT timing outside audio",
+            "SRT timing rejected: SRT timing anomaly exceeds repair limit",
+            "SRT timing rejected: SRT cues too dense to repair",
+            "SRT timing rejected: SRT cue too short to repair",
+            "SRT timing rejected: Empty SRT",
+            "SRT timing rejected: Invalid SRT timing",
+        }:
+            logger.error("%s", line)
     if proc.returncode == 65:
         logger.error("Speech worker produced invalid SRT")
         raise HTTPException(422, "Speech worker produced invalid SRT")

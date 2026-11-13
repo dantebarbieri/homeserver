@@ -57,9 +57,9 @@ def capture(host, command):
     return ssh(host, command, stdout=subprocess.PIPE).stdout
 
 
-def save(name, data):
+def save(name, data, root=ROOT):
     # noclobber protects all previous comparison outputs, including failures.
-    command = f"umask 077; set -C; cat > {shlex.quote(ROOT + '/' + name)}"
+    command = f"umask 077; set -C; cat > {shlex.quote(root + '/' + name)}"
     ssh("ai-studio", command, input=data)
 
 
@@ -156,10 +156,11 @@ print(json.dumps({
     print("Server runtime metadata retained")
 
 
-def run_engine(engine, kind):
-    prefix = shlex.quote(ROOT + "/" + kind + "-" + engine)
+def run_engine(engine, kind, output_root=ROOT):
+    prefix = shlex.quote(output_root + "/" + kind + "-" + engine)
     ssh("ai-studio",
-        f"test ! -e {prefix}.srt && test ! -e {prefix}.error && test ! -e {prefix}.json")
+        f"test -d {shlex.quote(output_root)} && test -w {shlex.quote(output_root)}"
+        f" && test ! -e {prefix}.srt && test ! -e {prefix}.error && test ! -e {prefix}.json")
     manifest = json.loads(capture("ai-studio", f"cat {shlex.quote(ROOT + '/manifest.json')}"))
     source = manifest["episodes"][kind]
     query = (f"/asr?task={source['task']}&language={source['language']}"
@@ -181,9 +182,9 @@ def run_engine(engine, kind):
     if metadata["pcm_sha256"] != source["pcm"]["sha256"]:
         raise RuntimeError("Engine received different PCM")
     suffix = "srt" if metadata["status"] == 200 else "error"
-    save(f"{kind}-{engine}.{suffix}", result.stdout)
+    save(f"{kind}-{engine}.{suffix}", result.stdout, root=output_root)
     metadata.update({"engine": engine, "kind": kind, "query": query})
-    save(f"{kind}-{engine}.json", json.dumps(metadata, indent=2).encode())
+    save(f"{kind}-{engine}.json", json.dumps(metadata, indent=2).encode(), root=output_root)
     print(json.dumps(metadata), flush=True)
 
 
@@ -193,6 +194,8 @@ if __name__ == "__main__":
     parser.add_argument("kind", nargs="?", choices=KINDS)
     parser.add_argument("--sources", type=Path,
                         help="Private JSON manifest containing the episodes and source paths")
+    parser.add_argument("--output-directory", default=ROOT,
+                        help="Existing private Studio directory for new endpoint outputs")
     args = parser.parse_args()
     if args.action == "prepare":
         if args.sources is None:
@@ -203,4 +206,4 @@ if __name__ == "__main__":
     elif args.kind is None:
         parser.error("Engine comparison needs one episode kind")
     else:
-        run_engine(args.action, args.kind)
+        run_engine(args.action, args.kind, args.output_directory)

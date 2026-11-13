@@ -83,9 +83,11 @@ class CompareTests(unittest.TestCase):
         ]), patch.object(compare_engines, "ssh", return_value=response), patch.object(
             compare_engines, "save"
         ) as save, patch("builtins.print"):
-            compare_engines.run_engine("studio", "english")
+            compare_engines.run_engine("studio", "english", "/private/new")
         self.assertEqual(save.call_args_list[0].args[0], "english-studio.error")
         self.assertEqual(save.call_args_list[1].args[0], "english-studio.json")
+        self.assertEqual(save.call_args_list[0].kwargs["root"], "/private/new")
+        self.assertEqual(save.call_args_list[1].kwargs["root"], "/private/new")
 
 
 if __name__ == "__main__":

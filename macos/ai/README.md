@@ -95,9 +95,11 @@ hours. Temporary audio is private to the service account and removed after
 the job in normal operation; an abrupt process or system termination can
 leave private temporary files that require cleanup. Allow enough free disk for
 two copies of the upload and enough unified memory for Whisper, the audio and
-other workloads. Invalid, reversed or out-of-order SRT timestamps fail the
-request rather than being saved; this does not detect missing speech or
-hallucinations.
+other workloads. The worker sorts bounded out-of-order cues, trims overlaps,
+and estimates an end time for bounded reversed or zero-duration cues. It logs
+repair counts without subtitle text; unparseable, extreme, or unsalvageable
+timings still fail the request. Reordering and estimated ends are not verified
+against the audio, and repairs cannot fix missing or hallucinated speech.
 
 Prepare the isolated account's model cache, including the pinned snapshot and
 all referenced blobs, as described above. Ensure `_studio` can read/traverse
