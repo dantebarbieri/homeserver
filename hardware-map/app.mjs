@@ -1,5 +1,6 @@
 import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, inspectionConnections, occupancyLabels, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
+import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
+import { linuxSnapshot } from "./linux-snapshot.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -9,12 +10,14 @@ let focusMode = "hardware";
 let activeCategory = "*";
 const componentById = new Map(components.map(component => [component.id, component]));
 const sceneParts = new Map();
+const linuxTopology = buildLinuxTopology(linuxSnapshot);
 let mode = "snapshot";
 let zoom = 100;
 let fanMotionPreview = "off";
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let fanRotationEnabled = !reducedMotion.matches;
 let fanRotationOverride = false;
+let linuxReturnId = null;
 let dirty = false;
 let storageBlocked = false;
 let pendingPersistence = false;
@@ -243,13 +246,8 @@ function drawFan(parent, x, y, size, redux = false, fraction = null) {
   fan.append(svgElement("title", {}));
   fan.append(svgElement("rect", { x, y, width: size, height: size, rx: 5, class: "fan-frame" }));
   fan.append(svgElement("circle", { cx: x + size / 2, cy: y + size / 2, r: size * .43, class: "fan-ring" }));
-  const rotor = svgElement("g", { class: "fan-rotor" });
-  for (let angle = 0; angle < 360; angle += 60) {
-    rotor.append(svgElement("path", {
-      transform: `rotate(${angle} ${x + size / 2} ${y + size / 2})`, class: "fan-blade",
-    }));
-  }
-  fan.append(rotor, svgElement("g", { class: "fan-speed-lines" }));
+  fan.append(svgElement("circle", { cx: x + size / 2, cy: y + size / 2, r: size * .42, class: "fan-motion-disc" }));
+  fan.append(svgElement("g", { class: "fan-rotor" }), svgElement("g", { class: "fan-speed-lines" }));
   fan.append(svgElement("circle", { cx: x + size / 2, cy: y + size / 2, r: size * .15, class: "fan-hub" }));
   if (parent.dataset.id) fan.append(svgElement("text", { x: x + size / 2, y: y + size + 15, class: "fan-motion-caption centered" }));
   applyFanMotion(fan, fraction);
@@ -268,17 +266,23 @@ function applyFanMotion(fan, fraction) {
   const cx = Number(fan.dataset.centerX);
   const cy = Number(fan.dataset.centerY);
   const x = cx - size / 2, y = cy - size / 2;
-  const smear = stage?.smear ?? 0;
+  const impressions = stage?.impressions ?? 6;
+  const pitch = 360 / impressions;
   const point = (radius, angle) => `${cx + size * radius * Math.cos(angle * Math.PI / 180)} ${cy + size * radius * Math.sin(angle * Math.PI / 180)}`;
-  const blade = smear
-    ? `M${point(.13, -135)} Q${point(.32, -150 - smear * .3)} ${point(.42, -104 - smear)} A${size * .42} ${size * .42} 0 0 1 ${point(.42, -74 + smear * .15)} Q${point(.32, -45)} ${point(.13, -30)} Z`
+  const blade = stage?.impressions
+    ? `M${point(.13, -90)} Q${point(.3, -90 - pitch * .6)} ${point(.42, -90 - pitch * .4)} A${size * .42} ${size * .42} 0 0 1 ${point(.42, -90 + pitch * .4)} Q${point(.3, -90 + pitch * .75)} ${point(.13, -90 + pitch * .4)} Z`
     : `M${x + size * .5} ${y + size * .49} Q${x + size * .07} ${y + size * .18} ${x + size * .45} ${y + size * .08} Q${x + size * .77} ${y + size * .09} ${x + size * .57} ${y + size * .48} Z`;
-  for (const path of fan.querySelectorAll(".fan-blade")) path.setAttribute("d", blade);
-  fan.style.setProperty("--fan-line-opacity", smear ? .42 : .72);
+  const rotor = fan.querySelector(".fan-rotor");
+  rotor.replaceChildren();
+  for (let index = 0; index < impressions; index += 1) {
+    rotor.append(svgElement("path", { d: blade, transform: `rotate(${index * pitch} ${cx} ${cy})`, class: "fan-blade" }));
+  }
+  fan.style.setProperty("--fan-disc-opacity", stage?.discOpacity ?? 0);
+  fan.style.setProperty("--fan-line-opacity", stage?.impressions ? .28 : .72);
   for (let ring = 0; ring < (stage?.rings ?? 0); ring += 1) {
-    const radius = size * (smear ? .34 + ring * .035 : .24 + ring * .075);
+    const radius = size * .405;
     for (let segment = 0; segment < stage.segments; segment += 1) {
-      const start = (segment * 360 / stage.segments + (smear ? -96 - stage.sweep + ring * 7 : ring * 13)) * Math.PI / 180;
+      const start = (segment * 360 / stage.segments - 90 - stage.sweep) * Math.PI / 180;
       const end = start + stage.sweep * Math.PI / 180;
       lines.append(svgElement("path", {
         d: `M${cx + Math.cos(start) * radius} ${cy + Math.sin(start) * radius} A${radius} ${radius} 0 0 1 ${cx + Math.cos(end) * radius} ${cy + Math.sin(end) * radius}`,
@@ -405,6 +409,13 @@ function renderBoard() {
   board.append(connectorLayer);
 
   const hardware = svgElement("g", { id: "installed-hardware" });
+  const network = hardwarePart("network-ports", "rear-io", "Network ports / Linux interfaces", "Rear connector locations follow the manual. Linux interface names are known, but their LAN1/LAN2 physical-port pairing remains unassigned.", ["LAN1", "LAN2", "IPMI_LAN1"]);
+  for (const id of ["LAN1", "LAN2", "IPMI_LAN1"]) {
+    const bounds = landscapeBounds(connectorById.get(id));
+    network.append(svgElement("rect", { ...bounds, rx: 2, class: "nic-port part-outline" }));
+    network.append(svgElement("text", { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 + 3, class: "hardware-label centered" }, id === "IPMI_LAN1" ? "BMC" : id));
+  }
+  hardware.append(network);
   const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. User confirms four HDDs with the bottom bay empty in each cage. Individual logical-drive identities remain unassigned.");
   for (let cage = 0; cage < 3; cage += 1) {
     const y = 124 + cage * 196;
@@ -584,6 +595,7 @@ function renderComponentDetails() {
   $("component-note").textContent = component.note ?? "";
   $("component-placement").textContent = part.placement;
   renderComponentMotion();
+  renderLinuxAssociation(selectedPartId);
   $("component-reference-links").replaceChildren();
   appendReferences($("component-reference-links"), partReferences[part.componentId ?? selectedPartId] ?? []);
   const reading = part.readingId ? readingFor(currentReadings(), part.readingId) : null;
@@ -601,6 +613,92 @@ function renderComponentDetails() {
       part.componentId === "rear-fans"
         ? "Reported PSU/Molex power only; no motherboard tach or control connection."
         : "No specific board connector is assigned here. Do not infer a cable route from placement."));
+  }
+}
+
+function linuxNodeButton(id, label = linuxTopology.nodes.get(id).label) {
+  const button = element("button", { type: "button", "data-linux-node": id }, label);
+  button.addEventListener("click", () => renderLinuxNode(id));
+  return button;
+}
+
+function linuxCapacity(node) {
+  const tib = bytes => `${(bytes / 2 ** 40).toLocaleString(undefined, { maximumFractionDigits: 2 })} TiB`;
+  if (!Number.isFinite(node.sizeBytes)) return "";
+  return node.usedBytes === undefined ? tib(node.sizeBytes) : `${tib(node.usedBytes)} used / ${tib(node.sizeBytes)} total`;
+}
+
+function renderLinuxNode(id) {
+  const node = linuxTopology.nodes.get(id);
+  if (!$("linux-list").hidden) linuxReturnId = id;
+  $("linux-list").hidden = true;
+  const detail = $("linux-node");
+  detail.hidden = false;
+  detail.replaceChildren();
+  const back = element("button", { type: "button" }, "← Back to this part's Linux devices");
+  back.addEventListener("click", () => {
+    detail.hidden = true;
+    $("linux-list").hidden = false;
+    const buttons = [...$("linux-list").querySelectorAll("button")];
+    (buttons.find(button => button.dataset.linuxNode === linuxReturnId) ?? buttons[0])?.focus();
+  });
+  const heading = element("h4", { tabindex: "-1" }, node.label);
+  detail.append(back, heading, element("p", { class: "compact" }, `${node.kind}${node.model ? ` · ${node.model}` : ""}${node.sizeBytes ? ` · ${linuxCapacity(node)}` : ""}`));
+  detail.append(element("p", { class: "reading-note" }, linuxNodeSummary(linuxTopology, id)));
+  if (node.aliases?.length) detail.append(element("p", { class: "compact" }, `Same Linux object / aliases: ${node.aliases.join(", ")}`));
+  if (node.summary && node.summary !== linuxNodeSummary(linuxTopology, id)) detail.append(element("p", { class: "compact muted" }, node.summary));
+  const relationships = [
+    ["Underlying / associated objects", node.parents],
+    ["Used by / represented as", [...linuxTopology.nodes.values()].flatMap(child =>
+      child.parents.filter(parent => parent.id === id).map(parent => ({ id: child.id, relation: parent.relation })),
+    )],
+  ];
+  for (const [label, links] of relationships) {
+    if (!links.length) continue;
+    detail.append(element("h4", {}, label));
+    const list = element("ul", { class: "linux-relationships" });
+    for (const link of links) {
+      const row = element("li");
+      row.append(linuxNodeButton(link.id), element("span", { class: "compact muted" }, link.relation));
+      list.append(row);
+    }
+    detail.append(list);
+  }
+  heading.focus();
+}
+
+function renderLinuxAssociation(target) {
+  const snapshot = linuxTopology.snapshot;
+  const association = snapshot.associations.find(entry => entry.targets.includes(target));
+  $("linux-details").hidden = !association;
+  if (!association) return;
+  const host = selectedPartId ? $("component-details") : $("connector-details");
+  host.insertBefore($("linux-details"), selectedPartId ? $("component-reference-links").closest(".reference") : $("pin-section"));
+  $("linux-captured").textContent = `OBSERVED SNAPSHOT · ${new Date(snapshot.capturedAt).toLocaleString()} · NOT LIVE. ${snapshot.source}`;
+  $("linux-association").textContent = association.note;
+  $("linux-limitations").textContent = `${snapshot.note} ${snapshot.limitations}`;
+  $("linux-node").hidden = true;
+  const list = $("linux-list");
+  list.hidden = false;
+  list.replaceChildren();
+  const table = element("table");
+  const head = element("thead"), headings = element("tr");
+  headings.append(element("th", {}, "Linux object"), element("th", {}, "Role / representation"));
+  head.append(headings);
+  const body = element("tbody");
+  for (const id of association.nodes) {
+    const row = element("tr"), name = element("td"), info = element("td");
+    const node = linuxTopology.nodes.get(id);
+    name.append(linuxNodeButton(id));
+    info.textContent = `${linuxNodeSummary(linuxTopology, id)}${node.sizeBytes ? ` · ${linuxCapacity(node)}` : ""}`;
+    row.append(name, info);
+    body.append(row);
+  }
+  table.append(head, body);
+  list.append(table);
+  if (association.nodes.some(id => linuxTopology.nodes.get(id).memberships.length)) {
+    for (const raid of snapshot.raids) list.append(linuxNodeButton(raid.id, `${linuxTopology.nodes.get(raid.id).label} · ${linuxNodeSummary(linuxTopology, raid.id)}`));
+    list.append(linuxNodeButton("data-filesystem", "/data · explore LVM / cache / backing devices"));
   }
 }
 
@@ -634,6 +732,7 @@ function renderSelection() {
     renderComponentDetails();
     return;
   }
+  renderLinuxAssociation(selectedId);
   $("detail-category").textContent = `${connector.category.toUpperCase()} / SELECTED CONNECTOR`;
   $("detail-name").textContent = connector.id;
   $("detail-confidence").textContent = `Evidence: ${connection.confidence}`;

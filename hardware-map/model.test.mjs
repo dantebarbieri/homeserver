@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { connectors, connectorById, landscapeBounds, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
+import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
+import { linuxSnapshot } from "./linux-snapshot.mjs";
 
 const now = "2026-11-12T21:30:00.000Z";
 const annotation = { target: "CPU cooler via splitter", confidence: "confirmed", occupancy: "occupied", evidence: "Cable physically traced; example test evidence", note: "Both branches checked" };
@@ -29,6 +30,7 @@ test("hardware filters include off-board parts, overlapping categories and model
   assert.ok(matchesHardware(drive, "Storage", "990 EVO"));
   assert.equal(matchesHardware(drive, "Memory"), false);
   assert.equal(matchesHardware(fan, "Fans"), false, "connector categories are separate from hardware categories");
+  assert.ok(matchesHardware({ id: "network-ports", componentId: "rear-io", label: "Network ports" }, "Networking"));
 });
 
 test("fan animation distinguishes unavailable speed from stopped and selects proportional speed bands", () => {
@@ -50,6 +52,82 @@ test("fan animation distinguishes unavailable speed from stopped and selects pro
     assert.ok(moving[i].period < moving[i - 1].period, "higher bands must rotate faster");
     assert.ok(moving[i].rings * moving[i].segments > moving[i - 1].rings * moving[i - 1].segments, "higher bands must add speed lines");
   }
+  const multiples = moving.filter(stage => stage.impressions);
+  for (let i = 1; i < multiples.length; i += 1) {
+    assert.ok(multiples[i].impressions > multiples[i - 1].impressions, "higher bands must subdivide the blade impressions");
+    assert.equal(multiples[i].impressions % 6, 0, "impressions must be evenly distributed full repetitions");
+    assert.ok(multiples[i].discOpacity > multiples[i - 1].discOpacity, "higher bands blend toward a disc");
+  }
+});
+
+test("replacing a Linux snapshot moves spare and bond roles without changing physical annotations or the old snapshot", () => {
+  const original = structuredClone(linuxSnapshot);
+  const topology = buildLinuxTopology(linuxSnapshot);
+  assert.match(linuxNodeSummary(topology, "sde"), /HOT SPARE/);
+  assert.match(linuxNodeSummary(topology, "sde1"), /HOT SPARE/);
+  const refreshed = structuredClone(linuxSnapshot);
+  const oldSpare = refreshed.raids[0].members.find(member => member.state === "spare");
+  const newSpare = refreshed.raids[0].members.find(member => member.id === "sda1");
+  oldSpare.state = "in_sync";
+  oldSpare.slot = newSpare.slot;
+  newSpare.state = "spare";
+  newSpare.slot = null;
+  refreshed.bonds[0].activeSlave = "enp66s0f0";
+  const next = buildLinuxTopology(refreshed);
+  assert.match(linuxNodeSummary(next, "sda"), /HOT SPARE/);
+  assert.doesNotMatch(linuxNodeSummary(next, "sde"), /HOT SPARE/);
+  assert.match(linuxNodeSummary(next, "md0"), /11\/11 in sync · 1 hot spare/);
+  assert.match(linuxNodeSummary(next, "enp66s0f0"), /Active link/);
+  assert.match(linuxNodeSummary(next, "enp66s0f1"), /Standby link/);
+  assert.match(linuxNodeSummary(topology, "sde"), /HOT SPARE/);
+  assert.deepEqual(linuxSnapshot, original, "deriving roles must not mutate supplied snapshot observations");
+  const standby = next.nodes.get("md0").parents.find(parent => parent.id === "sda1");
+  assert.equal(standby.standby, true);
+  assert.match(standby.relation, /not active stripes/);
+});
+
+test("Linux topology keeps partitions, aliases, cache and ordinary NVMe backing distinct", () => {
+  const topology = buildLinuxTopology(linuxSnapshot);
+  assert.ok(topology.nodes.get("dm-5").aliases.includes("/dev/dm-5"));
+  assert.ok(topology.nodes.get("dm-5").aliases.includes("/dev/vg_redundant/lv_data"));
+  assert.ok(topology.nodes.get("dm-2").parents.some(parent => parent.id === "nvme1n1p1"));
+  assert.ok(topology.nodes.get("dm-4").parents.some(parent => parent.id === "nvme1n1p1"), "NVMe also backs ordinary data, not only cache");
+  assert.ok(topology.nodes.get("dm-4").parents.some(parent => parent.id === "md0"));
+  assert.equal(topology.nodes.get("data-filesystem").parents[0].id, "dm-5");
+  for (const target of ["M2_1", "M2_2", "LAN1", "LAN2"]) {
+    assert.equal(linuxSnapshot.associations.find(entry => entry.targets.includes(target)).nodes.filter(id => id !== "bond0").length, 2, "do not invent a one-to-one physical port/socket binding");
+  }
+});
+
+test("a spare assigned to a recovery slot is not presented as an idle hot spare", () => {
+  const snapshot = structuredClone(linuxSnapshot);
+  const raid = snapshot.raids[0];
+  raid.syncAction = "recover";
+  raid.degraded = 1;
+  const failed = raid.members.find(member => member.id === "sda1");
+  const replacement = raid.members.find(member => member.state === "spare");
+  replacement.slot = failed.slot;
+  failed.slot = null;
+  failed.state = "faulty";
+  raid.members.find(member => member.id === "sdb1").state = "in_sync,writemostly";
+  const topology = buildLinuxTopology(snapshot);
+  assert.doesNotMatch(linuxNodeSummary(topology, "sde"), /HOT SPARE/);
+  assert.match(linuxNodeSummary(topology, "sde"), /not in sync/);
+  assert.match(linuxNodeSummary(topology, "sda"), /FAULTY/);
+  assert.match(linuxNodeSummary(topology, "md0"), /10\/11 in sync · 0 hot spare.*recover.*degraded 1/);
+  assert.equal(topology.nodes.get("md0").parents.find(parent => parent.id === "sde1").standby, false);
+});
+
+test("Linux topology rejects duplicate identities, missing references and cyclic dependencies", () => {
+  const duplicate = structuredClone(linuxSnapshot);
+  duplicate.nodes.push(duplicate.nodes[0]);
+  assert.throws(() => buildLinuxTopology(duplicate), /Duplicate/);
+  const missing = structuredClone(linuxSnapshot);
+  missing.nodes.find(node => node.id === "sda1").parents[0].id = "missing";
+  assert.throws(() => buildLinuxTopology(missing), /Unknown Linux node/);
+  const cyclic = structuredClone(linuxSnapshot);
+  cyclic.nodes.find(node => node.id === "nvme0n1").parents = [{ id: "nvme0n1p1", relation: "invalid" }];
+  assert.throws(() => buildLinuxTopology(cyclic), /Cyclic/);
 });
 
 test("landscape projection rotates connector order without mutating manual geometry or pin functions", () => {

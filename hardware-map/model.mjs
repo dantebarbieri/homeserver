@@ -9,16 +9,98 @@ const isRecord = value => value !== null && typeof value === "object" && !Array.
 export const fanMotionStages = [
   { id: "stopped", label: "Stopped", example: 0, ceiling: 0, period: 0, bladeOpacity: 1, rings: 0, segments: 0, sweep: 0 },
   { id: "slow", label: "Slow", example: .12, ceiling: .2, period: 10, bladeOpacity: 1, rings: 0, segments: 0, sweep: 0 },
-  { id: "medium", label: "Medium", example: .35, ceiling: .45, period: 2.2, bladeOpacity: .92, smear: 12, rings: 1, segments: 6, sweep: 24 },
-  { id: "fast", label: "Fast", example: .6, ceiling: .7, period: 1.25, bladeOpacity: .68, smear: 25, rings: 2, segments: 6, sweep: 34 },
-  { id: "very-fast", label: "Very fast", example: .82, ceiling: .9, period: .9, bladeOpacity: .48, smear: 38, rings: 3, segments: 8, sweep: 31 },
-  { id: "max", label: "Maximum", example: 1, ceiling: 1, period: .75, bladeOpacity: .28, rings: 3, segments: 12, sweep: 24 },
+  { id: "medium", label: "Medium", example: .35, ceiling: .45, period: 2.2, bladeOpacity: .85, impressions: 12, discOpacity: .05, rings: 1, segments: 12, sweep: 12 },
+  { id: "fast", label: "Fast", example: .6, ceiling: .7, period: 1.25, bladeOpacity: .65, impressions: 18, discOpacity: .12, rings: 1, segments: 18, sweep: 8 },
+  { id: "very-fast", label: "Very fast", example: .82, ceiling: .9, period: .9, bladeOpacity: .45, impressions: 24, discOpacity: .2, rings: 1, segments: 24, sweep: 6 },
+  { id: "max", label: "Maximum", example: 1, ceiling: 1, period: .75, bladeOpacity: .28, impressions: 36, discOpacity: .3, rings: 1, segments: 36, sweep: 4 },
 ];
 
 // Fraction of rated maximum RPM, not PWM duty. Null means unavailable, never stopped.
 export function fanMotionForSpeed(fraction) {
   if (!Number.isFinite(fraction) || fraction < 0) return null;
   return fanMotionStages.find(stage => fraction <= stage.ceiling) ?? fanMotionStages.at(-1);
+}
+
+function raidMemberStatus(member) {
+  const flags = member.state.split(",").map(flag => flag.trim());
+  const faulty = flags.includes("faulty");
+  const inSync = !faulty && flags.includes("in_sync");
+  const standby = !faulty && flags.includes("spare") && member.slot === null;
+  const label = faulty ? `FAULTY · ${member.state}`
+    : standby ? "HOT SPARE (standby)"
+      : inSync ? `Array member · ${member.state} · array slot ${member.slot ?? "unassigned"}`
+        : `${member.slot === null ? "Unassigned RAID device" : "Assigned RAID member"} · ${member.state} · array slot ${member.slot ?? "unassigned"} · not in sync`;
+  return { inSync, standby, label };
+}
+
+export function buildLinuxTopology(snapshot) {
+  if (snapshot.schemaVersion !== 1 || !Number.isFinite(Date.parse(snapshot.capturedAt))) throw new Error("Invalid Linux snapshot version or capture time.");
+  const nodes = new Map();
+  for (const node of snapshot.nodes) {
+    if (!node.id || nodes.has(node.id)) throw new Error(`Duplicate or missing Linux node: ${node.id}`);
+    nodes.set(node.id, { ...node, parents: [...(node.parents ?? [])], memberships: [] });
+  }
+  const requireNode = id => {
+    if (!nodes.has(id)) throw new Error(`Unknown Linux node: ${id}`);
+    return nodes.get(id);
+  };
+  for (const raid of snapshot.raids) {
+    const array = requireNode(raid.id);
+    array.raid = raid;
+    for (const member of raid.members) {
+      const status = raidMemberStatus(member);
+      const partition = requireNode(member.id);
+      const membership = { ...member, array: raid.id };
+      partition.memberships.push(membership);
+      for (const parent of partition.parents) {
+        const disk = requireNode(parent.id);
+        if (disk.kind === "Physical HDD" || disk.kind === "Physical NVMe") disk.memberships.push(membership);
+      }
+      array.parents.push({
+        id: member.id,
+        relation: status.standby ? "Hot spare · standby, not active stripes" : status.label,
+        standby: status.standby,
+      });
+    }
+  }
+  for (const bond of snapshot.bonds) {
+    const node = requireNode(bond.id);
+    node.summary = `${bond.mode} · active link ${bond.activeSlave}`;
+    for (const id of bond.members) {
+      const nic = requireNode(id);
+      nic.bondRole = `${id === bond.activeSlave ? "Active" : "Standby"} link in ${bond.id}`;
+      node.parents.push({ id, relation: nic.bondRole });
+    }
+  }
+  for (const node of nodes.values()) {
+    for (const parent of node.parents) requireNode(parent.id);
+  }
+  const visited = new Set(), visiting = new Set();
+  function visit(id) {
+    if (visiting.has(id)) throw new Error(`Cyclic Linux topology at ${id}`);
+    if (visited.has(id)) return;
+    visiting.add(id);
+    for (const parent of nodes.get(id).parents) visit(parent.id);
+    visiting.delete(id);
+    visited.add(id);
+  }
+  for (const id of nodes.keys()) visit(id);
+  for (const association of snapshot.associations) for (const id of association.nodes) requireNode(id);
+  return { snapshot, nodes };
+}
+
+export function linuxNodeSummary(topology, id) {
+  const node = topology.nodes.get(id);
+  if (!node) throw new Error(`Unknown Linux node: ${id}`);
+  if (node.raid) {
+    const active = node.raid.members.filter(member => raidMemberStatus(member).inSync).length;
+    const spares = node.raid.members.filter(member => raidMemberStatus(member).standby).length;
+    return `${node.raid.level} · ${active}/${node.raid.raidDisks} in sync · ${spares} hot spare · ${node.raid.state} · ${node.raid.syncAction} · degraded ${node.raid.degraded}`;
+  }
+  if (node.memberships.length) return node.memberships.map(member =>
+    `${raidMemberStatus(member).label} · /dev/${member.array}`,
+  ).join("; ");
+  return [node.bondRole, node.summary ?? node.kind].filter(Boolean).join(" · ");
 }
 
 export function matchesHardware(part, category, query = "") {

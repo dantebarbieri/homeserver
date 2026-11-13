@@ -93,6 +93,15 @@ main { width: 100%; }
 .drive-label { fill: #cdcec3; }
 .drive-screw { fill: #92958a; }
 .fan-frame { fill: #282e31; stroke: #141c21; stroke-width: 2; }
+.nic-port { fill: #555b56; stroke: #a4aaa0; stroke-width: 1.5; }
+.linux-details { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 8px; overflow-wrap: anywhere; }
+.linux-details table { table-layout: fixed; }
+.linux-details th:first-child { width: 38%; }
+.linux-details table td { vertical-align: top; font-family: inherit; font-size: 12px; }
+.linux-details button { max-width: 100%; overflow-wrap: anywhere; white-space: normal; text-align: left; }
+.linux-details td button { font-size: 11px; padding: 5px 7px; }
+.linux-relationships { list-style: none; padding: 0; display: grid; gap: 8px; }
+.linux-relationships li { display: grid; gap: 4px; justify-items: start; }
 .fan-ring { fill: #141d23; stroke: #444c50; }
 .fan-blade { fill: #464d50; stroke: #222b30; stroke-width: 1; }
 .fan-hub { fill: #1d262b; stroke: #565c5d; }
@@ -100,6 +109,8 @@ main { width: 100%; }
 .fan-face.redux .fan-ring { fill: #494f4f; stroke: #b8b9b7; }
 .fan-face.redux .fan-blade { fill: #717877; stroke: #494f4f; }
 .fan-face.redux .fan-hub { fill: #5d6464; stroke: #7e8282; }
+.fan-motion-disc { fill: #464d50; opacity: var(--fan-disc-opacity, 0); }
+.fan-face.redux .fan-motion-disc { fill: #717877; }
 .fan-rotor, .fan-speed-lines { transform-box: fill-box; transform-origin: center; }
 .fan-rotor { opacity: var(--fan-blade-opacity, 1); }
 .fan-rotation-enabled .fan-face[data-spinning="true"] .fan-rotor, .fan-rotation-enabled .fan-face[data-spinning="true"] .fan-speed-lines { animation: fan-whirl var(--fan-period) linear infinite; }

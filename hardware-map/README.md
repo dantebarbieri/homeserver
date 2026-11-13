@@ -42,10 +42,11 @@ node --test hardware-map/model.test.mjs
   for saved/tab-only annotations, including recovery after a storage failure.
 - **Fan motion** previews six artistic case-fan stages: stopped, slow, medium,
   fast, very fast and maximum. The slow stage uses unchanged blades with gentle
-  rotation; medium/fast/very-fast widen the blades into swept motion smears with
-  softer tip streaks, rotating once per 2.2/1.25/0.9 seconds. Maximum retains its
-  0.75-second rotation and dense speed-line look. Higher stages add 6/12/24/36
-  curved speed lines while fading the blades. Frames and hubs remain stationary.
+  rotation; medium/fast/very-fast/maximum use 12/18/24/36 evenly spaced curved
+  blade impressions and subtle tip streaks, fading toward a translucent disc.
+  These are stylized exposure **multiples**, not the physical blade count or
+  shutter-accurate motion blur. Periods are 2.2/1.25/0.9/0.75 seconds, keeping
+  maximum's previous timing. Frames and hubs remain stationary.
   The chooser shows animated examples, applies a stage to all eight case fans,
   or compares all stages on the map (including rear-fan examples).
   Every applied stage is labeled **DEMO**; it is not telemetry or fan control.
@@ -61,6 +62,8 @@ node --test hardware-map/model.test.mjs
   (overspeed uses the maximum illustration). These are stylized periods, not
   physical RPM, PWM duty, airflow or a thermal simulation. No snapshot or shared
   hub tach is automatically applied to the other five unmeasured fans.
+  Technique references: [rendered motion blur / exposure](https://docs.blender.org/manual/en/latest/render/cycles/render_settings/motion_blur.html)
+  and [animation smear frames / multiples](https://blog.cg-wire.com/smear-frames/).
 - Compact **Hardware / Connectors** controls choose what the category chips and
   search filter. Hardware categories cover compute, memory, storage, cooling,
   expansion cards, power, chassis and motherboard, including off-board parts.
@@ -68,6 +71,32 @@ node --test hardware-map/model.test.mjs
   expansion). Nonmatching parts dim and cannot intercept pointer/keyboard
   selection; matching parts still open their details. **All hardware** restores
   all component targets. Search matches part labels, models and categories.
+- **Linux devices & layers** appears in HDD, HBA, M.2, network-port and related
+  connector popups. Click a Linux name to traverse partitions, RAID, VG/LV,
+  internal cache/origin devices, filesystem and bond relationships within the
+  same popup. Aliases identify multiple names for one object, not extra disks.
+  The dated read-only snapshot currently shows `/dev/sde1` as the hot spare,
+  11 in-sync RAID6 members and `enp66s0f1` as `bond0`'s active-backup active link.
+  The spare is explicitly standby, not an active stripe-bearing member.
+  `nvme0n1` holds the OS; `nvme1n1` backs both cache and ordinary `/data` extents.
+  The latter means the data LV is **not entirely RAID-protected**. Privileged
+  LVM metadata was unavailable: exact extents and current cache mode are not
+  claimed from this inspection.
+  Bay-to-disk, M.2-to-NVMe and LAN1/LAN2-to-interface mappings remain unassigned;
+  no device is assigned from list order, PCI function order or old A/B sensors.
+  The separate AMI USB virtual NIC is not the dedicated BMC LAN socket.
+  `linux-snapshot.mjs` separates observed nodes, dependencies, RAID membership,
+  bond roles and physical associations. `buildLinuxTopology(snapshot)` derives
+  current roles anew, so replacing a future snapshot can change spare/active-link
+  assignments without changing inspection annotations. No live endpoint,
+  automatic polling, deployment or write/control operation is added here.
+  Kernel names are temporary snapshot aliases. A future private collector needs
+  stable identities and explicit physical bindings; serials/WWNs/MACs/IPs and
+  credentials must not be added to this public fixture. Refreshes must collect
+  RAID member **state and slot**, not mistake mdadm's bracketed device number
+  for the active array slot, and retain collection timestamps/non-atomic limits.
+  Comma-separated state flags are retained; a `spare` assigned to a recovery
+  slot is not labeled an idle hot spare. See the [kernel MD state/slot reference](https://docs.kernel.org/admin-guide/md.html).
   **Connectors** retains the motherboard's original category filters and search.
   In connector mode, hardware dims and is disabled for pointer/keyboard selection; nonmatching
   connectors also dim and cannot intercept clicks. Choosing a category only
