@@ -154,6 +154,8 @@ pinned Studio host key. Only Bazarr shares its Docker network; no port is
 published and NPM does not proxy it. Anything on that network can use the
 unauthenticated adapter, so attach nothing else to it. Never expose port 9000
 on the LAN or WAN; a private DNS name does not authenticate anyone.
+The tunnel resolves `ai-studio.home.arpa` through AdGuard at `192.168.50.100`;
+the server's public fallback resolvers cannot answer that private name.
 
 On the Studio, `_bazarr` is a hidden standard account with no password or
 usable home (`/var/empty`), outside `admin` and `wheel`. macOS PAM requires

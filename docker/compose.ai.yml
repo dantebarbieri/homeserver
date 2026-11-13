@@ -32,6 +32,8 @@ services:
         UID: ${HOST_UID}
         GID: ${HOST_GID}
     container_name: studio-whisper
+    # home.arpa is served by AdGuard, not the host's public fallback resolvers.
+    dns: [192.168.50.100]
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
