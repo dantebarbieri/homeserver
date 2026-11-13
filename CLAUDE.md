@@ -18,10 +18,13 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 |-----------|---------|
 | `docker/` | Docker Compose orchestration — 18 category files, 50+ services |
 | `nixos/` | NixOS system configuration — flake (`flake.nix` + `flake.lock`), `configuration.nix` importing `modules/`, Home Manager in `home/` |
+| `macos/` | Mac Studio (`ai-studio`, `192.168.50.140`) compute companion — isolated native speech/models and a disabled native Tdarr node |
 | `homepage/` | Homepage dashboard YAML config |
 | `mail-config/` | Portable email/contacts setup (aerc, khard, vdirsyncer) — also used on macOS |
 | `recyclarr-configs/` | TRaSH Guides quality profiles for Sonarr/Radarr |
 | `production-configs/` | Gitignored dir for production config copies (only `README.md` tracked) |
+
+The Mac Studio setup and the server cooling work were mostly agent-designed from basic requests. Read `docs/STUDIO-AND-COOLING-DECISIONS.md` before changing them: it marks which choices Dante made, lists simpler alternatives and removal steps, and explicitly allows replacing agent-chosen pieces with better solutions.
 
 ### Production Server Paths
 

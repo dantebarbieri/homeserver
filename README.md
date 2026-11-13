@@ -37,8 +37,10 @@ production-configs/  Gitignored production config copies for debugging
 **Docker Compose** is the service orchestration layer. `docker-compose.yml` uses the `include:` directive to pull in self-contained category files (`compose.*.yml`). Each category can run independently. Services extend from shared base templates in `compose.common.yml`.
 
 **Mac Studio** is an isolated compute companion for native speech, advisory models,
-and a paused-by-default CPU/x265 Tdarr node. See [setup and rollout boundaries](macos/README.md);
-working transport is not production media or subtitle cutover approval.
+and a native CPU/x265 Tdarr node that is currently disabled. See [setup and rollout boundaries](macos/README.md);
+working transport is not production media or subtitle cutover approval. The
+[decision and cleanup log](docs/STUDIO-AND-COOLING-DECISIONS.md) records why each
+piece exists, who chose it, and simpler alternatives.
 
 **Daily auto-update** (04:00): a NixOS systemd timer pulls this repo and runs `docker compose pull && build && up -d`.
 

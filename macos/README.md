@@ -1,12 +1,15 @@
 # Mac Studio compute companion
 
 The Studio runs native speech inference, an advisory local model, and a
-**paused-by-default CPU/x265 Tdarr node**. Colima is a separate, limited Docker
+**native CPU/x265 Tdarr node that is disabled** (see
+[Operations and rollout gates](#operations-and-rollout-gates)). Colima is a separate, limited Docker
 environment. This setup does not move production Bazarr or authorize Tdarr to
 replace original media.
 
 See [speech setup](ai/README.md), [model comparisons and limitations](ai/SPEECH.md),
-and [Tdarr's storage-authoritative flow](../docker/docs/TDARR.md).
+and [Tdarr's storage-authoritative flow](../docker/docs/TDARR.md). The
+[decision and cleanup log](../docs/STUDIO-AND-COOLING-DECISIONS.md) explains which
+choices were Dante's, which were agent defaults, and how to remove each piece.
 
 ## Identities and private transport
 
