@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { connectors, connectorById, landscapeBounds, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, fanAvailability, matchesHardware, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
+import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, occupancyCounts, fanAvailability, matchesHardware, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
 
 const now = "2026-11-12T21:30:00.000Z";
 const annotation = { target: "CPU cooler via splitter", confidence: "confirmed", occupancy: "occupied", evidence: "Cable physically traced; example test evidence", note: "Both branches checked" };
@@ -65,6 +65,16 @@ test("a connection edit preserves other connectors and retains evidence on expor
   assert.equal(first.connections.FAN2, undefined);
 });
 
+test("occupancy counts distinguish empty, connected, blocked and unverified independently of confidence", () => {
+  assert.deepEqual(occupancyCounts(emptyDocument()), { occupied: 0, free: 0, blocked: 0, unverified: connectors.length });
+  let document = updateConnection(emptyDocument(), "FAN1", annotation, now);
+  document = updateConnection(document, "FAN2", { ...annotation, target: "", confidence: "inferred", occupancy: "free" }, now);
+  document = updateConnection(document, "PCIE3", { ...annotation, confidence: "inferred", occupancy: "blocked" }, now);
+  assert.deepEqual(occupancyCounts(document), { occupied: 1, free: 1, blocked: 1, unverified: connectors.length - 3 });
+  document = updateConnection(document, "FAN2", { ...document.connections.FAN2, confidence: "confirmed" }, now);
+  assert.deepEqual(occupancyCounts(document), { occupied: 1, free: 1, blocked: 1, unverified: connectors.length - 3 });
+});
+
 test("inspection defaults distinguish confirmed occupied and confirmed free fan headers", () => {
   const document = withInspectionDefaults(emptyDocument());
   for (const id of ["CPU1", "M2_1", "M2_2", "SATA_0_3", "SATA_4_7", "FAN1", "FAN2", "ATXPWR1", "ATX12V1", "PANEL1"]) {
@@ -125,14 +135,14 @@ test("physical slot blockage stays distinct from a GPU electrical connection and
   assert.equal(document.connections.PCIE2.occupancy, "blocked");
   assert.equal(document.connections.PCIE2.confidence, "confirmed");
   assert.equal(document.connections.PCIE3.occupancy, "blocked");
-  assert.equal(document.connections.PCIE3.confidence, "inferred");
+  assert.equal(document.connections.PCIE3.confidence, "confirmed");
   assert.equal(document.connections.PCIE4.occupancy, "occupied");
-  assert.equal(document.connections.PCIE4.confidence, "inferred");
-  assert.equal(document.connections.PCIE4.provenance, "photo-inferred");
+  assert.equal(document.connections.PCIE4.confidence, "confirmed");
+  assert.equal(document.connections.PCIE4.provenance, "user-confirmed");
   for (const id of ["PCIE5", "PCIE6", "PCIE7"]) {
     assert.equal(document.connections[id].occupancy, "free");
-    assert.equal(document.connections[id].provenance, "photo-inferred");
-    assert.equal(document.connections[id].confidence, "inferred");
+    assert.equal(document.connections[id].provenance, "user-confirmed");
+    assert.equal(document.connections[id].confidence, "confirmed");
   }
   assert.deepEqual(parseDocument(serializeDocument(document)), document);
   const blocked = updateConnection(emptyDocument(), "FAN5", { ...annotation, occupancy: "blocked" }, now);

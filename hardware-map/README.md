@@ -58,6 +58,11 @@ node --test hardware-map/model.test.mjs
   chassis is not a physical pin-orientation reference.
 - Annotate connection target, confidence, physical occupancy (including blocked slots), evidence source
   and notes. Confirmed and inferred connections require evidence.
+  Connector outlines, list indicators, detail badges and the Tools summary use
+  **occupancy**, not confidence: teal = connected, pale gray = empty,
+  amber/dashed = physically blocked, muted/dotted = unverified. Selection adds
+  a glow without changing the state color. Unknown occupancy is never assumed
+  empty; confidence/provenance remain recorded in details and JSON.
   Inspection defaults distinguish photo-confirmed, photo-inferred, uncertain
   photo, user-confirmed, user-reported and unverified observations.
 - Fan-planning counts separate confirmed-free, confirmed-occupied and
@@ -100,7 +105,7 @@ FAN3 tach is a relayed BMC observation, not an independent cable trace.
 | Provenance | Observation |
 | --- | --- |
 | Photo-confirmed | Board silkscreen `ROMED8-2T REV 1.03`; GPU label `GV-N207SGAMING OC-8GD rev 1.0` in IMG_4548. The earlier extra zero in the GPU SKU was a transcription error. |
-| Photo-inferred, revised November 13 | Three exposed slots between DIMMs and GPU in IMG_4537 support the user's revised **GPU likely in PCIE4**, with PCIE7/6/5 empty and cooler apparently covering PCIE3/PCIE2. Slot labels are unreadable: PCIE4 is **not confirmed**. The earlier PCIE3 assignment and PCIE4-free report are superseded. |
+| User-confirmed, November 13 | User explicitly accepts the reviewed PCIe mapping as confirmed: **GPU in PCIE4**, **PCIE5/6/7 empty**, cooler covering **PCIE3/PCIE2**. This follows the three exposed rows in IMG_4537 and the manual; it is user confirmation, not a new readable-label photo. Earlier PCIE3 electrical assignment and PCIE4-free report are superseded. |
 | User-confirmed | HBA in PCIE1, directly at the GPU fan intake. Candidate model is **SAS 9300-8i**, still user-suspected rather than label-confirmed. Firmware/mode is not established by this candidate identification. |
 | Photo-confirmed | Both M.2 sockets right of PCIE7's end contain bare Samsung 2280 drives without heatsinks. Drives run perpendicular to the slots across the PCIE6→PCIE2 rows. Both onboard SATA connectors appear cabled; logical A/B identities and cable-to-drive routing remain unknown. |
 | Photo observation, unmeasured | GPU shroud overhangs both M.2 drives with a visible gap estimated as a few mm. This is not a measured clearance or a verified heatsink allowance. Drive outlines in the schematic show orientation, not dimensions or exact shroud extent. |
@@ -147,8 +152,8 @@ the latest supplied FAN3 record is visible separately without overwriting notes.
 The front is on the left and rear I/O on the right. Component and case-part
 positions, dimensions and mounting offsets are approximate, even when the
 component's identity or electrical slot is confirmed. GPU/HBA shapes illustrate
-photo-inferred PCIE4 GPU placement, confirmed PCIE1 HBA placement and apparent
-PCIE3/PCIE2 obstruction, not measured cooler footprints.
+user-confirmed PCIE4 GPU placement, PCIE1 HBA placement and PCIE3/PCIE2
+obstruction, not measured cooler footprints.
 Connector focus reveals sockets visually; it does not mean they are physically
 accessible beneath a card. M.2 outlines retain their perpendicular-to-slot
 direction; NVMe A/B readings are not assigned to a socket.

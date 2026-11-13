@@ -19,6 +19,7 @@ export const provenanceLabels = {
   unverified: "Unverified",
 };
 export const layoutSource = "Official manual rev. 1.30, printed pp. 7–8 (PDF pp. 14–15).";
+export const occupancyLabels = { occupied: "Connected", free: "Empty", blocked: "Blocked", unverified: "Unverified" };
 const fanPins = [
   { number: 1, signal: "GND", description: "Ground" },
   { number: 2, signal: "FAN_VOLTAGE", description: "Fan power" },
@@ -147,18 +148,18 @@ export const inspectionConnections = {
   PCIE1: observation("Low-profile HBA with two SFF-8643 cables", "confirmed", "occupied", "user-confirmed",
     "Updated user confirmation and photo set 2 place the HBA in PCIE1, directly at the GPU fan intake."),
   PCIE2: observation("GPU cooler — physical obstruction only", "confirmed", "blocked", "user-confirmed",
-    "PCIE2 is physically blocked by the GPU cooler. The earlier confirmed obstruction remains consistent with the revised photo-inferred GPU-in-PCIE4 placement.",
+    "User confirms the current PCIe mapping: GPU in PCIE4, with its cooler covering PCIE3/PCIE2.",
     "Blocked does not mean electrically occupied. The earlier PCIE3 electrical assignment is superseded.", "2026-11-13"),
-  PCIE3: observation("GPU cooler — inferred physical obstruction", "inferred", "blocked", "photo-inferred",
-    "User revises the GPU position to likely PCIE4. Three exposed slots between DIMMs and GPU in IMG_4537 support that interpretation; its cooler appears to cover PCIE3.",
-    "Earlier PCIE3 electrical assignment is withdrawn. Slot labels are not readable; exact physical clearance is not measured.", "2026-11-13"),
-  PCIE4: observation("GV-N207SGAMING OC-8GD rev 1.0 — likely electrical slot", "inferred", "occupied", "photo-inferred",
-    "IMG_4537 shows three exposed slot rows between DIMMs and GPU, supporting PCIE7/6/5 empty and GPU in PCIE4. User independently suspects PCIE4.",
-    "Position is photo-inferred, not label-confirmed. The cooler appears to cover PCIE3/PCIE2 and overhang both M.2 drives.", "2026-11-13"),
+  PCIE3: observation("GPU cooler — physical obstruction only", "confirmed", "blocked", "user-confirmed",
+    "User explicitly accepts the revised PCIe mapping as confirmed: GPU in PCIE4, cooler covering PCIE3/PCIE2.",
+    "Earlier PCIE3 electrical assignment is withdrawn. Confirmation is user-supplied, not a new readable-label photo or clearance measurement.", "2026-11-13"),
+  PCIE4: observation("GV-N207SGAMING OC-8GD rev 1.0", "confirmed", "occupied", "user-confirmed",
+    "User explicitly accepts PCIE4 as the GPU's electrical slot, following the photo/manual review showing three exposed PCIE7/6/5 rows.",
+    "This is user confirmation, not a new slot-label photo. Cooler covers PCIE3/PCIE2; M.2 overhang clearance remains unmeasured.", "2026-11-13"),
   ...Object.fromEntries([5, 6, 7].map(number => [
-    `PCIE${number}`, observation("", "inferred", "free", "photo-inferred",
-      "Three exposed empty slot rows in IMG_4537 align with PCIE7/6/5 in the manual. Their labels are not readable.",
-      "Earlier PCIE4–PCIE7-free report is superseded by this photo-supported interpretation.", "2026-11-13"),
+    `PCIE${number}`, observation("", "confirmed", "free", "user-confirmed",
+      "User accepts the reviewed PCIe mapping as confirmed: PCIE5/6/7 are empty.",
+      "Supersedes the earlier PCIE4–PCIE7-free report; PCIE4 holds the GPU.", "2026-11-13"),
   ])),
   ...Object.fromEntries(["A", "B", "G", "H"].map(letter => [
     `DDR4_${letter}1`, observation("Kingston KSM32RD4/32HDR · 32 GB ECC RDIMM", "confirmed", "occupied", "user-confirmed",
@@ -204,7 +205,7 @@ export const components = [
   { id: "board", label: "Motherboard", model: "ROMED8-2T REV 1.03", capacity: "Silkscreen revision", status: "Photo-confirmed (relayed)" },
   { id: "cpu", label: "CPU + cooler", model: "EPYC 7313P · NH-U9 TR4-SP3", capacity: "16 cores / 32 threads", status: "CPU reported installed; original cooler fan pair user-confirmed", note: "2026-11-13 walkthrough: both fans are the originals supplied with the cooler. Airflow through the heatsink runs from the PSU side toward the GPU side, NOT front to rear. Direction is user-confirmed, not measured airflow or a thermal simulation." },
   { id: "memory", label: "Memory", model: "Kingston KSM32RD4/32HDR · ECC RDIMM · A1/B1/G1/H1", capacity: "32 GB per installed module · 4 × 32 GB = 128 GB total system memory", status: "Exact modules and all eight socket states user-confirmed 2026-11-13", note: "C1/D1/E1/F1 are empty. DDR4-3200 is a rated specification; actual running clock and utilization are not measured here." },
-  { id: "gpu", label: "Graphics", model: "GV-N207SGAMING OC-8GD rev 1.0", capacity: "Likely PCIE4 · cooler appears to cover PCIE3/PCIE2", status: "Model photo-confirmed; slot/extent photo-inferred, not label-confirmed", note: "IMG_4548 confirms the model spelling (the earlier extra zero was a transcription error). IMG_4537 supports the user's revised PCIE4 interpretation; the earlier PCIE3 assignment is withdrawn. Fan intake faces the HBA in PCIE1. M.2 shroud clearance is unmeasured." },
+  { id: "gpu", label: "Graphics", model: "GV-N207SGAMING OC-8GD rev 1.0", capacity: "PCIE4 · cooler covers PCIE3/PCIE2", status: "Model photo-confirmed; slot and obstruction user-confirmed 2026-11-13", note: "User accepts the revised PCIE4 mapping as confirmed following the photo/manual review; this is not a new slot-label photo. The earlier PCIE3 assignment is withdrawn. Fan intake faces the HBA in PCIE1. M.2 shroud clearance is unmeasured." },
   { id: "nvme-a", label: "NVMe A", model: "Samsung 990 EVO · MZ-V9E2T0B", capacity: "2 TB nominal per drive", status: "Both installed models/capacities user-confirmed; bare drives photo-confirmed", note: "No heatsinks. Drives run perpendicular to the slots across PCIE6→PCIE2, under the GPU overhang. Logical A/B telemetry is not bound to physical sockets. Clearance is unmeasured." },
   { id: "nvme-b", label: "NVMe B", model: "Samsung 990 EVO · MZ-V9E2T0B", capacity: "2 TB nominal per drive", status: "Both installed models/capacities user-confirmed; bare drives photo-confirmed", note: "No heatsinks. A/B telemetry identities are not assigned to M2_1/M2_2; the observed GPU gap is not a verified heatsink allowance." },
   { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "3 cages × 4 HDDs · bottom bay empty in each", status: "12 installed / 15 bays; empty positions and three power harnesses user-confirmed", note: "Front-view left/center/right cages each have their bottom bay empty. Each group of four HDDs has its own PSU SATA harness. Individual logical-drive-to-bay and data-cable assignments remain untraced. 11 active + 1 hot spare, RAID6; no drives being added." },

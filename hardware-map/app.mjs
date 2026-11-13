@@ -1,5 +1,5 @@
-import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, inspectionConnections, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, connectionCounts, fanAvailability, matchesHardware, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
+import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, inspectionConnections, occupancyLabels, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
+import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -72,7 +72,7 @@ function connectionFor(id) {
 
 function describeConnection(id) {
   const connection = connectionFor(id);
-  return `${id}, ${connection.confidence} connection, ${connection.occupancy}, ${provenanceLabels[connection.provenance]}${connection.target ? ` to ${connection.target}` : ""}`;
+  return `${id}, ${occupancyLabels[connection.occupancy]}, ${connection.confidence} evidence, ${provenanceLabels[connection.provenance]}${connection.target ? ` to ${connection.target}` : ""}`;
 }
 
 function capturePopupContext() {
@@ -372,13 +372,13 @@ function renderBoard() {
   cpu.append(svgElement("text", { x: cpuBounds.x + cpuBounds.width / 2, y: cpuBounds.y + 61, class: "cooler-sublabel" }, "UNDER NH-U9 TR4-SP3"));
   hardware.append(cpu);
 
-  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / likely PCIE4", "GPU in PCIE4 is photo-inferred from three exposed rows, not label-confirmed. Outline spans PCIE3/PCIE2 to illustrate the apparent cooler obstruction; footprint and M.2 clearance are unmeasured.", ["PCIE4", "PCIE3", "PCIE2"], { readingId: "gpu" });
+  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / PCIE4", "PCIE4 placement and PCIE3/PCIE2 cooler obstruction are user-confirmed. Outline, exact footprint and M.2 clearance are unmeasured.", ["PCIE4", "PCIE3", "PCIE2"], { readingId: "gpu" });
   const gpuSlot = landscapeBounds(connectorById.get("PCIE4"));
   const gpuTop = landscapeBounds(connectorById.get("PCIE2")).y - 4;
   gpu.append(svgElement("rect", { x: 872, y: gpuTop, width: 418, height: gpuSlot.y + gpuSlot.height - gpuTop + 5, rx: 4, class: "gpu-body part-outline" }));
   gpu.append(svgElement("path", { d: `M882 ${gpuTop + 10} H1050 L1085 ${gpuTop + 45} H1280`, class: "gpu-trim" }));
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 26, class: "hardware-label" }, "GIGABYTE / RTX 2070 SUPER"));
-  gpu.append(svgElement("text", { x: 913, y: gpuTop + 45, class: "hardware-subtitle" }, "PCIE4 INFERRED · PCIE3/2 COVERED · M.2 OVERHANG"));
+  gpu.append(svgElement("text", { x: 913, y: gpuTop + 45, class: "hardware-subtitle" }, "PCIE4 · PCIE3/2 COVERED · M.2 OVERHANG"));
   hardware.append(gpu);
   const hba = hardwarePart("hba", "hba", "Low-profile HBA / PCIE1", "PCIE1 is user-confirmed/photo-consistent. HBA sits at the GPU fan intake. Outline and spacing are not measurements; cable routes and airflow impact remain unknown.", ["PCIE1"]);
   const hbaSlot = landscapeBounds(connectorById.get("PCIE1"));
@@ -403,7 +403,7 @@ function renderList() {
       "data-id": connector.id, "aria-pressed": String(!selectedPartId && connector.id === selectedId),
       "aria-label": describeConnection(connector.id),
     });
-    button.append(element("i", { class: `legend-dot ${connectionFor(connector.id).confidence}`, "aria-hidden": "true" }));
+    button.append(element("i", { class: `legend-dot ${connectionFor(connector.id).occupancy}`, "aria-hidden": "true" }));
     button.append(element("span", {}, connector.id));
     button.append(element("span", { class: "list-category" }, connector.category));
     button.addEventListener("click", () => {
@@ -499,9 +499,9 @@ function renderSelection() {
     group.setAttribute("aria-pressed", String(!selectedPartId && id === selectedId));
   }
   renderFocus();
-  const counts = connectionCounts(inventory);
-  for (const confidence of ["confirmed", "inferred", "unknown"]) {
-    $(`${confidence}-count`).textContent = counts[confidence];
+  const counts = occupancyCounts(inventory);
+  for (const occupancy of Object.keys(occupancyLabels)) {
+    $(`${occupancy}-count`).textContent = counts[occupancy];
   }
   const availability = fanAvailability(inventory);
   $("fan-availability").textContent = `${availability.free} / ${availability.occupied}`;
@@ -518,9 +518,9 @@ function renderSelection() {
   }
   $("detail-category").textContent = `${connector.category.toUpperCase()} / SELECTED CONNECTOR`;
   $("detail-name").textContent = connector.id;
-  $("detail-confidence").className = `badge ${connection.confidence}`;
-  $("detail-confidence").textContent = `${connection.confidence[0].toUpperCase()}${connection.confidence.slice(1)} connection`;
-  $("detail-occupancy").textContent = `${connection.occupancy[0].toUpperCase()}${connection.occupancy.slice(1)} occupancy`;
+  $("detail-confidence").textContent = `Evidence: ${connection.confidence}`;
+  $("detail-occupancy").className = `badge ${connection.occupancy}`;
+  $("detail-occupancy").textContent = occupancyLabels[connection.occupancy];
   $("detail-provenance").textContent = provenanceLabels[connection.provenance];
   const observation = inspectionConnections[selectedId];
   $("inspection-observation").hidden = !observation;

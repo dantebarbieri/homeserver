@@ -133,6 +133,14 @@ export function readingFor(readings, id) {
   return readings.find(reading => reading.id === id) ?? null;
 }
 
+export function occupancyCounts(document) {
+  const counts = { occupied: 0, free: 0, blocked: 0, unverified: 0 };
+  for (const id of connectorById.keys()) {
+    counts[document.connections[id]?.occupancy ?? "unverified"] += 1;
+  }
+  return counts;
+}
+
 export function fanAvailability(document) {
   const counts = { free: 0, occupied: 0, unverified: 0 };
   for (const [id, connector] of connectorById) {
