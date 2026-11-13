@@ -111,7 +111,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       cursor.setAttribute("d", `M${ratio * 300} 0V80`);
       cursor.setAttribute("visibility", "visible");
       tooltip.hidden = false;
-      tooltip.textContent = `${provenance()} · −${Math.round(record.seconds * (1 - ratio))}s · ${record.ids.map((id, i) => `${metrics.get(id).label}: ${chartNumber(record.values[i]?.[index], record.scale)}`).join(" / ")}`;
+      tooltip.textContent = `${provenance()} · −${Math.round(record.seconds * (1 - ratio))}s · ${record.ids.map((id, i) => `${metrics.get(id).label}: ${metricNumber(record.values[i]?.[index], metrics.get(id).unit)}`).join(" / ")}`;
     });
     plot.addEventListener("pointerleave", () => { tooltip.hidden = true; cursor.setAttribute("visibility", "hidden"); });
     charts.push(record);
@@ -153,7 +153,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       });
       record.area.setAttribute("d", record.values[0].every(Number.isFinite) ? `${record.paths[0].getAttribute("d")}L300,80L0,80Z` : "");
       record.header.lastChild.replaceChildren(...record.ids.map((id, index) => {
-        const node = el("span", {}, chartNumber(value(id), record.scale));
+        const node = el("span", {}, metricNumber(value(id), metrics.get(id).unit));
         if (record.ids.length > 1) node.style.color = colors[index % colors.length];
         if (signalGroup === "temperatures") decorateTemperature(node, id, value(id), node.textContent);
         return node;
@@ -162,7 +162,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const samples = record.values[0].filter(Number.isFinite);
       record.footer.textContent = record.compact
         ? `${historyLabel(record.seconds)} · ${provenance()} · ${record.scale.adaptive ? "AUTO" : "FIXED"}${record.ids.length > 1 ? " shared" : ""} ${chartNumber(record.scale.maximum, record.scale)}`
-        : `${historyLabel(record.seconds)} ago → now · ${record.scale.adaptive ? "AUTO window" : "FIXED reference"}${record.ids.length > 1 ? " shared" : ""} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${chartNumber(Math.max(...samples), record.scale)} · ${record.values[0].length} ${live ? "plot points" : "samples"}`;
+        : `${historyLabel(record.seconds)} ago → now · ${record.scale.adaptive ? "AUTO window" : "FIXED reference"}${record.ids.length > 1 ? " shared" : ""} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${metricNumber(Math.max(...samples), first.unit)} · ${record.values[0].length} ${live ? "plot points" : "samples"}`;
       record.footer.title = record.footer.textContent;
       record.plot.setAttribute("aria-label", `${record.header.firstChild.textContent}. ${live ? "Collected server history" : "Synthetic, not live"}. ${record.header.lastChild.textContent}. ${record.footer.textContent}`);
     }
@@ -192,9 +192,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const percent = Number.isFinite(used) && Number.isFinite(total) ? total > 0 ? used / total * 100 : used === 0 ? 0 : null : null;
       node.querySelector(".metric-capacity-bar span").style.width = `${percent ?? 0}%`;
       node.querySelector("[data-capacity-value]").textContent = percent === null ? "Unavailable" : `${percent.toFixed(1)}%`;
-      node.querySelector("[data-capacity-used]").textContent = `${Number.isFinite(used) ? used.toFixed(2) : "Unavailable"} / ${Number.isFinite(total) ? total.toFixed(2) : "Unavailable"} ${definition.unit}`;
+      node.querySelector("[data-capacity-used]").textContent = `${metricNumber(used, definition.unit)} / ${metricNumber(total, definition.unit)}`;
       const free = live && Object.hasOwn(dataSource.snapshot?.available ?? {}, id) ? dataSource.stale ? null : dataSource.snapshot.available[id] : Number.isFinite(used) && Number.isFinite(total) ? total - used : null;
-      node.querySelector("[data-capacity-free]").textContent = `${Number.isFinite(free) ? free.toFixed(2) : "Unavailable"} ${definition.unit} ${id === "cache-used" ? "unfilled" : "free"} · ${provenance()}`;
+      node.querySelector("[data-capacity-free]").textContent = `${metricNumber(free, definition.unit)} ${id === "cache-used" ? "unfilled" : "free"} · ${provenance()}`;
     }
     updateBadges();
     onFanFrame?.({ hubRpm: value("fan-hub"), rearRpm: 2000, provenance: live ? "live" : "synthetic" });

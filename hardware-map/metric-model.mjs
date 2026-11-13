@@ -269,8 +269,19 @@ export function metricPath(values, minimum, maximum, width = 300, height = 80) {
 }
 export function metricNumber(value, unit) {
   if (!Number.isFinite(value)) return "Unavailable";
-  if (unit === "Mb/s" && value >= 1000) return metricNumber(value / 1000, "Gb/s");
-  if (unit === "MB/s" && value >= 1000) return metricNumber(value / 1000, "GB/s");
+  const rate = /^(k|M|G|T)?([bB])\/s$/.exec(unit);
+  const capacities = ["B", "KiB", "MiB", "GiB", "TiB"];
+  if (rate || capacities.includes(unit)) {
+    const units = rate ? ["", "k", "M", "G", "T"].map(prefix => `${prefix}${rate[2]}/s`) : capacities;
+    const base = rate ? 1000 : 1024;
+    let index = units.indexOf(unit);
+    while (Math.abs(value) >= base && index < units.length - 1) { value /= base; index++; }
+    while (Math.abs(value) < 1 && index > 0) { value *= base; index--; }
+    return `${value.toLocaleString("en", { maximumSignificantDigits: 3 })} ${units[index]}`;
+  }
+  if (unit === "ms" && value !== 0 && Math.abs(value) < 1) {
+    return `${(value * 1000).toLocaleString("en", { maximumSignificantDigits: 3 })} µs`;
+  }
   return `${value.toLocaleString("en", { maximumFractionDigits: unit === "RPM" ? 0 : 1 })}${unit ? ` ${unit}` : ""}`;
 }
 

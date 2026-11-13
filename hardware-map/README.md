@@ -471,7 +471,11 @@ RX/TX and GPU-activity/encode overlays each share one explicit y-axis and
 consistent displayed units. Activity axes default to the peak of all overlaid
 series in the selected window plus the current reading, with zero baseline,
 headroom and rounded limits. Small transfers use kB/s or B/s (and corresponding
-bit units), rather than rounding to zero MB/s. Temperature plots use a padded
+bit units), rather than rounding to zero MB/s. Current readouts, hover samples
+and peaks choose their own appropriate units independently of the shared axis:
+for example, 0.002 Gb/s appears as 2 Mb/s even on a Gb/s graph. Byte quantities
+use binary KiB/MiB/GiB/TiB, while transfer rates use decimal kB/MB/GB (or bits).
+Temperature plots use a padded
 window range. Percentages stay 0–100%; memory, VRAM and storage amounts retain
 their capacity scales, and clocks/fans retain reference scales.
 **Layers → Graph y-axis scaling** switches back to fixed reference axes.

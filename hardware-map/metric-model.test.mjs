@@ -138,6 +138,20 @@ test("capacity and percentage axes remain truthful while temperatures and latenc
   assert.equal(chartNumber(0, throughput), "0 B/s");
 });
 
+test("readouts select readable units independently of the shared graph ceiling", () => {
+  assert.equal(metricNumber(.002, "Gb/s"), "2 Mb/s");
+  assert.equal(metricNumber(.002, "GB/s"), "2 MB/s");
+  assert.equal(metricNumber(.002, "Mb/s"), "2 kb/s");
+  assert.equal(metricNumber(.0002, "MB/s"), "200 B/s");
+  assert.equal(metricNumber(2500, "Mb/s"), "2.5 Gb/s");
+  assert.equal(metricNumber(.5, "TiB"), "512 GiB");
+  assert.equal(metricNumber(.0009765625, "GiB"), "1 MiB");
+  assert.equal(metricNumber(.05, "ms"), "50 µs");
+  assert.equal(metricNumber(0, "MB/s"), "0 B/s");
+  assert.equal(metricNumber(null, "Gb/s"), "Unavailable");
+  assert.equal(chartNumber(2, sharedMetricScale(["net-bond0-rx", "net-bond0-tx"])), "0.002 Gb/s");
+});
+
 test("storage details trace root, swap, cache and ordinary extents without losing RAID roles", () => {
   const root = storageDetails("nvme0n1").layers.map(node => node.id);
   assert.ok(root.includes("homeserver-vg") && root.includes("dm-0") && root.includes("dm-1"));
