@@ -46,7 +46,14 @@ in
       source ${../docker-functions.zsh}
 
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
-      [[ $SHLVL -eq 1 ]] && fastfetch
+      if [[ $SHLVL -eq 1 ]]; then
+        # Logo/padding (~47 columns) + info (~47) need ~94 columns; leave a margin.
+        if (( COLUMNS > 0 && COLUMNS < 96 )); then
+          fastfetch --logo-position top
+        else
+          fastfetch
+        fi
+      fi
 
     '';
     shellAliases = {
