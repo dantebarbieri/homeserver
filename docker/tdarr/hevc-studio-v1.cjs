@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const { constants: C } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { internals: { inside } } = require('./dv5-sidecar.cjs');
+const { internals: { inside, runProcess } } = require('./dv5-sidecar.cjs');
 
 const PRIVATE_ROOT = '/app/server/Tdarr/Custom/state/studio-native-v1';
 const CACHE_ROOT = '/temp/studio-native';
@@ -195,6 +195,23 @@ async function cleanupCache(cacheRoot, token) {
   }
 }
 
+function matroskaOutputRunner(staged, run) {
+  return (binary, argv, options) => {
+    let index;
+    if (binary === '/usr/lib/jellyfin-ffmpeg/ffprobe') {
+      index = argv.length - 1;
+    } else if (binary === '/usr/lib/jellyfin-ffmpeg/ffmpeg') {
+      index = argv.indexOf('-i');
+      assert(index >= 0 && argv[index + 1] === staged, 'unexpected validation decode input');
+    } else {
+      throw new Error('Studio HEVC: unexpected validation binary');
+    }
+    assert((binary.endsWith('/ffprobe') ? argv[index] : argv[index + 1]) === staged,
+      'unexpected validation probe input');
+    return run(binary, [...argv.slice(0, index), '-f', 'matroska', ...argv.slice(index)], options);
+  };
+}
+
 async function commit(args, injected = {}) {
   worker(args, 'linux', 'homeserver-storage', injected);
   const privateRoot = injected.privateRoot || PRIVATE_ROOT, cacheRoot = injected.cacheRoot || CACHE_ROOT;
@@ -222,7 +239,7 @@ async function commit(args, injected = {}) {
     const variables = { ...args.variables, homeserverSafeHevc: saved };
     const result = await require('./hevc-safe-v1.cjs').commit({
       ...args, inputFileObj: { _id: staged }, variables,
-    }, injected);
+    }, { ...injected, run: matroskaOutputRunner(staged, injected.run || runProcess) });
     await fs.writeFile(path.join(state, 'outcome.json'), JSON.stringify({
       outputNumber: result.outputNumber, output: result.outputFileObj._id, finishedAt: new Date().toISOString(),
     }), { flag: 'wx', mode: 0o600 });

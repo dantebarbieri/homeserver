@@ -68,7 +68,10 @@ worker type `CPU`, `queueTags` requeueing):
    `/proc/self/fd` handles and `O_NOFOLLOW`; reject symlinks, non-regular
    files, hardlinks, empty files, and outputs larger than twice the source.
    Copy those opened bytes into Linux-private staging **before** any probe or
-   decode. Returned variables cannot replace the authoritative source
+   decode. The private output's ffprobe and full FFmpeg decode both force the
+   Matroska demuxer before opening it, rejecting disguised playlists rather
+   than following external media; original source probing still autodetects
+   its format. Returned variables cannot replace the authoritative source
    identity or stream contract. The unchanged `hevc-safe-v1.cjs` then validates
    and publishes only the private bytes, including its full decode, source
    fingerprint checks, 5% savings requirement and recoverable atomic

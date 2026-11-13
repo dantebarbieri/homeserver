@@ -7,7 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { prepare, encode, commit, encodeArgs, privateCopy, MAC_FFMPEG } = require('./hevc-studio-v1.cjs');
-const { fingerprint } = require('./hevc-safe-v1.cjs');
+const { fingerprint, validate } = require('./hevc-safe-v1.cjs');
+const { internals: { runProcess } } = require('./dv5-sidecar.cjs');
 const { flowDefinition, libraryDefinition, libraryTemplate, install, FLOW_ID, LIBRARY_ID, CANARY_FOLDER } = require('./install-studio-flow.cjs');
 const { exclusions, restrict } = require('./restrict-studio-node.cjs');
 const linux = { skip: process.platform !== 'linux' };
@@ -243,6 +244,9 @@ test('shared bytes changed during validation never affect the private bytes that
   f.injected.run = async (binary, argv) => {
     const file = binary.endsWith('ffprobe') ? argv.at(-1) : argv[argv.indexOf('-i') + 1];
     assert.equal(file, path.join(f.state, 'validated.mkv'));
+    const format = argv.indexOf('-f');
+    assert.deepEqual(argv.slice(format, format + 2), ['-f', 'matroska']);
+    assert(format < argv.indexOf(file));
     assert.equal((await fs.readFile(file))[0], 2);
     await fs.writeFile(f.output, Buffer.alloc(600, 9));
     return run(binary, argv);
@@ -254,6 +258,82 @@ test('shared bytes changed during validation never affect the private bytes that
   await assert.rejects(fs.access(f.work), /ENOENT/);
   assert.equal(JSON.parse(await fs.readFile(path.join(f.state, 'outcome.json'))).outputNumber, 1);
   await assert.rejects(commit(f.args, f.injected), /manifest|EEXIST/);
+});
+
+test('real media: reject disguised external HLS playlist and publish a genuine Matroska output', {
+  skip: process.platform !== 'linux' || process.env.TDARR_INTEGRATION_TESTS !== '1',
+  timeout: 180000,
+}, async t => {
+  const f = await fixture(t);
+  const ffmpeg = '/usr/lib/jellyfin-ffmpeg/ffmpeg', ffprobe = '/usr/lib/jellyfin-ffmpeg/ffprobe';
+  const source = path.join(f.media, 'source.avi');
+  await fs.unlink(f.source);
+  await runProcess(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=128x96:rate=24:duration=4',
+    '-c:v', 'mpeg4', '-q:v', '2', source]);
+  // Sparse padding makes the real non-Matroska source eligible and ensures a meaningful saving.
+  const handle = await fs.open(source, 'r+');
+  try { await handle.truncate(101 * 1024 ** 2); } finally { await handle.close(); }
+  await fs.utimes(source, new Date(0), new Date(0));
+  f.args.inputFileObj = f.args.originalLibraryFile = { _id: source };
+  f.args.userVariables = { library: { crf: '20' } };
+  await fs.rm(f.state, { recursive: true });
+  const calls = [];
+  const run = async (binary, argv, options) => {
+    calls.push({ binary, argv });
+    return runProcess(binary, argv, options);
+  };
+  const injected = { privateRoot: f.privateRoot, cacheRoot: f.cacheRoot, run };
+  assert.equal((await prepare(f.args, injected)).outputNumber, 1);
+  assert.equal(calls[0].binary, ffprobe);
+  assert(!calls[0].argv.includes('-f'), 'AVI source must be probed without forcing Matroska');
+  const token = f.args.variables.homeserverStudio.token;
+  const output = path.join(f.cacheRoot, token, 'result.mkv');
+  const genuine = path.join(f.root, 'genuine.mkv');
+  await runProcess(ffmpeg, ['-v', 'error', '-i', source, '-map', '0', '-c:v', 'libx265',
+    '-preset', 'ultrafast', '-crf', '20', '-x265-params', 'pools=1:frame-threads=1', genuine], { timeout: 120000 });
+  const playlist = path.join(f.root, 'playlist.m3u8');
+  const sharedJob = path.dirname(output);
+  await runProcess(ffmpeg, ['-v', 'error', '-i', genuine, '-c', 'copy', '-f', 'hls', '-hls_time', '4',
+    '-hls_list_size', '0', '-hls_segment_filename', path.join(sharedJob, 'segment-%d.ts'), playlist]);
+  const contents = await fs.readFile(playlist, 'utf8');
+  const disguised = contents.replace(/segment-(\d+)\.ts/g, `${sharedJob}/segment-$1.ts`);
+  await fs.writeFile(output, disguised);
+  // The installed FFprobe rejects HLS autodetection with an .mkv suffix; force HLS here
+  // to establish that this playlist can otherwise read matching external media.
+  const hlsProbe = JSON.parse((await runProcess(ffprobe,
+    ['-v', 'error', '-show_streams', '-show_format', '-show_chapters', '-of', 'json', '-f', 'hls', output])).stdout);
+  assert.match(hlsProbe.format.format_name, /hls/);
+  const manifest = JSON.parse(await fs.readFile(path.join(f.state, 'manifest.json'), 'utf8'));
+  validate(manifest.saved.probe, hlsProbe);
+  f.args.inputFileObj = { _id: output };
+  const original = fingerprint(await fs.stat(source));
+  await assert.rejects(commit(f.args, injected), /ffprobe exited/);
+  assert.deepEqual(fingerprint(await fs.stat(source)), original);
+  assert.equal(await fs.readFile(output, 'utf8'), disguised);
+  await fs.unlink(path.join(f.state, 'commit.lock'));
+  const mockedProbe = {
+    ...injected, run: async (binary, argv, options) => {
+      if (binary === ffprobe) return { stdout: JSON.stringify(hlsProbe) };
+      return run(binary, argv, options);
+    },
+  };
+  await assert.rejects(commit(f.args, mockedProbe), /ffmpeg exited/);
+  assert.deepEqual(fingerprint(await fs.stat(source)), original);
+  await fs.unlink(path.join(f.state, 'commit.lock'));
+  await fs.copyFile(genuine, output);
+  const result = await commit(f.args, injected);
+  assert.equal(result.outputNumber, 1);
+  assert.equal(result.outputFileObj._id, path.join(f.media, 'source.mkv'));
+  assert.deepEqual(await fs.readFile(result.outputFileObj._id), await fs.readFile(genuine));
+  await assert.rejects(fs.access(source), /ENOENT/);
+  const outputCalls = calls.filter(c => c.argv.includes(path.join(f.state, 'validated.mkv')));
+  assert(outputCalls.some(c => c.binary === ffprobe));
+  assert(outputCalls.some(c => c.binary === ffmpeg));
+  for (const call of outputCalls) {
+    const index = call.argv.indexOf(path.join(f.state, 'validated.mkv'));
+    assert.deepEqual(call.argv.slice(call.argv.indexOf('-f'), call.argv.indexOf('-f') + 2), ['-f', 'matroska']);
+    assert(call.argv.indexOf('-f') < index);
+  }
 });
 
 test('pinned source handle prevents leaf replacement from redirecting the private copy', linux, async t => {
