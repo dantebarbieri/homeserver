@@ -158,7 +158,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const samples = record.values[0].filter(Number.isFinite);
       record.footer.textContent = record.compact
         ? `${historyLabel(record.seconds)} · ${provenance()}${record.ids.length > 1 ? " · shared axis" : ""}`
-        : `${historyLabel(record.seconds)} ago → now · ${record.ids.length > 1 ? "shared" : "fixed"} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${chartNumber(Math.max(...samples), record.scale)} · ${record.values[0].length} samples`;
+        : `${historyLabel(record.seconds)} ago → now · ${record.ids.length > 1 ? "shared" : "fixed"} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${chartNumber(Math.max(...samples), record.scale)} · ${record.values[0].length} ${live ? "plot points" : "samples"}`;
       record.plot.setAttribute("aria-label", `${record.header.firstChild.textContent}. ${live ? "Collected server history" : "Synthetic, not live"}. ${record.header.lastChild.textContent}. ${record.footer.textContent}`);
     }
     for (const node of document.querySelectorAll("[data-metric-value]")) {

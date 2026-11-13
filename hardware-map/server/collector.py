@@ -483,6 +483,16 @@ class Collector:
         for bond in bonds:
             for member in bond["members"]:
                 nodes.setdefault(member, {"id": member, "label": member, "kind": "Network interface", "parents": []})
+        network_nodes = [name for name, node in nodes.items() if node["kind"] in (
+            "Linux network bond", "Physical network interface", "Network interface")]
+        associations.append({"targets": ["network-ports", "rear-io"], "nodes": network_nodes,
+                             "note": "Current Linux NIC/bond inventory, not individual physical-port bindings. "
+                                     "A host-visible USB NIC is not the dedicated BMC LAN socket."})
+        for bond in bonds:
+            if bond["id"] == "bond0":
+                associations.append({"targets": ["LAN1", "LAN2"], "nodes": [bond["id"], *bond["members"]],
+                                     "note": "Known onboard-LAN bond shown as a group only. LAN1/LAN2-to-interface "
+                                             "pairing remains unverified; PCI function order is not physical port evidence."})
         for disk in disks.values():
             nodes[disk["id"]]["summary"] += " · Provisional serial-sorted mapping; not physically confirmed"
             if disk["slot"]:

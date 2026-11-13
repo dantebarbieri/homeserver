@@ -1013,7 +1013,21 @@ function applyCollectedInventory(data) {
   if (!data || data === appliedSnapshot) return;
   applyLiveSnapshot(data);
   if (data.inventory?.snapshot) linuxTopology = buildLinuxTopology(data.inventory.snapshot);
-  for (const binding of data.inventory?.disks ?? []) {
+  const bindings = data.inventory?.disks ?? [];
+  for (const [id, part] of sceneParts) {
+    if (!part.bindingId || bindings.some(binding => `drive-${binding.slot}` === id)) continue;
+    part.bindingId = undefined;
+    part.label = `${id.slice(6)} · current inventory unavailable`;
+    part.status = "No current disk observed for this provisional slot; not proof of physical removal.";
+    part.note = "The persisted slot reservation is retained. No previous device identity is substituted for missing inventory.";
+    part.model = "Unavailable";
+    part.capacity = "Unavailable";
+    const node = $("board").querySelector(`.hardware-part[data-id="${id}"]`);
+    node?.setAttribute("aria-label", part.label);
+    const label = node?.querySelector(".disk-linux-label");
+    if (label) label.textContent = "Not observed";
+  }
+  for (const binding of bindings) {
     if (!binding.slot) continue;
     const id = `drive-${binding.slot}`, part = sceneParts.get(id);
     if (!part) continue;

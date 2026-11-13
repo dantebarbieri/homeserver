@@ -8,6 +8,8 @@ services:
       service: common-service
     image: server-atlas:local
     container_name: server-atlas
+    init: true
+    stop_grace_period: 10s
     build:
       context: .
       dockerfile: server/Dockerfile

@@ -20,7 +20,9 @@ export class LiveData {
     this.listeners = new Set();
     this.histories = new Map();
     this.requests = new Map();
+    this.historyErrors = new Map();
     this.historyBatch = false;
+    this.generation = 0;
     this.timer = null;
   }
   get stale() {
@@ -48,6 +50,13 @@ export class LiveData {
       const snapshot = await this.json("./api/snapshot");
       if (snapshot.version !== 1 || snapshot.mode !== "live" || !snapshot.metrics ||
           !Number.isFinite(Date.parse(snapshot.capturedAt))) throw new Error("Unrecognized live snapshot");
+      if (JSON.stringify(this.snapshot?.channelKeys) !== JSON.stringify(snapshot.channelKeys)) {
+        this.generation++;
+        this.histories.clear();
+        this.requests.clear();
+        this.historyErrors.clear();
+        this.historyError = "";
+      }
       this.snapshot = snapshot;
       this.error = "";
     } catch (error) {
@@ -63,27 +72,34 @@ export class LiveData {
       for (const id of record.ids) if (Object.hasOwn(this.snapshot.channelKeys ?? {}, id)) windows.get(record.seconds).add(id);
     }
     this.historyBatch = true;
+    const generation = this.generation;
     try {
       for (const [seconds, set] of windows) {
-      const ids = [...set].sort();
-      if (!ids.length) continue;
-      const key = `${seconds}:${ids.join(",")}`;
-      const previous = this.requests.get(seconds);
-      if (previous?.pending || previous?.key === key && this.clock() - previous.at < 15000) continue;
-      this.requests.set(seconds, { key, at: this.clock(), pending: true });
-      try {
-        const history = await this.json(`./api/history?${new URLSearchParams({ ids: ids.join(","), seconds: String(seconds) })}`);
-        const end = Date.parse(history.capturedAt) / 1000;
-        if (!history.series || !Number.isFinite(end) || !Number.isFinite(history.step)) throw new Error("Unrecognized history response");
-        this.histories.set(seconds, { ...history, end });
-        this.historyError = (history.issues ?? []).join("; ");
-      } catch (error) {
-        this.historyError = error.message;
-        this.histories.delete(seconds);
-      } finally {
-        this.requests.set(seconds, { key, at: this.clock(), pending: false });
-        this.emit();
-      }
+        const ids = [...set].sort();
+        if (!ids.length) continue;
+        const key = `${seconds}:${ids.join(",")}`;
+        const previous = this.requests.get(seconds);
+        if (previous?.pending || previous?.key === key && this.clock() - previous.at < 15000) continue;
+        this.requests.set(seconds, { key, at: this.clock(), pending: true });
+        try {
+          const history = await this.json(`./api/history?${new URLSearchParams({ ids: ids.join(","), seconds: String(seconds) })}`);
+          if (generation !== this.generation) break;
+          const end = Date.parse(history.capturedAt) / 1000;
+          if (!history.series || !Number.isFinite(end) || !Number.isFinite(history.step)) throw new Error("Unrecognized history response");
+          this.histories.set(seconds, { ...history, end });
+          if (history.issues?.length) this.historyErrors.set(seconds, history.issues.join("; "));
+          else this.historyErrors.delete(seconds);
+        } catch (error) {
+          if (generation !== this.generation) break;
+          this.historyErrors.set(seconds, error.message);
+          this.histories.delete(seconds);
+        } finally {
+          if (generation === this.generation) {
+            this.requests.set(seconds, { key, at: this.clock(), pending: false });
+            this.historyError = [...this.historyErrors].map(([window, issue]) => `${window}s: ${issue}`).join("; ");
+          }
+          this.emit();
+        }
       }
     } finally {
       this.historyBatch = false;

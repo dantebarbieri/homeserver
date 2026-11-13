@@ -2,7 +2,9 @@
 set -eu
 
 if [ "${ATLAS_PROXY_INNER:-}" != 1 ]; then
-  exec docker exec -i -e ATLAS_PROXY_INNER=1 bmc-ip-monitor sh -s < "$0"
+  docker exec -i -e ATLAS_PROXY_INNER=1 bmc-ip-monitor sh -s < "$0"
+  docker exec nginxproxymanager nginx -t
+  exit 0
 fi
 : "${NPM_HOST:?}" "${NPM_PORT:?}" "${NPM_EMAIL:?}" "${NPM_PASSWORD:?}"
 api="http://${NPM_HOST}:${NPM_PORT}/api"
@@ -36,5 +38,10 @@ payload=$(jq -cn --argjson certificate "$certificate" --arg config "$config" '{
   block_exploits:true,caching_enabled:false,allow_websocket_upgrade:false,access_list_id:0,locations:[],
   advanced_config:$config,meta:{letsencrypt_agree:false,dns_challenge:false}
 }')
-request POST /nginx/proxy-hosts "$payload" | jq -e '.enabled and .meta.nginx_online == true' >/dev/null
+response=$(request POST /nginx/proxy-hosts "$payload")
+printf '%s' "$response" | jq -e '(.enabled == true or .enabled == 1) and .meta.nginx_online != false and .meta.nginx_online != 0' >/dev/null || {
+  echo "NPM did not confirm the new route. Inspect its sanitized status:" >&2
+  printf '%s' "$response" | jq '{id,enabled,nginx_online:.meta.nginx_online,nginx_err:.meta.nginx_err}' >&2
+  exit 1
+}
 echo "Atlas proxy created with Authelia protection; /metrics is not exposed."

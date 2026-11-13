@@ -77,6 +77,11 @@ monitor credentials, requires the existing wildcard certificate, and creates
 the authenticated route. `/metrics` returns 404 at the public proxy.
 The existing `docker/monitoring/prometheus.yml` includes the internal scrape;
 validate with `promtool check config` and reload Prometheus with SIGHUP.
+Until this feature branch is integrated, production has only the additive
+Atlas scrape/dashboard blocks in its existing checkout; the running Atlas
+release is pinned separately. Preserve those blocks during monitoring or
+dashboard configuration changes. Private pre-change backups live outside Git
+under `/srv/server-atlas/backups`.
 
 Backend checks (synthetic fixtures, no real identifiers):
 

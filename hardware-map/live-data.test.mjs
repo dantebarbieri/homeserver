@@ -80,6 +80,37 @@ test("multiple history windows stay serialized even when subscribers request aga
   assert.equal(maximum, 1);
 });
 
+test("a successful window does not hide another window's history failure", async () => {
+  const now = 100000;
+  const source = new LiveData({ enabled: true, clock: () => now, fetcher: async url => ({
+    ok: !url.endsWith("seconds=60"), status: 502,
+    json: async () => ({ capturedAt: new Date(now).toISOString(), step: 15, series: {} }),
+  }) });
+  source.snapshot = { capturedAt: new Date(now).toISOString(), intervalSeconds: 5, channelKeys: { cpu: "cpu" } };
+  await source.requestHistory([60, 120].map(seconds => ({ ids: ["cpu"], seconds })));
+  assert.match(source.historyError, /60s: .*502/);
+});
+
+test("device identity changes discard cached and in-flight histories for reused Linux aliases", async () => {
+  let identity = "disk-old", finish;
+  const now = 100000;
+  const source = new LiveData({ enabled: true, clock: () => now, fetcher: async url => {
+    if (url.includes("history")) return new Promise(resolve => { finish = resolve; });
+    return { ok: true, json: async () => ({ version: 1, mode: "live", capturedAt: new Date(now).toISOString(), intervalSeconds: 5,
+      metrics: { "disk-sda-read": 1 }, channelKeys: { "disk-sda-read": identity } }) };
+  } });
+  await source.poll();
+  source.histories.set(60, { end: 100, step: 15, series: { "disk-sda-read": [{ timestamp: 100, value: 99 }] } });
+  const pending = source.requestHistory([{ ids: ["disk-sda-read"], seconds: 60 }]);
+  identity = "disk-new";
+  await source.poll();
+  finish({ ok: true, json: async () => ({ capturedAt: new Date(now).toISOString(), step: 15, series: { "disk-sda-read": [{ timestamp: 100, value: 99 }] } }) });
+  await pending;
+  assert.deepEqual(source.series("disk-sda-read", 60), [null, null]);
+  assert.equal(source.historyError, "");
+  assert.equal(source.requests.size, 0);
+});
+
 test("live inventory replaces provisional NVMe card bindings without depending on controller numbering", async () => {
   const { linuxSnapshot } = await import("./linux-snapshot.mjs");
   const { applyLiveSnapshot, metricCards, metricBadges, metrics } = await import("./metric-model.mjs?live-inventory-test");

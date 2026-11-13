@@ -235,6 +235,22 @@ class AssignmentTests(WorkspaceTest):
         self.assertIn("/dev/vg-test/cache-data", node["aliases"])
         self.assertIn("linear", node["summary"])
 
+    def test_live_network_group_keeps_port_pairing_unverified(self):
+        self.write("sys/class/net/bond0/bonding/mode", "active-backup 1")
+        self.write("sys/class/net/bond0/bonding/active_slave", "enp1")
+        self.write("sys/class/net/bond0/bonding/slaves", "enp1 enp2")
+        self.write("sys/class/net/enp1/device/vendor", "0x8086")
+        self.write("sys/class/net/enp2/device/vendor", "0x8086")
+
+        def runner(source):
+            return '{"blockdevices":[]}' if source == "lsblk" else '{"report":[]}'
+
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        group = next(a for a in inventory["snapshot"]["associations"] if a["targets"] == ["LAN1", "LAN2"])
+        self.assertEqual(group["nodes"], ["bond0", "enp1", "enp2"])
+        self.assertIn("unverified", group["note"])
+
     def test_smart_rejects_identity_change_and_has_no_wakeup_retry(self):
         calls = []
 
