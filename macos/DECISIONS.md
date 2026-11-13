@@ -295,24 +295,39 @@ Sources: [HandBrake encoder comparison](https://handbrake.fr/docs/en/latest/tech
   cache, then Linux validate and publish, so the Mac can never replace
   originals.
 - **The controller/node split worked:** tunnel, registration and job delivery
-  all functioned. **What failed was limiting which jobs the node takes** on the
-  shared production controller. Tdarr 3.07 applies library exclusions
-  (`librariesToNotProcess`) only when picking fresh queue items. Already-staged
-  jobs skip that check, and untagged staged jobs match any node. The Mac took
-  23 staged production TV jobs; each failed safely because it could not create
+  all functioned. **Production routing is blocked by two separate issues:**
+  custom node-tag routing used by the flow requires Tdarr Pro and is ignored
+  without a license; independently, Tdarr 3.07 applies library exclusions
+  (`librariesToNotProcess`) only to fresh queue selection, not already-staged
+  jobs, and untagged staged jobs match any node. The Mac previously took 23
+  staged production TV jobs; each failed safely because it could not create
   Tdarr's `/temp/tdarr-workDir2-*` work folder. Nothing was encoded or
   replaced, and *Dante* chose to requeue the 23 jobs.
   [Incident details](../docker/docs/TDARR.md#prevent-the-mac-from-taking-existing-linux-only-jobs).
-- The native daemon is disabled (`launchctl disable`). Keep it off on the
-  shared controller.
+- An isolated follow-up lab required manually pausing nodes at each handoff;
+  a tagged staged item resumed on Linux storage instead of the Studio. A
+  full-episode encode took 39m18s and produced 582,779 KiB from a
+  498,226,784-byte source, so Linux validation retained the original and its
+  SHA-256 was unchanged. A 31-second excerpt padded from 11,687,533 to
+  134,217,728 bytes passed private-copy validation, full decode and publication,
+  but its apparent savings are not representative. Filesystem/network
+  isolation denied an eligible decoy, but a separate queued/staged-decoy
+  scheduler test was not performed. This is not production-ready evidence.
+- The production Studio Tdarr daemon remains disabled. No production service,
+  library or queue changed in the lab. Its server containers, networks, copied
+  media/cache/state and temporary SSH forward were removed; production mounts
+  remain. The three booted-out lab plists and two lab directories/logs listed
+  under [On the Studio](#on-the-studio) await explicit user-authorized
+  privileged cleanup.
 
 **Next:** Dante requested further work toward functioning Mac offload, not
 abandonment or a particular isolation design. Agents may choose a secure
-approach; candidates include a separate controller tested with disposable
-media or a verified upstream fix covering both fresh and staged selection.
-Any retry needs a completed encode/validation path and a negative test with an
-eligible decoy job before production activation. Do not drain or retag shared
-staging or pause production as a workaround.
+approach; first find a supported way to route work without the unavailable
+custom-tag feature, and isolate it from shared staged jobs. Any retry needs a
+representative, unpadded encode that meets savings/quality requirements, plus
+negative tests showing an eligible queued and staged decoy cannot be accepted.
+Do not activate the production node, drain or retag shared staging, or pause
+production as a workaround.
 
 ## Isolating untrusted media work
 
@@ -385,6 +400,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Whisper, Ollama | `com.danteb.studio-whisper`, `com.danteb.studio-ollama`; models in the worker home | `sudo launchctl bootout system/<label>`, delete the plist and worker data |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
+| Isolated Tdarr lab (inactive; cleanup pending) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `com.danteb.tdarr-lab-mount-media.plist`, `com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Jobs were booted out; remove only these exact lab targets after explicit user authorization. Their full current directory contents were not verified after sudo expired |
 | Worker account | `_studio`, `/var/lib/studio-worker`, `001-studio-worker.conf`, ACLs from `allow-worker-tools.sh` | Last: remove the ACLs (`ls -le`), `sudo dscl . -delete /Users/_studio`, delete the home and conf |
 | Initial benchmark subtitles (keep) | `~/Services/ai-staging/benchmark-20261113/`, `baseline/`, `qwen/`, and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in these initial test directories | Keep until a speech default is chosen |
 | Same-input comparison evidence | `~/Services/ai-staging/comparison-20261113/`: re-extracted PCM, references, endpoint outputs/errors, source manifest, timings and runtime fingerprints | Keep private for review; do not overwrite previous outcomes |
@@ -426,8 +442,10 @@ is not a leftover model download.
    candidate; Japanese/Telugu need substantive quality improvements and
    audio-grounded review, not more overlap scoring.
 5. Ollama: pick a first automation, or remove it.
-6. Tdarr: pursue a secure, validated Mac offload path, keeping the known-unsafe
-   shared-controller node disabled during the retry.
+6. Tdarr: keep production activation blocked. The current unlicensed setup
+   ignores custom node tags; staged-job exclusions are also bypassed. Find a
+   supported routing design and pass representative savings plus queued/staged
+   decoy tests. Complete the listed inactive lab cleanup after authorization.
 7. Review [#205](https://github.com/dantebarbieri/homeserver/pull/205). The docs
    are already pushed on `dantebarbieri-server-cooling` and accessible from
    other machines; merging makes them available on the default branch. After

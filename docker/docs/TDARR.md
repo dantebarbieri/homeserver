@@ -56,11 +56,21 @@ experimental, not an approved migration procedure.
 `homeserver-hevc-studio-v1` is a **separate versioned flow** for Tdarr
 3.07.00 on Linux and native `darwin_arm64` on the Studio. The three active TV
 libraries remain on `homeserver-hevc-cpu-v1`; neither that module/flow nor the
-Linux NVIDIA DV5 flow is modified. No Pro license is required: the Mac must be
-a **mapped** node, not an unmapped uploader.
+Linux NVIDIA DV5 flow is modified. **The intended cross-node routing is not
+available on this unlicensed server.** `Tags: Worker Type` / `Tags: Requeue`
+custom node-tag routing requires Tdarr Pro; without Pro the server matches
+worker type and automatic `mapped`/`unmapped` tags but ignores custom node
+tags. Being a mapped node avoids the unmapped-uploader limitation; it does not
+enable custom-tag routing. The maintainer confirms the Pro requirement
+([#1484](https://github.com/HaveAGitGat/Tdarr/issues/1484#issuecomment-6418340922))
+and says 3.08 reports when custom tags are ignored
+([clarification](https://github.com/HaveAGitGat/Tdarr/issues/1484#issuecomment-6847553728)).
+The existing 3.07 staged-job exclusion bypass is a separate blocker even if
+tag routing becomes available.
 
-The flow hands off with the upstream `tagsWorkerType` plugin (required
-worker type `CPU`, `queueTags` requeueing):
+The experimental flow was designed to hand off with the upstream
+`tagsWorkerType` plugin (required worker type `CPU`, `queueTags` requeueing),
+but must not be used on the shared production controller:
 
 1. `homeserver-storage`: eligibility, source fingerprint and stream contract
    are captured on Linux in a private per-job manifest.
@@ -216,6 +226,30 @@ canary, all three TV libraries, the production DV5 library and any retired
 DV5 canary must be excluded; only `homeserver-hevc-studio-canary-v1` is
 allowed. The Linux storage node must still be allowed to process the native
 canary so both storage steps can execute.
+
+#### Isolated lab follow-up (2026-11-13)
+
+The disposable lab confirmed that the shared scheduler still cannot perform
+the intended cross-node handoffs: every handoff needed a manual node-pause
+gate, and a tagged staged item resumed on the Linux storage node instead of
+the Studio. The filesystem/network sandbox denied an eligible decoy, but a
+separate queued/staged-decoy scheduler test was **not** performed. This does
+not validate production routing or activation.
+
+The full-episode Mac encode took 39m18s and produced 582,779 KiB from a
+498,226,784-byte source. Linux validation correctly kept the original because
+the output was larger; the original SHA-256 remained unchanged. A 31-second
+excerpt encoded from 11,687,533 bytes of real content padded to 134,217,728
+bytes, producing a 10,673,016-byte result that passed private-copy,
+validation, full decode and publication. The apparent savings are caused by
+padding and are not representative compression evidence.
+
+No production library, queue or service was changed. The temporary server
+containers, networks, copied media/cache/state and SSH forward were removed;
+production mounts remain and the Studio Tdarr daemon is disabled. Privileged
+removal of the three lab LaunchDaemon plists and the two lab directories/logs
+listed in [`macos/DECISIONS.md`](../../macos/DECISIONS.md#on-the-studio) is
+pending user authorization.
 
 Authenticated Tdarr API access, node identity, installed plugins and both node
 processes remain trusted. The private-copy boundary prevents shared-cache path
