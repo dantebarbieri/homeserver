@@ -10,7 +10,7 @@ export const boardId = "asrock-rack-romed8-2t";
 export const snapshotDate = "2026-11-12";
 export const boardRevision = "1.03";
 export const provenanceLabels = {
-  "photo-confirmed": "Photo-confirmed (relayed)",
+  "photo-confirmed": "Photo-confirmed",
   "photo-inferred": "Photo-inferred",
   "photo-uncertain": "Photo observation — uncertain",
   "user-confirmed": "User-confirmed",
@@ -34,27 +34,27 @@ function connector(id, label, category, x, y, width, height, detail, extra = {})
 
 export const connectors = [
   connector("CPU1", "SP3 / CPU", "Compute", 235, 180, 240, 155,
-    "AMD EPYC 7313P installed; Noctua NH-U9 TR4-SP3 cooler. The user reports its two fans on FAN1 and FAN2; that wiring has not been independently traced."),
+    "AMD EPYC 7313P with Noctua NH-U9 TR4-SP3 cooler. Original cooler fans use FAN1/FAN2; user-confirmed airflow runs from the PSU side toward the GPU side."),
   ...["H", "G", "F", "E"].map((letter, i) =>
     connector(`DDR4_${letter}1`, `DDR4 ${letter}1`, "Memory", 200, 65 + i * 21, 310, 15,
-      "DDR4 ECC DIMM socket. The user reports DIMMs in A1, B1, G1 and H1; 128 GB total. Other sockets are not independently verified free.")),
+      "DDR4 ECC DIMM socket. User-confirmed population: 32 GB Kingston KSM32RD4/32HDR modules in A1/B1/G1/H1; C1/D1/E1/F1 empty. 128 GB total system memory.")),
   ...["A", "B", "C", "D"].map((letter, i) =>
     connector(`DDR4_${letter}1`, `DDR4 ${letter}1`, "Memory", 200, 370 + i * 21, 310, 15,
-      "DDR4 ECC DIMM socket. The user reports DIMMs in A1, B1, G1 and H1. Do not infer population from BMC temperature-channel labels.")),
+      "DDR4 ECC DIMM socket. User-confirmed population: 32 GB Kingston KSM32RD4/32HDR modules in A1/B1/G1/H1; C1/D1/E1/F1 empty. Do not infer population from BMC temperature-channel labels.")),
   connector("ATX12V1", "EPS 8-pin", "Power", 565, 65, 75, 35,
-    "8-pin ATX 12 V connector. Cable connection awaits visual confirmation.",
+    "8-pin ATX 12 V / EPS motherboard connector. Occupied in IMG_4538; it is not a GPU PCIe power socket.",
     { source: "Official manual rev. 1.30, printed p. 31 (PDF p. 38)." }),
   connector("ATX12V2", "ATX 4-pin", "Power", 650, 65, 65, 35,
-    "4-pin ATX 12 V connector. Cable connection awaits visual confirmation.",
+    "4-pin ATX 12 V motherboard connector. Empty in IMG_4538. This schematic is not an instruction to add or change a power cable.",
     { source: "Official manual rev. 1.30, printed p. 31 (PDF p. 38)." }),
   connector("ATXPWR1", "ATX 24-pin", "Power", 565, 115, 150, 35,
     "24-pin motherboard power connector. No PSU cable or modular-PSU pinout is implied.",
     { source: "Official manual rev. 1.30, printed p. 30 (PDF p. 37)." }),
   connector("GFX_12V1", "GFX 6-pin", "Power", 615, 832, 96, 25,
-    "6-pin graphics 12 V power connector. Physical connection unverified; this is not a GPU card's own power socket or a modular PSU pinout.",
+    "6-pin motherboard graphics 12 V connector, user-confirmed empty. This is not the GPU card's own power socket or a modular PSU pinout.",
     { source: "Official manual rev. 1.30, printed p. 31 (PDF p. 38)." }),
   connector("USB3_3_4", "Front USB 3", "Front panel", 570, 180, 140, 27,
-    "19-pin USB 3.2 Gen 1 front-panel header. Physical case cable unverified."),
+    "19-pin USB 3.2 Gen 1 front-panel header. Case front USB cable is user-confirmed connected here."),
   ...Array.from({ length: 7 }, (_, i) =>
     connector(`FAN${i + 1}`, `FAN${i + 1}`, "Fans", 615, i < 3 ? 345 + i * 34 : 665 + (i - 3) * 34, 96, 29,
       "Six-pin fan header, not a standard four-pin header. Primary and secondary tach inputs can appear as FANn and FANn_2 in IPMI. An RPM reading does not identify the attached fan.",
@@ -79,21 +79,22 @@ export const connectors = [
   ...Array.from({ length: 7 }, (_, i) => {
     const number = 7 - i;
     return connector(`PCIE${number}`, `PCIE${number}`, "Expansion", 145, 475 + i * 49, 245, 29,
-      `PCIe expansion slot. PCIE7 is nearest the CPU/DIMMs; PCIE1 is at the bottom board edge. GPU in PCIE3 and HBA in PCIE1 are user-confirmed and photo-consistent.${number === 2 ? " PCIE2 is physically blocked by the GPU cooler, not occupied by the GPU's electrical connector. Lane-selection jumper positions remain unverified." : ""}`);
+      `CPU-connected PCIe 4.0 x16 expansion slot; actual negotiated speed/width is not measured here. PCIE7 is nearest the CPU/DIMMs; PCIE1 is at the bottom board edge.${number === 2 ? " Lane sharing with storage is controlled by PE8_SEL/PE16_SEL; their installed positions are unverified." : ""}`);
   }),
   connector("OCU1", "OCU1", "Storage", 515, 370, 90, 28,
     "OCuLink connector; enabled/disabled by the PCIE2 selection jumpers. Connection unknown."),
   connector("OCU2", "OCU2", "Storage", 515, 410, 90, 28,
     "OCuLink connector; enabled/disabled by the PCIE2 selection jumpers. Connection unknown."),
   connector("PANEL1", "PANEL1", "Front panel", 600, 865, 110, 28,
-    "System front-panel header. Power/reset/indicator cable connections await inspection. A pin-level diagram is not yet included."),
+    "System front-panel header. IMG_4570 shows attached switch/LED leads, including a readable POWER SW plug. Individual lead polarity is not modeled.",
+    { source: "Official manual rev. 1.30, printed p. 28 (PDF p. 35)." }),
   connector("AUX_PANEL1", "AUX PANEL", "Front panel", 450, 865, 135, 28,
     "Auxiliary front-panel header. Connection unknown; verify the exact cable and manual before use."),
   connector("TR1", "TR1", "Sensors", 330, 865, 45, 28,
-    "Thermal sensor header. No connected probe has been verified; IPMI reports no reading.",
+    "Thermal sensor header. User confirms no separate temperature probe is connected.",
     { source: "Official manual rev. 1.30, printed p. 32 (PDF p. 39)." }),
   connector("TR2", "TR2", "Sensors", 260, 865, 45, 28,
-    "Thermal sensor header. No connected probe has been verified; IPMI reports no reading.",
+    "Thermal sensor header. User confirms no separate temperature probe is connected.",
     { source: "Official manual rev. 1.30, printed p. 32 (PDF p. 39)." }),
   connector("PSU_SMB1", "PSU SMB", "Sensors", 565, 20, 100, 25,
     "PSU SMBus header. Its presence does not establish that the PSU exposes telemetry or that a cable is connected."),
@@ -120,32 +121,53 @@ function observation(target, confidence, occupancy, provenance, evidence, note =
 }
 
 export const inspectionConnections = {
+  CPU1: observation("AMD EPYC 7313P beneath NH-U9 TR4-SP3", "confirmed", "occupied", "photo-confirmed",
+    "Cleaning photos show the cooler mounted over the board's sole SP3 socket. CPU model comes from the earlier supplied read-only inventory, not a visible processor label.",
+    "The cooler and its original fan pair are user-confirmed; no cooler removal or new server query was performed.", "2026-11-13"),
   ...Object.fromEntries(["M2_1", "M2_2"].map(id => [
-    id, observation("Bare Samsung 2280 SSD; logical A/B identity unknown", "confirmed", "occupied", "photo-confirmed",
-      "Photo set 2 shows both M.2 sockets populated without heatsinks. The drives run perpendicular to the PCIe slots across the PCIE6→PCIE2 rows.",
-      "The GPU shroud overhangs both drives. The visible gap is estimated as a few mm from the photo, NOT measured and not a verified heatsink-clearance allowance."),
+    id, observation("Samsung 990 EVO 2 TB · MZ-V9E2T0B; logical A/B identity unknown", "confirmed", "occupied", "photo-confirmed",
+      "Photos show both sockets populated without heatsinks, drives perpendicular to the PCIe slots across PCIE6→PCIE2. User confirms both exact models/capacities on November 13.",
+      "GPU overhang and its few-mm gap are photo observations, NOT measured heatsink-clearance allowances.", "2026-11-13"),
   ])),
   SATA_0_3: observation("SATA breakout cable; drive routing unknown", "confirmed", "occupied", "photo-confirmed",
     "Connector appears cabled in the cleaning photos, as relayed by the coordinating session."),
   SATA_4_7: observation("SATA breakout cable; drive routing unknown", "confirmed", "occupied", "photo-confirmed",
     "Connector appears cabled in the cleaning photos, as relayed by the coordinating session."),
-  GFX_12V1: observation("", "inferred", "free", "photo-uncertain",
-    "Appears empty in the cleaning photos, but this is not certain.", "Not a verified-free connector."),
+  GFX_12V1: observation("", "confirmed", "free", "user-confirmed",
+    "User confirms the motherboard GFX_12V1 six-pin socket is empty.",
+    "This is distinct from the power sockets on the GPU card.", "2026-11-13"),
+  ...Object.fromEntries(["ATXPWR1", "ATX12V1"].map(id => [
+    id, observation(id === "ATXPWR1" ? "PSU 24-pin ATX cable" : "PSU EPS 8-pin cable", "confirmed", "occupied", "photo-confirmed",
+      "IMG_4538 shows the motherboard 24-pin and EPS 8-pin sockets occupied, supporting the user's interpretation.",
+      "The PSU-side 18-pin + 10-pin pair is the split end of the main ATX cable, not two additional motherboard connectors.", "2026-11-13"),
+  ])),
+  ATX12V2: observation("", "confirmed", "free", "photo-confirmed",
+    "IMG_4538 shows the separate motherboard four-pin ATX 12 V socket empty.",
+    "This records occupancy, not a recommendation to change power wiring.", "2026-11-13"),
   PCIE1: observation("Low-profile HBA with two SFF-8643 cables", "confirmed", "occupied", "user-confirmed",
     "Updated user confirmation and photo set 2 place the HBA in PCIE1, directly at the GPU fan intake."),
-  PCIE2: observation("GPU's 2.5-slot cooler — physical obstruction only", "confirmed", "blocked", "user-confirmed",
-    "The GPU is in PCIE3; its cooler physically blocks PCIE2. Updated user confirmation is photo-consistent.",
-    "Blocked does not mean electrically occupied. This supersedes the earlier unverified claim that the GPU was installed in PCIE2."),
-  PCIE3: observation("GV-N2070SGAMING OC-8GD rev 1.0", "confirmed", "occupied", "user-confirmed",
-    "User-confirmed PCIE3 placement, consistent with photo set 2.",
-    "The 2.5-slot cooler blocks PCIE2. Its fan intake faces the HBA in PCIE1; the shroud also overhangs both M.2 drives."),
-  ...Object.fromEntries([4, 5, 6, 7].map(number => [
-    `PCIE${number}`, observation("", "inferred", "free", "user-reported",
-      "User reports PCIE4–PCIE7 free. This is not an independent clearance or slot-population inspection."),
+  PCIE2: observation("GPU cooler — physical obstruction only", "confirmed", "blocked", "user-confirmed",
+    "PCIE2 is physically blocked by the GPU cooler. The earlier confirmed obstruction remains consistent with the revised photo-inferred GPU-in-PCIE4 placement.",
+    "Blocked does not mean electrically occupied. The earlier PCIE3 electrical assignment is superseded.", "2026-11-13"),
+  PCIE3: observation("GPU cooler — inferred physical obstruction", "inferred", "blocked", "photo-inferred",
+    "User revises the GPU position to likely PCIE4. Three exposed slots between DIMMs and GPU in IMG_4537 support that interpretation; its cooler appears to cover PCIE3.",
+    "Earlier PCIE3 electrical assignment is withdrawn. Slot labels are not readable; exact physical clearance is not measured.", "2026-11-13"),
+  PCIE4: observation("GV-N207SGAMING OC-8GD rev 1.0 — likely electrical slot", "inferred", "occupied", "photo-inferred",
+    "IMG_4537 shows three exposed slot rows between DIMMs and GPU, supporting PCIE7/6/5 empty and GPU in PCIE4. User independently suspects PCIE4.",
+    "Position is photo-inferred, not label-confirmed. The cooler appears to cover PCIE3/PCIE2 and overhang both M.2 drives.", "2026-11-13"),
+  ...Object.fromEntries([5, 6, 7].map(number => [
+    `PCIE${number}`, observation("", "inferred", "free", "photo-inferred",
+      "Three exposed empty slot rows in IMG_4537 align with PCIE7/6/5 in the manual. Their labels are not readable.",
+      "Earlier PCIE4–PCIE7-free report is superseded by this photo-supported interpretation.", "2026-11-13"),
   ])),
   ...Object.fromEntries(["A", "B", "G", "H"].map(letter => [
-    `DDR4_${letter}1`, observation("ECC DDR4 DIMM", "inferred", "occupied", "user-reported",
-      "User reports DIMMs in A1, B1, G1 and H1; independent socket-label verification pending."),
+    `DDR4_${letter}1`, observation("Kingston KSM32RD4/32HDR · 32 GB ECC RDIMM", "confirmed", "occupied", "user-confirmed",
+      "User confirms these exact four 32 GB modules are installed in A1/B1/G1/H1; 128 GB total.",
+      "DDR4-3200 is the module specification, not a measurement of current memory clock.", "2026-11-13"),
+  ])),
+  ...Object.fromEntries(["C", "D", "E", "F"].map(letter => [
+    `DDR4_${letter}1`, observation("", "confirmed", "free", "user-confirmed",
+      "User confirms C1/D1/E1/F1 are empty.", "", "2026-11-13"),
   ])),
   ...Object.fromEntries([1, 2].map(number => [
     `FAN${number}`, observation("Noctua 4-pin fan plug on pins 1–4", "confirmed", "occupied", "photo-confirmed",
@@ -160,32 +182,40 @@ export const inspectionConnections = {
       "User confirms FAN4–FAN7 are all visibly empty, based on inspection or clear photos.",
       "Supersedes the earlier photo-inferred empty status. This confirmation is physical, not inferred from missing tach readings. Electrical limits and independent BMC control groups remain subject to the documented limitations.", "2026-11-13"),
   ])),
-  USB3_3_4: observation("Case front-panel USB 3 cable", "inferred", "occupied", "user-reported",
-    "User reports the case front-panel USB 3 cable connected here."),
-  ...Object.fromEntries(["LAN1", "LAN2", "IPMI_LAN1"].map(id => [
-    id, observation("TP-Link TL-SX1008 switch", "inferred", "occupied", "user-reported",
-      "User reports both onboard LAN ports and the dedicated BMC LAN connected to the switch."),
+  USB3_3_4: observation("Case front-panel USB 3 cable", "confirmed", "occupied", "user-confirmed",
+    "User explicitly confirms the case front USB cable is connected to USB3_3_4.", "", "2026-11-13"),
+  PANEL1: observation("Case front-panel switch/LED leads", "confirmed", "occupied", "photo-confirmed",
+    "IMG_4570 shows plugs at the PANEL1 silkscreen, including a readable POWER SW plug.",
+    "Individual LED/switch wire assignments and polarity have not been mapped. This is not a USB header.", "2026-11-13"),
+  ...Object.fromEntries(["TR1", "TR2"].map(id => [
+    id, observation("", "confirmed", "free", "user-confirmed",
+      "User confirms neither TR1 nor TR2 has a separate temperature probe.", "", "2026-11-13"),
   ])),
-  REAR_OTHER: observation("", "inferred", "free", "user-reported",
-    "User reports no other rear I/O connections except power.", "Power refers to the PSU inlet; this does not verify the motherboard's internal power-header wiring."),
+  ...Object.fromEntries(["LAN1", "LAN2", "IPMI_LAN1"].map(id => [
+    id, observation("TP-Link TL-SX1008 switch", "confirmed", "occupied", "user-confirmed",
+      "User confirms LAN1, LAN2 and dedicated BMC LAN are the three connected rear-I/O ports. Switch destination was previously reported.", "", "2026-11-13"),
+  ])),
+  REAR_OTHER: observation("", "confirmed", "free", "user-confirmed",
+    "User confirms no rear USB, display or serial devices are connected.",
+    "The PSU AC power cord is separate from rear motherboard I/O.", "2026-11-13"),
 };
 
 export const components = [
   { id: "board", label: "Motherboard", model: "ROMED8-2T REV 1.03", capacity: "Silkscreen revision", status: "Photo-confirmed (relayed)" },
   { id: "cpu", label: "CPU + cooler", model: "EPYC 7313P · NH-U9 TR4-SP3", capacity: "16 cores / 32 threads", status: "CPU reported installed; original cooler fan pair user-confirmed", note: "2026-11-13 walkthrough: both fans are the originals supplied with the cooler. Airflow through the heatsink runs from the PSU side toward the GPU side, NOT front to rear. Direction is user-confirmed, not measured airflow or a thermal simulation." },
-  { id: "memory", label: "Memory", model: "ECC DDR4 · A1 / B1 / G1 / H1 reported", capacity: "128 GB total system memory across four reported DIMMs; per-module capacity unassigned", status: "User-reported; socket labels not independently verified" },
-  { id: "gpu", label: "Graphics", model: "GV-N2070SGAMING OC-8GD rev 1.0", capacity: "PCIE3 · 2.5-slot cooler blocks PCIE2", status: "Label photo-confirmed; slot user-confirmed / photo-consistent", note: "Fan intake directly faces the HBA in PCIE1. Shroud overhangs both M.2 drives; a few-mm gap is a photo estimate, not a measurement." },
-  { id: "nvme-a", label: "NVMe A", model: "Samsung 990 EVO reported · physical socket binding unknown", capacity: "2 TB nominal", status: "Bare Samsung 2280 drives photo-confirmed in both sockets", note: "No heatsinks. Drives run perpendicular to the slots across PCIE6→PCIE2, under the GPU overhang. Clearance is unmeasured." },
-  { id: "nvme-b", label: "NVMe B", model: "Samsung 990 EVO reported · physical socket binding unknown", capacity: "2 TB nominal", status: "Bare Samsung 2280 drives photo-confirmed in both sockets", note: "No heatsinks. A/B telemetry identities are not assigned to M2_1/M2_2; the observed GPU gap is not a verified heatsink allowance." },
-  { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "12 / 15 bays populated · 3 empty", status: "12 disks and 15-bay capacity user-confirmed", note: "11 active + 1 hot spare, RAID6. No drives are being added. Individual bay assignments and the locations of the three empty bays are unknown; the diagram is a count illustration, not a physical bay map." },
-  { id: "hba", label: "Storage HBA", model: "Low-profile HBA · two SFF-8643 cables", capacity: "PCIE1 · 4 connected HDDs reported", status: "Slot user-confirmed / photo-consistent; model unknown", note: "Directly at the GPU fan intake. Appearance and cable count are photo-confirmed; airflow impact is not measured." },
+  { id: "memory", label: "Memory", model: "Kingston KSM32RD4/32HDR · ECC RDIMM · A1/B1/G1/H1", capacity: "32 GB per installed module · 4 × 32 GB = 128 GB total system memory", status: "Exact modules and all eight socket states user-confirmed 2026-11-13", note: "C1/D1/E1/F1 are empty. DDR4-3200 is a rated specification; actual running clock and utilization are not measured here." },
+  { id: "gpu", label: "Graphics", model: "GV-N207SGAMING OC-8GD rev 1.0", capacity: "Likely PCIE4 · cooler appears to cover PCIE3/PCIE2", status: "Model photo-confirmed; slot/extent photo-inferred, not label-confirmed", note: "IMG_4548 confirms the model spelling (the earlier extra zero was a transcription error). IMG_4537 supports the user's revised PCIE4 interpretation; the earlier PCIE3 assignment is withdrawn. Fan intake faces the HBA in PCIE1. M.2 shroud clearance is unmeasured." },
+  { id: "nvme-a", label: "NVMe A", model: "Samsung 990 EVO · MZ-V9E2T0B", capacity: "2 TB nominal per drive", status: "Both installed models/capacities user-confirmed; bare drives photo-confirmed", note: "No heatsinks. Drives run perpendicular to the slots across PCIE6→PCIE2, under the GPU overhang. Logical A/B telemetry is not bound to physical sockets. Clearance is unmeasured." },
+  { id: "nvme-b", label: "NVMe B", model: "Samsung 990 EVO · MZ-V9E2T0B", capacity: "2 TB nominal per drive", status: "Both installed models/capacities user-confirmed; bare drives photo-confirmed", note: "No heatsinks. A/B telemetry identities are not assigned to M2_1/M2_2; the observed GPU gap is not a verified heatsink allowance." },
+  { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "3 cages × 4 HDDs · bottom bay empty in each", status: "12 installed / 15 bays; empty positions and three power harnesses user-confirmed", note: "Front-view left/center/right cages each have their bottom bay empty. Each group of four HDDs has its own PSU SATA harness. Individual logical-drive-to-bay and data-cable assignments remain untraced. 11 active + 1 hot spare, RAID6; no drives being added." },
+  { id: "hba", label: "Storage HBA", model: "Likely LSI Broadcom SAS 9300-8i · two SFF-8643 cables", capacity: "PCIE1 · 4 connected HDDs reported", status: "Slot user-confirmed; model user-suspected, installed label unverified", note: "The 9300-8i is the current candidate, not a confirmed label identification. Firmware/mode is not inferred. Directly at the GPU fan intake; cable routing and airflow impact are not measured." },
   { id: "case-fans", label: "Front + middle fans / FAN3 hub", model: "6 × Noctua NF-P12 redux-1700 PWM", capacity: "120 × 25 mm · rated maximum 1700 RPM / 0.09 A per fan", tachPartId: "middle-fan-3", status: "User-installed 2026-11-12; airflow and tach-return position user-confirmed 2026-11-13", note: "3 front + 3 middle, all blowing front to rear. The PSU-side middle fan (middle-fan-3) supplies the single hub tach return; other hub-port assignments remain untraced. Replaced the six BoK BDM12025S fans and their Molex chain A. All six use a SATA-powered Thermalright ARGB FAN HUB X8 with its lead on FAN3. Approximately 1100 RPM is one BMC-observed hub return, not six measured speeds. Ratings are specifications, not measured current/RPM. Micro Center SKU 062398." },
-  { id: "fan-hub", label: "Case-fan hub", model: "Thermalright ARGB 8 Group Fan HUB/Controller · ARGB FAN HUB X8", capacity: "6 fans · PSU SATA power / FAN3 PWM + one tach return", status: "FAN3 lead and tach-return fan user-confirmed; RPM BMC-observed (relayed)", note: "Micro Center product 710163, SKU 025247. Tach-return fan: middle-fan-3, PSU side of the middle bank (user-confirmed 2026-11-13). Relayed reading is approximately 1100 RPM; exact capture time is unavailable. BMC lower alarm is reported as 100 RPM. Other five fan speeds are not individually monitored. Physical hub position, other per-port mappings and upstream PSU harness routing remain untraced." },
-  { id: "rear-fans", label: "Rear fans / chain B", model: "2 × 80 mm BoK · thickness and exact model UNVERIFIED", capacity: "Reported label: 12 V / 0.1 A / 2000 RPM", status: "Width: manufacturer chassis specification + user-confirmed original fans", note: "Rosewill RSV-L4500U manual specifies rear 80 mm fans; the user confirms both installed rear fans are factory-original. Both exhaust out the back (user-confirmed 2026-11-13). Width is specification-based, NOT photo-measured. Thickness and tentative model transcription BDM180255 remain unverified. Molex wiring is user-reported. Label-rated 2000 RPM is NOT a measured speed; no tach connection or board header is reported." },
-  { id: "psu", label: "PSU modular-port inventory", model: "Corsair HX1000i", capacity: "Pre-replacement free-port report: 2 SATA/PATA + 4 PCIe/CPU", status: "User-reported; current port counts not retraced after fan replacement", note: "Pre-replacement used-port report: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA; two SATA/PATA fed the former Molex fan chains. The new six-fan hub now uses PSU SATA power; the rear pair remains on Molex. Current harness/port allocation is not retraced. User suspects one SATA/PATA harness powers all 12 HDDs; upstream routing and splitter topology remain untraced. This does not verify load limits or individual board-header wiring." },
-  { id: "case-header", label: "Board-to-case header", model: "Case pin header is not a fan connector", capacity: "Exact header designator unverified", status: "User-reported identification", note: "Do not assign it to FAN1–FAN7 or assume PANEL1 without a label or cable trace." },
-  { id: "unidentified-cable", label: "Lower-edge flat cable", model: "Red / white / green / black, under GPU", capacity: "Possibly internal USB 2.0", status: "Photo-inferred; identity unverified", note: "No exact header or pinout assigned. Wire colors alone do not confirm a USB connection." },
-  { id: "rear-io", label: "Rear connections", model: "LAN1 / LAN2 / BMC LAN → switch", capacity: "Other rear I/O unused except PSU power", status: "User-reported" },
+  { id: "fan-hub", label: "Case-fan hub", model: "Thermalright ARGB 8 Group Fan HUB/Controller · ARGB FAN HUB X8", capacity: "6 fans · dedicated PSU SATA harness / FAN3 PWM + one tach return", status: "Location, dedicated power, FAN3 lead and tach-return fan user-confirmed", note: "Between motherboard and middle fan wall, near case centerline and FAN1–FAN3; exact coordinates are approximate. Micro Center product 710163, SKU 025247. Tach-return fan: middle-fan-3, PSU side of middle bank. Relayed reading approximately 1100 RPM; capture time unavailable. Reported lower alarm 100 RPM. Other five speeds are not individually monitored; other port assignments remain untraced." },
+  { id: "rear-fans", label: "Rear fans / chain B", model: "2 × 80 mm BoK · thickness and exact model UNVERIFIED", capacity: "Reported label: 12 V / 0.1 A / 2000 RPM", status: "Original fans, rear exhaust and one dedicated Molex harness user-confirmed", note: "Rosewill case specification establishes 80 mm width, not a photo measurement. Both fans are factory-original and exhaust out the back. One separate PSU Molex harness powers both. Thickness and tentative BDM180255 transcription remain unverified. Label-rated 2000 RPM is NOT measured; no board tach/control connection." },
+  { id: "psu", label: "PSU + power routing", model: "Corsair HX1000i · CP-9020259-NA / RPS0131 family", capacity: "1000 W rated · 3 HDD SATA harnesses + 1 hub SATA + 1 rear-fan Molex", status: "Part family identified from listing; harness topology and USB absence user-confirmed", note: "Three separate SATA harnesses each feed four HDDs; a fourth SATA harness serves only the fan hub; one separate Molex harness serves both rear fans. This supersedes the earlier one-harness-for-12-HDDs suspicion. PSU 18+10-pin ATX pair is connected. Motherboard 24-pin/EPS 8-pin are occupied; its 4-pin and GFX_12V1 are empty. USB/iCUE cable is NOT connected. Individual PSU port IDs, cable part numbers and spare-port counts are unverified. No modular pinout, load limit or cable interchangeability is implied; the current retail title does not establish a newer ATX certification for this unit." },
+  { id: "case-header", label: "Front-panel connections", model: "PANEL1 · case switch/LED leads", capacity: "9-pin system-panel header", status: "Photo-confirmed in IMG_4570", note: "PANEL1 silkscreen and POWER SW plug are readable. Other switch/LED leads are present, but their individual assignments/polarity have not been mapped. This is not a fan header." },
+  { id: "unidentified-cable", label: "Lower-edge flat cable", model: "Red / white / green / black, under GPU", capacity: "Likely part of the front-panel switch/LED loom", status: "Photo-inferred from IMG_4570 terminations; full cable trace unverified", note: "POWER SW and other front-panel plugs are visible at PANEL1. The earlier USB 2.0 suggestion was based only on wire colors and is not established. No individual wire-to-pin assignment is implied." },
+  { id: "rear-io", label: "Rear connections", model: "LAN1 / LAN2 / BMC LAN → switch", capacity: "No rear USB, display or serial devices", status: "User-confirmed 2026-11-13", note: "The PSU AC power cord is separate. The PSU USB telemetry cable is not connected internally either." },
   { id: "filesystem", label: "/data", model: "LVM + XFS over RAID6", capacity: "≈53 / 66 TiB used", status: "Reported snapshot; approximate" },
 ];
 
@@ -211,3 +241,79 @@ export const syntheticReadings = [
   { id: "air-front", label: "Example inlet air", value: 24, unit: "°C", kind: "air", position: 0, provenance: "synthetic", source: "Invented air probe, not installed", observedAt: null },
   { id: "air-rear", label: "Example outlet air", value: 39, unit: "°C", kind: "air", position: 1, provenance: "synthetic", source: "Invented air probe, not installed", observedAt: null },
 ];
+
+const motherboardReference = {
+  label: "ASRock Rack ROMED8-2T manual (PDF)",
+  url: "https://download.asrock.com/Manual/ROMED8-2T.pdf",
+  note: "Internal revision 1.30 / April 2026; the cover still names an older revision.",
+};
+const chassisReference = {
+  label: "Rosewill RSV-L4500U manual (PDF)",
+  url: "https://c1.neweggimages.com/IMAttachment/UserManual/User%20Manual-1741922402096.pdf",
+  note: "Manufacturer chassis documentation; rear-fan width relies on this specification plus user-confirmed original fans.",
+};
+const nvmeReference = {
+  label: "Samsung 990 EVO datasheet (PDF)",
+  url: "https://download.semiconductor.samsung.com/resources/data-sheet/samsung_nvme_ssd_990_evo_datasheet_rev.1.1.pdf",
+  note: "Revision 1.1; covers the confirmed MZ-V9E2T0B family. Specifications are not live measurements.",
+};
+export const partReferences = {
+  board: [motherboardReference],
+  chassis: [chassisReference],
+  cpu: [{
+    label: "Noctua NH-U9 TR4-SP3 installation manual (PDF)",
+    url: "https://cdn.noctua.at/media/noctua_nh_u9_tr4-sp3_manual_en.pdf?download=true",
+  }, {
+    label: "AMD EPYC 7003 family datasheet (PDF; download unverified)",
+    url: "https://www.amd.com/content/dam/amd/en/documents/epyc-business-docs/datasheets/amd-epyc-7003-series-product-datasheet.pdf",
+    note: "Manufacturer-published family reference. Automated retrieval failed; use the exact-model specification page below if the PDF does not open.",
+  }, {
+    label: "AMD EPYC 7313P specifications (HTML)",
+    url: "https://www.amd.com/en/products/processors/server/epyc/7003-series/amd-epyc-7313p.html",
+  }, motherboardReference],
+  memory: [{
+    label: "Kingston KSM32RD4/32HDR datasheet (PDF)",
+    url: "https://www.kingston.com/datasheets/KSM32RD4_32HDR.pdf",
+    note: "32 GB per module; rated DDR4-3200 ECC RDIMM specifications, not measured operating speed.",
+  }],
+  gpu: [{
+    label: "Gigabyte graphics-card installation guide (PDF; generic)",
+    url: "https://download.gigabyte.com/FileList/Manual/VGAGUIDE_web.pdf",
+    note: "Generic installation guide from the spreadsheet, not a model-specific pinout or clearance drawing.",
+  }, {
+    label: "GV-N207SGAMING OC-8GD rev. 1.0/1.1 support (HTML)",
+    url: "https://www.gigabyte.com/us/Graphics-Card/GV-N207SGAMING-OC-8GD-rev-10-11/support",
+  }],
+  "nvme-a": [nvmeReference],
+  "nvme-b": [nvmeReference],
+  "drive-M2_1": [nvmeReference],
+  "drive-M2_2": [nvmeReference],
+  disks: [{
+    label: "WD Red Plus product brief (PDF)",
+    url: "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-red-plus-hdd/product-brief-western-digital-wd-red-plus-hdd.pdf",
+    note: "Includes WD80EFPX. Product ratings do not identify logical disks or their physical bays.",
+  }],
+  hba: [{
+    label: "Broadcom SAS 9300-8i user guide (PDF; candidate model)",
+    url: "https://docs.broadcom.com/doc/12354877",
+    note: "Revision 1.3 / March 2015. The installed controller label is unverified; this guide is not evidence of its identity or firmware.",
+  }],
+  "case-fans": [{
+    label: "Noctua NF-P12 redux-1700 PWM specification (PDF)",
+    url: "https://cdn.noctua.at/media/55101b81/Noctua%20NF-P12%20redux-1700%20PWM%20Specification.pdf?download=true",
+  }],
+  "fan-hub": [{
+    label: "Thermalright TL-FAN and ARGB HUB x8 product reference (HTML)",
+    url: "https://www.thermalright.com/product/tl-fan-and-argb-hub-x8/",
+    note: "Manufacturer-listed PDF download returned HTTP 404 during verification; no verified matching PDF is available here. Do not substitute the x8 IR variant's manual.",
+  }],
+  "rear-fans": [chassisReference],
+  psu: [{
+    label: "Corsair HXi series manual (PDF; HX1000i / RPS0131)",
+    url: "https://assets.corsair.com/image/upload/v1701372411/documents/49_002658_AA_WW_HXi_Series_QSG_Web.pdf#page=4",
+    note: "Linked by Corsair for the CP-9020259 family; the installed revision is listing-based, not label-verified. Use only cables verified compatible with this PSU.",
+  }],
+  "case-header": [motherboardReference, chassisReference],
+  "unidentified-cable": [motherboardReference],
+  "rear-io": [motherboardReference],
+};

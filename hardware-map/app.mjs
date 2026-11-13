@@ -1,4 +1,4 @@
-import { connectors, connectorById, components, boardRevision, landscapeBounds, inspectionConnections, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
+import { connectors, connectorById, components, partReferences, boardRevision, landscapeBounds, inspectionConnections, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
 import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, connectionCounts, fanAvailability, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
@@ -240,7 +240,7 @@ function renderBoard() {
   const enclosure = hardwarePart("chassis", null, "Rosewill RSV-L4500U", "Original top-view schematic informed by inspection photos. Case-part positions, proportions and component outlines are approximate, not measured.", [], {
     model: "Rosewill RSV-L4500U · 4U rack chassis", capacity: "15 HDD bays · 12 installed / 3 empty",
     status: "Chassis model user-reported; bay capacity and installed count user-confirmed",
-    note: "Fan faces are unfolded for identification, not their physical mounting angle. No actual bay identity, cable route, airflow direction or mounting clearance is established by this drawing.",
+    note: "Fan faces are unfolded for identification, not mounting angle. User confirms four HDDs plus the bottom bay empty in each front-view cage. Logical drive identities, exact cable routes and mounting clearances remain untraced.",
   });
   enclosure.append(svgElement("rect", { x: 35, y: 65, width: 1365, height: 725, rx: 9, class: "chassis-shell part-outline" }));
   for (const y of [81, 774]) enclosure.append(svgElement("path", { d: `M50 ${y} H1383`, class: "chassis-rail" }));
@@ -282,7 +282,7 @@ function renderBoard() {
   board.append(connectorLayer);
 
   const hardware = svgElement("g", { id: "installed-hardware" });
-  const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three cage regions are approximate. Twelve filled and three outlined bays illustrate counts ONLY; they do not assign drives or empty positions to a cage.");
+  const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. User confirms four HDDs with the bottom bay empty in each cage. Individual logical-drive identities remain unassigned.");
   for (let cage = 0; cage < 3; cage += 1) {
     const y = 124 + cage * 196;
     disks.append(svgElement("rect", { x: 172, y, width: 231, height: 173, rx: 4, class: "drive-cage part-outline" }));
@@ -295,7 +295,7 @@ function renderBoard() {
     }
   }
   disks.append(svgElement("text", { x: 173, y: 738, class: "scene-heading" }, "12 HDDs / 15 BAYS"));
-  disks.append(svgElement("text", { x: 173, y: 758, class: "scene-note" }, "3 EMPTY · POSITIONS UNKNOWN"));
+  disks.append(svgElement("text", { x: 173, y: 758, class: "scene-note" }, "BOTTOM BAY EMPTY IN EACH CAGE"));
   hardware.append(disks);
   for (const [region, x] of [["front", 60], ["middle", 440]]) {
     for (let i = 0; i < 3; i += 1) {
@@ -315,6 +315,11 @@ function renderBoard() {
   psu.append(svgElement("text", { x: 1060, y: 698, class: "psu-label" }, "HX1000i"));
   psu.append(svgElement("text", { x: 1060, y: 723, class: "hardware-subtitle" }, "CORSAIR / PSU"));
   hardware.append(psu);
+  const hub = hardwarePart("fan-hub", "fan-hub", "Thermalright fan hub / FAN3", "User places the hub between the motherboard and middle fan wall, near the case centerline and FAN1–FAN3. Outline and exact position are approximate, not a cable-routing diagram.", ["FAN3"]);
+  hub.append(svgElement("rect", { x: 672, y: 409, width: 113, height: 66, rx: 4, class: "psu-body part-outline" }));
+  hub.append(svgElement("text", { x: 682, y: 435, class: "hardware-label" }, "PWM HUB"));
+  hub.append(svgElement("text", { x: 682, y: 455, class: "hardware-subtitle" }, "6 FANS / 1 TACH"));
+  hardware.append(hub);
   for (let i = 0; i < 2; i += 1) {
     const fan = hardwarePart(`rear-fan-${i + 1}`, "rear-fans", `Rear 80 mm fan ${i + 1} · Molex chain B`, "Rear bank is photo-informed; centers and mounting geometry are approximate. Width is specification-based plus user-confirmed factory-original fans, not photo-measured.");
     drawFan(fan, 1314, 420 + i * 111, 63);
@@ -325,8 +330,8 @@ function renderBoard() {
   for (const id of ["M2_2", "M2_1"]) {
     const connector = connectorById.get(id);
     const drive = hardwarePart(`drive-${id}`, null, `${id} / bare Samsung 2280`, "Drive direction follows inspection evidence: perpendicular to PCIe slots across PCIE6→PCIE2. Outline and GPU overhang are approximate; clearance is unmeasured.", [id], {
-      model: "Bare Samsung 2280 SSD · no heatsink", capacity: "2 TB per drive reported · logical A/B binding unknown",
-      status: "Both populated sockets and bare drives photo-confirmed (relayed)",
+      model: "Samsung 990 EVO · MZ-V9E2T0B · bare 2280 SSD", capacity: "2 TB nominal per drive · logical A/B binding unknown",
+      status: "Models/capacities user-confirmed; bare populated sockets photo-confirmed",
       note: "The GPU shroud overhangs both drives. The photo-estimated few-mm gap is not a measured heatsink allowance. NVMe A/B telemetry is deliberately not assigned to a physical socket.",
     });
     const bounds = landscapeBounds({ x: connector.x + 25, y: 513, width: 40, height: 236 });
@@ -337,7 +342,7 @@ function renderBoard() {
   }
   for (const socket of ["DDR4_A1", "DDR4_B1", "DDR4_G1", "DDR4_H1"]) {
     const { x, y, width, height } = landscapeBounds(connectorById.get(socket));
-    const dimm = hardwarePart(`dimm-${socket}`, "memory", `${socket} / installed ECC DIMM`, "Population in A1/B1/G1/H1 is user-reported. Board positions follow the manual; module heights and appearance are schematic.", [socket]);
+    const dimm = hardwarePart(`dimm-${socket}`, "memory", `${socket} / Kingston 32 GB ECC DIMM`, "User confirms KSM32RD4/32HDR modules, 32 GB each, in A1/B1/G1/H1. Board positions follow the manual; module heights and appearance are schematic.", [socket]);
     dimm.append(svgElement("rect", { x, y: y - 4, width, height: height + 5, rx: 1, class: `dimm-body part-outline ${["DDR4_A1", "DDR4_H1"].includes(socket) ? "blue-slot" : ""}` }));
     for (let i = 0; i < 8; i += 1) {
       dimm.append(svgElement("rect", { x: x + 8 + i * 25, y: y - 1, width: 17, height: height - 1, class: "dimm-chip" }));
@@ -361,13 +366,13 @@ function renderBoard() {
   cpu.append(svgElement("text", { x: cpuBounds.x + cpuBounds.width / 2, y: cpuBounds.y + 61, class: "cooler-sublabel" }, "UNDER NH-U9 TR4-SP3"));
   hardware.append(cpu);
 
-  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / PCIE3", "Slot PCIE3 is user-confirmed/photo-consistent. The card outline spans PCIE2 to illustrate the reported cooler blockage; its full shroud footprint and M.2 clearance are not measured.", ["PCIE3", "PCIE2"], { readingId: "gpu" });
-  const gpuSlot = landscapeBounds(connectorById.get("PCIE3"));
+  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / likely PCIE4", "GPU in PCIE4 is photo-inferred from three exposed rows, not label-confirmed. Outline spans PCIE3/PCIE2 to illustrate the apparent cooler obstruction; footprint and M.2 clearance are unmeasured.", ["PCIE4", "PCIE3", "PCIE2"], { readingId: "gpu" });
+  const gpuSlot = landscapeBounds(connectorById.get("PCIE4"));
   const gpuTop = landscapeBounds(connectorById.get("PCIE2")).y - 4;
   gpu.append(svgElement("rect", { x: 872, y: gpuTop, width: 418, height: gpuSlot.y + gpuSlot.height - gpuTop + 5, rx: 4, class: "gpu-body part-outline" }));
   gpu.append(svgElement("path", { d: `M882 ${gpuTop + 10} H1050 L1085 ${gpuTop + 45} H1280`, class: "gpu-trim" }));
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 26, class: "hardware-label" }, "GIGABYTE / RTX 2070 SUPER"));
-  gpu.append(svgElement("text", { x: 913, y: gpuTop + 45, class: "hardware-subtitle" }, "PCIE3 · PCIE2 BLOCKED · M.2 OVERHANG"));
+  gpu.append(svgElement("text", { x: 913, y: gpuTop + 45, class: "hardware-subtitle" }, "PCIE4 INFERRED · PCIE3/2 COVERED · M.2 OVERHANG"));
   hardware.append(gpu);
   const hba = hardwarePart("hba", "hba", "Low-profile HBA / PCIE1", "PCIE1 is user-confirmed/photo-consistent. HBA sits at the GPU fan intake. Outline and spacing are not measurements; cable routes and airflow impact remain unknown.", ["PCIE1"]);
   const hbaSlot = landscapeBounds(connectorById.get("PCIE1"));
@@ -431,6 +436,15 @@ function renderFocus() {
   renderList();
 }
 
+function appendReferences(container, references) {
+  for (const reference of references) {
+    const row = element("p", { class: "compact" });
+    row.append(element("a", { href: reference.url, target: "_blank", rel: "noopener noreferrer" }, reference.label));
+    if (reference.note) row.append(element("span", { class: "muted" }, ` — ${reference.note}`));
+    container.append(row);
+  }
+}
+
 function renderComponentDetails() {
   const part = sceneParts.get(selectedPartId);
   const component = componentById.get(part.componentId) ?? part;
@@ -440,6 +454,8 @@ function renderComponentDetails() {
   $("component-provenance").textContent = component.status;
   $("component-note").textContent = component.note ?? "";
   $("component-placement").textContent = part.placement;
+  $("component-reference-links").replaceChildren();
+  appendReferences($("component-reference-links"), partReferences[part.componentId ?? selectedPartId] ?? []);
   const reading = part.readingId ? readingFor(currentReadings(), part.readingId) : null;
   $("component-reading").textContent = reading
     ? `${readingLabel(reading)}: ${formatReadingValue(reading)} ${reading.unit}. ${reading.source}.`
@@ -657,10 +673,10 @@ function renderAir() {
   $("air-result").textContent = value === null ? "Unavailable" : `≈ ${formatValue(value)} °C at ${Math.round(position * 100)}%`;
   $("air-field").setAttribute("opacity", value === null ? "0" : ".28");
   $("air-front-label").textContent = value === null ? "INLET AIR: UNKNOWN" : "SYNTHETIC INLET: 24 °C";
-  $("air-mid-label").textContent = value === null ? "NO VERIFIED AIR PROBES" : "LERP MIDPOINT: ≈31.5 °C";
+  $("air-mid-label").textContent = value === null ? "NO SEPARATE AIR PROBES INSTALLED" : "LERP MIDPOINT: ≈31.5 °C";
   $("air-rear-label").textContent = value === null ? "OUTLET AIR: UNKNOWN" : "SYNTHETIC OUTLET: 39 °C";
   $("air-explanation").textContent = value === null
-    ? "No air estimate: there are no verified, located air-temperature probes in the observed dataset. Component temperatures are intentionally excluded."
+    ? "No air estimate: the user confirms no separate TR1/TR2 probes are installed. There are no located air-temperature measurements in this dataset; component temperatures are intentionally excluded."
     : "SYNTHETIC ESTIMATE — linear interpolation between two invented air probes. Not measured air, an airflow simulation, or evidence of real hot spots. Case geometry and airflow are conceptual.";
 }
 
@@ -698,6 +714,7 @@ for (const component of components) {
   const card = element("article", { class: "inventory-card" });
   card.append(element("h4", {}, component.label), element("p", {}, component.model), element("strong", {}, component.capacity), element("p", {}, component.status));
   if (component.note) card.append(element("p", {}, component.note));
+  appendReferences(card, partReferences[component.id] ?? []);
   $("inventory-grid").append(card);
 }
 renderBoard();

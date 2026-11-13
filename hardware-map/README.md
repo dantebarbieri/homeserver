@@ -77,7 +77,8 @@ tab blocks saves until reload to reduce accidental overwrites.
 
 ## Cleaning inspection and fan replacement, November 12–13, 2026
 
-Inventory evidence below was relayed by the coordinating session. Private
+Initial inventory evidence was relayed by the coordinating session; the
+November 13 walkthrough adds Dante's direct confirmations. Private
 inspection photo sheets were also viewed for this UI revision's colors and
 general case arrangement: green PCB, black/blue slots, silver chassis and
 heatsinks, dark cards/fans/PSU, beige/brown Noctua frames. This does not upgrade
@@ -91,28 +92,31 @@ FAN3 tach is a relayed BMC observation, not an independent cable trace.
 
 | Provenance | Observation |
 | --- | --- |
-| Photo-confirmed | Board silkscreen `ROMED8-2T REV 1.03`; GPU label `GV-N2070SGAMING OC-8GD rev 1.0`. |
-| User-confirmed, photo-consistent | GPU in PCIE3, with its 2.5-slot cooler physically blocking PCIE2. HBA in PCIE1, directly at the GPU fan intake. This supersedes the earlier unverified GPU-in-PCIE2 report. |
-| User-reported | PCIE4–PCIE7 free. The schematic follows the manual: PCIE7 nearest CPU/DIMMs, PCIE1 at the bottom board edge. |
+| Photo-confirmed | Board silkscreen `ROMED8-2T REV 1.03`; GPU label `GV-N207SGAMING OC-8GD rev 1.0` in IMG_4548. The earlier extra zero in the GPU SKU was a transcription error. |
+| Photo-inferred, revised November 13 | Three exposed slots between DIMMs and GPU in IMG_4537 support the user's revised **GPU likely in PCIE4**, with PCIE7/6/5 empty and cooler apparently covering PCIE3/PCIE2. Slot labels are unreadable: PCIE4 is **not confirmed**. The earlier PCIE3 assignment and PCIE4-free report are superseded. |
+| User-confirmed | HBA in PCIE1, directly at the GPU fan intake. Candidate model is **SAS 9300-8i**, still user-suspected rather than label-confirmed. Firmware/mode is not established by this candidate identification. |
 | Photo-confirmed | Both M.2 sockets right of PCIE7's end contain bare Samsung 2280 drives without heatsinks. Drives run perpendicular to the slots across the PCIE6→PCIE2 rows. Both onboard SATA connectors appear cabled; logical A/B identities and cable-to-drive routing remain unknown. |
 | Photo observation, unmeasured | GPU shroud overhangs both M.2 drives with a visible gap estimated as a few mm. This is not a measured clearance or a verified heatsink allowance. Drive outlines in the schematic show orientation, not dimensions or exact shroud extent. |
-| Uncertain photo | GFX_12V1 appears empty, not certainly. It is not marked confirmed-free. |
+| User-confirmed, November 13 | Both SSDs are **Samsung 990 EVO 2 TB, MZ-V9E2T0B**. Logical A/B telemetry-to-socket bindings remain unknown. |
+| Photo-confirmed, November 13 review | IMG_4538 supports ATXPWR1 24-pin occupied, ATX12V1 EPS 8-pin occupied and ATX12V2 four-pin empty. The PSU-side 18+10-pin plugs are split ends of the motherboard ATX cable. |
+| User-confirmed, November 13 | GFX_12V1 is empty. This is the motherboard auxiliary socket, not the GPU card's power input. |
 | Photo-confirmed | Existing Noctua four-pin plugs on FAN1/FAN2 are seated on pins 1–4. This verifies those particular plugs' in-situ fit, not universal compatibility or physical keying. |
 | Historical photo-confirmed and user-confirmed | FAN3 was empty/free in the cleaning photo; FAN3 / LED_FAN3 silkscreen is visible. Superseded by the subsequently reported hub connection below. |
 | User-confirmed, November 13 | FAN4–FAN7 are all visibly empty. This supersedes the earlier photo-inferred empty status; the confirmation is from physical inspection/photos, not missing tach readings. |
-| User-reported | DIMMs in A1/B1/G1/H1; NH-U9 cooler fans on FAN1/FAN2; case USB 3 cable on USB3_3_4. |
-| User-reported | LAN1, LAN2 and BMC LAN connected to the switch; no other rear I/O connections except PSU power. The other rear ports are a logical group, `REAR_OTHER`, not a vendor header identifier. |
+| User-confirmed, November 13 | Four **Kingston KSM32RD4/32HDR**, **32 GB each**, in **A1/B1/G1/H1**; **C1/D1/E1/F1 empty**. 128 GB is the total, not a single module's capacity. Rated DDR4-3200 does not establish current running speed. Original NH-U9 cooler fans use FAN1/FAN2. Case front USB cable is on USB3_3_4. |
+| User-confirmed, November 13 | Rear LAN1/LAN2/dedicated BMC LAN are connected; no rear USB, display or serial devices. Switch destination was previously reported. The PSU AC cord is separate. `REAR_OTHER` is a logical group, not a vendor designator. |
 | Historical user-reported wiring, photographed label | Former Molex chain A: six BoK BDM12025S fans, 120 mm reported, 12 V / 0.10 A per label; three front plus three middle. Replaced on November 12; no longer the installed front/middle inventory. |
 | User-installed and reported, November 12 | Six Noctua **NF-P12 redux-1700 PWM**, **120 × 25 mm**, three front plus three middle. Rated maximum **1700 RPM / 0.09 A** per fan; specifications are not measurements. Micro Center SKU 062398. Hub-port mapping beyond the subsequently identified tach-return fan remains untraced. Redux light-grey frames/darker cool-grey blades follow the supplied product photo; the beige/brown CPU cooler and the rear pair retain their prior appearance. No vendor photo is bundled. |
-| User-installed and reported | All six redux fans use a **Thermalright ARGB 8 Group Fan HUB/Controller**, Mfr part **ARGB FAN HUB X8**, Micro Center product 710163 / SKU 025247. PSU SATA power; PWM/tach lead on **FAN3**. Hub position, other per-port mappings and upstream harness routing remain untraced. The product name does not establish an RGB connection. |
+| User-installed and reported; wiring/location confirmed November 13 | All six redux fans use a **Thermalright ARGB 8 Group Fan HUB/Controller**, Mfr part **ARGB FAN HUB X8**, Micro Center product 710163 / SKU 025247. A **dedicated PSU SATA harness** supplies it; PWM/tach lead on **FAN3**. Hub lies between motherboard and middle fan wall, near case centerline and FAN1–FAN3; exact coordinates are approximate. Other per-port mappings remain untraced. Product name does not establish an RGB connection. |
 | User-confirmed, November 13 | The hub lead is on FAN3, seated like the FAN1/FAN2 plugs with two of six pins exposed. The PSU-side middle fan, **middle-fan-3**, supplies the hub's single tach return. Only that physical fan is bound to the FAN3 snapshot in its popup; the other five speeds remain unmeasured. Other hub-port assignments remain untraced. In-situ fit does not establish universal keying. |
 | User-confirmed, November 13 | All six redux fans blow front to rear. Both rear fans exhaust out the back. Both CPU-cooler fans are the originals supplied with the NH-U9 TR4-SP3 and move air **from the PSU side toward the GPU side**, not front to rear. These are confirmed orientations, not measured airflow rates or thermal simulation results. |
 | Relayed BMC observation | FAN3 is approximately **1100 RPM**; the hub passes back **one tach**, not six individually measured fan speeds. Exact capture time is unavailable; the relay was received November 13. BMC lower alarm is reported as **100 RPM**. No live query or control change was made for this update. |
 | Manufacturer chassis specification + user-confirmed original fans | Molex chain B: two rear **80 mm** BoK fans. The [Rosewill RSV-L4500U manual](https://c1.neweggimages.com/IMAttachment/UserManual/User%20Manual-1741922402096.pdf) specifies rear 80 mm fans, and the user confirms both are factory-original. Width is specification-based, **not photo-measured**. Thickness and exact model remain **UNVERIFIED**; `BDM180255` is only a tentative transcription. Molex wiring and label 12 V / 0.1 A / 2000 RPM are reported; rated RPM is not a measurement, and no tach is connected. |
-| Historical user report + reported fan replacement | HX1000i pre-replacement PSU-side ports used: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA; two SATA/PATA fed the former Molex chains. Pre-replacement free count: 2 SATA/PATA and 4 PCIe/CPU. The six-fan hub now uses SATA power; the rear pair stays on Molex. Current harness/port allocation is not retraced. User suspects one SATA/PATA harness powers all 12 HDDs; upstream routing and splitter topology remain untraced. These counts do not verify electrical loads or individual internal board-header wiring. |
-| User-reported | The observed case pin header is board-to-case, not a fan connector; its exact designator is unverified. |
-| Photo-inferred | Red/white/green/black flat cable along the lower board edge under the GPU is possibly internal USB 2.0. No specific header, pinout or USB identity is confirmed. |
-| User-confirmed | 12 HDDs is the true installed count; the case has 15 bays, leaving three empty. No drives are being added. Individual bay mapping and the locations of the empty bays remain unknown. |
+| Listing-based PSU identity | Corsair HX1000i **CP-9020259-NA / RPS0131 family**. Identification is listing-based, not read from the installed label. The current retail title does not establish a newer ATX certification for this unit. |
+| User-confirmed, November 13 | **Three separate SATA power harnesses, four HDDs each**; a **fourth SATA harness dedicated to the hub**; **one separate Molex harness for both rear fans**. This supersedes the old one-harness-for-12-HDDs suspicion and stale port counts. Individual PSU port IDs, cable part numbers, load limits and spare-port counts remain unverified. **PSU USB/iCUE is not connected**. Do not infer modular-cable compatibility from connector shape or package quantities. |
+| Photo-confirmed / inferred | IMG_4570 shows **PANEL1** with readable **POWER SW** and other switch/LED plugs. The red/white/green/black lower-edge flat cable is likely part of that loom; exact continuity and individual pin assignments remain untraced. The earlier USB 2.0 suggestion was not established. |
+| User-confirmed, November 13 | **12 installed HDDs**, three five-bay cages, **bottom bay empty in each front-view left/center/right cage**. Each cage contains four drives; no drives being added. Logical-drive-to-bay and individual data-cable mapping remain unknown. |
+| User-confirmed, November 13 | **No separate temperature probes** on TR1/TR2. Component-temperature snapshots are not air measurements. |
 
 User-reported occupied headers remain inferred rather than independently
 confirmed unless explicitly user-confirmed. For an unmodified inspection map,
@@ -126,7 +130,8 @@ and independent BMC control groups are still not established by occupancy.
 The six front/middle fans use reported SATA hub power plus FAN3 control/tach;
 the unchanged rear pair remains unmonitored on Molex chain B.
 Aside from the relayed FAN3 tach, no new telemetry, rear-fan thickness or exact
-rear-fan model is inferred. HDD splitter topology remains untraced.
+rear-fan model is inferred. HDD harness grouping is confirmed, but individual
+power connector/cable part-number and logical-drive-to-bay bindings are not.
 Existing saved/imported annotations still take precedence over defaults;
 the latest supplied FAN3 record is visible separately without overwriting notes.
 
@@ -135,17 +140,40 @@ the latest supplied FAN3 record is visible separately without overwriting notes.
 The front is on the left and rear I/O on the right. Component and case-part
 positions, dimensions and mounting offsets are approximate, even when the
 component's identity or electrical slot is confirmed. GPU/HBA shapes illustrate
-PCIE3/PCIE1 placement and PCIE2 blockage, not measured cooler footprints.
+photo-inferred PCIE4 GPU placement, confirmed PCIE1 HBA placement and apparent
+PCIE3/PCIE2 obstruction, not measured cooler footprints.
 Connector focus reveals sockets visually; it does not mean they are physically
 accessible beneath a card. M.2 outlines retain their perpendicular-to-slot
 direction; NVMe A/B readings are not assigned to a socket.
 
 Fan faces are unfolded for recognition, not shown at their physical mounting
-angles or as verified airflow directions. Filled/outlined drive marks illustrate
-12 occupied / three empty bays only, not a per-cage population claim. No
-cable routing, actual bay identity, splitter topology or component clearance
-is inferred from the illustration. Existing saved/imported annotations are
-preserved unchanged; this is a visual revision, not a schema migration.
+angles. Airflow directions come from user confirmation, not geometry. The three
+front-view cages are unfolded down the scene; each has four filled bays and an
+outlined bottom bay per the walkthrough. Logical disk identities, exact cable
+routes and clearances are not inferred. Saved/imported annotations are preserved
+unchanged; this is not a schema migration.
+
+### Part documentation
+
+Each physical part's popup links its manual or datasheet; inventory cards expose
+the same references. URLs and qualifications live in `partReferences` in
+`board.mjs`. Except for the explicitly qualified AMD download below, linked
+PDFs were opened and matched to their stated product or family; vendor
+files/artwork are not bundled. The references include the
+Noctua cooler installation guide and redux specifications, exact Kingston
+datasheet, Samsung 990 EVO revision 1.1 datasheet, WD Red Plus product brief,
+Rosewill chassis manual and Corsair HXi manual for the CP-9020259 family.
+
+The Gigabyte PDF is a **generic graphics installation guide**, accompanied by
+the model-specific support page. The Broadcom 9300-8i guide is explicitly
+**candidate-model documentation**, not proof of the installed controller.
+Thermalright publishes an x8 hub PDF link, but it returned **HTTP 404** during
+verification; its official product page is linked with that limitation instead.
+No x8 IR variant documentation is substituted. Manufacturer specifications and
+PDF references do not turn inferred hardware identities into confirmed facts.
+AMD's published EPYC 7003 family PDF could not be retrieved by the validation
+client; its link is labeled download-unverified and accompanied by the exact
+7313P specification page.
 
 ## Sources and interpretation
 

@@ -48,26 +48,26 @@ test("a connection edit preserves other connectors and retains evidence on expor
 
 test("inspection defaults distinguish confirmed occupied and confirmed free fan headers", () => {
   const document = withInspectionDefaults(emptyDocument());
-  for (const id of ["M2_1", "M2_2", "SATA_0_3", "SATA_4_7", "FAN1", "FAN2"]) {
+  for (const id of ["CPU1", "M2_1", "M2_2", "SATA_0_3", "SATA_4_7", "FAN1", "FAN2", "ATXPWR1", "ATX12V1", "PANEL1"]) {
     assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].provenance, "photo-confirmed");
     assert.equal(document.connections[id].occupancy, "occupied");
   }
   for (const id of ["DDR4_A1", "DDR4_B1", "DDR4_G1", "DDR4_H1", "USB3_3_4", "LAN1", "LAN2", "IPMI_LAN1"]) {
-    assert.equal(document.connections[id].provenance, "user-reported");
-    assert.equal(document.connections[id].confidence, "inferred");
+    assert.equal(document.connections[id].provenance, "user-confirmed");
+    assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].occupancy, "occupied");
   }
   assert.equal(document.connections.FAN3.confidence, "confirmed");
   assert.equal(document.connections.FAN3.occupancy, "occupied");
   assert.equal(document.connections.FAN3.provenance, "user-confirmed");
-  for (const id of ["FAN4", "FAN5", "FAN6", "FAN7"]) {
+  for (const id of ["FAN4", "FAN5", "FAN6", "FAN7", "DDR4_C1", "DDR4_D1", "DDR4_E1", "DDR4_F1", "GFX_12V1", "TR1", "TR2", "REAR_OTHER"]) {
     assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].occupancy, "free");
     assert.equal(document.connections[id].provenance, "user-confirmed");
   }
-  assert.equal(document.connections.GFX_12V1.provenance, "photo-uncertain");
-  assert.equal(document.connections.GFX_12V1.confidence, "inferred");
+  assert.equal(document.connections.ATX12V2.provenance, "photo-confirmed");
+  assert.equal(document.connections.ATX12V2.occupancy, "free");
   assert.deepEqual(fanAvailability(document), { free: 4, occupied: 3, unverified: 0 });
   assert.deepEqual(parseDocument(serializeDocument(document)), document);
 });
@@ -79,10 +79,15 @@ test("adding inspection defaults never overwrites existing user annotations, inc
     ...emptyConnection(), confidence: "confirmed", occupancy: "free", provenance: "photo-confirmed",
     evidence: "Earlier empty-header photo; preserved local annotation predates the replacement.",
   }, now);
+  document = updateConnection(document, "PCIE3", {
+    ...annotation, target: "Earlier GPU-in-PCIE3 annotation",
+  }, now);
   const combined = withInspectionDefaults(document);
   assert.deepEqual(combined.connections.FAN1, document.connections.FAN1);
   assert.deepEqual(combined.connections.M2_1, document.connections.M2_1);
   assert.deepEqual(combined.connections.FAN3, document.connections.FAN3);
+  assert.deepEqual(combined.connections.PCIE3, document.connections.PCIE3);
+  assert.equal(inspectionConnections.PCIE3.occupancy, "blocked");
   assert.equal(inspectionConnections.FAN3.occupancy, "occupied");
   assert.equal(combined.connections.M2_2.provenance, "photo-confirmed");
   assert.equal(inspectionConnections.FAN1.provenance, "photo-confirmed");
@@ -93,16 +98,21 @@ test("adding inspection defaults never overwrites existing user annotations, inc
 
 test("physical slot blockage stays distinct from a GPU electrical connection and survives export", () => {
   const document = withInspectionDefaults(emptyDocument());
-  for (const id of ["PCIE1", "PCIE3"]) {
+  for (const id of ["PCIE1"]) {
     assert.equal(document.connections[id].occupancy, "occupied");
     assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].provenance, "user-confirmed");
   }
   assert.equal(document.connections.PCIE2.occupancy, "blocked");
   assert.equal(document.connections.PCIE2.confidence, "confirmed");
-  for (const id of ["PCIE4", "PCIE5", "PCIE6", "PCIE7"]) {
+  assert.equal(document.connections.PCIE3.occupancy, "blocked");
+  assert.equal(document.connections.PCIE3.confidence, "inferred");
+  assert.equal(document.connections.PCIE4.occupancy, "occupied");
+  assert.equal(document.connections.PCIE4.confidence, "inferred");
+  assert.equal(document.connections.PCIE4.provenance, "photo-inferred");
+  for (const id of ["PCIE5", "PCIE6", "PCIE7"]) {
     assert.equal(document.connections[id].occupancy, "free");
-    assert.equal(document.connections[id].provenance, "user-reported");
+    assert.equal(document.connections[id].provenance, "photo-inferred");
     assert.equal(document.connections[id].confidence, "inferred");
   }
   assert.deepEqual(parseDocument(serializeDocument(document)), document);
