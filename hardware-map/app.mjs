@@ -326,7 +326,7 @@ function renderCaseFanMotion() {
     if ((!dataMode && !snapshotMode) || fan.dataset.motionStage !== (stage?.id ?? "unknown")) applyFanMotion(fan, stage?.example ?? null);
     if ((dataMode || snapshotMode) && Number.isFinite(rpm)) {
       fan.dataset.rpm = rpm;
-      fan.dataset.rpmSource = index < 6 ? snapshotMode ? "reported-shared-assumption" : "synthetic-shared-assumption" : "assumed-constant";
+      fan.dataset.rpmSource = index < 6 ? snapshotMode ? "reported-shared-assumption" : metricFanFrame?.provenance === "live" ? "collected-shared-assumption" : "synthetic-shared-assumption" : "assumed-constant";
       const source = index < 6 ? snapshotMode ? "REPORTED ~" : metricFanFrame?.provenance === "live" ? "LIVE " : "DEMO " : "ASSUMED ";
       fan.querySelector("title").textContent = `${source}${Math.round(rpm)} RPM. ${index < 6 ? "One hub tach applied to all six by user assumption; not six measured speeds." : "Constant 2000 RPM assumed by the user; no tach."} Artistic speed band, not physical-rate rotation.`;
       fan.querySelector(".fan-motion-caption").textContent = "";
