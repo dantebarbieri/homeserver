@@ -201,7 +201,7 @@ films. Dante asked to try all three languages.
 LaunchDaemon `com.danteb.studio-whisper` as `_studio` on `127.0.0.1:9000`. It
 turns off `condition_on_previous_text` for English transcription only.
 
-**Tested on full episodes.** The score is how many word-bearing reference
+**Initial Studio-only tests on full episodes.** The score is how many word-bearing reference
 subtitle cues overlap generated words. It measures timing coverage, not
 whether the words are right.
 
@@ -213,11 +213,21 @@ whether the words are right.
 | SeamlessM4T v2 | Not run | Hallucinated a short synthetic sentence | Correct on a short synthetic greeting | Not run on episodes; non-commercial licence, no timings |
 | turbo, Parakeet, Omnilingual, IndicConformer | Not run | | | Ruled out on paper ([why](ai/SPEECH.md#candidates-and-constraints)) |
 
-**Decision so far:** no production default. **Bazarr still uses the server's
-Whisper.** Large-v3 is the best Studio candidate, but nobody has reviewed the
-words. Before a cutover: a fluent human review, a way for Bazarr to reach the
-service ([above](#exposing-studio-services)), multi-audio handling and the
-provider patch in [`ai/`](ai/).
+**Subsequent same-input comparison and AI word review:**
+[`ai/COMPARISON.md`](ai/COMPARISON.md) compares both deployed endpoints on
+Brooklyn Nine-Nine S01E01 (English), Parasyte S01E01 (Japanese), and Vishnu
+Puran (2003) S01E01 (explicit Telugu audio). Studio English was faster
+(54.8 vs 106.0 seconds) and the preferable proofread fallback draft in this
+test. Neither Japanese output was good enough unattended. Studio Telugu
+returned HTTP 422 for invalid timing; the server returned materially
+unreliable translation despite HTTP 200. This is AI review against subtitle
+references, not listening-based multilingual verification.
+
+**Decision so far:** no production default and no Bazarr cutover. Timing
+overlap and API success are not quality approval. Production use still needs
+content-quality decisions, a way for Bazarr to reach the service
+([above](#exposing-studio-services)), multi-audio handling and the provider
+patch in [`ai/`](ai/).
 
 [`ai/compare_speech.py`](ai/compare_speech.py) computes these scores. The
 reference and generated subtitles stay private on the Studio in
@@ -351,7 +361,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, Tdarr launcher and plists |
 | `macos/install/` | Historical one-time installers from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
-| `macos/ai/` | Whisper adapter, Ollama and Whisper plists, Bazarr patch, `compare_speech.py`, `condition_false.py`, model evaluation |
+| `macos/ai/` | Whisper adapter, Ollama and Whisper plists, Bazarr patch, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
 | `docker/tdarr/` | Studio flow, its installer and the node restriction script |
 | `nixos/modules/ssh.nix`, `users.nix` | `studio-tunnel` restrictions and the Studio's admin key |
@@ -365,7 +375,8 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
 | Worker account | `_studio`, `/var/lib/studio-worker`, `001-studio-worker.conf`, ACLs from `allow-worker-tools.sh` | Last: remove the ACLs (`ls -le`), `sudo dscl . -delete /Users/_studio`, delete the home and conf |
-| Benchmark subtitles (keep) | `~/Services/ai-staging/` (`benchmark-20261113/`, `baseline/`, `qwen/`) and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in both trees | Keep until a speech default is chosen |
+| Initial benchmark subtitles (keep) | `~/Services/ai-staging/benchmark-20261113/`, `baseline/`, `qwen/`, and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in these initial test directories | Keep until a speech default is chosen |
+| Same-input comparison evidence | `~/Services/ai-staging/comparison-20261113/`: re-extracted PCM, references, endpoint outputs/errors, source manifest, timings and runtime fingerprints | Keep private for review; do not overwrite previous outcomes |
 
 Deleted with Dante's approval on 2026-11-13: the admin's Hugging Face and uv
 download caches, the worker's uv cache, the duplicate Tdarr download, staging
@@ -376,11 +387,10 @@ venv, benchmark audio, and duplicate scripts. Reusable scripts are in
 separate from Ollama's **retained `qwen3:8b`** language model. The worker's
 Whisper model, service environment and `mlx-whisper` tool are retained.
 
-All 28 subtitle files across the two trees retained their SHA-256 hashes
-through cleanup. To repeat inference benchmarks, re-extract the input audio
-from the original private media; the subtitle-overlap scorer still works on
-the retained outputs. An empty uv cache/lock directory may be recreated by uv
-and is not a leftover model download.
+All 28 initial subtitle files retained their SHA-256 hashes through cleanup.
+The later same-input comparison re-extracted audio into its separate private
+directory above. An empty uv cache/lock directory may be recreated by uv and
+is not a leftover model download.
 
 ### On the homeserver
 
@@ -399,10 +409,9 @@ and is not a leftover model download.
 2. Prune retired SSH keys on the Studio (and the server if retired there too).
 3. Use `home.arpa` for future service integrations. Admin SSH migration is
    complete on the reachable hosts; the MacBook is intentionally unchanged.
-4. Speech: compare the deployed server and Studio stacks on identical episode
-   audio, including AI review of words/meaning against references, not just
-   timing overlap. That review is not audio-grounded proof of translation
-   accuracy. Then decide the Bazarr cutover and how Bazarr reaches the Studio.
+4. Speech: act on the completed comparison before any Bazarr cutover. English
+   remains a proofread fallback candidate; Japanese/Telugu need substantive
+   quality improvements and audio-grounded review, not more overlap scoring.
 5. Ollama: pick a first automation, or remove it.
 6. Tdarr: pursue a secure, validated Mac offload path, keeping the known-unsafe
    shared-controller node disabled during the retry.

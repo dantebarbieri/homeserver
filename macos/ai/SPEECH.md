@@ -11,10 +11,14 @@ for future text automations, not speech recognition. Qwen3-ASR, its aligner
 and SeamlessM4T were comparisons, not selected services; their benchmark
 installations have been removed. No production speech default has been chosen.
 
-The private benchmark subtitles remain on the Studio; benchmark audio and
-duplicate scripts were cleaned up with permission. Re-extract the original
-audio before repeating inference. See the [retained inventory](../DECISIONS.md#on-the-studio)
-and the full-episode results below.
+The initial private benchmark subtitles remain on the Studio; their audio and
+duplicate scripts were cleaned up with permission. The subsequent comparison
+re-extracted audio into a separate private directory. See the
+[retained inventory](../DECISIONS.md#on-the-studio) and the full-episode results below.
+
+See the [same-input server-versus-Studio comparison](COMPARISON.md) for a
+subsequent full-episode agent review of the words, endpoint failures and
+practical per-language readiness, beyond timing-overlap statistics.
 
 Large-v3 was initially chosen because it was already available, supports both
 target languages and direct translation, and had an MLX CLI that could be

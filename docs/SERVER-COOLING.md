@@ -68,11 +68,11 @@ so they do not prove which component made the audible sound.
 The server's `ipmitool` is not installed and the BMC fan RPM could not be read
 without it. The operating system exposes CPU and NVMe temperatures but no fan
 tach readings in hwmon. CPU temperature can rise under `libx265` load without
-the case shell feeling warm. The evidence makes the concurrent CPU encodes a
-strong candidate for CPU or FAN3-controlled case-fan ramping; GPU fans are a
-less likely source in the later snapshot, but the BMC-controlled fan curve and
-the exact fan that spun up remain unverified. No fan settings or workloads
-were changed.
+the case shell feeling warm. Dante considers the FAN3 bank unlikely based on
+the audible sound; the working suspects are the CPU cooler and/or GPU fans.
+The later idle GPU snapshot does not exclude GPU fan ramping during the
+earlier Whisper inference. The exact source remains unverified without
+time-correlated fan readings. No fan settings or workloads were changed.
 
 ## Server Atlas (hardware map)
 
@@ -86,8 +86,9 @@ resolve the unknowns and link manuals. After that, the goal is live sensor data
 
 ## Open items
 
-1. Find the cause of the fan surges under real load: which BMC sensor drives
-   FAN3 and how its fan curve is set.
+1. Identify the ramping fan under real load, correlating CPU-cooler tach and
+   GPU fan readings with workload and temperature. Treat FAN3 as a secondary
+   candidate, not an established source.
 2. NVMe heat: one sensor reached about 78 °C under boot I/O. Measure clearance
    under the GPU before buying heatsinks.
 3. Replace or verify the rear 80 mm Molex fans. FAN4–7 and the HDD power harness
