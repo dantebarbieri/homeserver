@@ -41,6 +41,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   let playing = !reducedMotion.matches, playbackChosen = false;
   let second = 86400, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores", sensor = "all";
   let charts = [];
+  let caseFanPreview = null;
   const cards = new Map(), badges = new Map(), lines = new Map();
   const frame = () => ({ second, profile: settings.profile, provenance: "synthetic" });
   const value = id => demoValue(id, second, settings.profile);
@@ -173,21 +174,38 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       node.querySelector("[data-capacity-used]").textContent = `${used.toFixed(2)} / ${definition.maximum.toFixed(2)} ${definition.unit}`;
       node.querySelector("[data-capacity-free]").textContent = `${(definition.maximum - used).toFixed(2)} ${definition.unit} free · DEMO`;
     }
+    updateBadges();
+    onFanFrame?.({ hubRpm: value("fan-hub"), rearRpm: value("fan-rear1"), provenance: "synthetic" });
+    $("metric-clock").textContent = `${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} simulated`;
+    scheduleLayout();
+  }
+  function updateBadges() {
     for (const [id, node] of badges) {
       const badge = metricBadges.find(b => b.id === id);
-      const readout = badge.ids
+      const metricId = badge.metricId ?? id;
+      let source = metricId.startsWith("fan-rear") ? "ASSUMED" : "DEMO";
+      let readout = badge.ids
         ? `${Math.min(...badge.ids.map(value)).toFixed(0)}–${Math.max(...badge.ids.map(value)).toFixed(0)} °C`
-        : metricNumber(value(id), metrics.get(id).unit);
-      node.textContent = `${badge.label} ${readout} · ${id.startsWith("fan-rear") ? "ASSUMED" : "DEMO"}`;
-      if (id.startsWith("fan-rear")) node.title = "Both Molex rear fans are assumed constant 2000 RPM at the user's request; no tach is measured.";
+        : metricNumber(value(metricId), metrics.get(metricId).unit);
+      if (badge.previewBank && caseFanPreview) {
+        if (caseFanPreview.mode === "snapshot") {
+          readout = `${badge.previewBank === "hub" ? "~" : ""}${metricNumber(caseFanPreview[`${badge.previewBank}Rpm`], "RPM")}`;
+          source = badge.previewBank === "hub" ? "SNAPSHOT" : "ASSUMED";
+        } else {
+          readout = caseFanPreview.mode === "off" ? "No feed" : "Motion study";
+          source = "PREVIEW";
+        }
+      }
+      node.textContent = `${badge.label} ${readout} · ${source}`;
+      node.dataset.source = source.toLowerCase();
+      if (badge.previewBank === "hub") node.title = "One FAN3 hub-return channel shared by both three-fan banks, not six independently measured speeds. Snapshot/manual motion previews override these map readouts only; detail histories remain synthetic.";
+      if (badge.previewBank === "rear") node.title = "Both Molex rear fans are assumed constant 2000 RPM at the user's request; no tach is measured. Manual motion studies are previews only.";
+      if (id === "fan-gpu") node.title = "Synthetic fan-speed percentage, not RPM or three measured physical fans. NVIDIA fan percentages describe intended speed; live channel support on this GPU has not been queried.";
       if (badge.group === "temperatures") {
         const ids = badge.ids ?? [badge.id], hottest = ids.reduce((a, b) => temperatureLevels.indexOf(temperatureLevel(a, value(a))) >= temperatureLevels.indexOf(temperatureLevel(b, value(b))) ? a : b);
         decorateTemperature(node, hottest, value(hottest), node.textContent);
       }
     }
-    onFanFrame?.({ hubRpm: value("fan-hub"), rearRpm: value("fan-rear1"), provenance: "synthetic" });
-    $("metric-clock").textContent = `${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} simulated`;
-    scheduleLayout();
   }
   function fullness(id, compact = false) {
     const node = el("div", { class: "metric-fullness", "data-fullness": id, "data-compact": String(compact) });
@@ -204,7 +222,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     node.style.color = level.color;
     node.dataset.temperatureLevel = level.label.toLowerCase();
     node.textContent = `${level.icon} ${text}`;
-    node.title = `${level.label}. Illustrative component-specific UI band, not a verified vendor alarm threshold. Physical sensor package positions are not established.`;
+    node.title = `${level.label}. Illustrative component-specific UI band, not a verified vendor alarm threshold. ${demoSensors.find(item => item.id === id).location}`;
     node.setAttribute("aria-label", `${text}. ${level.label}. Synthetic temperature; illustrative band.`);
   }
   function temperatureButton(id) {
@@ -278,8 +296,8 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     layout();
   }
   for (const definition of metricBadges) {
-    const selection = definition.ids ? definition.anchor === "nvme-group" ? "nvme" : "hdds" : definition.id;
-    const node = button("", () => openPanel("sensors", { sensor: selection }), { class: "metric-badge", title: "Synthetic channel; * means physical binding is unverified." });
+    const selection = definition.ids ? definition.anchor === "nvme-group" ? "nvme" : "hdds" : definition.metricId ?? definition.id;
+    const node = button("", () => openPanel("sensors", { sensor: selection }), { class: "metric-badge", "data-badge": definition.id, "data-align": definition.align ?? "start", title: "Synthetic channel; * means physical binding is unverified." });
     node.style.setProperty("--metric-color", metricGroups[definition.group].color);
     $("metric-layer").append(node); badges.set(definition.id, node);
   }
@@ -295,7 +313,10 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     for (const definition of metricBadges) {
       const p = point(definition.x, definition.y), node = badges.get(definition.id);
       node.style.left = `${p.x}px`; node.style.top = `${p.y}px`;
-      if (!node.hidden) occupied.push({ x: p.x - 4, y: p.y - 4, width: node.offsetWidth + 8, height: node.offsetHeight + 8 });
+      if (!node.hidden) {
+        const rect = node.getBoundingClientRect();
+        occupied.push({ x: rect.left - bounds.left - 4, y: rect.top - bounds.top - 4, width: rect.width + 8, height: rect.height + 8 });
+      }
     }
     for (const node of document.querySelectorAll('.hardware-part[aria-disabled="false"]:not([data-id="chassis"]):not([data-id="motherboard"]), .connector:not(.out-of-focus)')) {
       const rect = node.getBoundingClientRect();
@@ -493,8 +514,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       body.append(grid, el("div", { class: "metric-storage-layers" }, "LVM snapshot: homeserver-vg = nvme0n1p3 → root + swap. vg_redundant = md0 + nvme1n1p1 → cached /data. nvme1n1 holds cache data/metadata AND ordinary /data extents; /data is not entirely RAID-protected."),
         el("p", { class: "muted compact" }, "Filesystem fullness is logical, not per RAID member. Cache occupancy is an invented runtime used-block count, not the NVMe's filesystem fullness or allocated-LV percentage. Actual cache mode and extent layout still require privileged LVM inspection. Individual SMART temperatures and stable disk identities belong in the future private collector."));
     } else if (activePanel === "gpu") {
-      for (const id of ["gpu-util", "gpu-3d", "gpu-copy", "gpu-encode", "gpu-decode", "gpu-dedicated", "gpu-shared", "gpu-power", "temp-gpu"]) add([id], metrics.get(id).label);
-      body.append(grid, el("p", { class: "muted compact" }, "The summary compares general GPU activity and video encode on one shared 0–100% axis: useful for this server's compute/ML versus transcoding workloads. Engines can overlap; do not sum them. Generic GPU utilization is not 3D-only activity or SM occupancy. Task-Manager-inspired, all synthetic; separate 3D/copy/shared-memory counters may be unavailable on Linux. Shared/host chart scale is not a hardware pool limit."));
+      for (const id of ["gpu-util", "gpu-3d", "gpu-copy", "gpu-encode", "gpu-decode", "gpu-dedicated", "gpu-shared", "gpu-power", "temp-gpu", "fan-gpu"]) add([id], metrics.get(id).label);
+      body.append(grid, el("p", { class: "muted compact" }, "The summary compares general GPU activity and video encode on one shared 0–100% axis: useful for this server's compute/ML versus transcoding workloads. Engines can overlap; do not sum them. Generic GPU utilization is not 3D-only activity or SM occupancy. Task-Manager-inspired, all synthetic; separate 3D/copy/shared-memory counters may be unavailable on Linux. Shared/host chart scale is not a hardware pool limit."),
+        el("p", { class: "muted compact" }, "GPU fan speed is one synthetic percentage channel, not measured RPM or independently bound to the card's three fans. NVIDIA NVML/nvidia-smi can expose intended fan speed as a percentage; this does not prove a fan is physically turning. Actual channel count, RPM support and zero-RPM behavior require a later read-only capability check on this GPU/driver."));
     } else if (activePanel === "network") {
       body.append(select(demoNics.map(id => [id, id]), nic, next => { nic = next; }, "Network interface"));
       add([`net-${nic}-rx`, `net-${nic}-tx`], "Receive / send · separate full-duplex directions");
@@ -509,8 +531,17 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       body.append(select(choices, sensor, next => { sensor = next; }, "Sensor selection"), actions);
       const legend = el("div", { class: "metric-temperature-legend" });
       for (const level of temperatureLevels) { const item = el("span", {}, `${level.icon} ${level.label}`); item.style.color = level.color; legend.append(item); }
-      body.append(legend, el("p", { class: "muted compact" }, "Illustrative, component-specific bands only, not verified vendor limits or an alarm system. Board/LAN package locations are unverified; badges are reference anchors. Every changing value is synthetic. Rear fans use your assumed constant 2000 RPM, without tach. One FAN3 return drives all six front/middle animations under your shared-speed assumption, not six independent measurements. Secondary NVMe channels are illustrative."));
-      for (const definition of [...demoSensors, ...demoFans].filter(item => sensor === "all" || sensor === item.id || sensor === "nvme" && item.id.startsWith("temp-nvme") || sensor === "hdds" && item.id.startsWith("temp-sd") || sensor === "fans" && item.id.startsWith("fan-"))) add([definition.id], definition.label);
+      body.append(legend, el("p", { class: "muted compact" }, "Illustrative, component-specific bands only, not verified vendor limits or an alarm system. Every changing value and every graph is synthetic. Rear fans use your assumed constant 2000 RPM, without tach. One FAN3 return drives both three-fan banks under your shared-speed assumption, not six independent measurements. Snapshot/manual motion previews change the bank badges and artwork, not these demo histories. CPU FAN1 is PSU-side; FAN2 is GPU-side."));
+      const selected = [...demoSensors, ...demoFans].filter(item => sensor === "all" || sensor === item.id || sensor === "nvme" && item.id.startsWith("temp-nvme") || sensor === "hdds" && item.id.startsWith("temp-sd") || sensor === "fans" && item.id.startsWith("fan-"));
+      const locations = [...new Set(selected.filter(item => item.location).map(item => item.location))];
+      if (locations.length) {
+        const notes = el("details", { class: "metric-sensor-locations", ...(sensor !== "all" ? { open: "" } : {}) });
+        notes.append(el("summary", {}, "Sensor locations and limits"));
+        for (const location of locations) notes.append(el("p", {}, location));
+        body.append(notes);
+      }
+      if (selected.some(item => item.id === "fan-gpu")) body.append(el("p", { class: "muted compact" }, "GPU fan percentage is synthetic and unbound to individual physical fans. NVIDIA exposes intended speed percentages on supported devices, not necessarily actual RPM or proof of rotation. Actual channel/RPM support has not been checked."));
+      for (const definition of selected) add([definition.id], definition.label);
       body.append(grid);
     }
     controls(); updateCharts();
@@ -535,12 +566,13 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   controls(); updateVisibility();
   return {
     updateVisibility, layout: scheduleLayout, openPanel, frame,
+    setCaseFanPreview(preview) { caseFanPreview = preview; updateBadges(); scheduleLayout(); },
     panelFor(part) {
       if (!part) return null;
       if (part === "cpu") return "cpu";
       if (part.startsWith("dimm-")) return "memory";
       if (part === "gpu") return "gpu";
-      if (part === "network-ports") return "network";
+      if (part === "network-ports" || part === "lan-controller") return "network";
       if (part === "disk-bays" || part === "hba" || part.startsWith("drive-")) return "storage";
       if (part.includes("fan") || part === "motherboard") return "sensors";
       return null;

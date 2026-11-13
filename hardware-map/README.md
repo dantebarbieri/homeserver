@@ -346,7 +346,12 @@ space before accepting overlap when space is exhausted. GPU/CPU cards get the
 nearby open case space; NVMe and memory cards prefer the right perimeter, and
 HDD charts prefer the left. Saved manual placements remain authoritative.
 Temperature badges stay by their reference
-hardware. The board and LAN sensor's actual package locations remain unverified.
+hardware. CPU FAN1 sits on the PSU-side cooler fan and FAN2 on the GPU-side fan.
+Case fans have one standardized readout per bank (front three, middle three,
+rear pair), without duplicate per-fan numeric captions. Both three-fan badges
+use the same FAN3 channel, not independent measurements. Snapshot/manual motion
+previews update these bank readouts as well as artwork; histories remain
+explicitly synthetic. Hide/show fan speeds also covers the GPU fan percentage.
 Narrow screens and landscape windows up to 1800 px wide dock cards in a
 horizontally scrollable tray instead of crowding the hardware. Hardware filters retain
 only relevant overlays; connector inspection hides the overlay hit targets.
@@ -381,6 +386,28 @@ summed. CPU details include temperature plus FAN1 (PSU side) and FAN2 (GPU side)
 the card compares clock with the rated 3.7 GHz boost ceiling and 3 GHz base,
 not a guaranteed all-core frequency. Network details include the shared onboard
 LAN sensor, not invented per-port temperatures.
+
+Sensor tooltips and detail notes distinguish component references from known
+probe sites. CPU Tctl comes from internal processor sensors, not cooler/air
+temperature, and is not automatically Tdie or the BMC CPU reading
+([Linux k10temp documentation](https://docs.kernel.org/hwmon/k10temp.html)).
+The GPU core reading belongs to GPU silicon. The motherboard MB sensor's
+physical position is unknown; its badge explicitly marks an unknown-site board
+reference. LAN references an original X550 outline near PCIE5/PCIE6 following the
+official motherboard layout, not the RJ45 jacks; the exact BMC LAN sensor
+implementation remains unverified. Each NVMe exposes its own SMART temperature
+information, but composite/secondary channels are not guaranteed located
+controller/NAND probes. Individual HDD SMART temperatures depend on
+drive/controller support. NVMe and HDD badges remain grouped until physical
+socket/bay assignments are verified.
+
+GPU details and a shroud-side badge include one synthetic fan-speed percentage,
+not invented RPM or three independently measured fans. NVIDIA
+[NVML fan queries](https://docs.nvidia.com/deploy/archive/R535/nvml-api/group__nvmlDeviceQueries.html)
+report **intended speed** as a percentage; this does not prove physical rotation.
+The demo uses a 0–100% graph scale; it is not a universal NVML bound.
+Actual fan channel count, RPM support and zero-RPM behavior on this GPU/driver
+still need a later read-only capability check. No server query was made.
 
 Two NVMe cards distinguish root/swap from `/data` cache **and ordinary extents**.
 Both anchor to the M.2 group, without guessing socket assignments. Cache

@@ -118,17 +118,25 @@ for (const id of demoNics) {
   metric(`net-${id}-rx`, "Receive", "Mb/s", 10000, "network");
   metric(`net-${id}-tx`, "Send", "Mb/s", 10000, "network");
 }
+const sensorLocations = {
+  cpu: "CPU: internal processor sensors beneath the cooler, not an air probe. Tctl is a cooling-control reading and must not automatically be equated with Tdie or the BMC CPU channel.",
+  gpu: "GPU: core temperature belongs to the GPU silicon beneath its cooler, not case air.",
+  motherboard: "Motherboard: the physical location of the BMC MB Temp sensor is unknown. This badge is a board reference marker, not a located probe.",
+  "lan-controller": "LAN: the badge references the onboard Intel X550 controller, schematically placed using the official motherboard layout. The BMC Onboard LAN Temp sensor's exact implementation/location is unverified; this is not an RJ45 or per-port temperature.",
+  "nvme-group": "NVMe: each SSD has its own SMART temperature information. Composite temperature need not identify one physical probe; optional secondary channels need vendor interpretation. These secondary channels are illustrative. Linux-device-to-M.2-socket bindings remain unknown, so the badge stays with the two-drive group.",
+  "disk-bays": "HDDs: individual drives can expose internal SMART temperatures where the drive/controller supports them. Exact internal probe positions and Linux-device-to-bay bindings remain unknown; the badge shows a group range rather than assigning temperatures to bays.",
+};
 export const demoSensors = [
   ["temp-cpu", "CPU Tctl", "cpu"],
   ["temp-gpu", "GPU core", "gpu"],
   ["temp-board", "Motherboard", "motherboard"],
-  ["temp-lan", "LAN controller", "network-ports"],
+  ["temp-lan", "LAN controller", "lan-controller"],
   ["temp-nvme0", "nvme0n1 composite · socket unbound", "nvme-group"],
   ["temp-nvme0-secondary", "nvme0n1 secondary · illustrative", "nvme-group"],
   ["temp-nvme1", "nvme1n1 composite · socket unbound", "nvme-group"],
   ["temp-nvme1-secondary", "nvme1n1 secondary · illustrative", "nvme-group"],
   ...demoDisks.filter(disk => disk.kind === "Physical HDD").map(disk => [`temp-${disk.id}`, `${disk.label} · bay unbound`, "disk-bays"]),
-].map(([id, label, anchor]) => ({ id, label, anchor }));
+].map(([id, label, anchor]) => ({ id, label, anchor, location: sensorLocations[anchor] }));
 for (const sensor of demoSensors) metric(sensor.id, sensor.label, "°C", 110, "temperatures", { minimum: 20 });
 export const demoFans = [
   ["fan-cpu1", "CPU FAN1 · PSU side", "cpu"],
@@ -136,8 +144,9 @@ export const demoFans = [
   ["fan-hub", "FAN3 · shared six-fan speed assumption", "fan-hub"],
   ["fan-rear1", "Rear 1 · assumed constant 2000 RPM", "rear-fan-1"],
   ["fan-rear2", "Rear 2 · assumed constant 2000 RPM", "rear-fan-2"],
-].map(([id, label, anchor]) => ({ id, label, anchor }));
-for (const fan of demoFans) metric(fan.id, fan.label, "RPM", 2200, "fans");
+  ["fan-gpu", "GPU fan speed · percent, physical channels unbound", "gpu", "%"],
+].map(([id, label, anchor, unit = "RPM"]) => ({ id, label, anchor, unit }));
+for (const fan of demoFans) metric(fan.id, fan.label, fan.unit, fan.unit === "%" ? 100 : 2200, "fans");
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 const hash = id => [...id].reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 7);
@@ -207,6 +216,7 @@ export function demoValue(id, second, profile = "mixed") {
     return 32 + base * 8 + 5 * wave(60);
   }
   if (id.startsWith("fan-")) {
+    if (id === "fan-gpu") return { idle: 0, mixed: 42, transcode: 68, transfer: 27 }[profile] + (profile === "idle" ? 0 : 7 * wave(35));
     if (id.startsWith("fan-rear")) return 2000;
     return (id === "fan-hub" ? 650 : 850) + base * 900 + 35 * wave(35);
   }
@@ -249,14 +259,16 @@ export const metricCards = [
   { id: "fans", group: "fans", label: "Fan speeds · synthetic", anchor: "fan-hub", x: 440, y: 705, series: ["fan-hub"], footer: [], mobileOnly: true },
 ];
 export const metricBadges = [
-  { id: "temp-cpu", group: "temperatures", label: "CPU", anchor: "cpu", x: 1040, y: 550 },
+  { id: "temp-cpu", group: "temperatures", label: "CPU Tctl", anchor: "cpu", x: 991, y: 480, align: "end" },
   { id: "temp-gpu", group: "temperatures", label: "GPU", anchor: "gpu", x: 1100, y: 195 },
-  { id: "temp-board", group: "temperatures", label: "Board", anchor: "motherboard", x: 820, y: 610 },
-  { id: "temp-lan", group: "temperatures", label: "LAN", anchor: "network-ports", x: 1220, y: 500 },
+  { id: "temp-board", group: "temperatures", label: "Board · site?", anchor: "motherboard", x: 820, y: 610 },
+  { id: "temp-lan", group: "temperatures", label: "X550", anchor: "lan-controller", x: 1310, y: 338, align: "end" },
   { id: "temp-nvme-range", ids: ["temp-nvme0", "temp-nvme1"], group: "temperatures", label: "NVMe group*", anchor: "nvme-group", x: 958, y: 332 },
   { id: "temp-hdd-range", ids: demoDisks.filter(disk => disk.kind === "Physical HDD").map(disk => `temp-${disk.id}`), group: "temperatures", label: "HDD group*", anchor: "disk-bays", x: 185, y: 105 },
-  { id: "fan-cpu1", group: "fans", label: "FAN1", anchor: "cpu", x: 985, y: 590 },
-  { id: "fan-cpu2", group: "fans", label: "FAN2", anchor: "cpu", x: 1120, y: 590 },
-  { id: "fan-hub", group: "fans", label: "6 fans / hub", anchor: "fan-hub", x: 655, y: 482 },
-  { id: "fan-rear1", group: "fans", label: "Rear pair", anchor: "rear-fan-1", x: 1260, y: 630 },
+  { id: "fan-cpu1", group: "fans", label: "FAN1 · PSU", anchor: "cpu", x: 1089.4, y: 536, align: "center" },
+  { id: "fan-cpu2", group: "fans", label: "FAN2 · GPU", anchor: "cpu", x: 1089.4, y: 424, align: "center" },
+  { id: "fan-front-bank", metricId: "fan-hub", previewBank: "hub", group: "fans", label: "Front ×3", anchor: "front-fan-1", x: 107, y: 136, align: "center" },
+  { id: "fan-middle-bank", metricId: "fan-hub", previewBank: "hub", group: "fans", label: "Middle ×3", anchor: "middle-fan-1", x: 487, y: 136, align: "center" },
+  { id: "fan-rear-bank", metricId: "fan-rear1", previewBank: "rear", group: "fans", label: "Rear ×2", anchor: "rear-fan-1", x: 1377, y: 610, align: "end" },
+  { id: "fan-gpu", group: "fans", label: "GPU fans", anchor: "gpu", x: 1275, y: 248, align: "end" },
 ];

@@ -94,6 +94,7 @@ main { width: 100%; }
 .drive-screw { fill: #92958a; }
 .fan-frame { fill: #282e31; stroke: #141c21; stroke-width: 2; }
 .nic-port { fill: #555b56; stroke: #a4aaa0; stroke-width: 1.5; }
+.lan-chip { fill: #24352e; stroke: #a4aaa0; stroke-width: 1.5; }
 .linux-details { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 8px; overflow-wrap: anywhere; }
 .linux-details table { table-layout: fixed; }
 .linux-details th:first-child { width: 38%; }
@@ -288,7 +289,12 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .metric-card-extra { font-size: 8px; line-height: 1.6; display: grid; gap: 5px; margin-top: 3px; color: #9daeba; }
 .metric-extra-field { display: grid; gap: 1px; }
 .metric-card-extra strong { font-size: 10px; font-weight: 500; color: #dce5eb; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.metric-badge { position: absolute; z-index: 2; font-size: 9px; padding: 4px 7px; color: var(--metric-color); background: #111c25f2; border-color: #475252; white-space: nowrap; pointer-events: auto; box-shadow: 0 2px 5px #0004; }
+.metric-badge { position: absolute; z-index: 2; font-size: 9px; padding: 4px 7px; color: var(--metric-color); background: #111c25f2; border-color: #475252; white-space: nowrap; pointer-events: auto; box-shadow: 0 2px 5px #0004; font-variant-numeric: tabular-nums; transform: translateY(-50%); }
+.metric-badge[data-align="center"] { transform: translate(-50%, -50%); }
+.metric-badge[data-align="end"] { transform: translate(-100%, -50%); }
+.metric-sensor-locations { margin: 12px 0; padding: 12px; border: 1px solid #3b4a50; border-radius: 6px; color: #b6cad8; font-size: 12px; line-height: 1.6; }
+.metric-sensor-locations summary { cursor: pointer; color: #dce5eb; }
+.metric-sensor-locations p { margin-top: 10px; }
 .mobile-metric-card { display: none; }
 .performance-chart { position: relative; min-width: 0; border: 1px solid #2c3b48; border-radius: 8px; padding: 12px; background: #101b26; }
 .metric-chart-heading { display: grid; gap: 6px; margin-bottom: 9px; font-size: 11px; color: #acbfce; }

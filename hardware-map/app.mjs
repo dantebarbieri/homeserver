@@ -326,7 +326,7 @@ function renderCaseFanMotion() {
       fan.dataset.rpmSource = index < 6 ? snapshotMode ? "reported-shared-assumption" : "synthetic-shared-assumption" : "assumed-constant";
       const source = index < 6 ? snapshotMode ? "REPORTED ~" : "DEMO " : "ASSUMED ";
       fan.querySelector("title").textContent = `${source}${Math.round(rpm)} RPM. ${index < 6 ? "One hub tach applied to all six by user assumption; not six measured speeds." : "Constant 2000 RPM assumed by the user; no tach."} Artistic speed band, not physical-rate rotation.`;
-      fan.querySelector(".fan-motion-caption").textContent = `${source}${Math.round(rpm)} RPM`;
+      fan.querySelector(".fan-motion-caption").textContent = "";
     } else {
       delete fan.dataset.rpm;
       delete fan.dataset.rpmSource;
@@ -351,6 +351,9 @@ function renderCaseFanMotion() {
   $("compare-fan-motion").setAttribute("aria-pressed", String(fanMotionPreview === "compare"));
   $("clear-fan-motion").setAttribute("aria-pressed", String(dataMode));
   $("snapshot-fan-motion").setAttribute("aria-pressed", String(snapshotMode));
+  metricUI?.setCaseFanPreview(dataMode ? null : snapshotMode
+    ? { mode: "snapshot", hubRpm: readingFor(observedReadings, "FAN3")?.value, rearRpm: 2000 }
+    : { mode: fanMotionPreview === "off" ? "off" : "study" });
   renderComponentMotion();
 }
 
@@ -436,6 +439,14 @@ function renderBoard() {
     network.append(svgElement("text", { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 + 3, class: "hardware-label centered" }, id === "IPMI_LAN1" ? "BMC" : id));
   }
   hardware.append(network);
+  const lan = hardwarePart("lan-controller", "rear-io", "Intel X550 / onboard LAN controller", "Original chip outline near PCIE5/PCIE6 follows the official motherboard layout; position and size are schematic. This is a controller reference, not a verified location for the BMC Onboard LAN Temp sensor package.", [], {
+    model: "Intel X550 · onboard dual-port 10GbE controller", capacity: "Shared controller context, not per-port temperature",
+    status: "Controller identified in official ROMED8-2T manual; exact thermal sensor implementation unverified",
+    note: "The temperature badge references this controller rather than the RJ45 jacks. Physical LAN1/LAN2-to-Linux-interface pairing remains unassigned.",
+  });
+  lan.append(svgElement("rect", { x: 1260, y: 275, width: 42, height: 43, rx: 2, class: "lan-chip part-outline" }));
+  lan.append(svgElement("text", { x: 1281, y: 300, class: "hardware-label centered" }, "X550"));
+  hardware.append(lan);
   const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. User confirms four HDDs with the bottom bay empty in each cage. Individual logical-drive identities remain unassigned.");
   for (let cage = 0; cage < 3; cage += 1) {
     const y = 124 + cage * 196;
