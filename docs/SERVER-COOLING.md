@@ -49,6 +49,31 @@ reseated the power cable, and the array and `/data` came back intact. When
 drives drop after hardware work, check power and data cables before any
 `mdadm` or XFS repair.
 
+## Fan ramp observed during speech comparison, November 13
+
+During the reported fan ramp, a read-only server snapshot found four active
+production Tdarr `libx265 -preset slow` encodes, each using about three CPU
+cores (about 12 cores total). They were already running; neither the speech
+comparison nor the isolated Studio Tdarr session started them. `Tctl` was
+64 °C. Bazarr was not a leading CPU consumer.
+
+The comparison session separately reported that while it ran Whisper on the
+server, GPU utilization reached about 88–90%, Whisper used about one CPU core,
+and Tdarr continued using about 12 CPU cores. In the later snapshot, the GPU
+was 48 °C at 0% utilization, drawing about 23 W, and `nvidia-smi` reported
+0% fan speed. The hottest NVMe reading was 73.85 °C (`Sensor 1`; the device
+identity was not mapped). These observations were taken at different times,
+so they do not prove which component made the audible sound.
+
+The server's `ipmitool` is not installed and the BMC fan RPM could not be read
+without it. The operating system exposes CPU and NVMe temperatures but no fan
+tach readings in hwmon. CPU temperature can rise under `libx265` load without
+the case shell feeling warm. The evidence makes the concurrent CPU encodes a
+strong candidate for CPU or FAN3-controlled case-fan ramping; GPU fans are a
+less likely source in the later snapshot, but the BMC-controlled fan curve and
+the exact fan that spun up remain unverified. No fan settings or workloads
+were changed.
+
 ## Server Atlas (hardware map)
 
 An interactive map of the board, connectors and fans: the static
