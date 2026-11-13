@@ -1,6 +1,7 @@
 # Mac Studio local AI
 
-The Studio can run Whisper with Apple MLX and Ollama natively, not in Colima.
+The Studio runs Whisper with Apple MLX and Ollama natively (MLX needs macOS
+Metal, so they cannot run in a Linux container or VM).
 Nothing here changes the homeserver's existing Whisper endpoint or Bazarr
 settings. Open WebUI is not installed. Whisper large-v3 is a comparison
 baseline, **not an established best model** for the target media. See
@@ -53,8 +54,8 @@ and defaults to one request at a time, one resident model, a four-request
 queue, 4096 context tokens and a five-minute idle unload. These are defaults,
 not a hard RAM cap: API clients can override context and keep-alive and can
 request other locally installed models. Restrict local access and do not send
-large-context or multiple-model workloads while Whisper, two x265 workers and
-the 6 GB Colima VM are active. Monitor memory pressure and adjust workloads
+large-context or multiple-model workloads while Whisper and two x265 workers
+are active. Monitor memory pressure and adjust workloads
 if they compete; no combined-load capacity guarantee is implied.
 
 Pull the 5.2 GB Q4 model once, then check actual structured output:

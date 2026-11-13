@@ -40,11 +40,11 @@ best Mac model or justify copying the server's settings.
 | [Whisper large-v3-turbo](https://github.com/openai/whisper#command-line-usage) | Faster multilingual transcription. | OpenAI explicitly says turbo was **not trained for translation** and may return the source language even when asked to translate. Not a replacement for direct translation. |
 | [Qwen3-ASR 1.7B and aligner](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) | ASR: 30 languages including Hindi, Japanese and English, **not Telugu**. Forced alignment: 11 languages including Japanese and English, **not Telugu**. | [MLX implementation](https://github.com/moona3k/mlx-qwen3-asr) supports SRT; its documented 1.7B fp16 estimate is ~3.4 GB plus the aligner and runtime. It does not directly translate speech. |
 | [SeamlessM4T v2 large](https://github.com/facebookresearch/seamless_communication/blob/main/docs/m4t/README.md#supported-languages) | Telugu and Japanese speech input and English text output, including direct speech-to-text translation. | 2.3B parameters; published model is [CC BY-NC 4.0](https://huggingface.co/facebook/seamless-m4t-v2-large), unlike MIT Whisper. PyTorch MPS ran a short test with CPU fallback enabled; full GPU coverage, memory, long-form segmentation, timing, and real-media quality are not established. Direct output is text, not a finished timestamped SRT. |
-| [Omnilingual ASR](https://huggingface.co/facebook/omniASR-LLM-7B) | ASR includes `tel_Telu`, `jpn_Jpan` and `eng_Latn`; not a speech-translation model. | The LLM 7B card gives ~17 GiB inference memory for 30 seconds in BF16 on an **A100**, not a Mac measurement, and 30 GiB FP32 download. It is a poor first coexistence choice beside 6 GB Colima and other work; Apple acceleration and subtitle alignment remain unverified. |
+| [Omnilingual ASR](https://huggingface.co/facebook/omniASR-LLM-7B) | ASR includes `tel_Telu`, `jpn_Jpan` and `eng_Latn`; not a speech-translation model. | The LLM 7B card gives ~17 GiB inference memory for 30 seconds in BF16 on an **A100**, not a Mac measurement, and 30 GiB FP32 download. It is a poor first coexistence choice beside other work in 36 GB of unified memory; Apple acceleration and subtitle alignment remain unverified. |
 | [AI4Bharat IndicConformer Telugu](https://huggingface.co/ai4bharat/indicconformer_stt_te_hybrid_ctc_rnnt_large) | Telugu ASR only; 120M-parameter encoder, not translation. | Specialized comparison candidate, but its documented NeMo path does not establish Apple GPU, subtitle timing or NTR-film accuracy. |
 | [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | Transcription and word timestamps for 25 European languages including English. | Does not list Telugu or Japanese, and does not provide direct speech translation. |
 
-Unified memory is shared by the OS, GPU, Colima, LLM and video workers. Model
+Unified memory is shared by the OS, GPU, LLM and video workers. Model
 sizes are not hard process-memory ceilings, and no combined-load capacity
 test has been run. Run one bounded speech job at a time; let the Ollama model
 unload when it is not needed, and monitor memory pressure. Avoid installing
@@ -103,6 +103,7 @@ The reference subtitles are not guaranteed verbatim transcripts; their timing
 and phrasing can differ legitimately from speech. A fluent human needs to
 review the content, including names, omissions and hallucinations. Do not
 enable production subtitle generation based on timing overlap or API success.
+The overlap counts come from [`compare_speech.py`](compare_speech.py).
 
 On the same English mono audio, the native Qwen3-ASR 1.7B plus forced aligner
 produced word-bearing output overlapping 615/630 word-bearing reference cues,

@@ -14,7 +14,7 @@ This is a monorepo for a NixOS-based homeserver running 50+ Docker containers. D
 - `recyclarr-configs/` — TRaSH Guides quality profiles for Sonarr/Radarr
 - `production-configs/` — Gitignored dir for production config copies (only `README.md` tracked)
 
-The Mac Studio setup and server cooling work were mostly agent-designed from basic requests. Read `docs/STUDIO-AND-COOLING-DECISIONS.md` before changing them: it marks which choices Dante made, lists simpler alternatives and removal steps, and explicitly allows replacing agent-chosen pieces with better solutions.
+The Mac Studio is set up by hand, not declaratively. Read `macos/DECISIONS.md` before changing it: it separates Dante's intents from agent-chosen implementations (which may be replaced with better solutions), and lists where every piece lives and how to remove it. Update it with any Studio change. Server cooling findings are in `docs/SERVER-COOLING.md`.
 
 ### Production Server
 

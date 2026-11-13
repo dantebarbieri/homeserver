@@ -38,9 +38,9 @@ production-configs/  Gitignored production config copies for debugging
 
 **Mac Studio** is an isolated compute companion for native speech, advisory models,
 and a native CPU/x265 Tdarr node that is currently disabled. See [setup and rollout boundaries](macos/README.md);
-working transport is not production media or subtitle cutover approval. The
-[decision and cleanup log](docs/STUDIO-AND-COOLING-DECISIONS.md) records why each
-piece exists, who chose it, and simpler alternatives.
+working transport is not production media or subtitle cutover approval. Its
+[intents and decisions](macos/DECISIONS.md) record what Dante wants, what an
+agent chose and may be replaced, and where every piece lives.
 
 **Daily auto-update** (04:00): a NixOS systemd timer pulls this repo and runs `docker compose pull && build && up -d`.
 

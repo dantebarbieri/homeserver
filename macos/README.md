@@ -2,21 +2,22 @@
 
 The Studio runs native speech inference, an advisory local model, and a
 **native CPU/x265 Tdarr node that is disabled** (see
-[Operations and rollout gates](#operations-and-rollout-gates)). Colima is a separate, limited Docker
-environment. This setup does not move production Bazarr or authorize Tdarr to
+[Operations and rollout gates](#operations-and-rollout-gates)). Docker (Colima)
+is being removed until a service needs it; see [Docker](DECISIONS.md#docker).
+This setup does not move production Bazarr or authorize Tdarr to
 replace original media.
 
 See [speech setup](ai/README.md), [model comparisons and limitations](ai/SPEECH.md),
-and [Tdarr's storage-authoritative flow](../docker/docs/TDARR.md). The
-[decision and cleanup log](../docs/STUDIO-AND-COOLING-DECISIONS.md) explains which
-choices were Dante's, which were agent defaults, and how to remove each piece.
+and [Tdarr's storage-authoritative flow](../docker/docs/TDARR.md). Start with
+[intents and decisions](DECISIONS.md): it records what Dante wants, which
+pieces an agent chose, and how to remove each piece.
 
 ## Identities and private transport
 
 | Component | Identity / boundary |
 |---|---|
 | Native speech, Ollama, Tdarr, SSH transport | `_studio`, private `/var/lib/studio-worker` home, no admin/wheel/SSH-login access |
-| Mac administrative SSH and Colima | `dante`; never lend this account's private key or Docker socket to `_studio` |
+| Mac administrative SSH | `dante`; never lend this account's private key to `_studio` |
 | Linux SSH transport | `studio-tunnel`, nologin, dedicated key, no shell/PTY/SFTP, reverse/agent/Unix-socket forwarding |
 | Linux SMB account | `studio`; original media read-only, only the dedicated native job cache writable |
 | Linux fixed TCP relays | UID/GID 65534, read-only root, no capabilities, no-new-privileges, no mounts or credentials |
@@ -174,8 +175,3 @@ transport, multi-audio integration, and quality approval before any switch.
 It scopes resolution to the homeserver's DNS; AdGuard provides
 `ai-studio.home.arpa` and `homeserver.home.arpa`. Preserve pinned SSH host keys
 when updating administrative aliases.
-
-Colima runs separately as `dante` with 4 CPUs, 6 GiB RAM and a 60 GiB ARM64 VZ
-disk; its explicit shared directory is `~/Services/docker-shared`. Do not
-mount the worker's credentials, administrator SSH directory or production
-media into that VM.
