@@ -323,7 +323,9 @@ the server.
 |---|---|
 | `macos/admin/` | sshd hardening and dotfiles |
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, Tdarr launcher and plists |
-| `macos/ai/` | Whisper adapter, Ollama and Whisper plists, Bazarr patch, `compare_speech.py`, model evaluation |
+| `macos/install/` | The one-time installers as run on 2026-11-13 (they read from the deleted `~/Services/ai-staging`; the files they staged are in `macos/` and `macos/ai/`) |
+| `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
+| `macos/ai/` | Whisper adapter, Ollama and Whisper plists, Bazarr patch, `compare_speech.py`, `condition_false.py`, model evaluation |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
 | `docker/tdarr/` | Studio flow, its installer and the node restriction script |
 | `nixos/modules/ssh.nix`, `users.nix` | `studio-tunnel` restrictions and the Studio's admin key |
@@ -337,15 +339,20 @@ the server.
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
 | Worker account | `_studio`, `/var/lib/studio-worker`, `001-studio-worker.conf`, ACLs from `allow-worker-tools.sh` | Last: remove the ACLs (`ls -le`), `sudo dscl . -delete /Users/_studio`, delete the home and conf |
-| Benchmark subtitles (keep) | `~/Services/ai-staging/benchmark-20261113/*.srt`, `*.ass` | Keep until a speech default is chosen |
-| Safe to delete | Rest of `~/Services/ai-staging` (1.3 GB: venv, script copies, extracted audio, synthetic probes); `~/Services/tdarr` (400 MB download; the worker has its own copy); `~/.cache/huggingface` (18 GB benchmark copies incl. SeamlessM4T; the service uses the worker's cache); `~/.cache/uv` (4.4 GB); worker `ai-tests/` (Qwen benchmark models) | Not deleted yet; ask Dante |
+| Benchmark subtitles (keep) | `~/Services/ai-staging/` (only `.srt`/`.ass` remain: `benchmark-20261113/`, `baseline/`, `qwen/`); inputs for re-runs in the worker's `ai-tests/benchmark-20261113/` | Keep until a speech default is chosen |
+| Qwen comparison (needs sudo to remove) | Worker `ai-tests/models/` and its `mlx-qwen3-asr` uv tool | `sudo rm -rf /var/lib/studio-worker/ai-tests/models` and `sudo -u _studio env HOME=/var/lib/studio-worker /opt/homebrew/bin/uv tool uninstall mlx-qwen3-asr` |
+
+Deleted with Dante's approval on 2026-11-13 (about 16 GB): the admin's Hugging
+Face and uv caches, the duplicate Tdarr download, and the staging folder's
+venv, audio and script copies (scripts not already in git were moved to
+`macos/install/`, `macos/checks/` and `macos/ai/`).
 
 ### On the homeserver
 
 | Item | Location | Remove |
 |---|---|---|
 | Samba and relays | `studio-media-share`, `studio-transfer-relay`, `studio-tdarr-relay`, started with the private overlay `/srv/docker/data/studio-transfer/compose.studio.yml` (holds the `samba.env` secret) | `docker rm -f` the three, remove their networks, delete `/srv/docker/data/studio-transfer` and the cache dir. A main-file `up --remove-orphans` also removes them |
-| sshd | `/etc/ssh/sshd_config` is a root-owned copy shadowing the Nix symlink, plus a `studio-tunnel` Match block; backups in `/var/backups/studio-transfer/` | Restore the Nix symlink and reload sshd. A NixOS activation from `main` may do this and break the tunnel (it fails closed) |
+| sshd | `/etc/ssh/sshd_config` is a root-owned copy shadowing the Nix symlink, plus a `studio-tunnel` Match block; backups in `/var/backups/studio-transfer/` | Restore the Nix symlink and reload sshd. Once `ssh.nix` with the same Match block is on `main`, a NixOS activation does this and keeps the tunnel; before that, activation drops the block (the tunnel fails closed) |
 | Tunnel account | `studio-tunnel`, `/etc/ssh/studio-transfer-keys` | `userdel`, delete the file, drop it from `users.nix`/`ssh.nix` |
 | Studio admin key | `~/.ssh/authorized_keys`, `users.nix` | Delete the line |
 | Tdarr | `Studio-Native` node, canary library and flow, dedicated API key, snapshots in `/srv/docker/data/tdarr/server/Tdarr/Custom/backups/` (mode 0600; may hold credentials) | Delete in the UI and revoke the key |
@@ -361,6 +368,8 @@ the server.
 5. Ollama: pick a first automation, or remove it.
 6. Tdarr: choose a retry option or abandon it. If abandoned, remove Tdarr, the
    tunnel, mounts, relays and Samba.
-7. Delete the leftover staging files once Dante agrees.
-8. Merge this work to `main` so agents elsewhere can find it; reconcile the
-   server's sshd shadow file and Compose overlay with Nix.
+7. Finish removing Colima, and the Qwen comparison if not needed (both need
+   sudo; see [Docker](#docker) and the table above).
+8. Merge [#205](https://github.com/dantebarbieri/homeserver/pull/205) so agents
+   elsewhere can find this, then check the server's sshd file is the Nix symlink
+   and reconcile the private Compose overlay with `compose.studio.yml`.
