@@ -69,6 +69,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   function chart(ids, title, compact = false) {
     const scale = sharedMetricScale(ids);
     const box = el("article", { class: `performance-chart${compact ? " mini-chart" : ""}` });
+    box.style.setProperty("--metric-series-count", ids.length);
     const header = el("div", { class: "metric-chart-heading" });
     header.append(el("span", {}, title), el("span", { class: "metric-chart-values" }));
     if (ids.length > 1) {
@@ -114,7 +115,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     const container = el("div", { class: "metric-composition" });
     const bar = el("div", { class: "metric-memory-bar", role: "img", "aria-label": "Synthetic memory composition" });
     for (const key of ["apps", "cache", "kernel", "free"]) bar.append(el("span", { "data-memory-part": key }));
-    container.append(bar, el("div", { class: "metric-composition-label" }));
+    const label = el("div", { class: "metric-composition-label" });
+    label.append(el("span", { "data-memory-amount": "" }), el("span", { "data-memory-percent": "" }));
+    container.append(bar, label);
     return container;
   }
   function updateCharts() {
@@ -150,7 +153,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       node.hidden = !settings.groups.temperatures;
       decorateTemperature(node, node.dataset.temperature, value(node.dataset.temperature), metricNumber(value(node.dataset.temperature), "°C"));
     }
-    for (const node of document.querySelectorAll("[data-clock-summary]")) node.textContent = `${value("cpu-clock").toFixed(2)} / ${cpuClockSpecification.boost} GHz boost · ${cpuClockSpecification.base} GHz base`;
+    for (const node of document.querySelectorAll("[data-clock-summary]")) node.textContent = `${value("cpu-clock").toFixed(2)} / ${cpuClockSpecification.boost} GHz boost`;
     const memory = demoMemory(second, settings.profile);
     for (const node of document.querySelectorAll(".metric-composition")) {
       for (const part of node.querySelectorAll("[data-memory-part]")) {
@@ -159,13 +162,15 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
         part.title = `${part.dataset.memoryPart}: ${metricNumber(amount, "GiB")}`;
       }
       node.querySelector(".metric-memory-bar").setAttribute("aria-label", `Synthetic memory: ${Object.entries(memory).filter(([id]) => id !== "used").map(([id, amount]) => `${id} ${metricNumber(amount, "GiB")}`).join(", ")}`);
-      node.querySelector(".metric-composition-label").textContent = `${memory.used.toFixed(1)} / 128 GiB in use · ${(memory.used / 128 * 100).toFixed(1)}%`;
+      node.querySelector("[data-memory-amount]").textContent = `${memory.used.toFixed(1)} / 128 GiB in use`;
+      node.querySelector("[data-memory-percent]").textContent = `${(memory.used / 128 * 100).toFixed(1)}%`;
     }
     for (const node of document.querySelectorAll("[data-fullness]")) {
       const id = node.dataset.fullness, definition = metrics.get(id), used = value(id);
       node.querySelector(".metric-capacity-bar span").style.width = `${used / definition.maximum * 100}%`;
       node.querySelector("[data-capacity-value]").textContent = `${(used / definition.maximum * 100).toFixed(1)}%`;
-      node.querySelector("p").textContent = `${used.toFixed(2)} / ${definition.maximum.toFixed(2)} ${definition.unit} · ${(definition.maximum - used).toFixed(2)} free · DEMO`;
+      node.querySelector("[data-capacity-used]").textContent = `${used.toFixed(2)} / ${definition.maximum.toFixed(2)} ${definition.unit}`;
+      node.querySelector("[data-capacity-free]").textContent = `${(definition.maximum - used).toFixed(2)} free · DEMO`;
     }
     for (const [id, node] of badges) {
       const badge = metricBadges.find(b => b.id === id);
@@ -188,7 +193,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     const heading = el("div", { class: "metric-capacity-heading" });
     heading.append(el("span", {}, metrics.get(id).label), el("strong", { "data-capacity-value": "" }));
     const bar = el("div", { class: "metric-capacity-bar" }); bar.append(el("span"));
-    node.append(heading, bar, el("p"));
+    const detail = el("p");
+    detail.append(el("span", { "data-capacity-used": "" }), el("span", { "data-capacity-free": "" }));
+    node.append(heading, bar, detail);
     return node;
   }
   function decorateTemperature(node, id, reading, text) {
@@ -220,8 +227,10 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     else if (definition.footer.length) {
       const footer = el("div", { class: "metric-card-extra" });
       for (const id of definition.footer) {
-        if (id === "cpu-clock") footer.append(el("strong", { "data-clock-summary": "" }));
-        else footer.append(el("span", {}, `${metrics.get(id).label}: `), el("strong", { "data-metric-value": id }));
+        const field = el("div", { class: "metric-extra-field" });
+        if (id === "cpu-clock") field.append(el("span", {}, `CPU clock · ${cpuClockSpecification.base} GHz base`), el("strong", { "data-clock-summary": "" }));
+        else field.append(el("span", {}, metrics.get(id).label), el("strong", { "data-metric-value": id }));
+        footer.append(field);
       }
       card.append(footer);
     }

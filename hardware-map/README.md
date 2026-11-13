@@ -349,6 +349,10 @@ only relevant overlays; connector inspection hides the overlay hit targets.
 Click a chart title, sensor badge, or a component's performance button for
 detailed graphs in a dismissible dialog.
 
+Changing numbers occupy dedicated rows and fixed series columns, with tabular
+digits and non-wrapping readouts. Capacity, clock and memory summaries keep
+their label/value lines separate so updates do not resize cards or shift plots.
+
 The lab includes CPU totals and 16-core/32-thread views, non-overlapping memory
 composition and swap (including a swap bar on the memory card), physical-disk
 busy time/read/write/latency/queue depth and a twelve-HDD comparison table,
