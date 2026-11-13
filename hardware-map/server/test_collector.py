@@ -71,6 +71,111 @@ class CounterTests(unittest.TestCase):
                 collector.command("smart", name)
 
 
+class PowerAndCacheTests(WorkspaceTest):
+    status = "vg-data: 0 1000 cache 8 10/128 1024 1200/2000 10 20 30 40 2 3 400 1 writeback 2 migration_threshold 2048 smq 0 rw -"
+
+    def test_cache_occupancy_uses_cache_blocks_not_metadata_or_filesystem_blocks(self):
+        state = collector.cache_status(self.status)["vg-data"]
+        self.assertEqual(state["usedBytes"], 600 * 2 ** 20)
+        self.assertEqual(state["totalBytes"], 1000 * 2 ** 20)
+        self.assertEqual(state["dirtyBytes"], 200 * 2 ** 20)
+        self.assertEqual(state["mode"], "writeback")
+        self.assertFalse(state["needsCheck"])
+        self.assertTrue(collector.cache_status(self.status.replace("rw -", "rw needs_check"))["vg-data"]["needsCheck"])
+        for invalid in ("vg-data: 0 100 cache Fail", self.status.replace("1200/2000", "2001/2000"),
+                        self.status.replace(" 400 1 ", " 1400 1 "), self.status + "\n" + self.status,
+                        self.status.split(" smq")[0], self.status.replace("smq 0 rw", "smq 20 rw")):
+            with self.assertRaises(ValueError):
+                collector.cache_status(invalid)
+
+    def test_cache_is_selected_by_data_dependencies_not_first_target(self):
+        caches = collector.cache_status(self.status + "\n" + self.status.replace("vg-data:", "other-cache:"))
+        snapshot = {"nodes": [
+            {"id": "data-filesystem", "parents": [{"id": "dm-7"}]},
+            {"id": "dm-7", "parents": [{"id": "dm-5"}]},
+            {"id": "dm-5", "aliases": ["/dev/mapper/vg-data"], "parents": []},
+        ]}
+        self.assertEqual(collector.data_cache(caches, snapshot)["device"], "vg-data")
+        with self.assertRaises(ValueError):
+            collector.data_cache(caches, {"nodes": []})
+
+    def test_energy_average_zero_wrap_reset_and_long_gap(self):
+        self.assertEqual(collector.package_watts(350000000, 100000000, 5, 1000000000), 50)
+        self.assertEqual(collector.package_watts(100000000, 900000000, 5, 1000000000), 40)
+        self.assertEqual(collector.package_watts(100, 100, 5, 1000), 0)
+        for previous, elapsed in ((None, 5), (500, 5), (100, 0), (100, 60)):
+            self.assertIsNone(collector.package_watts(100, previous, elapsed, 1000))
+        with self.assertRaises(ValueError):
+            collector.package_watts(1100, 100, 5, 1000)
+
+    def test_package_power_excludes_nested_core_energy_and_primes_after_errors(self):
+        now = [1000]
+        self.write("sys/class/powercap/zone-package/name", "package-0")
+        energy = self.write("sys/class/powercap/zone-package/energy_uj", "100000000")
+        self.write("sys/class/powercap/zone-package/max_energy_range_uj", "1000000000")
+        self.write("sys/class/powercap/zone-core/name", "core")
+        self.write("sys/class/powercap/zone-core/energy_uj", "999999999")
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", monotonic=lambda: now[0])
+        self.assertIsNone(instance.package_power())
+        now[0] += 5
+        energy.write_text("350000000")
+        self.assertEqual(instance.package_power(), 50)
+        now[0] += 5
+        energy.write_text("100000000")
+        self.assertIsNone(instance.package_power())
+        now[0] += 5
+        energy.write_text("350000000")
+        self.assertEqual(instance.package_power(), 50)
+        self.write("sys/class/powercap/duplicate/name", "package-0")
+        self.write("sys/class/powercap/duplicate/energy_uj", "350000000")
+        self.write("sys/class/powercap/duplicate/max_energy_range_uj", "1000000000")
+        with self.assertRaises(ValueError):
+            instance.package_power()
+
+    def test_all_packages_need_valid_samples_and_changed_ranges_reprime(self):
+        now = [1000]
+        energies = []
+        for index in range(2):
+            base = f"sys/class/powercap/package-{index}"
+            self.write(base + "/name", f"package-{index}")
+            self.write(base + "/max_energy_range_uj", "1000000000")
+            energies.append(self.write(base + "/energy_uj", "100000000"))
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", monotonic=lambda: now[0])
+        self.assertIsNone(instance.package_power())
+        now[0] += 5
+        for energy in energies:
+            energy.write_text("300000000")
+        self.assertEqual(instance.package_power(), 80)
+        self.write("sys/class/powercap/package-1/max_energy_range_uj", "2000000000")
+        now[0] += 5
+        self.assertIsNone(instance.package_power())
+        energies[1].unlink()
+        with self.assertRaises(OSError):
+            instance.package_power()
+
+    def test_cache_metrics_and_capacity_reach_the_snapshot(self):
+        self.write("sys/class/block/dm-5/dm/name", "vg-data")
+        devices = [{"name": "nvme1n1", "type": "disk", "serial": "SYNTH-CACHE", "children": [
+            {"name": "data", "kname": "dm-5", "type": "lvm", "mountpoints": ["/data"]}]}]
+
+        def runner(source, device=None):
+            if source == "lsblk":
+                return json.dumps({"blockdevices": devices})
+            if source == "lvs":
+                return '{"report":[]}'
+            if source == "cache-status":
+                return self.status
+            raise OSError("Synthetic unavailable source")
+
+        instance = collector.Collector(self.root / "state", self.root / "proc", self.root / "sys", runner=runner)
+        snapshot = instance.collect()
+        self.assertEqual(snapshot["metrics"]["cache-used"], 600 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["metrics"]["cache-dirty"], 200 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["capacities"]["cache-used"], 1000 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["available"]["cache-used"], 400 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["inventory"]["cache"]["mode"], "writeback")
+
+
 class AssignmentTests(WorkspaceTest):
     def disk(self, name, serial, **extra):
         return {"id": name, "serial": serial, "kind": "hdd", **extra}

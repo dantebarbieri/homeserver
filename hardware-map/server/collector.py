@@ -34,6 +34,7 @@ COMMANDS = {
             "temperature.gpu,power.draw,fan.speed", "--format=csv,noheader,nounits"),
     "gpu-engines": ("nvidia-smi", "--query-gpu=utilization.encoder,utilization.decoder",
                     "--format=csv,noheader,nounits"),
+    "cache-status": ("dmsetup", "status", "--target", "cache", "--noflush"),
 }
 DEVICE = re.compile(r"(?:sd[a-z]+|nvme[0-9]+n[0-9]+)\Z")
 
@@ -49,6 +50,89 @@ def number(value):
         return result if math.isfinite(result) else None
     except (ValueError, TypeError):
         return None
+
+
+def cache_status(text):
+    """Parse dm-cache's documented 512-byte-sector status, never its table."""
+    caches = {}
+    for line in text.splitlines():
+        match = re.fullmatch(r"([^:]+):\s+\d+\s+\d+\s+cache\s+(.+)", line.strip())
+        if not match:
+            if line.strip():
+                raise ValueError("Unrecognized dm-cache status")
+            continue
+        name, status = match.groups()
+        fields = status.split()
+        if len(fields) < 12:
+            raise ValueError("Incomplete or failed dm-cache status")
+        metadata_used, metadata_total = map(int, fields[1].split("/"))
+        used, total = map(int, fields[3].split("/"))
+        block_sectors, dirty, feature_count = int(fields[2]), int(fields[10]), int(fields[11])
+        if not (block_sectors > 0 and total > 0 and 0 <= dirty <= used <= total and
+                0 <= metadata_used <= metadata_total and feature_count >= 0 and
+                len(fields) >= 12 + feature_count):
+            raise ValueError("Invalid dm-cache counters")
+        features = fields[12:12 + feature_count]
+        cursor = 12 + feature_count
+        if cursor >= len(fields):
+            raise ValueError("Missing dm-cache policy status")
+        core_count = int(fields[cursor])
+        cursor += 1 + core_count
+        if core_count < 0 or cursor + 1 >= len(fields):
+            raise ValueError("Invalid dm-cache core arguments")
+        policy_count = int(fields[cursor + 1])
+        cursor += 2 + policy_count
+        if policy_count < 0 or cursor >= len(fields) or fields[cursor] not in ("rw", "ro"):
+            raise ValueError("Invalid dm-cache metadata state")
+        metadata_mode = fields[cursor]
+        if name in caches:
+            raise ValueError("Multiple cache segments on one mapper are unsupported")
+        caches[name] = {
+            "device": name, "blockSizeBytes": block_sectors * 512,
+            "usedBlocks": used, "totalBlocks": total, "dirtyBlocks": dirty,
+            "usedBytes": used * block_sectors * 512,
+            "totalBytes": total * block_sectors * 512,
+            "dirtyBytes": dirty * block_sectors * 512,
+            "mode": next((mode for mode in ("passthrough", "writethrough") if mode in features), "writeback"),
+            "metadataMode": metadata_mode,
+            "needsCheck": "needs_check" in fields,
+        }
+    return caches
+
+
+def data_cache(caches, snapshot):
+    nodes = {node["id"]: node for node in snapshot["nodes"]}
+    pending, visited, found = ["data-filesystem"], set(), set()
+    while pending:
+        identity = pending.pop()
+        if identity in visited:
+            continue
+        visited.add(identity)
+        node = nodes.get(identity, {})
+        for alias in node.get("aliases", []):
+            if alias.startswith("/dev/mapper/") and alias[12:] in caches:
+                found.add(alias[12:])
+        pending.extend(parent["id"] for parent in node.get("parents", []))
+    if len(found) != 1:
+        raise ValueError("A unique /data cache target could not be established")
+    return caches[found.pop()]
+
+
+def package_watts(current, previous, elapsed, maximum):
+    if not (0 <= current <= maximum and maximum > 0):
+        raise ValueError("Invalid package energy counter")
+    if previous is None or elapsed <= 0 or elapsed > INTERVAL * 3:
+        return None
+    if not 0 <= previous <= maximum:
+        return None
+    if current < previous:
+        # A reset is not automatically a wrap. Only accept boundary crossings.
+        if previous < maximum * .9 or current > maximum * .1:
+            return None
+        delta = maximum - previous + current
+    else:
+        delta = current - previous
+    return delta / 1e6 / elapsed
 
 
 def command(source, device=None, timeout=8):
@@ -244,10 +328,12 @@ def smart_values(payload):
 
 
 class Collector:
-    def __init__(self, state_dir, proc="/proc", sys="/sys", runner=command, clock=time.time, background=False):
+    def __init__(self, state_dir, proc="/proc", sys="/sys", runner=command, clock=time.time, background=False,
+                 monotonic=time.monotonic):
         self.state_dir = Path(state_dir)
         self.proc, self.sys = Path(proc), Path(sys)
         self.runner, self.clock = runner, clock
+        self.monotonic = monotonic
         self.cache, self.sources, self.previous = {}, {}, {}
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="atlas-read") if background else None
         self.smart_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="atlas-smart") if background else None
@@ -573,9 +659,37 @@ class Collector:
             raise ValueError("SMART device identity changed since inventory; discarding sample")
         return smart_values(payload)
 
+    def package_power(self):
+        samples, labels, active = [], set(), set()
+        now = self.monotonic()
+        for zone in sorted((self.sys / "class" / "powercap").glob("*")):
+            if not (zone / "name").exists():
+                continue
+            label = self.text(zone / "name")
+            if not re.fullmatch(r"package-\d+", label):
+                continue
+            if label in labels:
+                raise ValueError("Duplicate package energy domains")
+            labels.add(label)
+            current = int(self.text(zone / "energy_uj"))
+            maximum = int(self.text(zone / "max_energy_range_uj"))
+            key = "power:" + str(zone.resolve())
+            active.add(key)
+            previous = self.previous.get(key)
+            watts = package_watts(current, previous[1] if previous and previous[2] == maximum else None,
+                                  now - previous[0] if previous else 0, maximum)
+            self.previous[key] = (now, current, maximum)
+            samples.append(watts)
+        for key in list(self.previous):
+            if key.startswith("power:") and key not in active:
+                del self.previous[key]
+        if not samples:
+            raise OSError("No package powercap energy domain")
+        return sum(samples) if all(value is not None for value in samples) else None
+
     def collect(self):
         now = self.clock()
-        metrics = dict.fromkeys(("cpu", "cpu-clock", "cpu-power", "cache-used", "gpu-util",
+        metrics = dict.fromkeys(("cpu", "cpu-clock", "cpu-power", "cache-used", "cache-dirty", "gpu-util",
             "gpu-3d", "gpu-copy", "gpu-encode", "gpu-decode", "gpu-dedicated", "gpu-shared",
             "gpu-power", "temp-cpu", "temp-gpu", "temp-board", "temp-lan", "fan-cpu1",
             "fan-cpu2", "fan-hub", "fan-gpu", "memory-used", "memory-apps", "memory-cache",
@@ -584,10 +698,13 @@ class Collector:
                   "memory-apps is residual other/anonymous memory, not per-process RSS.",
                   "Rear fan 2000 RPM values are ASSUMPTIONS, not measured; FAN3 is one shared six-fan hub reading.",
                   "Optional NVMe secondary is SMART temperature sensor 1; vendor-specific physical meaning is unverified.",
-                  "CPU power, cache occupancy, GPU 3D/copy/shared memory are unavailable (no supported source)."]
+                  "GPU 3D/copy/shared memory remain unavailable (no supported source).",
+                  "CPU package power is an energy-counter-derived interval average, not instantaneous or whole-server power.",
+                  "Cache occupancy is resident cached blocks, not filesystem fullness; a full cache can be normal."]
         metrics.update({"fan-rear1": 2000, "fan-rear2": 2000})
         capacities = dict.fromkeys(("memory-used", "memory-apps", "memory-cache", "memory-kernel",
-                                   "memory-free", "swap", "data-used", "root-used", "gpu-dedicated"))
+                                   "memory-free", "swap", "data-used", "root-used", "gpu-dedicated",
+                                   "cache-used", "cache-dirty"))
         available, channel_keys = dict.fromkeys(("data-used", "root-used")), {}
         inventory = self.refresh("inventory", 60, self.inventory)
         if inventory is None:
@@ -608,6 +725,42 @@ class Collector:
             issues.append("cpu-clock: current cpufreq readings unavailable")
         if not cpu["cores"]:
             issues.append("cpu: actual package/core topology unavailable")
+        try:
+            metrics["cpu-power"] = self.package_power()
+        except (OSError, ValueError) as error:
+            for key in list(self.previous):
+                if key.startswith("power:"):
+                    del self.previous[key]
+            issues.append(f"cpu-power: package energy source unavailable ({type(error).__name__})")
+        if metrics["cpu-power"] is None:
+            issues.append("cpu-power: waiting for two valid package-energy samples; missing/reset intervals are not zero")
+        self.sources["cpu-power"] = {
+            "capturedAt": utc(now) if metrics["cpu-power"] is not None else None,
+            "lastAttempt": utc(now), "expiresAt": utc(now + INTERVAL * 2),
+            "status": "ok" if metrics["cpu-power"] is not None else "unavailable",
+            "note": "RAPL package energy delta / monotonic elapsed time; child core domains are excluded.",
+        }
+        cache_reading = None
+        statuses = self.refresh("cache", INTERVAL, lambda: cache_status(self.runner("cache-status")))
+        if statuses is not None:
+            try:
+                cache_reading = data_cache(statuses, inventory["snapshot"])
+                total = cache_reading["totalBytes"] / TIB
+                metrics["cache-used"] = cache_reading["usedBytes"] / TIB
+                metrics["cache-dirty"] = cache_reading["dirtyBytes"] / TIB
+                capacities.update({"cache-used": total, "cache-dirty": total})
+                available["cache-used"] = total - metrics["cache-used"]
+                if cache_reading["needsCheck"]:
+                    issues.append("cache: kernel reports needs_check; cached metadata requires operator attention")
+                    self.sources["cache"]["status"] = "degraded"
+                if cache_reading["metadataMode"] == "ro":
+                    issues.append("cache: metadata is read-only; operator attention required")
+                    self.sources["cache"]["status"] = "degraded"
+            except ValueError as error:
+                self.sources["cache"]["status"] = "unavailable"
+                issues.append(f"cache-used: {error}")
+        if cache_reading is None:
+            issues.append("cache-used: /data dm-cache status unavailable or pending; no allocation-size substitute")
         try:
             values, totals = memory_values(self.text(self.proc / "meminfo"))
             metrics.update(values)
@@ -747,7 +900,8 @@ class Collector:
         return {"version": 1, "mode": "live", "capturedAt": utc(self.clock()), "intervalSeconds": INTERVAL,
                 "retentionDays": 90, "metrics": metrics, "capacities": capacities, "available": available,
                 "inventory": {"disks": inventory["disks"], "cpu": cpu, "snapshot": inventory["snapshot"],
-                              "lvm": inventory.get("lvm"), "mapping": "provisional", "mappingMethod": "serial-sorted"},
+                              "lvm": inventory.get("lvm"), "cache": cache_reading,
+                              "mapping": "provisional", "mappingMethod": "serial-sorted"},
                 "issues": issues, "channelKeys": channel_keys, "sources": dict(self.sources)}
 
     def write(self, snapshot):

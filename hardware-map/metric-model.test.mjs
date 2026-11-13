@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, chartNumber, temperatureLevel, storageDetails, placeMetricCard } from "./metric-model.mjs";
+import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, storageDetails, placeMetricCard } from "./metric-model.mjs";
 
 test("automatic callouts find clear background beyond nearby candidates without covering hardware", () => {
   const card = { x: 700, y: 80, width: 206, height: 234 };
@@ -104,6 +104,38 @@ test("temperature bands distinguish component contexts and missing sensors", () 
   assert.equal(temperatureLevel("temp-sda", 45).label, "Hot");
   assert.equal(temperatureLevel("temp-gpu", 45).label, "Moderate");
   assert.equal(temperatureLevel("temp-cpu", null).label, "Unavailable");
+});
+
+test("adaptive axes include both traffic series, the selected window and the latest value", () => {
+  const ids = ["net-bond0-rx", "net-bond0-tx"];
+  const scale = windowMetricScale(ids, [[.003, .005, null], [.008, .015, NaN]], [.002, .02]);
+  assert.equal(scale.minimum, 0);
+  assert.equal(scale.maximum, .025);
+  assert.equal(chartNumber(.005, scale), "5 kb/s");
+  assert.equal(chartNumber(.02, scale), "20 kb/s");
+  assert.ok(windowMetricScale(ids, [[.003, 1500], [.008, .015]]).maximum > 1500);
+  assert.ok(windowMetricScale(ids, [[.003, .005], [.008, .015]]).maximum < 1);
+  assert.equal(windowMetricScale(ids, [[0, 0], [0, 0]]).maximum, 1);
+  assert.equal(windowMetricScale(ids, [[null], [NaN]]).adaptive, false);
+  assert.equal(windowMetricScale(ids, [[1], [2]], [], "fixed").maximum, 10000);
+  assert.throws(() => windowMetricScale(ids, [[1], [2]], [], "invalid"));
+});
+
+test("capacity and percentage axes remain truthful while temperatures and latency gain readable ranges", () => {
+  for (const id of ["cpu", "gpu-util", "gpu-dedicated", "memory-used", "data-used", "cache-used"]) {
+    const scale = windowMetricScale([id], [[1, 2]]);
+    assert.equal(scale.minimum, metrics.get(id).minimum);
+    assert.equal(scale.maximum, metrics.get(id).maximum);
+    assert.equal(scale.adaptive, false);
+  }
+  const temp = windowMetricScale(["temp-cpu"], [[48, 53]]);
+  assert.ok(temp.minimum < 48 && temp.minimum > 0);
+  assert.ok(temp.maximum > 53 && temp.maximum < 80);
+  const latency = windowMetricScale(["disk-sda-latency"], [[.05, .1]]);
+  assert.equal(chartNumber(.05, latency), "50 µs");
+  const throughput = windowMetricScale(["disk-sda-read"], [[.00001, .0001]]);
+  assert.equal(chartNumber(.0001, throughput), "100 B/s");
+  assert.equal(chartNumber(0, throughput), "0 B/s");
 });
 
 test("storage details trace root, swap, cache and ordinary extents without losing RAID roles", () => {

@@ -34,9 +34,28 @@ atomic private files under `/var/lib/server-atlas` every five seconds. Slow
 inventory/IPMI refreshes run separately; SMART polls every five minutes with
 `smartctl -n standby` so sleeping disks are not deliberately awakened.
 Per-source timestamps/expiry accompany cached measurements. Unsupported or
-failed readings stay unavailable: GPU 3D/copy/shared memory, package power and
-cache occupancy are not invented. Rear RPM remains an explicit 2000-RPM
+failed readings stay unavailable; GPU 3D/copy/shared memory are not invented.
+Rear RPM remains an explicit 2000-RPM
 assumption; FAN3 remains one shared hub tach, not six measurements.
+
+CPU package power uses the existing read-only
+[powercap energy counters](https://docs.kernel.org/power/powercap/powercap.html):
+microjoule delta divided by monotonic elapsed time. Only package domains count,
+not their nested core domains. The first interval, resets, changed ranges,
+unreadable counters and long sampling gaps remain unavailable. This is average CPU
+package power, not instantaneous power, TDP or whole-server wall draw.
+
+Cache occupancy and dirty data use
+[`dmsetup status --target cache --noflush`](https://docs.kernel.org/admin-guide/device-mapper/cache.html).
+The collector finds the `/data` cache through its actual mapper dependencies,
+and converts block counts using the reported size in 512-byte sectors.
+Resident blocks describe a warmed cache; dirty blocks differ from the origin.
+A nearly full cache is normally useful, unlike a nearly full filesystem.
+Capacity comes from active cache status, not LV allocation size. Metadata
+`needs_check` or read-only state is surfaced for operator attention.
+Neither source changes cache policy, flushes metadata, loads a driver, changes
+power limits or alters device permissions. Upgrading the root collector needs
+sudo; a web-only update cannot activate these new host readings.
 
 The unprivileged, read-only `server-atlas` container serves only allowlisted
 static files and GET/HEAD APIs. It mounts collector state read-only, has no
@@ -449,8 +468,22 @@ aggregation or real retained measurements. A production collector should use
 appropriate downsampling and retention; these synthetic histories need no server.
 
 RX/TX and GPU-activity/encode overlays each share one explicit y-axis and
-consistent displayed units. GPU activity plus encode is the server-oriented
-summary; 3D/copy/decode remain separate detail plots. General GPU utilization
+consistent displayed units. Activity axes default to the peak of all overlaid
+series in the selected window plus the current reading, with zero baseline,
+headroom and rounded limits. Small transfers use kB/s or B/s (and corresponding
+bit units), rather than rounding to zero MB/s. Temperature plots use a padded
+window range. Percentages stay 0–100%; memory, VRAM and storage amounts retain
+their capacity scales, and clocks/fans retain reference scales.
+**Layers → Graph y-axis scaling** switches back to fixed reference axes.
+AUTO/FIXED labels and numeric axes make scale changes explicit; a throughput
+axis ceiling does not claim link capacity. Old layouts default to adaptive
+activity axes without discarding positions or annotations.
+
+The GPU card separates its prominent used/total/percent VRAM allocation and
+capacity-scaled VRAM history from the 0–100% engine activity/encode history.
+Allocated memory can persist while engines are idle; it does not prove that
+the GPU is busy. GPU power appears separately. 3D/copy/decode remain separate
+detail plots. General GPU utilization
 is neither 3D-only activity nor SM occupancy, and different engines must not be
 summed. CPU details include temperature plus FAN1 (PSU side) and FAN2 (GPU side);
 the card compares clock with the rated 3.7 GHz boost ceiling and 3 GHz base,
@@ -481,7 +514,7 @@ still need a later read-only capability check. No server query was made.
 
 Two NVMe cards distinguish root/swap from `/data` cache **and ordinary extents**.
 Both anchor to the M.2 group, without guessing socket assignments. Cache
-occupancy is a synthetic used-block metric, not filesystem fullness or LV
+occupancy is a synthetic used-block metric in this demo, not filesystem fullness or LV
 allocation. Storage details trace the existing snapshot's partitions, mdadm,
 volume groups, internal cache/origin LVs and mounts, preserving spare/member
 roles. Raw HDDs have no individual filesystem-fullness percentage.

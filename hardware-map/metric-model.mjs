@@ -65,11 +65,36 @@ export function sharedMetricScale(ids) {
   if (!definitions.length || definitions.some(definition => !definition) || new Set(definitions.map(definition => definition.unit)).size !== 1) throw new Error("A shared axis needs compatible metric units.");
   return { minimum: Math.min(...definitions.map(d => d.minimum)), maximum: Math.max(...definitions.map(d => d.maximum)), unit: definitions[0].unit };
 }
+function niceCeiling(value) {
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  return [1, 2, 2.5, 5, 10].find(step => step * magnitude >= value) * magnitude;
+}
+export function windowMetricScale(ids, series, current = [], mode = "auto") {
+  const reference = sharedMetricScale(ids);
+  if (!["auto", "fixed"].includes(mode)) throw new Error("Unrecognized axis mode");
+  if (mode === "fixed" || ["%", "GiB", "TiB", "GHz", "RPM"].includes(reference.unit)) return { ...reference, adaptive: false };
+  const samples = [...series.flat(), ...current].filter(Number.isFinite);
+  if (!samples.length) return { ...reference, adaptive: false };
+  if (reference.unit === "°C") {
+    const low = Math.min(...samples), high = Math.max(...samples), padding = Math.max(2, (high - low) * .15);
+    const step = niceCeiling((high - low + padding * 2) / 4);
+    return { minimum: Math.floor((low - padding) / step) * step, maximum: Math.ceil((high + padding) / step) * step, unit: reference.unit, adaptive: true };
+  }
+  const peak = Math.max(0, ...samples);
+  return { minimum: 0, maximum: niceCeiling(peak > 0 ? peak * 1.12 : 1), unit: reference.unit, adaptive: true };
+}
 export function chartNumber(value, scale) {
   if (!Number.isFinite(value)) return "Unavailable";
-  const factor = ["Mb/s", "MB/s"].includes(scale.unit) && scale.maximum >= 1000 ? 1000 : 1;
-  const unit = factor === 1 ? scale.unit : scale.unit === "Mb/s" ? "Gb/s" : "GB/s";
-  return `${(value / factor).toLocaleString("en", { maximumFractionDigits: factor === 1000 ? 3 : unit === "RPM" ? 0 : 1 })}${unit ? ` ${unit}` : ""}`;
+  let factor = 1, unit = scale.unit;
+  if (["Mb/s", "MB/s"].includes(unit)) {
+    const bit = unit === "Mb/s";
+    if (scale.maximum >= 1000) { factor = 1000; unit = bit ? "Gb/s" : "GB/s"; }
+    else if (scale.maximum < .001) { factor = .000001; unit = bit ? "b/s" : "B/s"; }
+    else if (scale.maximum < 1) { factor = .001; unit = bit ? "kb/s" : "kB/s"; }
+  } else if (unit === "ms" && scale.maximum < 1) {
+    factor = .001; unit = "µs";
+  }
+  return `${(value / factor).toLocaleString("en", unit === "RPM" ? { maximumFractionDigits: 0 } : { maximumSignificantDigits: 3 })}${unit ? ` ${unit}` : ""}`;
 }
 export function storageDetails(id) {
   const node = topology.nodes.get(id);
@@ -114,6 +139,7 @@ for (const id of ["array", ...demoDisks.map(disk => disk.id)]) {
 metric("data-used", "/data used", "TiB", 65.51, "storage");
 metric("root-used", "Root filesystem used", "TiB", 1.7, "storage");
 metric("cache-used", "Cache occupancy", "TiB", topology.nodes.get("dm-2").sizeBytes / 2 ** 40, "storage");
+metric("cache-dirty", "Dirty cached data", "TiB", topology.nodes.get("dm-2").sizeBytes / 2 ** 40, "storage");
 for (const id of demoNics) {
   metric(`net-${id}-rx`, "Receive", "Mb/s", 10000, "network");
   metric(`net-${id}-tx`, "Send", "Mb/s", 10000, "network");
@@ -183,6 +209,7 @@ export function demoValue(id, second, profile = "mixed") {
   if (id === "data-used") return 52.3 + .03 * Math.sin(second / 300);
   if (id === "root-used") return 1.08 + .002 * Math.sin(second / 300);
   if (id === "cache-used") return 1.15 + .12 * Math.sin(second / 600);
+  if (id === "cache-dirty") return .03 + .02 * (1 + Math.sin(second / 80));
   if (id.startsWith("gpu-")) {
     const load = { idle: 2, mixed: 43, transcode: 78, transfer: 10 }[profile];
     if (id === "gpu-dedicated") return clamp(1.2 + load * .068 + .2 * wave(38), 0, 8);
@@ -250,7 +277,7 @@ export function metricNumber(value, unit) {
 export const metricCards = [
   { id: "cpu", group: "cpu", label: "EPYC · 16C / 32T", anchor: "cpu", x: 585, y: 535, series: ["cpu"], footer: ["cpu-clock", "cpu-power"] },
   { id: "memory", group: "memory", label: "System memory · 128 GiB", anchor: "dimm-DDR4_A1", x: 1450, y: 480, series: ["memory-used"], footer: ["memory-cache"] },
-  { id: "gpu", group: "gpu", label: "RTX 2070 SUPER", anchor: "gpu", x: 585, y: 130, series: ["gpu-util", "gpu-encode"], footer: ["gpu-dedicated"] },
+  { id: "gpu", group: "gpu", label: "RTX 2070 SUPER", anchor: "gpu", x: 585, y: 130, series: ["gpu-util", "gpu-encode"], footer: ["gpu-power"], fullness: "gpu-dedicated" },
   { id: "storage", group: "storage", label: "HDD set · /data", anchor: "disk-bays", x: -220, y: 300, series: ["disk-array-read", "disk-array-write"], footer: [], fullness: "data-used", device: "array" },
   { id: "nvme-root", group: "storage", label: "nvme0n1 · root + swap", anchor: "nvme-group", x: 1450, y: 0, series: ["disk-nvme0n1-read", "disk-nvme0n1-write"], footer: [], fullness: "root-used", device: "nvme0n1" },
   { id: "nvme", group: "storage", label: "nvme1n1 · /data cache + extents", anchor: "nvme-group", x: 1450, y: 240, series: ["disk-nvme1n1-read", "disk-nvme1n1-write"], footer: [], fullness: "cache-used", device: "nvme1n1" },

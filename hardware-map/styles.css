@@ -316,7 +316,7 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .mini-chart .metric-chart-heading { gap: 3px; font-size: 9px; margin-bottom: 5px; }
 .mini-chart .metric-chart-values { font-size: 12px; }
 .mini-chart svg { height: 38px; }
-.mini-chart .metric-chart-footer { font-size: 8px; margin-top: 4px; }
+.mini-chart .metric-chart-footer { font-size: 8px; margin-top: 4px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metric-tooltip { position: absolute; z-index: 2; left: 0; right: 0; bottom: 25px; padding: 6px 8px; background: #050c13ed; border: 1px solid #617588; border-radius: 4px; font-size: 10px; line-height: 1.5; pointer-events: none; }
 .metric-memory-bar { display: flex; height: 9px; overflow: hidden; border-radius: 3px; background: #263646; }
 .metric-memory-bar span[data-memory-part="apps"], [data-memory-label="apps"]::before { background: #b9a2df; }
