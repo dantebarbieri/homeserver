@@ -374,7 +374,7 @@ input[type="range"] { padding: 0; accent-color: var(--accent); }
 .metrics-popup .toolbar { flex-wrap: wrap; }
 .metrics-popup .toolbar button { font-size: 11px; padding: 7px 10px; }
 @media (max-width: 1200px) and (min-width: 1001px) { .metric-card { width: 176px; padding: 7px; } .metric-card-title { font-size: 9px; } .metric-chart-values { font-size: 11px; } .metric-badge { font-size: 8px; } }
-@media (max-width: 1000px) {
+@media (max-width: 1000px), (max-width: 1800px) and (min-aspect-ratio: 1/1) {
   .metric-layer { top: auto; bottom: 8px; left: 8px; right: 8px; height: 290px; display: flex; align-items: start; gap: 8px; overflow-x: auto; overflow-y: auto; pointer-events: auto; scrollbar-width: thin; }
   .metric-card { position: relative; left: auto !important; top: auto !important; flex: 0 0 220px; }
   .map-scroll { padding-bottom: 297px; }

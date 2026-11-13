@@ -17,6 +17,37 @@ export const cpuClockSpecification = { base: 3, boost: 3.7 };
 export const historyWindows = [60, 120, 300, 900, 1800, 3600, 7200, 21600, 86400];
 export const defaultHistoryWindows = { cpu: 120, gpu: 120, network: 120, memory: 900, storage: 7200, temperatures: 1800, fans: 300 };
 export const historyLabel = seconds => seconds >= 3600 ? `${seconds / 3600}h` : `${seconds / 60}m`;
+export function placeMetricCard(card, viewport, occupied) {
+  const gap = 10;
+  const right = Math.max(gap, viewport.width - card.width - gap);
+  const bottom = Math.max(gap, viewport.height - card.height - gap);
+  const clamp = point => ({ x: Math.max(gap, Math.min(right, point.x)), y: Math.max(gap, Math.min(bottom, point.y)) });
+  const preferred = clamp(card);
+  const overlap = point => occupied.reduce((area, rect) => area +
+    Math.max(0, Math.min(point.x + card.width + gap, rect.x + rect.width) - Math.max(point.x - gap, rect.x)) *
+    Math.max(0, Math.min(point.y + card.height + gap, rect.y + rect.height) - Math.max(point.y - gap, rect.y)), 0);
+  let best = preferred, bestArea = overlap(best), bestDistance = 0;
+  if (!bestArea) return best;
+  function consider(point) {
+    const candidate = clamp(point);
+    const distance = (candidate.x - preferred.x) ** 2 + (candidate.y - preferred.y) ** 2;
+    if (!bestArea && distance >= bestDistance) return;
+    const area = overlap(candidate);
+    if (area < bestArea || area === bestArea && distance < bestDistance) {
+      best = candidate; bestArea = area; bestDistance = distance;
+    }
+  }
+  for (const rect of occupied) {
+    for (const x of [rect.x - card.width - gap, rect.x + rect.width + gap]) {
+      for (const y of [preferred.y, rect.y, rect.y + rect.height - card.height]) consider({ x, y });
+    }
+    for (const y of [rect.y - card.height - gap, rect.y + rect.height + gap]) consider({ x: preferred.x, y });
+  }
+  for (let x = gap; x < right + 32; x += 32) {
+    for (let y = gap; y < bottom + 32; y += 32) consider({ x, y });
+  }
+  return best;
+}
 export const temperatureLevels = [
   { label: "Cold", icon: "❄", color: "#83c9f4" }, { label: "Cool", icon: "◌", color: "#72d3cc" },
   { label: "Moderate", icon: "●", color: "#b5d590" }, { label: "Warm", icon: "☀", color: "#eac26f" },
@@ -208,12 +239,12 @@ export function metricNumber(value, unit) {
 
 export const metricCards = [
   { id: "cpu", group: "cpu", label: "EPYC · 16C / 32T", anchor: "cpu", x: 585, y: 535, series: ["cpu"], footer: ["cpu-clock", "cpu-power"] },
-  { id: "memory", group: "memory", label: "System memory · 128 GiB", anchor: "dimm-DDR4_A1", x: 585, y: 330, series: ["memory-used"], footer: ["memory-cache"] },
+  { id: "memory", group: "memory", label: "System memory · 128 GiB", anchor: "dimm-DDR4_A1", x: 1450, y: 480, series: ["memory-used"], footer: ["memory-cache"] },
   { id: "gpu", group: "gpu", label: "RTX 2070 SUPER", anchor: "gpu", x: 585, y: 130, series: ["gpu-util", "gpu-encode"], footer: ["gpu-dedicated"] },
-  { id: "storage", group: "storage", label: "HDD set · /data", anchor: "disk-bays", x: 180, y: 705, series: ["disk-array-read", "disk-array-write"], footer: [], fullness: "data-used", device: "array" },
-  { id: "nvme-root", group: "storage", label: "nvme0n1 · root + swap", anchor: "nvme-group", x: 850, y: -110, series: ["disk-nvme0n1-read", "disk-nvme0n1-write"], footer: [], fullness: "root-used", device: "nvme0n1" },
-  { id: "nvme", group: "storage", label: "nvme1n1 · /data cache + extents", anchor: "nvme-group", x: 1130, y: -110, series: ["disk-nvme1n1-read", "disk-nvme1n1-write"], footer: [], fullness: "cache-used", device: "nvme1n1" },
-  { id: "network", group: "network", label: "bond0 · 10GbE active-backup", anchor: "network-ports", x: 1100, y: 270, series: ["net-bond0-rx", "net-bond0-tx"], footer: [] },
+  { id: "storage", group: "storage", label: "HDD set · /data", anchor: "disk-bays", x: -220, y: 300, series: ["disk-array-read", "disk-array-write"], footer: [], fullness: "data-used", device: "array" },
+  { id: "nvme-root", group: "storage", label: "nvme0n1 · root + swap", anchor: "nvme-group", x: 1450, y: 0, series: ["disk-nvme0n1-read", "disk-nvme0n1-write"], footer: [], fullness: "root-used", device: "nvme0n1" },
+  { id: "nvme", group: "storage", label: "nvme1n1 · /data cache + extents", anchor: "nvme-group", x: 1450, y: 240, series: ["disk-nvme1n1-read", "disk-nvme1n1-write"], footer: [], fullness: "cache-used", device: "nvme1n1" },
+  { id: "network", group: "network", label: "bond0 · 10GbE active-backup", anchor: "network-ports", x: 585, y: -80, series: ["net-bond0-rx", "net-bond0-tx"], footer: [] },
   { id: "temperatures", group: "temperatures", label: "Component temperatures", anchor: "motherboard", x: 820, y: 660, series: ["temp-cpu", "temp-gpu"], footer: [], mobileOnly: true },
   { id: "fans", group: "fans", label: "Fan speeds · synthetic", anchor: "fan-hub", x: 440, y: 705, series: ["fan-hub"], footer: [], mobileOnly: true },
 ];

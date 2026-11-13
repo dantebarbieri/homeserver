@@ -1,6 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, chartNumber, temperatureLevel, storageDetails } from "./metric-model.mjs";
+import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, chartNumber, temperatureLevel, storageDetails, placeMetricCard } from "./metric-model.mjs";
+
+test("automatic callouts find clear background beyond nearby candidates without covering hardware", () => {
+  const card = { x: 700, y: 80, width: 206, height: 234 };
+  const board = { x: 250, y: 0, width: 700, height: 700 };
+  const position = placeMetricCard(card, { width: 1200, height: 700 }, [board]);
+  assert.ok(position.x + card.width <= board.x - 10 || position.x >= board.x + board.width + 10);
+  assert.ok(position.y >= 10 && position.y + card.height <= 690);
+});
+
+test("automatic callouts preserve clear preferences and avoid other cards", () => {
+  const viewport = { width: 1000, height: 800 }, card = { x: 100, y: 100, width: 206, height: 234 };
+  assert.deepEqual(placeMetricCard(card, viewport, []), { x: 100, y: 100 });
+  const next = placeMetricCard(card, viewport, [card]);
+  assert.ok(next.x >= card.x + card.width + 10 || next.y >= card.y + card.height + 10);
+  assert.deepEqual(placeMetricCard(card, viewport, [card]), next);
+});
 
 test("synthetic channels are deterministic and remain inside their declared graph ranges", () => {
   for (const profile of Object.keys(demoProfiles)) {

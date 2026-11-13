@@ -340,11 +340,15 @@ and fan overlays independently. **All / None** shows or hides all layers;
 temperature controls, individual chart visibility and layout reset. Drag a
 card's grip, or focus it and use arrow keys (Shift moves farther). Charts can
 move anywhere inside the visible background, including beyond the chassis and
-SVG drawing bounds. Default placement avoids fixed sensor badges and case fans,
-moving charts toward edges as needed; temperature badges stay by their reference
+SVG drawing bounds. Default placement avoids installed components, visible
+connector outlines, fixed sensor badges and other cards, using clear perimeter
+space before accepting overlap when space is exhausted. GPU/CPU cards get the
+nearby open case space; NVMe and memory cards prefer the right perimeter, and
+HDD charts prefer the left. Saved manual placements remain authoritative.
+Temperature badges stay by their reference
 hardware. The board and LAN sensor's actual package locations remain unverified.
-Compact
-screens dock cards in a horizontally scrollable tray. Hardware filters retain
+Narrow screens and landscape windows up to 1800 px wide dock cards in a
+horizontally scrollable tray instead of crowding the hardware. Hardware filters retain
 only relevant overlays; connector inspection hides the overlay hit targets.
 Click a chart title, sensor badge, or a component's performance button for
 detailed graphs in a dismissible dialog.

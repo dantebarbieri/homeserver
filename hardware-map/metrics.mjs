@@ -1,4 +1,4 @@
-import { metricGroups, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, chartNumber, temperatureLevel, temperatureLevels, storageDetails, metricTopology, cpuClockSpecification } from "./metric-model.mjs";
+import { metricGroups, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, chartNumber, temperatureLevel, temperatureLevels, storageDetails, metricTopology, cpuClockSpecification, placeMetricCard } from "./metric-model.mjs";
 
 const $ = id => document.getElementById(id);
 function el(tag, attrs = {}, text = "") {
@@ -37,6 +37,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     onError(`Metric preferences could not be loaded: ${error.message}. Default layout is in use; inspection annotations are untouched.`);
   }
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const compactLayout = matchMedia("(max-width: 1000px), (max-width: 1800px) and (min-aspect-ratio: 1/1)");
   let playing = !reducedMotion.matches, playbackChosen = false;
   let second = 86400, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores", sensor = "all";
   let charts = [];
@@ -284,7 +285,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   }
   function layout() {
     const bounds = $("metric-layer").getBoundingClientRect(), matrix = $("board").getScreenCTM();
-    if (!matrix || $("metric-layer").hidden || matchMedia("(max-width: 1000px)").matches) return;
+    if (!matrix || $("metric-layer").hidden || compactLayout.matches) return;
     $("metric-leaders").setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
     const point = (x, y) => {
       const p = new DOMPoint(x, y).matrixTransform(matrix);
@@ -296,11 +297,12 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       node.style.left = `${p.x}px`; node.style.top = `${p.y}px`;
       if (!node.hidden) occupied.push({ x: p.x - 4, y: p.y - 4, width: node.offsetWidth + 8, height: node.offsetHeight + 8 });
     }
-    for (const node of document.querySelectorAll('.hardware-part[data-id*="fan-"][aria-disabled="false"], .hardware-part[data-id="disk-bays"][aria-disabled="false"]')) {
+    for (const node of document.querySelectorAll('.hardware-part[aria-disabled="false"]:not([data-id="chassis"]):not([data-id="motherboard"]), .connector:not(.out-of-focus)')) {
       const rect = node.getBoundingClientRect();
       occupied.push({ x: rect.left - bounds.left, y: rect.top - bounds.top, width: rect.width, height: rect.height });
     }
-    const ordered = [...metricCards].sort((a, b) => Number(Boolean(settings.positions[b.id])) - Number(Boolean(settings.positions[a.id])));
+    const priority = ["gpu", "cpu", "nvme-root", "nvme", "memory", "network", "storage", "temperatures", "fans"];
+    const ordered = [...metricCards].sort((a, b) => Number(Boolean(settings.positions[b.id])) - Number(Boolean(settings.positions[a.id])) || priority.indexOf(a.id) - priority.indexOf(b.id));
     for (const definition of ordered) {
       const node = cards.get(definition.id), position = settings.positions[definition.id] ?? [definition.x, definition.y];
       const line = lines.get(definition.id);
@@ -308,17 +310,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       if (node.hidden || definition.mobileOnly) continue;
       const clampPoint = p => ({ x: Math.max(8, Math.min(bounds.width - node.offsetWidth - 8, p.x)), y: Math.max(8, Math.min(bounds.height - node.offsetHeight - 8, p.y)) });
       let p = clampPoint(point(...position));
-      const overlap = candidate => occupied.reduce((area, rect) => area +
-        Math.max(0, Math.min(candidate.x + node.offsetWidth + 6, rect.x + rect.width) - Math.max(candidate.x - 6, rect.x)) *
-        Math.max(0, Math.min(candidate.y + node.offsetHeight + 6, rect.y + rect.height) - Math.max(candidate.y - 6, rect.y)), 0);
-      if (!settings.positions[definition.id] && overlap(p)) {
-        const preferred = p, candidates = [];
-        for (const dx of [-160, -80, -40, -20, 0, 20, 40, 80, 160]) for (const dy of [-160, -80, -40, -20, 0, 20, 40, 80, 160]) candidates.push(clampPoint({ x: preferred.x + dx, y: preferred.y + dy }));
-        for (let x = 8; x < bounds.width; x += 40) for (const y of [8, bounds.height - node.offsetHeight - 8]) candidates.push(clampPoint({ x, y }));
-        for (let y = 8; y < bounds.height; y += 40) for (const x of [8, bounds.width - node.offsetWidth - 8]) candidates.push(clampPoint({ x, y }));
-        const score = candidate => overlap(candidate) * 100000 + (candidate.x - preferred.x) ** 2 + (candidate.y - preferred.y) ** 2;
-        p = candidates.reduce((best, candidate) => score(candidate) < score(best) ? candidate : best, preferred);
-      }
+      if (!settings.positions[definition.id]) p = placeMetricCard({ ...p, width: node.offsetWidth, height: node.offsetHeight }, bounds, occupied);
       node.style.left = `${p.x}px`; node.style.top = `${p.y}px`;
       occupied.push({ ...p, width: node.offsetWidth, height: node.offsetHeight });
       const anchor = anchorBounds(definition.anchor);
@@ -531,7 +523,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   };
   document.querySelector(".map-scroll").addEventListener("scroll", scheduleLayout, { passive: true });
   new ResizeObserver(scheduleLayout).observe(document.querySelector(".map-panel"));
-  matchMedia("(max-width: 1000px)").addEventListener("change", updateVisibility);
+  compactLayout.addEventListener("change", updateVisibility);
   $("metrics-dialog").addEventListener("close", () => {
     updateCharts();
     if (document.activeElement === document.body || document.activeElement.closest("[hidden]")) $("metrics-button").focus({ preventScroll: true });
