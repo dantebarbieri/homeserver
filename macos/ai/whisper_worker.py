@@ -19,6 +19,12 @@ def read_pcm(path, samples=-1):
     return np.fromfile(path, dtype="<i2", count=samples).astype(np.float32) / 32768.0
 
 
+def decoding_options(mode, language):
+    if mode == "transcribe" and language == "en":
+        return {"condition_on_previous_text": False}
+    return {}
+
+
 def validate_srt(text):
     previous_start = -1
     for index, block in enumerate(re.split(r"\n\s*\n", text.strip()), 1):
@@ -63,7 +69,7 @@ def main():
         audio = read_pcm(path)
         result = mlx_whisper.transcribe(
             audio, path_or_hf_repo=model_path, task=mode,
-            language=language or None, verbose=None,
+            language=language or None, verbose=None, **decoding_options(mode, language),
         )
         output = io.StringIO()
         WriteSRT(".").write_result(result, output)

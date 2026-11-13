@@ -80,19 +80,34 @@ comparisons, not a speaker-reviewed accuracy assessment:
   A full-episode experiment with `condition_on_previous_text=False` eliminated
   the punctuation loop and improved word-bearing reference-cue overlap from
   527/630 to 623/630. It is not proof of semantic correctness, and has not
-  established whether that setting is preferable for other languages.
+  established whether that setting is preferable for other languages. The
+  experimental adapter applies it only to explicitly English transcription.
 * Japanese-to-English translation took 104 seconds for a 22m51s anime episode.
   Dialogue-only reference cues overlapped most generated cues, but overlap
   does not establish translation correctness or exclude hallucinations.
+  Disabling previous-text conditioning took 90.8 seconds and gave word-bearing
+  overlap for 285/309 reference cues versus 304/309 with default conditioning,
+  with different segmentation; this does not justify applying the English
+  setting globally.
 * Telugu-to-English translation took 196 seconds for a 46m36s episode. Its
   SRT contained two reversed-duration cues, one backward start time, and
   repeated identical cues. The adapter now rejects invalid SRT timing rather
-  than returning it as a successful subtitle.
+  than returning it as a successful subtitle. Disabling previous-text
+  conditioning eliminated the timestamp errors, but reduced word-bearing
+  reference-cue overlap from 313/319 to 301/319 and left repeated output,
+  including one cue repeated 45 times without reference overlap.
 
 The reference subtitles are not guaranteed verbatim transcripts; their timing
 and phrasing can differ legitimately from speech. A fluent human needs to
 review the content, including names, omissions and hallucinations. Do not
 enable production subtitle generation based on timing overlap or API success.
+
+On the same English mono audio, the native Qwen3-ASR 1.7B plus forced aligner
+produced word-bearing output overlapping 615/630 word-bearing reference cues,
+without the Whisper punctuation loop, in 54.46 seconds. Its SRT had three
+zero-duration cues, so it also requires timing validation before use. This
+comparison does not establish which transcript is semantically more accurate.
+Qwen does not provide Telugu ASR or direct speech-to-English translation.
 
 ## Before selecting a default
 

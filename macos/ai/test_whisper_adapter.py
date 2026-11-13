@@ -9,7 +9,7 @@ import numpy as np
 from fastapi import HTTPException
 
 import whisper_adapter
-from whisper_worker import read_pcm, validate_srt
+from whisper_worker import decoding_options, read_pcm, validate_srt
 
 
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -135,7 +135,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(error.exception.detail, "Speech worker produced invalid SRT")
 
 
-class PcmTests(unittest.TestCase):
+class WorkerTests(unittest.TestCase):
     def test_signed_little_endian_pcm_normalization(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "audio.pcm")
@@ -143,6 +143,15 @@ class PcmTests(unittest.TestCase):
                 audio.write(b"\x00\x80\x00\x00\xff\x7f")
             np.testing.assert_allclose(read_pcm(path), [-1.0, 0.0, 32767 / 32768])
             self.assertEqual(len(read_pcm(path, 1)), 1)
+
+    def test_decoder_reset_is_limited_to_explicit_english_transcription(self):
+        self.assertEqual(
+            decoding_options("transcribe", "en"), {"condition_on_previous_text": False}
+        )
+        for mode, language in (("translate", "en"), ("translate", "ja"),
+                               ("translate", "te"), ("transcribe", "ja"),
+                               ("transcribe", "")):
+            self.assertEqual(decoding_options(mode, language), {})
 
     def test_srt_timing_is_validated_without_rewriting(self):
         validate_srt(

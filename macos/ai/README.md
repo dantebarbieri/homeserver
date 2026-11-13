@@ -81,6 +81,9 @@ ignored, never opened or logged. Other formats, encoded uploads, arbitrary
 models and arbitrary paths are not supported. The only model is the offline
 large-v3 snapshot at revision `49e6aa286ad60c14352c404340ded53710378a11`.
 It is a baseline to compare, not a promise of Telugu translation quality.
+Explicit English transcription disables previous-text conditioning to reduce
+an observed repetition loop; other tasks retain the upstream default. This can
+change consistency between audio windows and has not been speaker-reviewed.
 
 The daemon listens on `127.0.0.1:9000`, does not authenticate clients, disables
 HTTP access logs, and runs as `_studio`. One job is accepted at a time; busy
