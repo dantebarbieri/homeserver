@@ -247,9 +247,12 @@ padding and are not representative compression evidence.
 No production library, queue or service was changed. The temporary server
 containers, networks, copied media/cache/state and SSH forward were removed;
 production mounts remain and the Studio Tdarr daemon is disabled. Privileged
-removal of the three lab LaunchDaemon plists and the two lab directories/logs
-listed in [`macos/DECISIONS.md`](../../macos/DECISIONS.md#on-the-studio) is
-pending user authorization.
+cleanup removed the three lab LaunchDaemon plists and the two exact lab
+directories/logs listed in [`macos/DECISIONS.md`](../../macos/DECISIONS.md#on-the-studio).
+Preflight found regular files/directories only, with no symlinks or special
+files; post-check confirmed all five targets absent and no lab Tdarr process.
+Production SMB mounts remained mounted, production Tdarr remained disabled,
+and the server's production Tdarr and relay containers remained running.
 
 Authenticated Tdarr API access, node identity, installed plugins and both node
 processes remain trusted. The private-copy boundary prevents shared-cache path

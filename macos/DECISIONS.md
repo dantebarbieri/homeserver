@@ -316,9 +316,12 @@ Sources: [HandBrake encoder comparison](https://handbrake.fr/docs/en/latest/tech
 - The production Studio Tdarr daemon remains disabled. No production service,
   library or queue changed in the lab. Its server containers, networks, copied
   media/cache/state and temporary SSH forward were removed; production mounts
-  remain. The three booted-out lab plists and two lab directories/logs listed
-  under [On the Studio](#on-the-studio) await explicit user-authorized
-  privileged cleanup.
+  remain. After explicit authorization, cleanup removed the three booted-out
+  lab plists and two lab directories/logs listed under [On the Studio](#on-the-studio).
+  Preflight found only regular files/directories (no symlinks or special
+  files); all five targets were absent on post-check, no lab Tdarr process
+  remained, production SMB mounts remained mounted, and production Tdarr
+  services remained running.
 
 **Next:** Dante requested further work toward functioning Mac offload, not
 abandonment or a particular isolation design. Agents may choose a secure
@@ -400,7 +403,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Whisper, Ollama | `com.danteb.studio-whisper`, `com.danteb.studio-ollama`; models in the worker home | `sudo launchctl bootout system/<label>`, delete the plist and worker data |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
-| Isolated Tdarr lab (inactive; cleanup pending) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `com.danteb.tdarr-lab-mount-media.plist`, `com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Jobs were booted out; remove only these exact lab targets after explicit user authorization. Their full current directory contents were not verified after sudo expired |
+| Isolated Tdarr lab (removed 2026-11-13) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-media.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Removed after explicit authorization. Preflight found regular files/directories only, no symlinks or special files; post-check confirmed all five targets absent |
 | Worker account | `_studio`, `/var/lib/studio-worker`, `001-studio-worker.conf`, ACLs from `allow-worker-tools.sh` | Last: remove the ACLs (`ls -le`), `sudo dscl . -delete /Users/_studio`, delete the home and conf |
 | Initial benchmark subtitles (keep) | `~/Services/ai-staging/benchmark-20261113/`, `baseline/`, `qwen/`, and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in these initial test directories | Keep until a speech default is chosen |
 | Same-input comparison evidence | `~/Services/ai-staging/comparison-20261113/`: re-extracted PCM, references, endpoint outputs/errors, source manifest, timings and runtime fingerprints | Keep private for review; do not overwrite previous outcomes |
@@ -445,7 +448,7 @@ is not a leftover model download.
 6. Tdarr: keep production activation blocked. The current unlicensed setup
    ignores custom node tags; staged-job exclusions are also bypassed. Find a
    supported routing design and pass representative savings plus queued/staged
-   decoy tests. Complete the listed inactive lab cleanup after authorization.
+   decoy tests.
 7. Review [#205](https://github.com/dantebarbieri/homeserver/pull/205). The docs
    are already pushed on `dantebarbieri-server-cooling` and accessible from
    other machines; merging makes them available on the default branch. After
