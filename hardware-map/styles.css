@@ -89,6 +89,10 @@ main { width: 100%; }
 .fan-ring { fill: #141d23; stroke: #444c50; }
 .fan-blade { fill: #464d50; stroke: #222b30; stroke-width: 1; }
 .fan-hub { fill: #1d262b; stroke: #565c5d; }
+.fan-face.redux .fan-frame { fill: #8a8b86; stroke: #858782; }
+.fan-face.redux .fan-ring { fill: #494f4f; stroke: #b8b9b7; }
+.fan-face.redux .fan-blade { fill: #717877; stroke: #494f4f; }
+.fan-face.redux .fan-hub { fill: #5d6464; stroke: #7e8282; }
 .psu-body { fill: #242a2c; stroke: #454c4c; stroke-width: 2; }
 .psu-grille { fill: none; stroke: #5a6061; stroke-width: 2; }
 .psu-label { fill: #eeeee3; font-size: 27px; font-weight: 600; }

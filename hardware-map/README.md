@@ -75,7 +75,7 @@ by the file's author, not independent verification. Invalid saved data is not
 silently overwritten; import a valid export to replace it. A change from another
 tab blocks saves until reload to reduce accidental overwrites.
 
-## Cleaning inspection, November 12, 2026
+## Cleaning inspection and fan replacement, November 12–13, 2026
 
 Inventory evidence below was relayed by the coordinating session. Private
 inspection photo sheets were also viewed for this UI revision's colors and
@@ -83,6 +83,11 @@ general case arrangement: green PCB, black/blue slots, silver chassis and
 heatsinks, dark cards/fans/PSU, beige/brown Noctua frames. This does not upgrade
 reported connections to confirmed ones. No photos or identifying serial
 numbers are bundled.
+
+The six front/middle BoK fans were replaced on November 12. Their earlier
+Molex chain A and the empty-FAN3 photo are historical evidence, not the current
+installation. The replacement details are user-installed/reported; the later
+FAN3 tach is a relayed BMC observation, not an independent cable trace.
 
 | Provenance | Observation |
 | --- | --- |
@@ -93,25 +98,33 @@ numbers are bundled.
 | Photo observation, unmeasured | GPU shroud overhangs both M.2 drives with a visible gap estimated as a few mm. This is not a measured clearance or a verified heatsink allowance. Drive outlines in the schematic show orientation, not dimensions or exact shroud extent. |
 | Uncertain photo | GFX_12V1 appears empty, not certainly. It is not marked confirmed-free. |
 | Photo-confirmed | Existing Noctua four-pin plugs on FAN1/FAN2 are seated on pins 1–4. This verifies those particular plugs' in-situ fit, not universal compatibility or physical keying. |
-| Photo-confirmed and user-confirmed | FAN3 is empty/free; FAN3 / LED_FAN3 silkscreen is visible. |
+| Historical photo-confirmed and user-confirmed | FAN3 was empty/free in the cleaning photo; FAN3 / LED_FAN3 silkscreen is visible. Superseded by the subsequently reported hub connection below. |
 | Photo-inferred | FAN4–FAN7 appear empty under the GPU overhang, but are not confirmed-free. No tach reading is not itself proof of a free header. |
 | User-reported | DIMMs in A1/B1/G1/H1; NH-U9 cooler fans on FAN1/FAN2; case USB 3 cable on USB3_3_4. |
 | User-reported | LAN1, LAN2 and BMC LAN connected to the switch; no other rear I/O connections except PSU power. The other rear ports are a logical group, `REAR_OTHER`, not a vendor header identifier. |
-| User-reported wiring, photographed label | Molex chain A: six BoK BDM12025S fans, 120 mm reported, 12 V / 0.10 A per label; three front plus three middle. None use motherboard headers or tach connections. |
+| Historical user-reported wiring, photographed label | Former Molex chain A: six BoK BDM12025S fans, 120 mm reported, 12 V / 0.10 A per label; three front plus three middle. Replaced on November 12; no longer the installed front/middle inventory. |
+| User-installed and reported, November 12 | Six Noctua **NF-P12 redux-1700 PWM**, **120 × 25 mm**, three front plus three middle. Rated maximum **1700 RPM / 0.09 A** per fan; specifications are not measurements. Micro Center SKU 062398. Exact per-position placement remains untraced. Redux light-grey frames/darker cool-grey blades follow the supplied product photo; the beige/brown CPU cooler and the rear pair retain their prior appearance. No vendor photo is bundled. |
+| User-installed and reported | All six redux fans use a **Thermalright ARGB 8 Group Fan HUB/Controller**, Mfr part **ARGB FAN HUB X8**, Micro Center product 710163 / SKU 025247. PSU SATA power; PWM/tach lead on **FAN3**. Hub position, per-port mapping and upstream harness routing remain untraced. The product name does not establish an RGB connection. |
+| Relayed BMC observation | FAN3 is approximately **1100 RPM**; the hub passes back **one tach**, not six individually measured fan speeds. Exact capture time is unavailable; the relay was received November 13. BMC lower alarm is reported as **100 RPM**. No live query or control change was made for this update. |
 | Manufacturer chassis specification + user-confirmed original fans | Molex chain B: two rear **80 mm** BoK fans. The [Rosewill RSV-L4500U manual](https://c1.neweggimages.com/IMAttachment/UserManual/User%20Manual-1741922402096.pdf) specifies rear 80 mm fans, and the user confirms both are factory-original. Width is specification-based, **not photo-measured**. Thickness and exact model remain **UNVERIFIED**; `BDM180255` is only a tentative transcription. Molex wiring and label 12 V / 0.1 A / 2000 RPM are reported; rated RPM is not a measurement, and no tach is connected. |
-| User-reported | HX1000i PSU-side ports used: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA. User suspects one SATA/PATA harness powers all 12 HDDs; upstream routing and splitter topology remain untraced. Two SATA/PATA feed the Molex fan chains. Free: 2 SATA/PATA and 4 PCIe/CPU. These counts do not verify electrical loads or individual internal board-header wiring. |
+| Historical user report + reported fan replacement | HX1000i pre-replacement PSU-side ports used: all motherboard ports, 1 CPU, 1 PCIe and 3 SATA/PATA; two SATA/PATA fed the former Molex chains. Pre-replacement free count: 2 SATA/PATA and 4 PCIe/CPU. The six-fan hub now uses SATA power; the rear pair stays on Molex. Current harness/port allocation is not retraced. User suspects one SATA/PATA harness powers all 12 HDDs; upstream routing and splitter topology remain untraced. These counts do not verify electrical loads or individual internal board-header wiring. |
 | User-reported | The observed case pin header is board-to-case, not a fan connector; its exact designator is unverified. |
 | Photo-inferred | Red/white/green/black flat cable along the lower board edge under the GPU is possibly internal USB 2.0. No specific header, pinout or USB identity is confirmed. |
 | User-confirmed | 12 HDDs is the true installed count; the case has 15 bays, leaving three empty. No drives are being added. Individual bay mapping and the locations of the empty bays remain unknown. |
 
 User-reported occupied headers remain inferred rather than independently
 confirmed unless explicitly user-confirmed. For an unmodified inspection map,
-fan-planning counts show **one confirmed-free header (FAN3), two
-photo-confirmed occupied headers (FAN1/FAN2), and four unverified headers
-(FAN4–FAN7)**. Photo-inferred empty headers do not count as verified free.
-The eight case fans use reported Molex chains, not motherboard headers.
-No new telemetry readings, rear-fan thickness or exact rear-fan model are
-inferred from these observations. HDD splitter topology remains untraced.
+fan-planning counts now show **zero confirmed-free headers, two photo-confirmed
+occupied headers (FAN1/FAN2), and five not independently verified**:
+FAN3 is **user-reported occupied by the hub**, while FAN4–FAN7 remain
+photo-inferred empty. A BMC tach does not independently verify which six fans
+are wired to that hub. Photo-inferred empty headers do not count as verified free.
+The six front/middle fans use reported SATA hub power plus FAN3 control/tach;
+the unchanged rear pair remains unmonitored on Molex chain B.
+Aside from the relayed FAN3 tach, no new telemetry, rear-fan thickness or exact
+rear-fan model is inferred. HDD splitter topology remains untraced.
+Existing saved/imported annotations still take precedence over defaults;
+the latest supplied FAN3 record is visible separately without overwriting notes.
 
 ### Chassis drawing boundaries
 
@@ -153,6 +166,9 @@ preserved unchanged; this is a visual revision, not a schema migration.
   NVMe A/B label logical devices, **not** known M.2 sockets. Secondary NVMe
   sensor labels are retained without assuming which internal part they measure.
   BMC FAN1/FAN2 RPM identifies tach channels, not attached physical fans.
+- The later FAN3 BMC return was relayed on November 13 with no exact capture
+  time. It is shown separately as approximate, not backdated to the November 12
+  sensor snapshot or copied onto six physical fans.
 
 The vendor PDF and any rendered reference images stay in private session
 artifacts, not this public repository. All shipped visuals are original,

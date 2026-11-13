@@ -55,6 +55,16 @@ function formatValue(value) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(value);
 }
 
+function formatReadingValue(reading) {
+  return `${reading.approximate ? "≈ " : ""}${formatValue(reading.value)}`;
+}
+
+function readingLabel(reading) {
+  return mode === "snapshot"
+    ? reading.observedAt ? `Observed ${reading.observedAt}; not live` : "Observed; capture date unavailable, not live"
+    : "Synthetic example";
+}
+
 function connectionFor(id) {
   return inventory.connections[id] ?? emptyConnection();
 }
@@ -210,8 +220,8 @@ function hardwarePart(id, componentId, label, placement, connectorIds = [], extr
   });
 }
 
-function drawFan(parent, x, y, size) {
-  const fan = svgElement("g", { class: "fan-face" });
+function drawFan(parent, x, y, size, redux = false) {
+  const fan = svgElement("g", { class: `fan-face${redux ? " redux" : ""}` });
   fan.append(svgElement("rect", { x, y, width: size, height: size, rx: 5, class: "fan-frame" }));
   fan.append(svgElement("circle", { cx: x + size / 2, cy: y + size / 2, r: size * .43, class: "fan-ring" }));
   for (let angle = 0; angle < 360; angle += 60) {
@@ -289,12 +299,12 @@ function renderBoard() {
   hardware.append(disks);
   for (const [region, x] of [["front", 60], ["middle", 440]]) {
     for (let i = 0; i < 3; i += 1) {
-      const fan = hardwarePart(`${region}-fan-${i + 1}`, "case-fans", `${region === "front" ? "Front" : "Middle"} 120 mm fan ${i + 1} · Molex chain A`, "Bank placement is photo-informed but approximate. Fan faces are unfolded into this view; drawn order is not a cable or airflow trace.");
-      drawFan(fan, x, 159 + i * 196, 94);
+      const fan = hardwarePart(`${region}-fan-${i + 1}`, "case-fans", `${region === "front" ? "Front" : "Middle"} Noctua NF-P12 redux-1700 PWM ${i + 1} · shared FAN3 hub`, "Three front and three middle fans are user-installed/reported. Exact per-position placement and hub-port mapping are untraced. Fan faces are unfolded into this view; drawn order is not a cable or airflow trace.", ["FAN3"]);
+      drawFan(fan, x, 159 + i * 196, 94, true);
       hardware.append(fan);
     }
     hardware.append(svgElement("text", { x, y: 112, class: "scene-heading" }, region === "front" ? "3 FRONT" : "3 MIDDLE"));
-    hardware.append(svgElement("text", { x, y: 716, class: "scene-note" }, "MOLEX A"));
+    hardware.append(svgElement("text", { x, y: 716, class: "scene-note" }, "HUB / FAN3"));
   }
 
   const psu = hardwarePart("psu", "psu", "Corsair HX1000i", "Rear PSU region is photo-informed. Size, mounting offsets and clearance are approximate; modular port counts do not verify cable routing.");
@@ -430,7 +440,7 @@ function renderComponentDetails() {
   $("component-placement").textContent = part.placement;
   const reading = part.readingId ? readingFor(currentReadings(), part.readingId) : null;
   $("component-reading").textContent = reading
-    ? `${mode === "snapshot" ? `Observed ${snapshotDate}; not live` : "Synthetic example"}: ${formatValue(reading.value)} ${reading.unit}. ${reading.source}.`
+    ? `${readingLabel(reading)}: ${formatReadingValue(reading)} ${reading.unit}. ${reading.source}.`
     : "No sensor reading assigned to this physical component. Ratings, reported capacities and snapshot telemetry are separate evidence.";
   $("component-connectors").replaceChildren();
   for (const id of part.connectorIds) {
@@ -440,7 +450,7 @@ function renderComponentDetails() {
   }
   if (!part.connectorIds.length) {
     $("component-connectors").append(element("p", { class: "compact muted" },
-      part.componentId === "case-fans" || part.componentId === "rear-fans"
+      part.componentId === "rear-fans"
         ? "Reported PSU/Molex power only; no motherboard tach or control connection."
         : "No specific board connector is assigned here. Do not infer a cable route from placement."));
   }
@@ -491,7 +501,7 @@ function renderSelection() {
   $("detail-source").textContent = connector.source;
   const reading = readingFor(currentReadings(), selectedId);
   $("detail-reading").textContent = reading
-    ? `${mode === "snapshot" ? `Observed ${snapshotDate}; not live` : "Synthetic example"}: ${formatValue(reading.value)} ${reading.unit}. ${reading.source}.`
+    ? `${readingLabel(reading)}: ${formatReadingValue(reading)} ${reading.unit}. ${reading.source}.`
     : connector.category === "Fans"
       ? "No reading in this dataset. This does not prove that the header is empty or that a fan is stopped."
       : "Physical cable / slot assignment is separate from the reported installed inventory.";
@@ -659,21 +669,21 @@ function renderTelemetry() {
   $("synthetic-mode").setAttribute("aria-pressed", String(mode === "synthetic"));
   $("telemetry-warning").classList.toggle("synthetic", mode === "synthetic");
   $("telemetry-warning").textContent = mode === "snapshot"
-    ? `OBSERVED SNAPSHOT · ${snapshotDate} · Not live and not current. Values were read at separate moments; no exact synchronized capture time is available. GPU / HDD temperatures and case air remain unknown.`
+    ? `OBSERVED SNAPSHOTS · ${snapshotDate} readings plus a later relayed FAN3 hub tach with unknown capture time. Not live or synchronized. GPU / HDD temperatures and case air remain unknown.`
     : "SYNTHETIC DEMO · Every displayed sensor value below is invented. The air overlay is an estimated interpolation of invented probes, not a measurement.";
   $("reading-grid").replaceChildren();
   for (const reading of currentReadings()) {
     const card = element("article", { class: `reading-card ${reading.provenance}` });
     card.append(element("h4", {}, reading.label));
-    const value = element("div", { class: "reading-value" }, formatValue(reading.value));
+    const value = element("div", { class: "reading-value" }, formatReadingValue(reading));
     value.append(element("small", {}, reading.unit));
-    card.append(value, element("div", { class: "reading-provenance" }, mode === "snapshot" ? `OBSERVED / ${reading.observedAt}` : "SYNTHETIC EXAMPLE"));
+    card.append(value, element("div", { class: "reading-provenance" }, readingLabel(reading)));
     card.append(element("p", {}, reading.source));
     $("reading-grid").append(card);
   }
   const unknown = element("article", { class: "reading-card" });
   unknown.append(element("h4", {}, "Unobserved channels"), element("div", { class: "reading-value" }, "Unknown"));
-  unknown.append(element("p", {}, "GPU and HDD temperatures; FAN3–FAN7 and all secondary tach channels. Missing data is not zero."));
+  unknown.append(element("p", {}, "GPU and HDD temperatures; FAN4–FAN7 and all secondary tach channels. FAN3 returns one hub tach, not six individual fan speeds. Missing data is not zero."));
   $("reading-grid").append(unknown);
   renderAir();
   // Updating mode must not replace unsaved connection form fields.

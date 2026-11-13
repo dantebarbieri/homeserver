@@ -46,7 +46,7 @@ test("a connection edit preserves other connectors and retains evidence on expor
   assert.equal(first.connections.FAN2, undefined);
 });
 
-test("inspection defaults distinguish confirmed fan availability from photo-inferred empty headers", () => {
+test("inspection defaults distinguish cooler plugs, reported FAN3 hub and inferred empty headers", () => {
   const document = withInspectionDefaults(emptyDocument());
   for (const id of ["M2_1", "M2_2", "SATA_0_3", "SATA_4_7", "FAN1", "FAN2"]) {
     assert.equal(document.connections[id].confidence, "confirmed");
@@ -58,9 +58,9 @@ test("inspection defaults distinguish confirmed fan availability from photo-infe
     assert.equal(document.connections[id].confidence, "inferred");
     assert.equal(document.connections[id].occupancy, "occupied");
   }
-  assert.equal(document.connections.FAN3.confidence, "confirmed");
-  assert.equal(document.connections.FAN3.occupancy, "free");
-  assert.equal(document.connections.FAN3.provenance, "photo-confirmed");
+  assert.equal(document.connections.FAN3.confidence, "inferred");
+  assert.equal(document.connections.FAN3.occupancy, "occupied");
+  assert.equal(document.connections.FAN3.provenance, "user-reported");
   for (const id of ["FAN4", "FAN5", "FAN6", "FAN7"]) {
     assert.equal(document.connections[id].confidence, "inferred");
     assert.equal(document.connections[id].occupancy, "free");
@@ -68,16 +68,22 @@ test("inspection defaults distinguish confirmed fan availability from photo-infe
   }
   assert.equal(document.connections.GFX_12V1.provenance, "photo-uncertain");
   assert.equal(document.connections.GFX_12V1.confidence, "inferred");
-  assert.deepEqual(fanAvailability(document), { free: 1, occupied: 2, unverified: 4 });
+  assert.deepEqual(fanAvailability(document), { free: 0, occupied: 2, unverified: 5 });
   assert.deepEqual(parseDocument(serializeDocument(document)), document);
 });
 
 test("adding inspection defaults never overwrites existing user annotations, including explicit unknowns", () => {
   let document = updateConnection(emptyDocument(), "FAN1", annotation, now);
   document = updateConnection(document, "M2_1", emptyConnection(), now);
+  document = updateConnection(document, "FAN3", {
+    ...emptyConnection(), confidence: "confirmed", occupancy: "free", provenance: "photo-confirmed",
+    evidence: "Earlier empty-header photo; preserved local annotation predates the replacement.",
+  }, now);
   const combined = withInspectionDefaults(document);
   assert.deepEqual(combined.connections.FAN1, document.connections.FAN1);
   assert.deepEqual(combined.connections.M2_1, document.connections.M2_1);
+  assert.deepEqual(combined.connections.FAN3, document.connections.FAN3);
+  assert.equal(inspectionConnections.FAN3.occupancy, "occupied");
   assert.equal(combined.connections.M2_2.provenance, "photo-confirmed");
   assert.equal(inspectionConnections.FAN1.provenance, "photo-confirmed");
   assert.equal(inspectionConnections.M2_1.confidence, "confirmed");
@@ -169,10 +175,16 @@ test("browser persistence restores notes and surfaces storage/corruption failure
 
 test("observed component readings never produce an air estimate or imply a missing RPM of zero", () => {
   assert.equal(interpolateAir(observedReadings, 0.5, "snapshot"), null);
-  assert.equal(readingFor(observedReadings, "FAN3"), null);
+  assert.equal(readingFor(observedReadings, "FAN4"), null);
+  assert.equal(readingFor(observedReadings, "FAN3").provenance, "snapshot");
   assert.equal(readingFor(observedReadings, "FAN1").provenance, "snapshot");
   assert.equal(readingFor(observedReadings, "rear-fans"), null);
   assert.equal(readingFor(observedReadings, "case-fans"), null);
+  for (const bank of ["front", "middle"]) {
+    for (let number = 1; number <= 3; number += 1) {
+      assert.equal(readingFor(observedReadings, `${bank}-fan-${number}`), null);
+    }
+  }
 });
 
 test("synthetic air LERP has exact endpoints, midpoint and piecewise behavior", () => {
