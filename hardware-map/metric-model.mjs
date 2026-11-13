@@ -49,16 +49,59 @@ export function placeMetricCard(card, viewport, occupied) {
   return best;
 }
 export const temperatureLevels = [
-  { label: "Cold", icon: "❄", color: "#83c9f4" }, { label: "Cool", icon: "◌", color: "#72d3cc" },
-  { label: "Moderate", icon: "●", color: "#b5d590" }, { label: "Warm", icon: "☀", color: "#eac26f" },
+  { label: "Cold", icon: "↓", color: "#83c9f4" }, { label: "Cool", icon: "◌", color: "#72d3cc" },
+  { label: "Moderate", icon: "●", color: "#b5d590" }, { label: "Warm", icon: "♨", color: "#eac26f" },
   { label: "Hot", icon: "▲", color: "#ee936b" }, { label: "Dangerous", icon: "⚠", color: "#ff717f" },
 ];
 export function temperatureLevel(id, value) {
   if (!Number.isFinite(value)) return { label: "Unavailable", icon: "?", color: "#93aab9" };
-  const boundaries = id.startsWith("temp-sd") ? [20, 30, 40, 45, 55]
-    : id.includes("secondary") ? [30, 50, 70, 85, 100]
-      : id === "temp-lan" ? [30, 45, 65, 80, 95] : [25, 40, 55, 70, 85];
+  const { boundaries } = temperatureProfile(id);
   return temperatureLevels[boundaries.filter(boundary => value >= boundary).length];
+}
+export function temperatureProfile(id) {
+  if (id.startsWith("temp-sd") || id === "temp-hdd-average") return { label: "HDD", boundaries: [20, 30, 40, 45, 55] };
+  if (id.includes("secondary")) return { label: "NVMe secondary · vendor meaning unverified", boundaries: [30, 50, 70, 85, 100] };
+  if (id === "temp-lan") return { label: "LAN controller", boundaries: [30, 45, 65, 80, 95] };
+  const label = id === "temp-cpu" ? "CPU Tctl" : id === "temp-gpu" ? "GPU core" : id.startsWith("temp-nvme") ? "NVMe composite" : "Motherboard";
+  return { label, boundaries: [25, 40, 55, 70, 85] };
+}
+export function temperatureStops(id, minimum, maximum) {
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || maximum <= minimum) throw new Error("Invalid temperature color bounds");
+  const stops = [{ offset: 0, color: temperatureLevel(id, maximum).color }];
+  const boundaries = temperatureProfile(id).boundaries;
+  for (let index = boundaries.length - 1; index >= 0; index--) {
+    const boundary = boundaries[index];
+    if (boundary <= minimum || boundary > maximum) continue;
+    const offset = (maximum - boundary) / (maximum - minimum);
+    stops.push({ offset, color: temperatureLevels[index + 1].color }, { offset, color: temperatureLevels[index].color });
+  }
+  stops.push({ offset: 1, color: temperatureLevel(id, minimum).color });
+  return stops;
+}
+export function temperatureAverage(values) {
+  const measured = values.filter(Number.isFinite);
+  return { value: measured.length ? measured.reduce((sum, value) => sum + value, 0) / measured.length : null, count: measured.length, total: values.length };
+}
+export function performanceContext(part, binding) {
+  if (!part) return null;
+  if (part === "cpu") return { panel: "cpu", series: [["cpu"], ["cpu-clock"], ["cpu-power"], ["temp-cpu"], ["fan-cpu1", "fan-cpu2"]] };
+  if (part.startsWith("dimm-")) return { panel: "memory", series: [["memory-used"], ["memory-cache"], ["swap"]] };
+  if (part === "gpu") return { panel: "gpu", series: [["gpu-util", "gpu-encode"], ["gpu-dedicated"], ["temp-gpu"], ["fan-gpu"]] };
+  if (["network-ports", "lan-controller"].includes(part)) return { panel: "network", series: [["net-bond0-rx", "net-bond0-tx"], ["temp-lan"]] };
+  if (part.startsWith("drive-")) {
+    if (!binding) return { panel: "storage", disk: "array", series: [], unbound: true };
+    const nvme = binding.match(/^nvme(\d+)n\d+$/);
+    return { panel: "storage", disk: binding, series: [[`disk-${binding}-read`, `disk-${binding}-write`], [`disk-${binding}-active`],
+      ...[nvme ? `temp-nvme${nvme[1]}` : `temp-${binding}`, ...(nvme ? [`temp-nvme${nvme[1]}-secondary`] : [])].map(id => [id])] };
+  }
+  if (part === "disk-bays" || part === "hba") return { panel: "storage", disk: "array", series: [["disk-array-read", "disk-array-write"], ["temp-hdd-average"]] };
+  if (part.startsWith("rear-fan-")) {
+    const sensor = `fan-rear${part.slice(-1)}`;
+    return { panel: "sensors", sensor, series: [[sensor]] };
+  }
+  if (part.includes("fan")) return { panel: "sensors", sensor: "fan-hub", series: [["fan-hub"]] };
+  if (part === "motherboard") return { panel: "sensors", sensor: "temp-board", series: [["temp-board"], ["temp-lan"]] };
+  return null;
 }
 export function sharedMetricScale(ids) {
   const definitions = ids.map(id => metrics.get(id));
@@ -157,12 +200,13 @@ export const demoSensors = [
   ["temp-gpu", "GPU core", "gpu"],
   ["temp-board", "Motherboard", "motherboard"],
   ["temp-lan", "LAN controller", "lan-controller"],
+  ["temp-hdd-average", "HDD mean temperature", "disk-bays"],
   ["temp-nvme0", "nvme0n1 composite · socket unbound", "nvme-group"],
   ["temp-nvme0-secondary", "nvme0n1 secondary · illustrative", "nvme-group"],
   ["temp-nvme1", "nvme1n1 composite · socket unbound", "nvme-group"],
   ["temp-nvme1-secondary", "nvme1n1 secondary · illustrative", "nvme-group"],
   ...demoDisks.filter(disk => disk.kind === "Physical HDD").map(disk => [`temp-${disk.id}`, `${disk.label} · bay unbound`, "disk-bays"]),
-].map(([id, label, anchor]) => ({ id, label, anchor, location: sensorLocations[anchor] }));
+].map(([id, label, anchor]) => ({ id, label, anchor, location: id === "temp-hdd-average" ? "Derived arithmetic mean of reporting HDD SMART temperatures, not an additional physical sensor. Missing sensors are excluded; a mean can hide a hot member." : sensorLocations[anchor] }));
 for (const sensor of demoSensors) metric(sensor.id, sensor.label, "°C", 110, "temperatures", { minimum: 20 });
 export const demoFans = [
   ["fan-cpu1", "CPU FAN1 · PSU side", "cpu"],
@@ -234,6 +278,7 @@ export function demoValue(id, second, profile = "mixed") {
     const load = standby ? .0003 : { idle: .002, mixed: .15, transcode: .08, transfer: .72 }[profile];
     return load * 10000 * (.4 + .6 * wave(15)) * (id.endsWith("-tx") ? .48 : 1);
   }
+  if (id === "temp-hdd-average") return temperatureAverage(demoDisks.filter(disk => disk.kind === "Physical HDD").map(disk => demoValue(`temp-${disk.id}`, second, profile))).value;
   if (id.startsWith("temp-")) {
     if (id === "temp-cpu") return 41 + base * 43 + 2 * wave(38);
     if (id === "temp-gpu") return 39 + { idle: 2, mixed: 19, transcode: 33, transfer: 7 }[profile] + 2 * wave(40);

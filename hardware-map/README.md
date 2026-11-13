@@ -494,6 +494,24 @@ the card compares clock with the rated 3.7 GHz boost ceiling and 3 GHz base,
 not a guaranteed all-core frequency. Network details include the shared onboard
 LAN sensor, not invented per-port temperatures.
 
+CPU details include CPU temperature and both cooler tach readings; GPU details
+include core temperature and intended fan percentage; individual storage
+details include each device's available SMART temperatures. These contextual
+graphs remain visible when map/sensor-browser temperature or fan layers are
+hidden. The sensor browser uses pressed-state toggles with explicit shown/hidden
+labels. LIVE pages hide synthetic scenario/playback controls and the demo-only
+disclaimer. GPU allocation guidance is a keyboard-focusable/hover `?` tooltip.
+
+Hardware popups embed a subset of the same graph components and a saved
+per-family history selector. Disk popups use the current collected logical
+binding, never guessed controller/socket numbering; an unbound slot has no
+invented per-drive graphs. Their full-performance link retains that context.
+The HDD overview adds an arithmetic mean and current reporting-sensor count,
+excluding unavailable readings rather than treating them as zero. Historical
+means are computed from the existing per-disk history, not a new sensor or
+temporally smoothed measurement. Changing coverage can change the mean; keep
+individual temperatures visible when looking for hot spots.
+
 Sensor tooltips and detail notes distinguish component references from known
 probe sites. CPU Tctl comes from internal processor sensors, not cooler/air
 temperature, and is not automatically Tdie or the BMC CPU reading
@@ -524,8 +542,21 @@ volume groups, internal cache/origin LVs and mounts, preserving spare/member
 roles. Raw HDDs have no individual filesystem-fullness percentage.
 
 Temperature badges/plots use icons and colors for cold, cool, moderate, warm,
-hot and dangerous. These component-specific **illustrative UI bands are not
+hot and dangerous. Temperature traces change color at the same boundaries as
+badges, including historical threshold crossings, without bridging data gaps.
+Cold uses a downward arrow and warm uses a distinct heat symbol.
+Each detailed temperature graph has expandable numeric ranges for its sensor
+kind: HDD, CPU Tctl, GPU core, motherboard, LAN, NVMe composite or NVMe secondary.
+Some kinds share default bands; these are not discovered per-model limits.
+The ranges live in `temperatureProfile()` and apply consistently to traces,
+badges and legends. These component-specific **illustrative UI bands are not
 verified vendor operating limits, calibrated warnings or a safety system**.
+
+Fan graphs keep their native units. RPM divided by rated maximum is not PWM
+duty or NVIDIA intended-speed percent. Without a verified fan-specific
+relationship, two interchangeable RPM/% axes would imply a conversion we do
+not have. GPU percent is not converted into fabricated RPM; rear fans retain
+explicit ASSUMED provenance.
 
 All performance values and histories are **synthetic, not live**. Linux names
 come from the separate inventory snapshot, not fresh collection. HDD and NVMe

@@ -122,6 +122,7 @@ function inspect(changeSelection) {
     renderSelection();
     $("inspector-title").textContent = selectedPartId ? sceneParts.get(selectedPartId).label : selectedId;
     if (!$("inspector-dialog").open) openPopup($("inspector-dialog"), context);
+    metricUI?.refresh();
     $("inspector-dialog").querySelector(".popup-body").scrollTop = 0;
     $("close-inspector").focus({ preventScroll: true });
   });
@@ -637,6 +638,7 @@ function renderComponentDetails() {
   renderComponentMotion();
   renderLinuxAssociation(selectedPartId);
   $("component-metrics-button").hidden = !metricUI?.panelFor(selectedPartId);
+  metricUI?.renderComponent(selectedPartId, part.bindingId);
   $("component-reference-links").replaceChildren();
   appendReferences($("component-reference-links"), partReferences[part.componentId ?? selectedPartId] ?? []);
   const reading = part.readingId ? readingFor(currentReadings(), part.readingId) : null;
@@ -1063,7 +1065,7 @@ metricUI = createMetricUI({
     : Boolean(document.querySelector(`.hardware-part[data-id="${id}"][aria-disabled="false"]`)))),
 });
 dataSource.start();
-$("component-metrics-button").addEventListener("click", () => metricUI.openPanel(metricUI.panelFor(selectedPartId), { disk: sceneParts.get(selectedPartId)?.bindingId }));
+$("component-metrics-button").addEventListener("click", () => metricUI.openComponent(selectedPartId, sceneParts.get(selectedPartId)?.bindingId));
 renderCaseFanMotion();
 renderSelection();
 renderTelemetry();

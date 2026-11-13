@@ -61,6 +61,7 @@
           <p id="component-reading" class="reading-note"></p>
           <p id="component-motion" class="reading-note" hidden></p>
           <button id="component-metrics-button" type="button" hidden>View synthetic performance graphs ↗</button>
+          <section id="component-performance" class="metric-detail-grid" aria-label="Selected component performance" hidden></section>
           <section id="linux-details" class="linux-details" hidden aria-labelledby="linux-title">
             <h4 id="linux-title">Linux devices & layers</h4>
             <p id="linux-captured" class="compact muted"></p>
@@ -101,14 +102,14 @@
     <header class="popup-heading"><h2 id="metrics-title">Performance lab <span class="metric-provenance">SYNTHETIC / NOT LIVE</span></h2><button id="close-metrics" type="button" autofocus>Close ×</button></header>
     <div class="metric-lab-controls">
       <button id="metric-play-dialog" type="button">Play demo</button>
-      <label>Scenario<select id="metric-profile"></select></label>
+      <label id="metric-scenario">Scenario<select id="metric-profile"></select></label>
       <label>History · this view<select id="metric-window"></select></label>
       <button id="metric-reset-layout" type="button">Reset chart positions</button>
       <output id="metric-clock"></output>
     </div>
     <p id="metric-playback-note" class="metric-playback-note"></p>
     <nav id="metric-panel-nav" class="metric-panel-nav" aria-label="Performance views"></nav>
-    <div class="popup-body"><p class="metric-source-note">Every value and history here is invented. Hardware names provide context only. This is not current server activity, sensor discovery or a thermal simulation.</p><div id="metric-panel"></div></div>
+    <div class="popup-body"><p id="metric-source-note" class="metric-source-note">Every value and history here is invented. Hardware names provide context only. This is not current server activity, sensor discovery or a thermal simulation.</p><div id="metric-panel"></div></div>
   </dialog>
   <dialog id="fan-motion-dialog" class="popup" aria-labelledby="fan-motion-title">
     <header class="popup-heading"><h2 id="fan-motion-title">Case fan motion study</h2><button id="close-fan-motion" type="button" autofocus>Close ×</button></header>

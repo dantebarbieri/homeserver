@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, storageDetails, placeMetricCard } from "./metric-model.mjs";
+import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, placeMetricCard } from "./metric-model.mjs";
 
 test("automatic callouts find clear background beyond nearby candidates without covering hardware", () => {
   const card = { x: 700, y: 80, width: 206, height: 234 };
@@ -104,6 +104,41 @@ test("temperature bands distinguish component contexts and missing sensors", () 
   assert.equal(temperatureLevel("temp-sda", 45).label, "Hot");
   assert.equal(temperatureLevel("temp-gpu", 45).label, "Moderate");
   assert.equal(temperatureLevel("temp-cpu", null).label, "Unavailable");
+});
+
+test("temperature trace colors change exactly at kind-specific thresholds", () => {
+  const hdd = temperatureStops("temp-sda", 40, 60);
+  const crossing = hdd.filter(stop => stop.offset === .75);
+  assert.deepEqual(crossing.map(stop => stop.color), [temperatureLevel("temp-sda", 45).color, temperatureLevel("temp-sda", 44.9).color]);
+  assert.equal(hdd[0].color, temperatureLevel("temp-sda", 60).color);
+  assert.equal(hdd.at(-1).color, temperatureLevel("temp-sda", 40).color);
+  assert.ok(hdd.every((stop, index) => stop.offset >= 0 && stop.offset <= 1 && (!index || stop.offset >= hdd[index - 1].offset)));
+  assert.notDeepEqual(temperatureProfile("temp-sda").boundaries, temperatureProfile("temp-cpu").boundaries);
+  assert.notDeepEqual(temperatureProfile("temp-nvme0").boundaries, temperatureProfile("temp-nvme0-secondary").boundaries);
+  assert.deepEqual(temperatureProfile("temp-hdd-average"), temperatureProfile("temp-sda"));
+  assert.throws(() => temperatureStops("temp-cpu", 20, 20));
+});
+
+test("HDD means exclude missing sensors, report coverage and preserve a measured zero", () => {
+  assert.deepEqual(temperatureAverage([40, 50, null, NaN]), { value: 45, count: 2, total: 4 });
+  assert.deepEqual(temperatureAverage([0, null]), { value: 0, count: 1, total: 2 });
+  assert.deepEqual(temperatureAverage([null, undefined]), { value: null, count: 0, total: 2 });
+  assert.deepEqual(temperatureAverage([]), { value: null, count: 0, total: 0 });
+});
+
+test("component graph contexts preserve device bindings and never guess unbound slots", () => {
+  assert.ok(performanceContext("cpu").series.flat().includes("temp-cpu"));
+  assert.ok(performanceContext("cpu").series.flat().includes("fan-cpu2"));
+  assert.ok(performanceContext("gpu").series.flat().includes("temp-gpu"));
+  assert.equal(performanceContext("drive-M2_1").unbound, true);
+  const nvme = performanceContext("drive-M2_1", "nvme7n1");
+  assert.equal(nvme.disk, "nvme7n1");
+  assert.ok(nvme.series.flat().includes("temp-nvme7-secondary"));
+  assert.ok(performanceContext("drive-cage-1-bay-1", "sdz").series.flat().includes("temp-sdz"));
+  assert.equal(performanceContext("rear-fan-2").sensor, "fan-rear2");
+  assert.equal(performanceContext("front-fan-1").sensor, "fan-hub");
+  assert.equal(performanceContext("motherboard").sensor, "temp-board");
+  assert.equal(performanceContext("psu"), null);
 });
 
 test("adaptive axes include both traffic series, the selected window and the latest value", () => {

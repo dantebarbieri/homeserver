@@ -1,4 +1,4 @@
-import { metricGroups, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, storageDetails, metricTopology, cpuClockSpecification, placeMetricCard } from "./metric-model.mjs";
+import { metricGroups, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, metricTopology, cpuClockSpecification, placeMetricCard } from "./metric-model.mjs";
 
 const $ = id => document.getElementById(id);
 function el(tag, attrs = {}, text = "") {
@@ -44,10 +44,18 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   let playing = live || !reducedMotion.matches, playbackChosen = false;
   let second = 86400, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores", sensor = "all";
   let charts = [];
+  let chartSequence = 0, helpSequence = 0, componentKey = "";
   let caseFanPreview = null;
   const cards = new Map(), badges = new Map(), lines = new Map();
   const frame = () => ({ second, profile: settings.profile, provenance: live ? "live" : "synthetic" });
-  const value = id => live ? dataSource.value(id) : demoValue(id, second, settings.profile);
+  const hddSensors = () => demoDisks.filter(disk => disk.kind === "Physical HDD").map(disk => `temp-${disk.id}`);
+  const reading = id => live ? dataSource.value(id) : demoValue(id, second, settings.profile);
+  const value = id => id === "temp-hdd-average" ? temperatureAverage(hddSensors().map(reading)).value : reading(id);
+  const series = (id, seconds) => {
+    if (id !== "temp-hdd-average") return live ? dataSource.series(id, seconds) : demoSeries(id, second, seconds, settings.profile);
+    const sources = hddSensors().map(id => live ? dataSource.series(id, seconds) : demoSeries(id, second, seconds, settings.profile));
+    return Array.from({ length: Math.max(2, ...sources.map(values => values.length)) }, (_, index) => temperatureAverage(sources.map(values => values[index])).value);
+  };
   const capacity = id => live ? !dataSource.stale && Number.isFinite(dataSource.snapshot?.capacities?.[id]) ? dataSource.snapshot.capacities[id] : null : metrics.get(id).maximum;
   const save = () => {
     try { localStorage.setItem(preferenceKey, JSON.stringify({ ...settings, version: 2 })); }
@@ -72,7 +80,25 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     openPopup($("metrics-dialog"));
     updateCharts();
   }
-  function chart(ids, title, compact = false) {
+  function help(text, label) {
+    const wrapper = el("span", { class: "metric-help" }), id = `metric-help-${++helpSequence}`;
+    wrapper.append(button("?", () => {}, { class: "metric-help-button", "aria-label": label, "aria-describedby": id }),
+      el("span", { id, role: "tooltip", class: "metric-help-tip" }, text));
+    return wrapper;
+  }
+  function temperatureLegend(id) {
+    const profile = temperatureProfile(id), details = el("details", { class: "metric-thresholds", "data-threshold-profile": profile.label });
+    details.append(el("summary", {}, `${profile.label} · illustrative bands (°C)`));
+    const legend = el("div", { class: "metric-temperature-legend" });
+    temperatureLevels.forEach((level, index) => {
+      const range = index === 0 ? `<${profile.boundaries[0]}` : index === 5 ? `≥${profile.boundaries[4]}` : `${profile.boundaries[index - 1]}–<${profile.boundaries[index]}`;
+      const item = el("span", {}, `${level.icon} ${level.label} ${range}`);
+      item.style.color = level.color; legend.append(item);
+    });
+    details.append(legend, el("p", { class: "muted compact" }, "UI guidance by sensor kind, not verified device-specific vendor limits or a safety alarm."));
+    return details;
+  }
+  function chart(ids, title, compact = false, windowGroup = null) {
     const scale = sharedMetricScale(ids);
     const box = el("article", { class: `performance-chart${compact ? " mini-chart" : ""}` });
     box.style.setProperty("--metric-series-count", ids.length);
@@ -91,8 +117,16 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     for (const x of [75, 150, 225]) plot.append(svg("path", { d: `M${x} 0V80`, class: "metric-gridline" }));
     const area = svg("path", { fill: ids.length > 1 ? colors[0] : metricGroups[metrics.get(ids[0]).group].color, opacity: ".09", stroke: "none" });
     plot.append(area);
+    const defs = svg("defs"), gradients = [];
+    plot.append(defs);
     const paths = ids.map((id, index) => {
       const path = svg("path", { class: "metric-trace", fill: "none", stroke: ids.length > 1 ? colors[index % colors.length] : metricGroups[metrics.get(id).group].color });
+      if (metrics.get(id).group === "temperatures") {
+        const gradient = svg("linearGradient", { id: `temperature-trace-${++chartSequence}`, gradientUnits: "userSpaceOnUse", x1: 0, x2: 0, y1: 0, y2: 80 });
+        defs.append(gradient); gradients[index] = gradient;
+        path.setAttribute("stroke", `url(#${gradient.id})`);
+        if (index) path.setAttribute("stroke-dasharray", "5 3");
+      }
       plot.append(path); return path;
     });
     const cursor = svg("path", { class: "metric-cursor", visibility: "hidden" });
@@ -103,7 +137,18 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     for (const number of [scale.maximum, (scale.minimum + scale.maximum) / 2, scale.minimum]) axis.append(el("span", {}, chartNumber(number, scale)));
     plotArea.append(axis, plot);
     box.append(header, plotArea, footer, tooltip);
-    const record = { box, header, plot, area, paths, footer, ids, compact, scale, seconds: 120, values: [] };
+    if (!compact) {
+      const profiles = new Set();
+      for (const id of ids) if (metrics.get(id).group === "temperatures" && !profiles.has(temperatureProfile(id).label)) {
+        profiles.add(temperatureProfile(id).label); box.append(temperatureLegend(id));
+      }
+      if (ids.some(id => metrics.get(id).group === "fans")) box.append(el("p", { class: "metric-fan-note" }, ids.includes("fan-gpu")
+        ? "NVIDIA intended-speed %, not measured RPM. Conversion needs fan-specific calibration; a second RPM axis would invent data."
+        : ids.every(id => id.startsWith("fan-rear")) ? "Assumed constant 2000 RPM, not measured tachometer feedback."
+          : `${live ? "Measured" : "Synthetic"} tach RPM. RPM / rated maximum is not PWM duty or NVIDIA intended-speed %. No unverified percent axis is shown.`));
+      if (ids.includes("temp-hdd-average")) box.append(el("p", { class: "metric-average-note", "data-temperature-coverage": "" }));
+    }
+    const record = { box, header, plot, area, paths, gradients, footer, ids, compact, windowGroup, scale, seconds: 120, values: [] };
     plot.addEventListener("pointermove", event => {
       const bounds = plot.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
@@ -139,10 +184,10 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     }
     for (const record of charts) {
       const signalGroup = metrics.get(record.ids[0]).group;
-      if (record.box.closest("#metric-panel") && ["temperatures", "fans"].includes(signalGroup)) record.box.hidden = !settings.groups[signalGroup];
+      if (record.box.closest("#metric-panel") && ["temperatures", "fans"].includes(signalGroup)) record.box.hidden = activePanel === "sensors" && !settings.groups[signalGroup];
       if (record.box.closest("[hidden]") || (record.box.closest("dialog") && !record.box.closest("dialog").open)) continue;
-      record.seconds = settings.windows[record.compact ? signalGroup : historyGroup()];
-      record.values = record.ids.map(id => live ? dataSource.series(id, record.seconds) : demoSeries(id, second, record.seconds, settings.profile));
+      record.seconds = settings.windows[record.windowGroup ?? (record.compact ? signalGroup : historyGroup())];
+      record.values = record.ids.map(id => series(id, record.seconds));
       record.scale = windowMetricScale(record.ids, record.values, record.ids.map(value), settings.scaleMode);
       record.box.dataset.axisMode = record.scale.adaptive ? "auto" : "fixed";
       record.box.dataset.axisMinimum = record.scale.minimum;
@@ -150,6 +195,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       record.box.querySelector(".metric-y-axis").replaceChildren(...[record.scale.maximum, (record.scale.minimum + record.scale.maximum) / 2, record.scale.minimum].map(number => el("span", {}, chartNumber(number, record.scale))));
       record.ids.forEach((id, i) => {
         record.paths[i].setAttribute("d", metricPath(record.values[i], record.scale.minimum, record.scale.maximum));
+        if (record.gradients[i]) record.gradients[i].replaceChildren(...temperatureStops(id, record.scale.minimum, record.scale.maximum).map(stop => svg("stop", { offset: stop.offset, "stop-color": stop.color })));
       });
       record.area.setAttribute("d", record.values[0].every(Number.isFinite) ? `${record.paths[0].getAttribute("d")}L300,80L0,80Z` : "");
       record.header.lastChild.replaceChildren(...record.ids.map((id, index) => {
@@ -160,9 +206,14 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       }));
       const first = metrics.get(record.ids[0]);
       const samples = record.values[0].filter(Number.isFinite);
+      const source = record.ids.every(id => id.startsWith("fan-rear")) ? "ASSUMED" : provenance();
       record.footer.textContent = record.compact
-        ? `${historyLabel(record.seconds)} · ${provenance()} · ${record.scale.adaptive ? "AUTO" : "FIXED"}${record.ids.length > 1 ? " shared" : ""} ${chartNumber(record.scale.maximum, record.scale)}`
-        : `${historyLabel(record.seconds)} ago → now · ${record.scale.adaptive ? "AUTO window" : "FIXED reference"}${record.ids.length > 1 ? " shared" : ""} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${metricNumber(Math.max(...samples), first.unit)} · ${record.values[0].length} ${live ? "plot points" : "samples"}`;
+        ? `${historyLabel(record.seconds)} · ${source} · ${record.scale.adaptive ? "AUTO" : "FIXED"}${record.ids.length > 1 ? " shared" : ""} ${chartNumber(record.scale.maximum, record.scale)}`
+        : `${source} · ${historyLabel(record.seconds)} ago → now · ${record.scale.adaptive ? "AUTO window" : "FIXED reference"}${record.ids.length > 1 ? " shared" : ""} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${metricNumber(Math.max(...samples), first.unit)} · ${record.values[0].length} ${live ? "plot points" : "samples"}`;
+      if (record.box.querySelector("[data-temperature-coverage]")) {
+        const coverage = temperatureAverage(hddSensors().map(reading));
+        record.box.querySelector("[data-temperature-coverage]").textContent = `Mean of available HDD sensors · now ${coverage.count}/${coverage.total} reporting. Missing sensors are excluded, never zero-filled; no temporal smoothing. Check individual temperatures for hot spots.`;
+      }
       record.footer.title = record.footer.textContent;
       record.plot.setAttribute("aria-label", `${record.header.firstChild.textContent}. ${live ? "Collected server history" : "Synthetic, not live"}. ${record.header.lastChild.textContent}. ${record.footer.textContent}`);
     }
@@ -171,7 +222,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       node.textContent = metricNumber(value(id), metrics.get(id).unit);
     }
     for (const node of document.querySelectorAll("[data-temperature]")) {
-      node.hidden = !settings.groups.temperatures;
+      node.hidden = !settings.groups.temperatures && (!node.closest("#metric-panel") || activePanel === "sensors") && !node.closest("#component-performance");
       decorateTemperature(node, node.dataset.temperature, value(node.dataset.temperature), metricNumber(value(node.dataset.temperature), "°C"));
     }
     for (const node of document.querySelectorAll("[data-clock-summary]")) node.textContent = `${Number.isFinite(value("cpu-clock")) ? value("cpu-clock").toFixed(2) : "Unavailable"} / ${cpuClockSpecification.boost} GHz boost`;
@@ -207,7 +258,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       $("live-issues").textContent = issues.join("; ");
       for (const label of document.querySelectorAll(".metric-provenance")) label.textContent = provenance();
       const records = charts.filter(record => !record.box.closest("[hidden]") && (!record.box.closest("dialog") || record.box.closest("dialog").open));
-      void dataSource.requestHistory(records);
+      void dataSource.requestHistory(records.map(record => ({ seconds: record.seconds, ids: record.ids.flatMap(id => id === "temp-hdd-average" ? hddSensors() : [id]) })));
     }
     scheduleLayout();
   }
@@ -406,12 +457,20 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     $("metric-play-dialog").setAttribute("aria-pressed", String(playing));
     $("metric-playback-note").textContent = live ? "Read-only server collection every 5 seconds; histories retained by Prometheus. Unavailable counters stay unavailable; no synthetic backfill." : playing ? "Invented data advancing at 1 simulated second / second." : `Paused synthetic history.${reducedMotion.matches ? " Reduced Motion is honored; Play demo is an explicit opt-in." : ""}`;
     $("metric-profile").disabled = live;
+    $("metric-scenario").hidden = live;
+    $("metric-play-dialog").hidden = live;
+    $("metric-source-note").hidden = live;
     for (const node of $("metric-group-controls").children) {
       node.setAttribute("aria-pressed", String(settings.groups[node.dataset.group]));
       node.title = `${settings.groups[node.dataset.group] ? "Hide" : "Show"} all ${metricGroups[node.dataset.group].label.toLowerCase()}`;
     }
     for (const node of document.querySelectorAll("[data-group-check]")) node.checked = settings.groups[node.dataset.groupCheck];
     for (const node of document.querySelectorAll("[data-card-check]")) node.checked = !settings.hidden.includes(node.dataset.cardCheck);
+    for (const node of document.querySelectorAll("[data-sensor-toggle]")) {
+      const visible = settings.groups[node.dataset.sensorToggle];
+      node.setAttribute("aria-pressed", String(visible));
+      node.textContent = `${node.dataset.sensorToggle === "temperatures" ? "Temperatures" : "Fan speeds"}: ${visible ? "shown" : "hidden"}`;
+    }
     $("metric-window").value = String(settings.windows[historyGroup()]);
     $("metric-window").disabled = activePanel === "layers";
   }
@@ -451,6 +510,35 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     });
     return control;
   }
+  function sensorToggle(id) {
+    return button("", () => group(id, !settings.groups[id]), { "data-sensor-toggle": id, "aria-pressed": String(settings.groups[id]) });
+  }
+  function renderComponent(part, binding) {
+    const container = $("component-performance"), context = performanceContext(part, binding);
+    const windowGroup = context?.panel === "sensors" ? context.sensor.startsWith("fan-") ? "fans" : "temperatures" : context?.panel;
+    const key = JSON.stringify([part, binding, context, hddSensors(), settings.windows[windowGroup]]);
+    if (componentKey === key) return;
+    componentKey = key;
+    container.replaceChildren();
+    container.hidden = !context;
+    if (!context) return;
+    if (context.unbound) {
+      container.append(el("p", { class: "muted compact" }, "No current logical-device binding for this physical slot. Open Storage for the overview; no device identity is guessed."));
+      return;
+    }
+    const heading = el("div", { class: "component-performance-heading metric-section-heading" });
+    const window = el("select", { "aria-label": "Component history" });
+    window.append(...historyWindows.map(seconds => el("option", { value: seconds }, historyLabel(seconds))));
+    window.value = settings.windows[windowGroup];
+    window.addEventListener("change", () => { settings.windows[windowGroup] = Number(window.value); save(); updateCharts(); });
+    heading.append(el("h4", {}, `${live ? "Live" : "Synthetic"} performance`), window);
+    container.append(heading);
+    for (const ids of context.series) {
+      if (ids.some(id => !metrics.has(id))) continue;
+      const title = ids.map(id => metrics.get(id).label).join(" / ");
+      container.append(chart(ids, title, false, windowGroup));
+    }
+  }
   function diskComparison() {
     const wrapper = el("div", { class: "metric-disk-table" }), table = el("table");
     const heading = el("tr");
@@ -467,6 +555,11 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       body.append(row);
     }
     table.append(body); wrapper.append(table);
+    const foot = el("tfoot"), row = el("tr"), mean = el("td");
+    row.append(el("th", { scope: "row" }, "Mean of reporting HDD sensors"));
+    mean.append(temperatureButton("temp-hdd-average")); row.append(mean);
+    const note = el("td", { colspan: "3" }, "Missing excluded; inspect individual hot spots");
+    row.append(note); foot.append(row); table.append(foot);
     return wrapper;
   }
   function diskSelection(id) { disk = id; renderPanel(); $("metric-panel").querySelector("select")?.focus({ preventScroll: true }); }
@@ -511,7 +604,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       }, "Graph y-axis scaling"));
       body.append(el("p", { class: "muted compact" }, "AUTO uses all series in the selected window plus the current reading, with headroom and rounded limits. Read/write and receive/send always share a scale. Changing the graph ceiling does not change device capacity. Percentages stay 0–100%; memory and storage amounts retain capacity context."));
       const actions = el("div", { class: "toolbar" });
-      actions.append(button("Show all temperatures", () => group("temperatures", true)), button("Hide all temperatures", () => group("temperatures", false)), button("Show all layers", () => all(true)), button("Hide all layers", () => all(false)));
+      actions.append(sensorToggle("temperatures"), sensorToggle("fans"), button("Show all layers", () => all(true)), button("Hide all layers", () => all(false)));
       body.append(actions, el("h4", {}, "Individual chart cards"));
       for (const definition of metricCards) {
         const label = el("label", { class: "metric-card-check" }), input = el("input", { type: "checkbox", "data-card-check": definition.id });
@@ -567,11 +660,14 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
         for (const id of ids) add([id], metrics.get(id).label);
       }
       if (disk === "array") body.append(el("h4", {}, `Individual HDDs · ${live ? "collected" : "synthetic"} activity / temperature`), diskComparison());
+      if (disk === "array") add(["temp-hdd-average"], "HDD mean temperature");
       body.append(grid, el("p", { class: "muted compact" }, live ? "Filesystem fullness is logical, not per RAID member. Available space excludes filesystem reservations. Cache counters use read-only dm-cache status without requesting a metadata flush. NVMe cache and ordinary data extents must not be mistaken for entirely RAID-protected storage. SMART temperatures may be unavailable for sleeping or unsupported drives." : "LVM snapshot: the data NVMe holds both cache and ordinary /data extents, so /data is not entirely RAID-protected. Filesystem fullness is logical; synthetic cache occupancy is not filesystem fullness."));
     } else if (activePanel === "gpu") {
-      body.append(fullness("gpu-dedicated"), el("p", { class: "metric-storage-context" }, "VRAM allocation and GPU engine activity are different. Programs can keep gigabytes allocated while engines are idle. Memory stays on a capacity scale; activity stays 0–100%. Neither is substituted for the other."));
-      for (const id of ["gpu-util", "gpu-3d", "gpu-copy", "gpu-encode", "gpu-decode", "gpu-dedicated", "gpu-shared", "gpu-power", "temp-gpu", "fan-gpu"]) add([id], metrics.get(id).label);
-      body.append(grid, el("p", { class: "muted compact" }, `GPU activity and encode share a 0–100% axis. Engines can overlap; do not sum them. General utilization is not 3D-only activity or SM occupancy. ${live ? "Unsupported 3D/copy/shared-memory counters remain unavailable." : "All values are synthetic."}`),
+      const memoryHeading = el("div", { class: "metric-section-heading" });
+      memoryHeading.append(el("h4", {}, "GPU memory"), help("Programs can keep VRAM allocated while GPU engines are idle. Memory uses a capacity scale; engine activity uses 0–100%. Allocated memory is not evidence that an engine is busy.", "About VRAM allocation and engine activity"));
+      body.append(memoryHeading, fullness("gpu-dedicated"));
+      for (const id of ["gpu-util", "gpu-dedicated", "temp-gpu", "fan-gpu", "gpu-encode", "gpu-decode", "gpu-power", "gpu-3d", "gpu-copy", "gpu-shared"]) add([id], metrics.get(id).label);
+      body.append(grid, el("p", { class: "muted compact" }, `GPU activity and encode use 0–100% axes. Engines can overlap; do not sum them. General utilization is not 3D-only activity or SM occupancy. ${live ? "Unsupported 3D/copy/shared-memory counters remain unavailable." : "All values are synthetic."}`),
         el("p", { class: "muted compact" }, `${live ? "NVIDIA reports" : "The demo illustrates"} intended fan-speed percentage, not measured RPM or three independently bound physical fans. This does not prove physical rotation.`));
     } else if (activePanel === "network") {
       body.append(select(demoNics.map(id => [id, id]), nic, next => { nic = next; }, "Network interface"));
@@ -581,14 +677,13 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
         el("p", { class: "muted compact" }, "Receive/send share one axis, automatically fitted to the selected window when adaptive axes are enabled. The plot ceiling is not link capacity. Per-interface counters include the bond and physical members; avoid double-counting them. Active-backup does not aggregate link capacity. LAN temperature is controller context, not per-port; LAN1/LAN2 physical pairing remains unassigned. Permanent identities stay private."));
     } else if (activePanel === "sensors") {
       const actions = el("div", { class: "toolbar" });
-      actions.append(button("Show all temperatures", () => group("temperatures", true)), button("Hide all temperatures", () => group("temperatures", false)),
-        button("Show all fan speeds", () => group("fans", true)), button("Hide all fan speeds", () => group("fans", false)));
+      actions.append(sensorToggle("temperatures"), sensorToggle("fans"));
       const choices = [["all", "All sensors & fans"], ["nvme", "NVMe temperatures"], ["hdds", "HDD temperatures"], ["fans", "All fan speeds"], ...[...demoSensors, ...demoFans].map(item => [item.id, item.label])];
       body.append(select(choices, sensor, next => { sensor = next; }, "Sensor selection"), actions);
       const legend = el("div", { class: "metric-temperature-legend" });
       for (const level of temperatureLevels) { const item = el("span", {}, `${level.icon} ${level.label}`); item.style.color = level.color; legend.append(item); }
-      body.append(legend, el("p", { class: "muted compact" }, `Illustrative bands, not vendor alarms. ${live ? "Values and histories are collected read-only; unsupported channels remain unavailable." : "All changing values and histories are synthetic."} Rear fans assume 2000 RPM without tach. FAN3 drives both banks by shared-speed assumption, not six independent measurements. Motion previews change artwork/readouts only. FAN1 is PSU-side; FAN2 is GPU-side.`));
-      const selected = [...demoSensors, ...demoFans].filter(item => sensor === "all" || sensor === item.id || sensor === "nvme" && item.id.startsWith("temp-nvme") || sensor === "hdds" && item.id.startsWith("temp-sd") || sensor === "fans" && item.id.startsWith("fan-"));
+      body.append(legend, el("p", { class: "muted compact" }, `Toggles affect this sensor browser and the map; component performance retains associated readings. Illustrative bands, not vendor alarms. ${live ? "Values and histories are collected read-only; unsupported channels remain unavailable." : "All changing values and histories are synthetic."} Rear fans assume 2000 RPM without tach. FAN3 drives both banks by shared-speed assumption, not six independent measurements. Motion previews change artwork/readouts only. FAN1 is PSU-side; FAN2 is GPU-side.`));
+      const selected = [...demoSensors, ...demoFans].filter(item => sensor === "all" || sensor === item.id || sensor === "nvme" && item.id.startsWith("temp-nvme") || sensor === "hdds" && (item.id.startsWith("temp-sd") || item.id === "temp-hdd-average") || sensor === "fans" && item.id.startsWith("fan-"));
       const locations = [...new Set(selected.filter(item => item.location).map(item => item.location))];
       if (locations.length) {
         const notes = el("details", { class: "metric-sensor-locations", ...(sensor !== "all" ? { open: "" } : {}) });
@@ -641,17 +736,14 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   }
   controls(); updateVisibility();
   return {
-    updateVisibility, layout: scheduleLayout, openPanel, frame,
+    updateVisibility, layout: scheduleLayout, openPanel, frame, renderComponent, refresh: updateCharts,
+    openComponent(part, binding) {
+      const context = performanceContext(part, binding);
+      if (context) openPanel(context.panel, context);
+    },
     setCaseFanPreview(preview) { caseFanPreview = preview; updateBadges(); scheduleLayout(); },
     panelFor(part) {
-      if (!part) return null;
-      if (part === "cpu") return "cpu";
-      if (part.startsWith("dimm-")) return "memory";
-      if (part === "gpu") return "gpu";
-      if (part === "network-ports" || part === "lan-controller") return "network";
-      if (part === "disk-bays" || part === "hba" || part.startsWith("drive-")) return "storage";
-      if (part.includes("fan") || part === "motherboard") return "sensors";
-      return null;
+      return performanceContext(part)?.panel ?? null;
     },
     destroy() { clearInterval(timer); },
   };
