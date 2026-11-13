@@ -47,9 +47,17 @@ function libraryDefinition(defaults) {
   return {
     ...baseLibrary(defaults), _id: LIBRARY_ID, name: 'Studio native HEVC - isolated manual canary',
     folder: CANARY_FOLDER, cache: CACHE_ROOT, flowId: FLOW_ID,
+    foldersToIgnore: '', foldersToIgnoreCaseInsensitive: false,
     holdNewFiles: true, holdFor: 180, holdForDisplayUnit: 'minutes',
     filterCodecsSkip: 'hevc,av1,vp9',
   };
+}
+
+function libraryTemplate(libraries) {
+  const template = libraries.find(l => l._id === 'Io-wVbVRh' && l.flowId === 'homeserver-hevc-cpu-v1');
+  assert(template && Array.isArray(template.schedule) && template.decisionMaker
+    && typeof template.decisionMaker === 'object', 'Expected existing safe-v1 TV library template');
+  return template;
 }
 
 async function install({ crud, defaults, apply = false, log = console.log, io = fs }) {
@@ -75,6 +83,7 @@ async function install({ crud, defaults, apply = false, log = console.log, io = 
   const existingCrf = variables.filter(v => v.type === `library:${LIBRARY_ID}` && v.key === 'crf');
   assert(existingCrf.length <= 1, 'Duplicate canary CRF variables');
   if (existingCrf.length) assert.equal(existingCrf[0].value, '20', 'Canary CRF is not 20');
+  const desiredLibrary = existingLibrary ? null : libraryDefinition(defaults || libraryTemplate(libraries));
   log(`${apply ? 'Installing' : 'Previewing'} NEW disabled canary only; existing libraries and workers unchanged.`);
   if (!apply) return;
   await io.access(`${ROOT}/hevc-studio-v1.cjs`);
@@ -91,7 +100,7 @@ async function install({ crud, defaults, apply = false, log = console.log, io = 
     for (const key of Object.keys(obj)) assert.deepEqual(stored[key], obj[key]);
   };
   if (!existingFlow) await insert('FlowsJSONDB', FLOW_ID, desired);
-  if (!existingLibrary) await insert('LibrarySettingsJSONDB', LIBRARY_ID, libraryDefinition(defaults));
+  if (!existingLibrary) await insert('LibrarySettingsJSONDB', LIBRARY_ID, desiredLibrary);
   if (!existingCrf.length) await insert('VariablesJSONDB', `${LIBRARY_ID}-crf`, {
     _id: `${LIBRARY_ID}-crf`, key: 'crf', value: '20', type: `library:${LIBRARY_ID}`, date: Date.now(),
   });
@@ -103,9 +112,8 @@ async function main() {
   assert(options.length === 0 || (options.length === 1 && options[0] === '--apply'),
     'Usage: node install-studio-flow.cjs [--apply] (canary only; no enable mode)');
   const { crud } = await connect();
-  const defaults = require('/app/Tdarr_Server/srcug/commonModules/jobs/libraryDefaults').default;
-  await install({ crud, defaults, apply: options.includes('--apply') });
+  await install({ crud, apply: options.includes('--apply') });
 }
 
-module.exports = { flowDefinition, libraryDefinition, install, FLOW_ID, LIBRARY_ID, CANARY_FOLDER, MAC_MODULE };
+module.exports = { flowDefinition, libraryDefinition, libraryTemplate, install, FLOW_ID, LIBRARY_ID, CANARY_FOLDER, MAC_MODULE };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

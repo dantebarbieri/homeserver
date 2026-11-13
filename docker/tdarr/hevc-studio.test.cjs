@@ -8,7 +8,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { prepare, encode, commit, encodeArgs, privateCopy, MAC_FFMPEG } = require('./hevc-studio-v1.cjs');
 const { fingerprint } = require('./hevc-safe-v1.cjs');
-const { flowDefinition, libraryDefinition, install, FLOW_ID, LIBRARY_ID, CANARY_FOLDER } = require('./install-studio-flow.cjs');
+const { flowDefinition, libraryDefinition, libraryTemplate, install, FLOW_ID, LIBRARY_ID, CANARY_FOLDER } = require('./install-studio-flow.cjs');
+const { exclusions, restrict } = require('./restrict-studio-node.cjs');
 const linux = { skip: process.platform !== 'linux' };
 const notify = { pluginName: 'notifyRadarrOrSonarr', inputsDB: { arr: 'sonarr' } };
 
@@ -355,4 +356,96 @@ test('installer creates only disabled canary records and never updates real libr
   assert.equal(writes.length, 3, 'idempotent installer must not overwrite versioned modules or settings');
   records.LibrarySettingsJSONDB[1].processLibrary = true;
   await assert.rejects(install({ ...options, apply: true }), /already enabled/);
+});
+
+test('Tdarr 3.07 installer uses existing safe library schema without importing removed JavaScript defaults', () => {
+  const original = {
+    _id: 'Io-wVbVRh', flowId: 'homeserver-hevc-cpu-v1', schedule: [{ checked: true }],
+    decisionMaker: { settingsFlows: true, settingsPlugin: false }, foldersToIgnore: '/original/exclusion',
+    processLibrary: true, folderWatching: true, totalTranscodeCount: 123,
+  };
+  const copy = structuredClone(original);
+  const canary = libraryDefinition(libraryTemplate([original]));
+  assert.equal(canary.processLibrary, false);
+  assert.equal(canary.folderWatching, false);
+  assert.equal(canary.totalTranscodeCount, 0);
+  assert.equal(canary.foldersToIgnore, '');
+  assert.deepEqual(canary.schedule, original.schedule);
+  assert.deepEqual(original, copy);
+  assert.throws(() => libraryTemplate([{ ...original, flowId: 'different' }]), /template/);
+  assert.throws(() => libraryTemplate([{ ...original, schedule: undefined }]), /template/);
+});
+
+test('native exclusions include every current non-canary library but are not a future-library allowlist', () => {
+  const libraries = [{ _id: 'tv' }, { _id: 'dv5' },
+    { _id: LIBRARY_ID, flowId: FLOW_ID, folder: CANARY_FOLDER }];
+  const result = exclusions(libraries, { retired: true, tv: false });
+  assert.deepEqual(result, { retired: true, tv: true, dv5: true, [LIBRARY_ID]: false });
+  assert.equal(result['future-library'], undefined);
+  assert.throws(() => exclusions(libraries.slice(0, 2)), /canary/);
+});
+
+test('restriction utility changes only exclusions, verifies persistence and leaves native node paused', async () => {
+  const libraries = [{ _id: 'tv' }, { _id: LIBRARY_ID, flowId: FLOW_ID, folder: CANARY_FOLDER,
+    processLibrary: false, processTranscodes: false }];
+  const initial = { nodeName: 'StudioNative', nodePaused: true, nodeTags: 'studio-native',
+    workerLimits: { transcodecpu: 1, transcodegpu: 0, healthcheckcpu: 0, healthcheckgpu: 0 },
+    allowGpuDoCpu: false, librariesToNotProcess: {} };
+  let node = structuredClone(initial), persisted = structuredClone(initial);
+  const writes = [], backups = [];
+  const crud = async (collection, mode) => {
+    if (collection === 'LibrarySettingsJSONDB' && mode === 'getAll') return structuredClone(libraries);
+    assert.equal(collection, 'NodeJSONDB');
+    assert.equal(mode, 'getById');
+    return structuredClone(persisted);
+  };
+  const request = async (endpoint, payload) => {
+    if (endpoint === 'get-nodes') return { nativeID: structuredClone(node) };
+    assert.equal(endpoint, 'update-node');
+    assert.equal(payload.data.nodeID, 'nativeID');
+    assert.deepEqual(Object.keys(payload.data.nodeUpdates), ['librariesToNotProcess']);
+    writes.push(payload);
+    Object.assign(node, payload.data.nodeUpdates);
+    Object.assign(persisted, payload.data.nodeUpdates);
+  };
+  const options = { crud, request, nodeName: initial.nodeName, log: () => {},
+    io: { mkdir: async () => {}, writeFile: async (...args) => backups.push(args) } };
+  await restrict(options);
+  assert.equal(writes.length, 0);
+  await restrict({ ...options, apply: true });
+  assert.equal(writes.length, 1);
+  assert.equal(backups[0][2].mode, 0o600);
+  assert.equal(node.nodePaused, true);
+  assert.deepEqual(node.workerLimits, initial.workerLimits);
+  assert.deepEqual(persisted.librariesToNotProcess, { tv: true, [LIBRARY_ID]: false });
+  node.nodePaused = false;
+  await assert.rejects(restrict({ ...options, apply: true }), /paused/);
+  assert.equal(writes.length, 1);
+});
+
+test('restriction utility refuses changed inventories and failed persistence while never unpausing', async () => {
+  for (const failure of ['inventory', 'persistence']) {
+    const libraries = [{ _id: LIBRARY_ID, flowId: FLOW_ID, folder: CANARY_FOLDER,
+      processLibrary: false, processTranscodes: false }];
+    const node = { nodeName: 'Studio', nodePaused: true, nodeTags: 'studio-native', allowGpuDoCpu: false,
+      librariesToNotProcess: {}, workerLimits: { transcodecpu: 1 } };
+    let reads = 0, writes = 0;
+    const options = {
+      nodeName: 'Studio', apply: true, log: () => {},
+      io: { mkdir: async () => {}, writeFile: async () => {} },
+      crud: async collection => {
+        if (collection === 'NodeJSONDB') return structuredClone(node);
+        reads++;
+        return failure === 'inventory' && reads > 1 ? [...libraries, { _id: 'new' }] : libraries;
+      },
+      request: async (endpoint, payload) => {
+        if (endpoint === 'get-nodes') return { id: structuredClone(node) };
+        assert.deepEqual(Object.keys(payload.data.nodeUpdates), ['librariesToNotProcess']);
+        writes++;
+      },
+    };
+    await assert.rejects(restrict(options), failure === 'inventory' ? /inventory changed/ : /not applied/);
+    assert.equal(writes, failure === 'inventory' ? 0 : 1);
+    assert.equal(node.nodePaused, true);
+  }
 });

@@ -118,6 +118,50 @@ authenticated Tdarr HTTPS endpoint; no new public proxy route is needed.
 Native encoding uses the installed Tdarr CLI helper for worker progress and
 cancellation, refusing an untracked subprocess if that helper is unavailable.
 
+#### Prevent the Mac from taking existing Linux-only jobs
+
+**Keep the new node paused from its first connection.** A `studio-native`
+node tag does not exclude it from untagged existing CPU flows. In installed
+Tdarr 3.07.00, Node Options -> Libraries to process writes
+`librariesToNotProcess`: `true` excludes a library; `false` or a missing key
+allows it. This is an ordinary authenticated node setting, not the Pro-only
+unmapped-node feature. The installed UI and live/persisted node settings
+expose it; the server's packaged scheduler references the same field.
+
+There is **no fail-closed allowlist** here: newly added libraries default
+allowed. For a bounded canary, freeze library additions, exclude **every
+current library except the isolated canary**, and verify the live and
+persisted map before unpausing. Do not rely on tags alone, a single TV
+exclusion, or a stale list of library IDs. If library inventory cannot be
+held stable, leave the Mac paused; this denylist is not a permanent
+allowlist substitute.
+
+Deploy `restrict-studio-node.cjs` beside the Linux installer, then substitute
+the exact connected native node name:
+
+```bash
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/restrict-studio-node.cjs --node-name StudioNative
+docker exec --user abc tdarr node /app/server/Tdarr/Custom/restrict-studio-node.cjs --node-name StudioNative --apply
+```
+
+The first command is read-only. The explicit apply backs up settings (0600),
+requires the native-tagged node and canary to remain paused/disabled, checks
+at most one CPU worker and no GPU/health workers, and sends **only**
+`librariesToNotProcess` through the supported `update-node` API. It checks
+inventory again before/after, verifies the map in `get-nodes` and the
+`NodeJSONDB` record keyed by node name, and never changes pause state, tags
+or worker limits. Readback failure is a blocker, not permission to unpause.
+Preview again before any later unpause and refresh exclusions whenever
+libraries change.
+
+The API payload is
+`{data:{nodeID:<current connected ID>,nodeUpdates:{librariesToNotProcess:<map>}}}`.
+The map uses library `_id`, **not** flow IDs or node names. For the native
+canary, all three TV libraries, the production DV5 library and any retired
+DV5 canary must be excluded; only `homeserver-hevc-studio-canary-v1` is
+allowed. The Linux storage node must still be allowed to process the native
+canary so both storage steps can execute.
+
 Authenticated Tdarr API access, node identity, installed plugins and both node
 processes remain trusted. The private-copy boundary prevents shared-cache path
 redirection and mutable-byte publication; it is **not a sandbox for malicious
@@ -140,6 +184,11 @@ reads the records back. There is deliberately **no `--enable` mode**. Existing
 versioned flows must match exactly, and an already-enabled canary is rejected
 rather than overwritten. Workers, global scheduling, real libraries and
 existing CRFs are never updated.
+Tdarr 3.07's packaged Rust runtime no longer supplies the old
+`srcug/commonModules/jobs/libraryDefaults` JavaScript module. The installer
+therefore clones the existing safe-v1 TV library's schema (without changing
+that record), clears its folder exclusions and resets processing/watcher/
+scan toggles, counters, paths and flow assignment for the isolated canary.
 
 Place a **disposable copy**, not a hardlink, of representative eligible SDR
 media in `/data/media/tdarr-studio-canary` on Linux. That directory must not
