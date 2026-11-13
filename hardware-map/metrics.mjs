@@ -15,7 +15,9 @@ function svg(tag, attrs = {}) {
 const preferenceKey = "homeserver.hardware-metrics.v1";
 const colors = ["#81bddf", "#e7b66b", "#b9a2df", "#77d7c1"];
 
-export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFanFrame }) {
+export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFanFrame, dataSource }) {
+  const live = dataSource?.mode === "live";
+  const provenance = () => live ? dataSource.stale ? "STALE / UNAVAILABLE" : "LIVE" : "DEMO";
   let settings = { groups: Object.fromEntries(Object.keys(metricGroups).map(id => [id, true])), hidden: [], positions: {}, profile: "mixed", windows: { ...defaultHistoryWindows } };
   try {
     const saved = localStorage.getItem(preferenceKey);
@@ -38,13 +40,14 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   }
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const compactLayout = matchMedia("(max-width: 1000px), (max-width: 1800px) and (min-aspect-ratio: 1/1)");
-  let playing = !reducedMotion.matches, playbackChosen = false;
+  let playing = live || !reducedMotion.matches, playbackChosen = false;
   let second = 86400, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores", sensor = "all";
   let charts = [];
   let caseFanPreview = null;
   const cards = new Map(), badges = new Map(), lines = new Map();
-  const frame = () => ({ second, profile: settings.profile, provenance: "synthetic" });
-  const value = id => demoValue(id, second, settings.profile);
+  const frame = () => ({ second, profile: settings.profile, provenance: live ? "live" : "synthetic" });
+  const value = id => live ? dataSource.value(id) : demoValue(id, second, settings.profile);
+  const capacity = id => live ? !dataSource.stale && Number.isFinite(dataSource.snapshot?.capacities?.[id]) ? dataSource.snapshot.capacities[id] : null : metrics.get(id).maximum;
   const save = () => {
     try { localStorage.setItem(preferenceKey, JSON.stringify({ ...settings, version: 2 })); }
     catch (error) { onError(`Metric layout is tab-only: ${error.message}. Inspection annotations are unaffected.`); }
@@ -107,7 +110,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       cursor.setAttribute("d", `M${ratio * 300} 0V80`);
       cursor.setAttribute("visibility", "visible");
       tooltip.hidden = false;
-      tooltip.textContent = `DEMO · −${Math.round(record.seconds * (1 - ratio))}s · ${ids.map((id, i) => `${metrics.get(id).label}: ${chartNumber(record.values[i]?.[index], scale)}`).join(" / ")}`;
+      tooltip.textContent = `${provenance()} · −${Math.round(record.seconds * (1 - ratio))}s · ${record.ids.map((id, i) => `${metrics.get(id).label}: ${chartNumber(record.values[i]?.[index], record.scale)}`).join(" / ")}`;
     });
     plot.addEventListener("pointerleave", () => { tooltip.hidden = true; cursor.setAttribute("visibility", "hidden"); });
     charts.push(record);
@@ -124,12 +127,23 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   }
   function updateCharts() {
     charts = charts.filter(record => record.box.isConnected);
+    if (live) for (const definition of metricCards) {
+      const card = cards.get(definition.id);
+      if (!card) continue;
+      const title = card.querySelector(".metric-card-title");
+      title.textContent = definition.label;
+      title.title = definition.label;
+      const record = charts.find(item => item.box.parentElement === card);
+      if (record && definition.series.length === record.ids.length) record.ids = definition.series;
+    }
     for (const record of charts) {
       const signalGroup = metrics.get(record.ids[0]).group;
       if (record.box.closest("#metric-panel") && ["temperatures", "fans"].includes(signalGroup)) record.box.hidden = !settings.groups[signalGroup];
       if (record.box.closest("[hidden]") || (record.box.closest("dialog") && !record.box.closest("dialog").open)) continue;
       record.seconds = settings.windows[record.compact ? signalGroup : historyGroup()];
-      record.values = record.ids.map(id => demoSeries(id, second, record.seconds, settings.profile));
+      record.scale = sharedMetricScale(record.ids);
+      record.box.querySelector(".metric-y-axis").replaceChildren(...[record.scale.maximum, (record.scale.minimum + record.scale.maximum) / 2, record.scale.minimum].map(number => el("span", {}, chartNumber(number, record.scale))));
+      record.values = record.ids.map(id => live ? dataSource.series(id, record.seconds) : demoSeries(id, second, record.seconds, settings.profile));
       record.ids.forEach((id, i) => {
         record.paths[i].setAttribute("d", metricPath(record.values[i], record.scale.minimum, record.scale.maximum));
       });
@@ -143,9 +157,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const first = metrics.get(record.ids[0]);
       const samples = record.values[0].filter(Number.isFinite);
       record.footer.textContent = record.compact
-        ? `${historyLabel(record.seconds)} · DEMO${record.ids.length > 1 ? " · shared axis" : ""}`
+        ? `${historyLabel(record.seconds)} · ${provenance()}${record.ids.length > 1 ? " · shared axis" : ""}`
         : `${historyLabel(record.seconds)} ago → now · ${record.ids.length > 1 ? "shared" : "fixed"} axis ${chartNumber(record.scale.minimum, record.scale)}–${chartNumber(record.scale.maximum, record.scale)} · ${first.label} peak ${chartNumber(Math.max(...samples), record.scale)} · ${record.values[0].length} samples`;
-      record.plot.setAttribute("aria-label", `${record.header.firstChild.textContent}. Synthetic, not live. ${record.header.lastChild.textContent}. ${record.footer.textContent}`);
+      record.plot.setAttribute("aria-label", `${record.header.firstChild.textContent}. ${live ? "Collected server history" : "Synthetic, not live"}. ${record.header.lastChild.textContent}. ${record.footer.textContent}`);
     }
     for (const node of document.querySelectorAll("[data-metric-value]")) {
       const id = node.dataset.metricValue;
@@ -155,38 +169,53 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       node.hidden = !settings.groups.temperatures;
       decorateTemperature(node, node.dataset.temperature, value(node.dataset.temperature), metricNumber(value(node.dataset.temperature), "°C"));
     }
-    for (const node of document.querySelectorAll("[data-clock-summary]")) node.textContent = `${value("cpu-clock").toFixed(2)} / ${cpuClockSpecification.boost} GHz boost`;
-    const memory = demoMemory(second, settings.profile);
+    for (const node of document.querySelectorAll("[data-clock-summary]")) node.textContent = `${Number.isFinite(value("cpu-clock")) ? value("cpu-clock").toFixed(2) : "Unavailable"} / ${cpuClockSpecification.boost} GHz boost`;
+    const memory = live ? Object.fromEntries(["apps", "cache", "kernel", "free", "used"].map(id => [id, value(`memory-${id}`)])) : demoMemory(second, settings.profile);
+    const totalMemory = capacity("memory-used");
     for (const node of document.querySelectorAll(".metric-composition")) {
       for (const part of node.querySelectorAll("[data-memory-part]")) {
         const amount = memory[part.dataset.memoryPart];
-        part.style.width = `${amount / 128 * 100}%`;
+        part.style.width = `${Number.isFinite(amount) && totalMemory > 0 ? amount / totalMemory * 100 : 0}%`;
         part.title = `${part.dataset.memoryPart}: ${metricNumber(amount, "GiB")}`;
       }
-      node.querySelector(".metric-memory-bar").setAttribute("aria-label", `Synthetic memory: ${Object.entries(memory).filter(([id]) => id !== "used").map(([id, amount]) => `${id} ${metricNumber(amount, "GiB")}`).join(", ")}`);
-      node.querySelector("[data-memory-amount]").textContent = `${memory.used.toFixed(1)} / 128 GiB in use`;
-      node.querySelector("[data-memory-percent]").textContent = `${(memory.used / 128 * 100).toFixed(1)}%`;
+      node.querySelector(".metric-memory-bar").setAttribute("aria-label", `${provenance()} memory: ${Object.entries(memory).filter(([id]) => id !== "used").map(([id, amount]) => `${id} ${metricNumber(amount, "GiB")}`).join(", ")}`);
+      node.querySelector("[data-memory-amount]").textContent = `${Number.isFinite(memory.used) ? memory.used.toFixed(1) : "Unavailable"} / ${Number.isFinite(totalMemory) ? totalMemory.toFixed(1) : "Unavailable"} GiB in use`;
+      node.querySelector("[data-memory-percent]").textContent = Number.isFinite(memory.used) && totalMemory > 0 ? `${(memory.used / totalMemory * 100).toFixed(1)}%` : "Unavailable";
     }
     for (const node of document.querySelectorAll("[data-fullness]")) {
-      const id = node.dataset.fullness, definition = metrics.get(id), used = value(id);
-      node.querySelector(".metric-capacity-bar span").style.width = `${used / definition.maximum * 100}%`;
-      node.querySelector("[data-capacity-value]").textContent = `${(used / definition.maximum * 100).toFixed(1)}%`;
-      node.querySelector("[data-capacity-used]").textContent = `${used.toFixed(2)} / ${definition.maximum.toFixed(2)} ${definition.unit}`;
-      node.querySelector("[data-capacity-free]").textContent = `${(definition.maximum - used).toFixed(2)} ${definition.unit} free · DEMO`;
+      const id = node.dataset.fullness, definition = metrics.get(id), used = value(id), total = capacity(id);
+      const percent = Number.isFinite(used) && Number.isFinite(total) ? total > 0 ? used / total * 100 : used === 0 ? 0 : null : null;
+      node.querySelector(".metric-capacity-bar span").style.width = `${percent ?? 0}%`;
+      node.querySelector("[data-capacity-value]").textContent = percent === null ? "Unavailable" : `${percent.toFixed(1)}%`;
+      node.querySelector("[data-capacity-used]").textContent = `${Number.isFinite(used) ? used.toFixed(2) : "Unavailable"} / ${Number.isFinite(total) ? total.toFixed(2) : "Unavailable"} ${definition.unit}`;
+      const free = live && Object.hasOwn(dataSource.snapshot?.available ?? {}, id) ? dataSource.stale ? null : dataSource.snapshot.available[id] : Number.isFinite(used) && Number.isFinite(total) ? total - used : null;
+      node.querySelector("[data-capacity-free]").textContent = `${Number.isFinite(free) ? free.toFixed(2) : "Unavailable"} ${definition.unit} free · ${provenance()}`;
     }
     updateBadges();
-    onFanFrame?.({ hubRpm: value("fan-hub"), rearRpm: value("fan-rear1"), provenance: "synthetic" });
-    $("metric-clock").textContent = `${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} simulated`;
+    onFanFrame?.({ hubRpm: value("fan-hub"), rearRpm: 2000, provenance: live ? "live" : "synthetic" });
+    $("metric-clock").textContent = live ? dataSource.snapshot ? `Updated ${new Date(dataSource.snapshot.capturedAt).toLocaleTimeString()}` : "Waiting for collector" : `${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} simulated`;
+    if (live) {
+      const status = $("live-status");
+      status.hidden = false;
+      const issues = [...(dataSource.snapshot?.issues ?? []), dataSource.error, dataSource.historyError].filter(Boolean);
+      $("live-summary").textContent = `${provenance()} · 90-day history · Provisional slot mappings · ${issues.length} source notes`;
+      $("live-issues").textContent = issues.join("; ");
+      for (const label of document.querySelectorAll(".metric-provenance")) label.textContent = provenance();
+      const records = charts.filter(record => !record.box.closest("[hidden]") && (!record.box.closest("dialog") || record.box.closest("dialog").open));
+      void dataSource.requestHistory(records);
+    }
     scheduleLayout();
   }
   function updateBadges() {
     for (const [id, node] of badges) {
       const badge = metricBadges.find(b => b.id === id);
       const metricId = badge.metricId ?? id;
-      let source = metricId.startsWith("fan-rear") ? "ASSUMED" : "DEMO";
+      let source = metricId.startsWith("fan-rear") ? "ASSUMED" : provenance();
+      const readings = badge.ids?.map(value).filter(Number.isFinite);
       let readout = badge.ids
-        ? `${Math.min(...badge.ids.map(value)).toFixed(0)}–${Math.max(...badge.ids.map(value)).toFixed(0)} °C`
+        ? readings.length ? `${Math.min(...readings).toFixed(0)}–${Math.max(...readings).toFixed(0)} °C` : "Unavailable"
         : metricNumber(value(metricId), metrics.get(metricId).unit);
+      if (metricId.startsWith("fan-rear")) readout = "2,000 RPM";
       if (badge.previewBank && caseFanPreview) {
         if (caseFanPreview.mode === "snapshot") {
           readout = `${badge.previewBank === "hub" ? "~" : ""}${metricNumber(caseFanPreview[`${badge.previewBank}Rpm`], "RPM")}`;
@@ -198,11 +227,12 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       }
       node.textContent = `${badge.label} ${readout} · ${source}`;
       node.dataset.source = source.toLowerCase();
-      if (badge.previewBank === "hub") node.title = "One FAN3 hub-return channel shared by both three-fan banks, not six independently measured speeds. Snapshot/manual motion previews override these map readouts only; detail histories remain synthetic.";
+      if (badge.previewBank === "hub") node.title = `One FAN3 hub-return channel shared by both three-fan banks, not six independently measured speeds. Snapshot/manual motion previews override map readouts only; detail histories remain ${live ? "collected" : "synthetic"}.`;
       if (badge.previewBank === "rear") node.title = "Both Molex rear fans are assumed constant 2000 RPM at the user's request; no tach is measured. Manual motion studies are previews only.";
-      if (id === "fan-gpu") node.title = "Synthetic fan-speed percentage, not RPM or three measured physical fans. NVIDIA fan percentages describe intended speed; live channel support on this GPU has not been queried.";
+      if (id === "fan-gpu") node.title = `${live ? "Collected NVIDIA" : "Synthetic"} fan-speed percentage, not RPM or three measured physical fans. NVIDIA percentages describe intended speed, not proof of rotation.`;
       if (badge.group === "temperatures") {
-        const ids = badge.ids ?? [badge.id], hottest = ids.reduce((a, b) => temperatureLevels.indexOf(temperatureLevel(a, value(a))) >= temperatureLevels.indexOf(temperatureLevel(b, value(b))) ? a : b);
+        const ids = badge.ids ?? [badge.id];
+        const hottest = ids.reduce((a, b) => temperatureLevels.indexOf(temperatureLevel(a, value(a))) >= temperatureLevels.indexOf(temperatureLevel(b, value(b))) ? a : b, ids[0] ?? badge.id);
         decorateTemperature(node, hottest, value(hottest), node.textContent);
       }
     }
@@ -222,8 +252,8 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     node.style.color = level.color;
     node.dataset.temperatureLevel = level.label.toLowerCase();
     node.textContent = `${level.icon} ${text}`;
-    node.title = `${level.label}. Illustrative component-specific UI band, not a verified vendor alarm threshold. ${demoSensors.find(item => item.id === id).location}`;
-    node.setAttribute("aria-label", `${text}. ${level.label}. Synthetic temperature; illustrative band.`);
+    node.title = `${level.label}. Illustrative component-specific UI band, not a verified vendor alarm threshold. ${demoSensors.find(item => item.id === id)?.location ?? "Physical probe location unverified."}`;
+    node.setAttribute("aria-label", `${text}. ${level.label}. ${provenance()} temperature; illustrative band.`);
   }
   function temperatureButton(id) {
     return button("", () => openPanel("sensors", { sensor: id }), { class: "metric-temperature-link", "data-temperature": id });
@@ -360,11 +390,14 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     updateCharts();
   }
   function controls() {
-    $("metric-play").textContent = playing ? "Pause" : "Play demo";
+    $("metric-play").textContent = live ? "Live updates" : playing ? "Pause" : "Play demo";
+    $("metric-play").disabled = live;
     $("metric-play").setAttribute("aria-pressed", String(playing));
-    $("metric-play-dialog").textContent = playing ? "Pause demo" : "Play demo";
+    $("metric-play-dialog").textContent = live ? "Live updates" : playing ? "Pause demo" : "Play demo";
+    $("metric-play-dialog").disabled = live;
     $("metric-play-dialog").setAttribute("aria-pressed", String(playing));
-    $("metric-playback-note").textContent = playing ? "Invented data advancing at 1 simulated second / second." : `Paused synthetic history.${reducedMotion.matches ? " Reduced Motion is honored; Play demo is an explicit opt-in." : ""}`;
+    $("metric-playback-note").textContent = live ? "Read-only server collection every 5 seconds; histories retained by Prometheus. Unavailable counters stay unavailable; no synthetic backfill." : playing ? "Invented data advancing at 1 simulated second / second." : `Paused synthetic history.${reducedMotion.matches ? " Reduced Motion is honored; Play demo is an explicit opt-in." : ""}`;
+    $("metric-profile").disabled = live;
     for (const node of $("metric-group-controls").children) {
       node.setAttribute("aria-pressed", String(settings.groups[node.dataset.group]));
       node.title = `${settings.groups[node.dataset.group] ? "Hide" : "Show"} all ${metricGroups[node.dataset.group].label.toLowerCase()}`;
@@ -432,8 +465,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   function storageContext() {
     const section = el("section", { class: "metric-storage-context" });
     if (disk === "array") {
-      section.append(el("strong", {}, "11 RAID6 members + 1 hot spare · /dev/md0"),
-        el("p", {}, "Roles below come from the dated Linux snapshot, not this simulated workload. Per-disk counters remain available beneath mdadm; they should not be added to md0/LVM counters as if they were separate traffic."));
+      const raid = metricTopology.snapshot.raids.find(item => item.id === "md0");
+      section.append(el("strong", {}, raid ? `${raid.raidDisks} RAID6 members · ${raid.members.filter(item => item.state.includes("spare") && item.slot === null).length} hot spare · /dev/md0` : "RAID inventory unavailable"),
+        el("p", {}, `${live ? "Roles follow the latest collected inventory." : "Roles come from the dated snapshot, not this simulated workload."} Per-disk counters must not be added to md0/LVM counters as if they were separate traffic.`));
     } else {
       const info = storageDetails(disk);
       section.append(el("strong", {}, `${info.node.label} · ${(info.node.sizeBytes / 1e12).toFixed(2)} TB raw capacity`),
@@ -444,7 +478,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       }
       section.append(layers);
     }
-    section.append(el("p", { class: "compact muted" }, "Persistent identity: prefer a private WWN / /dev/disk/by-id or NVMe EUI/NGUID/UUID (model + serial fallback). No real identifiers are bundled. /dev/sdX and NVMe numbers are aliases; physical bays/sockets are still unbound."));
+    section.append(el("p", { class: "compact muted" }, live ? "Stable disk identities and serials stay in private server state. Slot assignments are persisted, provisional serial-sorted placeholders, NOT physically verified locations. Linux device names are current aliases." : "Persistent identity: prefer private WWN / by-id or NVMe identifiers (model + serial fallback). No real identifiers are bundled; physical slots remain unbound."));
     return section;
   }
   function renderPanel() {
@@ -477,7 +511,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
         });
         label.append(input, document.createTextNode(`${definition.label}${definition.mobileOnly ? " (compact screens)" : ""}`)); body.append(label);
       }
-      body.append(el("p", { class: "metric-demo-explainer" }, "All current values and histories are fabricated. Scenarios regenerate the entire invented history. Drag charts anywhere in the background; automatic layouts move charts toward edges to avoid fixed sensor badges. Temperature colors are illustrative comfort bands, not verified vendor alarm limits. Disk/socket badges do not establish physical bindings. Connector inspection hides overlays. Case-fan animations follow metric RPMs unless a manual motion study or reported snapshot is selected."));
+      body.append(el("p", { class: "metric-demo-explainer" }, `${live ? "Read-only server values with 90-day Prometheus retention; missing data is not backfilled. Provisional serial-sorted mappings do not establish physical wiring." : "Values and histories are fabricated; scenarios regenerate the invented history."} Drag charts anywhere in the background. Temperature colors are illustrative, not verified vendor alarms. Connector inspection hides overlays. Case-fan animations follow displayed RPMs unless a motion preview is selected.`));
     } else if (activePanel === "cpu") {
       add(["cpu"], "Overall · 16 cores / 32 logical CPUs");
       add(["cpu-clock"], "CPU clock");
@@ -486,17 +520,17 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       body.append(select([["cores", "16 cores"], ["threads", "32 logical CPUs"]], cpuView, next => { cpuView = next; }, "CPU graph grouping"));
       const cores = el("div", { class: "metric-core-grid" });
       for (let i = 0; i < (cpuView === "cores" ? 16 : 32); i += 1) cores.append(chart([`${cpuView === "cores" ? "core" : "thread"}-${i}`], `${cpuView === "cores" ? "Core" : "Logical CPU"} ${i}`, true));
-      body.append(grid, el("p", { class: "muted compact" }, "Synthetic core/thread grouping only. Physical Linux CPU IDs and SMT sibling topology have not been bound."), cores);
+      body.append(grid, el("p", { class: "muted compact" }, live ? "Core groups follow the collected kernel CPU topology; logical-CPU charts use Linux CPU IDs. Unsupported package-power readings remain unavailable." : "Synthetic core/thread grouping only. Physical Linux CPU IDs and SMT sibling topology have not been bound."), cores);
     } else if (activePanel === "memory") {
       const legend = el("div", { class: "metric-memory-legend" });
       for (const [id, label] of [["apps", "Applications"], ["cache", "File cache / reclaimable"], ["kernel", "Kernel"], ["free", "Free"]]) {
-        const item = el("span", { "data-memory-label": id }, `${label} `);
+        const item = el("span", { "data-memory-label": id }, `${live && id === "apps" ? "Other / anonymous (residual)" : label} `);
         item.append(el("strong", { "data-metric-value": `memory-${id}` }));
         legend.append(item);
       }
       body.append(composition(), legend);
       for (const id of ["memory-apps", "memory-cache", "memory-kernel", "memory-free", "swap"]) add([id], metrics.get(id).label);
-      body.append(grid, el("p", { class: "muted compact" }, "128 GiB illustrative accounting: in use = apps + kernel; all four composition buckets sum to capacity. A Linux collector must define non-overlapping accounting; /proc/meminfo fields cannot simply be added together."));
+      body.append(grid, el("p", { class: "muted compact" }, live ? "Linux composition partitions reported RAM into free, file cache/reclaimable, kernel and residual other/anonymous memory. In-use separately follows MemAvailable; it need not equal kernel + residual. Installed DIMMs total 128 GiB; usable memory excludes hardware reservations." : "128 GiB illustrative accounting: in use = apps + kernel; all four composition buckets sum to capacity."));
     } else if (activePanel === "storage") {
       const capacities = el("div", { class: "metric-capacity-grid" });
       capacities.append(fullness("data-used"), fullness("root-used"));
@@ -507,22 +541,22 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       add([`disk-${disk}-latency`], "Response time");
       add([`disk-${disk}-queue`], "Queue depth");
       if (disk !== "array") {
-        const ids = disk.startsWith("nvme") ? [`temp-nvme${disk === "nvme0n1" ? 0 : 1}`, `temp-nvme${disk === "nvme0n1" ? 0 : 1}-secondary`] : [`temp-${disk}`];
+        const nvme = disk.match(/^nvme(\d+)n\d+$/);
+        const ids = nvme ? [`temp-nvme${nvme[1]}`, `temp-nvme${nvme[1]}-secondary`] : [`temp-${disk}`];
         for (const id of ids) add([id], metrics.get(id).label);
       }
-      if (disk === "array") body.append(el("h4", {}, "Individual HDDs · synthetic activity / temperature"), diskComparison());
-      body.append(grid, el("div", { class: "metric-storage-layers" }, "LVM snapshot: homeserver-vg = nvme0n1p3 → root + swap. vg_redundant = md0 + nvme1n1p1 → cached /data. nvme1n1 holds cache data/metadata AND ordinary /data extents; /data is not entirely RAID-protected."),
-        el("p", { class: "muted compact" }, "Filesystem fullness is logical, not per RAID member. Cache occupancy is an invented runtime used-block count, not the NVMe's filesystem fullness or allocated-LV percentage. Actual cache mode and extent layout still require privileged LVM inspection. Individual SMART temperatures and stable disk identities belong in the future private collector."));
+      if (disk === "array") body.append(el("h4", {}, `Individual HDDs · ${live ? "collected" : "synthetic"} activity / temperature`), diskComparison());
+      body.append(grid, el("p", { class: "muted compact" }, live ? "Filesystem fullness is logical, not per RAID member. Available space excludes filesystem reservations. Cache occupancy remains unavailable unless collected. NVMe cache and ordinary data extents must not be mistaken for entirely RAID-protected storage. SMART temperatures may be unavailable for sleeping or unsupported drives." : "LVM snapshot: the data NVMe holds both cache and ordinary /data extents, so /data is not entirely RAID-protected. Filesystem fullness is logical; synthetic cache occupancy is not filesystem fullness."));
     } else if (activePanel === "gpu") {
       for (const id of ["gpu-util", "gpu-3d", "gpu-copy", "gpu-encode", "gpu-decode", "gpu-dedicated", "gpu-shared", "gpu-power", "temp-gpu", "fan-gpu"]) add([id], metrics.get(id).label);
-      body.append(grid, el("p", { class: "muted compact" }, "The summary compares general GPU activity and video encode on one shared 0–100% axis: useful for this server's compute/ML versus transcoding workloads. Engines can overlap; do not sum them. Generic GPU utilization is not 3D-only activity or SM occupancy. Task-Manager-inspired, all synthetic; separate 3D/copy/shared-memory counters may be unavailable on Linux. Shared/host chart scale is not a hardware pool limit."),
-        el("p", { class: "muted compact" }, "GPU fan speed is one synthetic percentage channel, not measured RPM or independently bound to the card's three fans. NVIDIA NVML/nvidia-smi can expose intended fan speed as a percentage; this does not prove a fan is physically turning. Actual channel count, RPM support and zero-RPM behavior require a later read-only capability check on this GPU/driver."));
+      body.append(grid, el("p", { class: "muted compact" }, `GPU activity and encode share a 0–100% axis. Engines can overlap; do not sum them. General utilization is not 3D-only activity or SM occupancy. ${live ? "Unsupported 3D/copy/shared-memory counters remain unavailable." : "All values are synthetic."}`),
+        el("p", { class: "muted compact" }, `${live ? "NVIDIA reports" : "The demo illustrates"} intended fan-speed percentage, not measured RPM or three independently bound physical fans. This does not prove physical rotation.`));
     } else if (activePanel === "network") {
       body.append(select(demoNics.map(id => [id, id]), nic, next => { nic = next; }, "Network interface"));
       add([`net-${nic}-rx`, `net-${nic}-tx`], "Receive / send · separate full-duplex directions");
       add(["temp-lan"], "Onboard LAN sensor · shared context, not per-port temperature");
       body.append(el("p", { class: "metric-storage-context" }, `${nic}: ${metricTopology.nodes.get(nic).bondRole ?? metricTopology.nodes.get(nic).summary}`), grid,
-        el("p", { class: "muted compact" }, "Receive and send share one 0–10 Gb/s axis and the same displayed units. Linux exposes per-interface counters for bond0 and each physical member via rtnetlink/sysfs; use counter deltas, handling resets. Active-backup is not a 20 Gb/s bond; avoid double-counting bond/member traffic. Prefer each NIC's permanent hardware MAC plus PCI path for identity, not its bond-assigned current MAC. Real addresses remain private/uncollected. LAN temperature is controller context; LAN1/LAN2 port pairing is unassigned."));
+        el("p", { class: "muted compact" }, "Receive/send share one 0–10 Gb/s axis. Per-interface counters include the bond and physical members; avoid double-counting them. Active-backup does not aggregate link capacity. LAN temperature is controller context, not per-port; LAN1/LAN2 physical pairing remains unassigned. Permanent identities stay private."));
     } else if (activePanel === "sensors") {
       const actions = el("div", { class: "toolbar" });
       actions.append(button("Show all temperatures", () => group("temperatures", true)), button("Hide all temperatures", () => group("temperatures", false)),
@@ -531,7 +565,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       body.append(select(choices, sensor, next => { sensor = next; }, "Sensor selection"), actions);
       const legend = el("div", { class: "metric-temperature-legend" });
       for (const level of temperatureLevels) { const item = el("span", {}, `${level.icon} ${level.label}`); item.style.color = level.color; legend.append(item); }
-      body.append(legend, el("p", { class: "muted compact" }, "Illustrative, component-specific bands only, not verified vendor limits or an alarm system. Every changing value and every graph is synthetic. Rear fans use your assumed constant 2000 RPM, without tach. One FAN3 return drives both three-fan banks under your shared-speed assumption, not six independent measurements. Snapshot/manual motion previews change the bank badges and artwork, not these demo histories. CPU FAN1 is PSU-side; FAN2 is GPU-side."));
+      body.append(legend, el("p", { class: "muted compact" }, `Illustrative bands, not vendor alarms. ${live ? "Values and histories are collected read-only; unsupported channels remain unavailable." : "All changing values and histories are synthetic."} Rear fans assume 2000 RPM without tach. FAN3 drives both banks by shared-speed assumption, not six independent measurements. Motion previews change artwork/readouts only. FAN1 is PSU-side; FAN2 is GPU-side.`));
       const selected = [...demoSensors, ...demoFans].filter(item => sensor === "all" || sensor === item.id || sensor === "nvme" && item.id.startsWith("temp-nvme") || sensor === "hdds" && item.id.startsWith("temp-sd") || sensor === "fans" && item.id.startsWith("fan-"));
       const locations = [...new Set(selected.filter(item => item.location).map(item => item.location))];
       if (locations.length) {
@@ -540,7 +574,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
         for (const location of locations) notes.append(el("p", {}, location));
         body.append(notes);
       }
-      if (selected.some(item => item.id === "fan-gpu")) body.append(el("p", { class: "muted compact" }, "GPU fan percentage is synthetic and unbound to individual physical fans. NVIDIA exposes intended speed percentages on supported devices, not necessarily actual RPM or proof of rotation. Actual channel/RPM support has not been checked."));
+      if (selected.some(item => item.id === "fan-gpu")) body.append(el("p", { class: "muted compact" }, `${live ? "Collected" : "Synthetic"} GPU fan percentage is not bound to individual physical fans. Intended speed does not prove physical rotation or provide actual RPM.`));
       for (const definition of selected) add([definition.id], definition.label);
       body.append(grid);
     }
@@ -563,6 +597,24 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     if (!playing || document.hidden) return;
     second += 1; updateCharts();
   }, 1000);
+  let inventorySignature = "";
+  if (live) dataSource.subscribe(data => {
+    const inventory = data?.inventory?.snapshot;
+    const signature = JSON.stringify([inventory?.nodes, inventory?.raids, inventory?.bonds, data?.inventory?.disks]);
+    if (signature !== inventorySignature) {
+      inventorySignature = signature;
+      if (disk !== "array" && !demoDisks.some(item => item.id === disk)) disk = "array";
+      if (!demoNics.includes(nic)) nic = demoNics[0] ?? "bond0";
+      if ($("metrics-dialog").open) renderPanel();
+    }
+    controls(); updateCharts();
+  });
+  if (live) {
+    $("metrics-button").textContent = "Metrics · LIVE";
+    $("component-metrics-button").textContent = "View collected performance graphs ↗";
+    $("metric-controls").setAttribute("aria-label", "Collected server metric layers");
+    $("metric-layer").setAttribute("aria-label", "Collected hardware metric overlays");
+  }
   controls(); updateVisibility();
   return {
     updateVisibility, layout: scheduleLayout, openPanel, frame,

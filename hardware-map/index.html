@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
+  <meta name="atlas-data" content="demo">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Server Atlas · ROMED8-2T</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" sizes="any">
@@ -37,6 +38,7 @@
         <button id="metric-show-all" type="button" title="Show all metric layers">All</button>
         <button id="metric-hide-all" type="button" title="Hide all metric layers">None</button>
       </section>
+      <details id="live-status" class="live-status" hidden><summary id="live-summary" role="status"></summary><p id="live-issues"></p></details>
       <div class="map-panel panel">
         <div class="map-scroll"><svg id="board" viewBox="0 0 1440 840" role="group" aria-label="Interactive Rosewill chassis and installed motherboard hardware"></svg></div>
         <div id="metric-layer" class="metric-layer" aria-label="Synthetic hardware metric overlays"><svg id="metric-leaders" aria-hidden="true"></svg></div>
@@ -111,7 +113,7 @@
   <dialog id="fan-motion-dialog" class="popup" aria-labelledby="fan-motion-title">
     <header class="popup-heading"><h2 id="fan-motion-title">Case fan motion study</h2><button id="close-fan-motion" type="button" autofocus>Close ×</button></header>
     <div class="popup-body">
-      <p class="muted compact">By default, the six front/middle fans follow the displayed synthetic hub RPM; both rear fans use your assumed constant 2000 RPM. Use the reported snapshot or override with an artistic stage below. None of these controls changes real fan settings. CPU/GPU artwork is unchanged.</p>
+      <p class="muted compact">By default, the six front/middle fans follow the displayed hub RPM (collected in LIVE mode, invented in DEMO); both rear fans use your assumed constant 2000 RPM. Use the historical snapshot or override with an artistic stage below. None of these controls changes real fan settings. CPU/GPU artwork is unchanged.</p>
       <label class="fan-rotation-toggle"><input id="fan-rotation-enabled" type="checkbox" aria-describedby="fan-motion-preference">Spin fans</label>
       <p id="fan-motion-preference" class="muted compact"></p>
       <div id="fan-motion-presets" class="fan-motion-presets" role="group" aria-label="Fan speed animation variants"></div>
@@ -151,7 +153,7 @@
       <div class="reference"><h4>Sources & limitations</h4><p>Original schematic, approximate positions and outlines; not a wiring, airflow or clearance guide. Official ASRock Rack manual rev. 1.30 / April 2026. No analytics, credentials, live server connection or remote writes.</p><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf" target="_blank" rel="noopener noreferrer">Official motherboard manual ↗</a> · <a href="./README.md" target="_blank" rel="noopener noreferrer">Sources & limitations ↗</a></div>
     </section>
     <section id="case-view" hidden aria-label="Case and telemetry explorer">
-      <div class="telemetry-toolbar"><div><h3>Same hardware. Different layers of evidence.</h3><p class="muted">Component sensors are not air-temperature probes. No live server connection.</p></div><div class="segmented" aria-label="Telemetry provenance"><button id="observed-mode" class="active" aria-pressed="true">Observed snapshot</button><button id="synthetic-mode" aria-pressed="false">Synthetic demo</button></div></div>
+      <div class="telemetry-toolbar"><div><h3>Same hardware. Different layers of evidence.</h3><p class="muted">Historical inspection evidence and a separate interpolation demo; current collection appears in the performance overlay. Component sensors are not air-temperature probes.</p></div><div class="segmented" aria-label="Telemetry provenance"><button id="observed-mode" class="active" aria-pressed="true">Observed snapshot</button><button id="synthetic-mode" aria-pressed="false">Synthetic demo</button></div></div>
       <div id="telemetry-warning" class="provenance-banner"></div>
       <div class="case-layout">
         <section class="panel case-panel"><div class="panel-heading"><h3>RSV-L4500U / conceptual top view</h3><span>NOT A BAY MAP</span></div>

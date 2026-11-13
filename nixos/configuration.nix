@@ -26,6 +26,7 @@
     ./modules/ntfy.nix
     ./modules/backups.nix
     ./modules/nvidia.nix
+    ./modules/server-atlas.nix
   ];
 
   # This option defines the first version of NixOS you have installed on this particular machine,

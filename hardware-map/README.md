@@ -1,8 +1,8 @@
 # Server Atlas
 
-A local-first, dependency-free prototype for mapping the ROMED8-2T's connectors
-to the hardware actually installed in the server. No deployment, server
-connection, credentials, analytics, fan control or remote writes.
+A hardware map and read-only live monitor for the ROMED8-2T server. The
+dependency-free browser UI also works as an explicitly synthetic local demo.
+No fan control, analytics or browser-side credentials.
 
 ## Run
 
@@ -18,6 +18,70 @@ Tests require Node.js and no packages:
 
 ```powershell
 node --test hardware-map\model.test.mjs hardware-map\metric-model.test.mjs
+node --test hardware-map\live-data.test.mjs
+```
+
+## Live service
+
+The deployed Python server marks the page **LIVE**; a static HTTP server marks
+it **DEMO**. API errors never fall back to fabricated values. `?demo=1` is an
+explicit synthetic-mode opt-in. The existing inspection annotations and their
+browser-local storage remain separate from telemetry.
+
+A root **host collector**, without a network listener, reads `/proc`, sysfs,
+`lsblk`, read-only LVM metadata, SMART, local IPMI and NVIDIA counters. It writes
+atomic private files under `/var/lib/server-atlas` every five seconds. Slow
+inventory/IPMI refreshes run separately; SMART polls every five minutes with
+`smartctl -n standby` so sleeping disks are not deliberately awakened.
+Per-source timestamps/expiry accompany cached measurements. Unsupported or
+failed readings stay unavailable: GPU 3D/copy/shared memory, package power and
+cache occupancy are not invented. Rear RPM remains an explicit 2000-RPM
+assumption; FAN3 remains one shared hub tach, not six measurements.
+
+The unprivileged, read-only `server-atlas` container serves only allowlisted
+static files and GET/HEAD APIs. It mounts collector state read-only, has no
+Docker socket or hardware devices, and publishes no host port. It joins the
+existing `compose_proxy` and `compose_monitoring` networks. A separate Compose
+project deliberately keeps this pinned feature deployment independent of the
+main project's nightly updates and network ownership.
+
+**History reuses the existing Prometheus 90-day TSDB**, with a 15-second Atlas
+scrape. Bounded API queries accept registered channel IDs only, never raw
+PromQL. Long windows return at most 301 points; missing/stale scrapes stay gaps,
+not zeroes or invented backfill. CPU/disk/NIC rates handle counter resets.
+Disk series use private stable-identity hashes, so Linux device renumbering
+does not silently splice another disk's history onto a series.
+
+**Provisional disk placement:** initial disk serials are lexicographically
+sorted and assigned to sorted installed slots (three cages, bays 1–4; M2_1/2).
+Private `assignments.json` preserves those assignments across renumbering;
+absent devices retain their reserved slots and new identities use unused ones.
+Unknown/duplicate identities are not assigned. Labels, popups and card leaders
+explicitly distinguish this arbitrary mapping from physical verification.
+Raw serials/WWNs never belong in the repository or public demo fixture.
+
+Deployment source is a committed clone under `/srv/server-atlas/source`.
+As root, run `hardware-map/deploy.sh`. It builds only the collector's Nix unit
+closure, installs it in the host's supported persistent
+`/usr/local/lib/systemd/system` search path (including a multi-user wants
+symlink), and retains the closure with `/srv/server-atlas/collector-unit`.
+It does **not** switch the whole NixOS generation or restart unrelated units.
+The imported Nix module is the declarative equivalent for future rebuilds.
+Do not install both competing unit versions; the installer refuses to replace
+an already NixOS-managed unit. The Docker service has `restart: unless-stopped`.
+
+Before exposing it, add `server-atlas.danteb.com` to Authelia's **admins /
+two_factor** rule, validate the configuration and restart only Authelia.
+`hardware-map/setup-proxy.sh` uses NPM's supported API and existing private
+monitor credentials, requires the existing wildcard certificate, and creates
+the authenticated route. `/metrics` returns 404 at the public proxy.
+The existing `docker/monitoring/prometheus.yml` includes the internal scrape;
+validate with `promtool check config` and reload Prometheus with SIGHUP.
+
+Backend checks (synthetic fixtures, no real identifiers):
+
+```powershell
+uv run --no-project python -B -m unittest discover -s hardware-map\server -p "test_*.py"
 ```
 
 ## What works
@@ -133,7 +197,8 @@ node --test hardware-map\model.test.mjs hardware-map\metric-model.test.mjs
   separately visible beside your editable annotation.
 - Inspect explicitly dated observed snapshots, reported capacities and
   unknowns. Separately opt into synthetic telemetry and an air-temperature
-  interpolation demonstration. There is no live refresh.
+  interpolation demonstration. These inspection snapshots do not live-refresh;
+  the performance overlay uses the separate live API when deployed.
 
 Do not put credentials, serial numbers, MAC addresses or other sensitive
 details in public exports or commits. User annotations are private browser

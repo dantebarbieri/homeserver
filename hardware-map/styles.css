@@ -95,6 +95,8 @@ main { width: 100%; }
 .fan-frame { fill: #282e31; stroke: #141c21; stroke-width: 2; }
 .nic-port { fill: #555b56; stroke: #a4aaa0; stroke-width: 1.5; }
 .lan-chip { fill: #24352e; stroke: #a4aaa0; stroke-width: 1.5; }
+.disk-linux-label { fill: #d3ddce; font-size: 11px; font-weight: 500; pointer-events: none; }
+.live-status { padding: 6px 12px; color: #b7c9bc; font-size: 10px; line-height: 1.5; background: #12231e; border: 1px solid #334d40; border-radius: 6px; }
 .linux-details { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 8px; overflow-wrap: anywhere; }
 .linux-details table { table-layout: fixed; }
 .linux-details th:first-child { width: 38%; }

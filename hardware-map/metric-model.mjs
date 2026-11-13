@@ -11,8 +11,8 @@ export const metricGroups = {
   fans: { label: "Fans", color: "#becbd3" },
 };
 export const demoProfiles = { mixed: "Mixed workload", idle: "Mostly idle", transcode: "Transcode", transfer: "Storage transfer" };
-export const metricTopology = buildLinuxTopology(linuxSnapshot);
-const topology = metricTopology;
+export let metricTopology = buildLinuxTopology(linuxSnapshot);
+let topology = metricTopology;
 export const cpuClockSpecification = { base: 3, boost: 3.7 };
 export const historyWindows = [60, 120, 300, 900, 1800, 3600, 7200, 21600, 86400];
 export const defaultHistoryWindows = { cpu: 120, gpu: 120, network: 120, memory: 900, storage: 7200, temperatures: 1800, fans: 300 };
@@ -272,3 +272,56 @@ export const metricBadges = [
   { id: "fan-rear-bank", metricId: "fan-rear1", previewBank: "rear", group: "fans", label: "Rear ×2", anchor: "rear-fan-1", x: 1377, y: 610, align: "end" },
   { id: "fan-gpu", group: "fans", label: "GPU fans", anchor: "gpu", x: 1275, y: 248, align: "end" },
 ];
+
+export function applyLiveSnapshot(data) {
+  metrics.get("memory-apps").label = "Other / anonymous (residual)";
+  for (const sensor of demoSensors) {
+    if (sensor.id.startsWith("temp-nvme")) {
+      sensor.label = `${sensor.id.slice(5)} · SMART ${sensor.id.endsWith("secondary") ? "sensor 1 (vendor meaning unverified)" : "composite"}`;
+      sensor.location = "NVMe: each drive reports its own SMART temperature information; composite and optional sensor 1 do not establish controller/NAND probe positions. Socket assignments are provisional serial-sorted placeholders, NOT physically verified.";
+      metrics.get(sensor.id).label = sensor.label;
+    }
+  }
+  if (data.inventory?.snapshot) {
+    const next = buildLinuxTopology(data.inventory.snapshot);
+    topology = next;
+    metricTopology = next;
+    demoDisks.splice(0, demoDisks.length, ...[...next.nodes.values()].filter(node => ["Physical HDD", "Physical NVMe"].includes(node.kind)));
+    demoNics.splice(0, demoNics.length, ...[...next.nodes.values()].filter(node => ["Linux network bond", "Physical 10GbE interface", "Physical network interface"].includes(node.kind)).map(node => node.id));
+  }
+  for (const [id, capacity] of Object.entries(data.capacities ?? {})) {
+    if (metrics.has(id) && Number.isFinite(capacity) && capacity > 0) metrics.get(id).maximum = capacity;
+  }
+  for (const disk of demoDisks) {
+    for (const [field, unit, maximum] of [["read", "MB/s", 2500], ["write", "MB/s", 2500], ["active", "%", 100], ["latency", "ms", 60], ["queue", "", 16]]) {
+      const id = `disk-${disk.id}-${field}`;
+      if (!metrics.has(id)) metric(id, field, unit, maximum, "storage");
+    }
+  }
+  for (const id of demoNics) for (const direction of ["rx", "tx"]) {
+    if (!metrics.has(`net-${id}-${direction}`)) metric(`net-${id}-${direction}`, direction === "rx" ? "Receive" : "Send", "Mb/s", 10000, "network");
+  }
+  const bindings = data.inventory?.disks ?? [];
+  for (const cardId of ["nvme-root", "nvme"]) {
+    const card = metricCards.find(item => item.id === cardId);
+    const binding = bindings.find(item => item.kind === "nvme" && item.role === (cardId === "nvme-root" ? "root" : "cache"));
+    if (!binding) {
+      card.device = undefined;
+      card.label = `${cardId === "nvme-root" ? "Root NVMe" : "Data/cache NVMe"} · inventory unavailable`;
+      card.anchor = "nvme-group";
+      continue;
+    }
+    card.device = binding.id;
+    card.label = `${binding.id} · ${cardId === "nvme-root" ? "root + swap" : "/data cache + extents"} · provisional`;
+    card.series = [`disk-${binding.id}-read`, `disk-${binding.id}-write`];
+    card.anchor = binding.slot ? `drive-${binding.slot}` : "nvme-group";
+  }
+  const hdds = metricBadges.find(item => item.id === "temp-hdd-range");
+  hdds.ids = bindings.filter(item => item.kind === "hdd").map(item => `temp-${item.id}`);
+  for (const id of Object.keys(data.metrics ?? {})) {
+    if (id.startsWith("temp-") && !metrics.has(id)) {
+      metric(id, id, "°C", 110, "temperatures", { minimum: 20 });
+      demoSensors.push({ id, label: id, anchor: id.startsWith("temp-sd") ? "disk-bays" : "nvme-group", location: id.startsWith("temp-sd") ? sensorLocations["disk-bays"] : sensorLocations["nvme-group"] });
+    }
+  }
+}

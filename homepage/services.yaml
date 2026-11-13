@@ -442,6 +442,13 @@
             - { field: enabled, label: Enabled, format: text }
 
 - Monitoring:
+    - Server Atlas:
+        icon: mdi-server
+        href: https://server-atlas.danteb.com
+        description: Interactive Hardware & Live Telemetry
+        siteMonitor: https://server-atlas.danteb.com
+        server: my-docker
+        container: server-atlas
     - Grafana:
         icon: grafana.svg
         href: https://grafana.danteb.com

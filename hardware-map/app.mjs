@@ -2,6 +2,8 @@ import { connectors, connectorById, components, hardwareCategories, partReferenc
 import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
 import { linuxSnapshot } from "./linux-snapshot.mjs";
 import { createMetricUI } from "./metrics.mjs";
+import { applyLiveSnapshot } from "./metric-model.mjs";
+import { LiveData } from "./live-data.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -12,7 +14,8 @@ let activeCategory = "*";
 const componentById = new Map(components.map(component => [component.id, component]));
 const sceneParts = new Map();
 let metricUI = null;
-const linuxTopology = buildLinuxTopology(linuxSnapshot);
+let linuxTopology = buildLinuxTopology(linuxSnapshot);
+const dataSource = new LiveData({ enabled: document.querySelector('meta[name="atlas-data"]').content === "live" && new URLSearchParams(location.search).get("demo") !== "1" });
 let mode = "snapshot";
 let zoom = 100;
 let fanMotionPreview = "data";
@@ -324,7 +327,7 @@ function renderCaseFanMotion() {
     if ((dataMode || snapshotMode) && Number.isFinite(rpm)) {
       fan.dataset.rpm = rpm;
       fan.dataset.rpmSource = index < 6 ? snapshotMode ? "reported-shared-assumption" : "synthetic-shared-assumption" : "assumed-constant";
-      const source = index < 6 ? snapshotMode ? "REPORTED ~" : "DEMO " : "ASSUMED ";
+      const source = index < 6 ? snapshotMode ? "REPORTED ~" : metricFanFrame?.provenance === "live" ? "LIVE " : "DEMO " : "ASSUMED ";
       fan.querySelector("title").textContent = `${source}${Math.round(rpm)} RPM. ${index < 6 ? "One hub tach applied to all six by user assumption; not six measured speeds." : "Constant 2000 RPM assumed by the user; no tach."} Artistic speed band, not physical-rate rotation.`;
       fan.querySelector(".fan-motion-caption").textContent = "";
     } else {
@@ -341,7 +344,7 @@ function renderCaseFanMotion() {
   $("fan-motion-button").classList.toggle("demo-active", demo);
   $("fan-motion-status").textContent = demo
     ? `ANIMATION DEMO · ${selected?.label ?? "Compare all six stages"} on the map. No RPM readings or fan settings are changed.${!fanRotationEnabled ? " Rotation is paused." : ""}`
-    : dataMode ? "Animations follow displayed synthetic RPMs: one hub value for all six front/middle fans; rear fans assumed constant 2000 RPM. Spin fans controls rotation and honors Reduced Motion."
+    : dataMode ? `Animations follow displayed ${dataSource.mode === "live" ? "collected" : "synthetic"} RPMs: one hub value for all six front/middle fans; rear fans assumed constant 2000 RPM. Spin fans controls rotation and honors Reduced Motion.`
       : snapshotMode ? "Reported snapshot: approximately 1100 RPM shared across the six hub fans; rear fans assumed constant 2000 RPM. This is not live telemetry."
         : "No live animation data assigned. Static artwork does not mean stopped.";
   for (const button of $("fan-motion-presets").children) {
@@ -448,20 +451,25 @@ function renderBoard() {
   lan.append(svgElement("text", { x: 1281, y: 300, class: "hardware-label centered" }, "X550"));
   hardware.append(lan);
   const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. User confirms four HDDs with the bottom bay empty in each cage. Individual logical-drive identities remain unassigned.");
+  const individualDisks = [];
   for (let cage = 0; cage < 3; cage += 1) {
     const y = 124 + cage * 196;
     disks.append(svgElement("rect", { x: 172, y, width: 231, height: 173, rx: 4, class: "drive-cage part-outline" }));
     for (let bay = 0; bay < 5; bay += 1) {
-      disks.append(svgElement("rect", { x: 185, y: y + 15 + bay * 29, width: 205, height: 22, rx: 2, class: bay === 4 ? "drive-bay empty" : "drive-bay" }));
+      const drive = bay < 4 ? hardwarePart(`drive-cage-${cage + 1}-bay-${bay + 1}`, "disks", `Cage ${cage + 1} / bay ${bay + 1}`, "Physical disk identity is unverified. Live mode may assign a provisional serial-sorted identity; that is not a physical observation.") : disks;
+      drive.append(svgElement("rect", { x: 185, y: y + 15 + bay * 29, width: 205, height: 22, rx: 2, class: bay === 4 ? "drive-bay empty" : "drive-bay part-outline" }));
       if (bay < 4) {
-        disks.append(svgElement("rect", { x: 193, y: y + 21 + bay * 29, width: 28, height: 10, class: "drive-label" }));
-        disks.append(svgElement("circle", { cx: 379, cy: y + 26 + bay * 29, r: 2, class: "drive-screw" }));
+        drive.append(svgElement("rect", { x: 193, y: y + 21 + bay * 29, width: 28, height: 10, class: "drive-label" }));
+        drive.append(svgElement("circle", { cx: 379, cy: y + 26 + bay * 29, r: 2, class: "drive-screw" }));
+        drive.append(svgElement("text", { x: 229, y: y + 30 + bay * 29, class: "disk-linux-label" }));
+        individualDisks.push(drive);
       }
     }
   }
   disks.append(svgElement("text", { x: 173, y: 738, class: "scene-heading" }, "12 HDDs / 15 BAYS"));
   disks.append(svgElement("text", { x: 173, y: 758, class: "scene-note" }, "BOTTOM BAY EMPTY IN EACH CAGE"));
   hardware.append(disks);
+  hardware.append(...individualDisks);
   for (const [region, x] of [["front", 60], ["middle", 440]]) {
     for (let i = 0; i < 3; i += 1) {
       const id = `${region}-fan-${i + 1}`;
@@ -619,7 +627,7 @@ function appendReferences(container, references) {
 
 function renderComponentDetails() {
   const part = sceneParts.get(selectedPartId);
-  const component = componentById.get(part.componentId) ?? part;
+  const component = { ...(componentById.get(part.componentId) ?? {}), ...part };
   $("component-name").textContent = part.label;
   $("component-model").textContent = component.model;
   $("component-capacity").textContent = component.capacity;
@@ -707,7 +715,7 @@ function renderLinuxAssociation(target) {
   if (!association) return;
   const host = selectedPartId ? $("component-details") : $("connector-details");
   host.insertBefore($("linux-details"), selectedPartId ? $("component-reference-links").closest(".reference") : $("pin-section"));
-  $("linux-captured").textContent = `OBSERVED SNAPSHOT · ${new Date(snapshot.capturedAt).toLocaleString()} · NOT LIVE. ${snapshot.source}`;
+  $("linux-captured").textContent = `${dataSource.mode === "live" ? "COLLECTED INVENTORY" : "OBSERVED SNAPSHOT · NOT LIVE"} · ${new Date(snapshot.capturedAt).toLocaleString()} · ${snapshot.source}`;
   $("linux-association").textContent = association.note;
   $("linux-limitations").textContent = `${snapshot.note} ${snapshot.limitations}`;
   $("linux-node").hidden = true;
@@ -731,7 +739,7 @@ function renderLinuxAssociation(target) {
   list.append(table);
   if (association.nodes.some(id => linuxTopology.nodes.get(id).memberships.length)) {
     for (const raid of snapshot.raids) list.append(linuxNodeButton(raid.id, `${linuxTopology.nodes.get(raid.id).label} · ${linuxNodeSummary(linuxTopology, raid.id)}`));
-    list.append(linuxNodeButton("data-filesystem", "/data · explore LVM / cache / backing devices"));
+    if (linuxTopology.nodes.has("data-filesystem")) list.append(linuxNodeButton("data-filesystem", "/data · explore LVM / cache / backing devices"));
   }
 }
 
@@ -1000,7 +1008,37 @@ for (const component of components) {
   $("inventory-grid").append(card);
 }
 renderBoard();
+let appliedSnapshot = null;
+function applyCollectedInventory(data) {
+  if (!data || data === appliedSnapshot) return;
+  applyLiveSnapshot(data);
+  if (data.inventory?.snapshot) linuxTopology = buildLinuxTopology(data.inventory.snapshot);
+  for (const binding of data.inventory?.disks ?? []) {
+    if (!binding.slot) continue;
+    const id = `drive-${binding.slot}`, part = sceneParts.get(id);
+    if (!part) continue;
+    part.label = `${binding.slot} · /dev/${binding.id} · PROVISIONAL`;
+    part.bindingId = binding.id;
+    part.model = binding.model;
+    part.capacity = `${(binding.sizeBytes / 2 ** 40).toFixed(2)} TiB`;
+    part.status = "PROVISIONAL · serial-sorted assignment, NOT physically verified";
+    part.note = `Serial: ${binding.serial ?? "unavailable"}. Stable identity: ${binding.stableId ?? "unavailable"}. This private mapping persists across Linux device renumbering. Correct it after physical inspection; do not infer cabling from this placeholder.`;
+    const node = $("board").querySelector(`.hardware-part[data-id="${id}"]`);
+    node?.setAttribute("aria-label", part.label);
+    const label = node?.querySelector(".disk-linux-label");
+    const disk = linuxTopology.nodes.get(binding.id);
+    if (label) label.textContent = `/dev/${binding.id} *${disk?.memberships?.some(member => member.state.includes("spare")) ? " · SPARE" : ""}`;
+  }
+  appliedSnapshot = data;
+  if ($("inspector-dialog").open && !dirty) renderSelection();
+}
+if (dataSource.mode === "live") {
+  await dataSource.poll();
+  applyCollectedInventory(dataSource.snapshot);
+  dataSource.subscribe(applyCollectedInventory);
+}
 metricUI = createMetricUI({
+  dataSource,
   openPopup, closePopup: requestPopupClose, onError: message => notify(message, true),
   onFanFrame: frame => {
     metricFanFrame = frame;
@@ -1010,7 +1048,8 @@ metricUI = createMetricUI({
     ? ["drive-M2_1", "drive-M2_2"].some(part => document.querySelector(`.hardware-part[data-id="${part}"][aria-disabled="false"]`))
     : Boolean(document.querySelector(`.hardware-part[data-id="${id}"][aria-disabled="false"]`)))),
 });
-$("component-metrics-button").addEventListener("click", () => metricUI.openPanel(metricUI.panelFor(selectedPartId)));
+dataSource.start();
+$("component-metrics-button").addEventListener("click", () => metricUI.openPanel(metricUI.panelFor(selectedPartId), { disk: sceneParts.get(selectedPartId)?.bindingId }));
 renderCaseFanMotion();
 renderSelection();
 renderTelemetry();
