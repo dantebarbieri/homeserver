@@ -119,8 +119,9 @@ to forwarding only `127.0.0.1:11434` from the homeserver's address.
 the same installer; the two accounts, keys and allowed destinations stay separate.
 
 Enable the `arr-ai` Compose profile and start in `ARR_AI_MODE=shadow`, then
-switch to `auto` only after checking real recommendations. See the integration
-document for rollout, verification, budgets and rollback.
+switch to `auto` only after checking real recommendations (production has run
+`auto` since 2026-11-14). See the integration document for rollout,
+verification, budgets and rollback.
 
 To retire the connection, first disable model assistance and stop
 `studio-ollama`. Remove its key directory on the server and the two

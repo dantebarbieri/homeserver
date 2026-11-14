@@ -128,8 +128,22 @@ Rollback: set `ARR_AI_MODE=off` and recreate only the three helpers. The
 deterministic engine remains available if Studio is down. Stop `studio-ollama`
 and remove `arr-ai` from `COMPOSE_PROFILES` if retiring the connection.
 Keep `ai.json` when rolling back so uncertain attempts are not forgotten.
-Never restore a whole old `.env` over unrelated newer changes.
+Never restore a whole old `.env` over unrelated newer changes. The nightly
+update rebuilds `arr-maint` from `main`, so a code rollback must be a reverted
+commit; `arr-maint:rollback-pre-ai` is only the one-off pre-integration image.
 
-The cloud "Lidarr queue watch" can still be useful for occasional code-defect
-investigation, which this fixed-action local layer does not perform. Its
-schedule is independent; deploying this code does not change or disable it.
+After a recreate, the helpers' first cycle can start before the tunnel has
+connected; that cycle skips the model and the next one uses it.
+
+## Production status
+
+Since 2026-11-14 production runs `ARR_AI_MODE=auto` with the `arr-ai` profile
+enabled. Its first cycle rechecked three missing-file Lidarr orphans: two
+resumed seeding and one resumed downloading its missing remainder. The other
+orphans proceed at three model calls per cycle. Radarr and Sonarr queues were
+empty, so their paths are covered by unit, contract and model tests rather
+than live repairs.
+
+Dante disabled the cloud "Lidarr queue watch" schedule when this went into
+`auto`. It can still be run manually for code-defect investigation, which this
+fixed-action local layer does not perform.

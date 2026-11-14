@@ -303,8 +303,9 @@ entries **without deleting any files**. The model cannot execute code, force
 identity mappings, override profiles or delete library files. State, retries,
 pre-execution checks and later verification live in the server helpers.
 The new `_arrmaint` SSH account and server-only key give only the helpers
-access to Ollama. Bazarr's subtitle work and the cloud watch schedule are not
-changed by this integration.
+access to Ollama. Bazarr's subtitle work is unchanged. Production helpers run
+in `auto` since 2026-11-14; at Dante's choice the cloud watch's 15-minute
+schedule was disabled then (it remains available for manual runs).
 
 The old model chose the expected action on 6/10 synthetic raw cases (7/10 with
 thinking); the selected 9B GGUF model chose 10/10 with thinking off, around a
