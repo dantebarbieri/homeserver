@@ -196,7 +196,8 @@ async function main() {
   if (enable) {
     const nodes = await request('get-nodes', undefined, 'GET');
     const entries = Object.entries(nodes);
-    assert.equal(entries.length, 1, 'Enabling requires exactly one colocated node');
+    assert.equal(entries.length, 1,
+      'Enabling requires exactly one connected node; run --enable while the Mac Studio node is stopped');
     const [nodeID, node] = entries[0];
     const limits = gpuWorkerLimits(node);
     const library = await crud('LibrarySettingsJSONDB', 'getById', { docID: LIBRARY_ID });
@@ -212,7 +213,7 @@ async function main() {
     await crud('LibrarySettingsJSONDB', 'update', { docID: LIBRARY_ID, obj: settings });
     const enabled = await crud('LibrarySettingsJSONDB', 'getById', { docID: LIBRARY_ID });
     for (const key of Object.keys(settings)) assert.deepEqual(enabled[key], settings[key]);
-    console.log('Movies enabled: CPU classification, one GPU encode, existing CPU limits preserved.');
+    console.log('Movies enabled: classification and the one encode both run on the Linux GPU worker; other worker limits preserved.');
     console.log('Polling for new files every 10 minutes; new files held for 3 minutes.');
   }
 }

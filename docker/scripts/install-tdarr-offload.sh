@@ -3,14 +3,16 @@ set -euo pipefail
 
 usage() {
     cat >&2 <<'EOF'
-Usage: install-tdarr-offload.sh [--adopt | --rollback] [--pools N] [--mac-node NAME] [--apply]
+Usage: install-tdarr-offload.sh [--adopt | --rollback | --hold | --release] [--pools N] [--mac-node NAME] [--apply]
 
 Copies the Tdarr offload modules into the container, then runs install-offload-flow.cjs with the same
 arguments. Without --apply it only prints the plan; the module copy is idempotent and always happens.
   (no mode)   install the offload flow and a disabled canary library (TV libraries untouched)
   --adopt     move the TV libraries onto the offload flow (Linux CPU workers must be idle and at 0)
   --rollback  move the TV libraries back to the Linux-only flow
-  --pools N   x265 thread pools per encode, 1-64 (not with --rollback)
+  --hold      uncheck every schedule slot of the TV libraries, so nothing new starts (running jobs finish)
+  --release   check every schedule slot again, once the nodes match the flow the TV libraries use
+  --pools N   x265 thread pools per encode, 1-64 (only with no mode or --adopt)
 EOF
     exit 2
 }
@@ -18,7 +20,7 @@ EOF
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[i]}" in
-        --adopt | --rollback | --apply) ;;
+        --adopt | --rollback | --hold | --release | --apply) ;;
         --pools | --mac-node) i=$((i + 1)) ;;
         *) usage ;;
     esac

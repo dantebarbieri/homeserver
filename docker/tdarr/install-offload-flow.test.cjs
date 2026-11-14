@@ -130,8 +130,12 @@ test('argument parsing accepts one mode and bounded pools', () => {
   assert.deepEqual(parseArgs(['--adopt', '--pools', '6', '--mac-node', 'Mini', '--apply']),
     { mode: 'adopt', apply: true, macNode: 'Mini', pools: 6 });
   assert.equal(parseArgs(['--rollback']).mode, 'rollback');
+  assert.deepEqual(parseArgs(['--hold', '--apply']), { mode: 'hold', apply: true, macNode: MAC });
+  assert.deepEqual(parseArgs(['--release', '--mac-node', 'Mini']), { mode: 'release', apply: false, macNode: 'Mini' });
   for (const bad of [['--adopt', '--rollback'], ['--rollback', '--pools', '6'], ['--pools'], ['--pools', '0'],
-    ['--pools', 'x'], ['--mac-node'], ['--mac-node', '--apply'], ['--enable'], ['--apply', 'extra']]) {
+    ['--pools', 'x'], ['--mac-node'], ['--mac-node', '--apply'], ['--enable'], ['--apply', 'extra'],
+    ['--hold', '--release'], ['--adopt', '--hold'], ['--release', '--rollback'],
+    ['--hold', '--pools', '6'], ['--release', '--pools', '6']]) {
     assert.throws(() => parseArgs(bad), `rejects ${bad.join(' ')}`);
   }
 });
@@ -148,6 +152,13 @@ test('a dry run writes nothing in any mode', async () => {
     nodes: { a: linux({}, { transcodecpu: 4 }), b: mac({ nodePaused: true }) } });
   assert((await w.run({ mode: 'rollback' })).length > 0);
   untouched(w);
+  const open = world({ libraries: TV_LIBRARIES.map(id => tv(id, { schedule: slots(true) })) });
+  assert((await open.run({ mode: 'hold' })).length > 0);
+  untouched(open);
+  const held = world({ libraries: TV_LIBRARIES.map(id => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT })) });
+  assert((await held.run({ mode: 'release' })).length > 0);
+  untouched(held);
+  assert.equal(open.calls.length + held.calls.length, 0);
 });
 
 test('canary install creates the flow, a runnable disabled canary and CRF 20 without touching TV libraries', async () => {
@@ -178,12 +189,14 @@ test('canary install creates the flow, a runnable disabled canary and CRF 20 wit
 });
 
 test('a missing module or cache aborts before any backup or write', async () => {
-  for (const missing of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs', 'cache']) {
-    const present = ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs'].filter(file => file !== missing)
-      .map(file => `${ROOT}/${file}`).concat(missing === 'cache' ? [] : [CACHE_ROOT]);
-    const w = world({ present });
-    await assert.rejects(w.run({ mode: 'canary', apply: true }), /ENOENT/, missing);
-    assert.deepEqual([w.writes, w.backups()], [[], []], missing);
+  for (const mode of ['canary', 'adopt']) {
+    for (const missing of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs', 'cache']) {
+      const present = ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs'].filter(file => file !== missing)
+        .map(file => `${ROOT}/${file}`).concat(missing === 'cache' ? [] : [CACHE_ROOT]);
+      const w = world({ present });
+      await assert.rejects(w.run({ mode, apply: true }), /ENOENT/, `${mode} without ${missing}`);
+      assert.deepEqual([w.writes, w.backups()], [[], []], `${mode} without ${missing}`);
+    }
   }
 });
 
@@ -343,6 +356,89 @@ test('rolling back restores the Linux flow and cache once Linux can encode and t
   await assert.rejects(world({ libraries: adopted(), flows: [], nodes: restored }).run({ mode: 'rollback', apply: true }), /required for a rollback/);
   const w = world({ libraries: adopted(), nodes: restored, staged: [{ _id: 'row', originalLibraryFile: { DB: TV_LIBRARIES[0] } }] });
   await assert.rejects(w.run({ mode: 'rollback', apply: true }), /staged TV file/);
+});
+
+test('holding unchecks only the schedules that are open and needs nothing from the nodes', async () => {
+  const w = world({ libraries: TV_LIBRARIES.map((id, i) => tv(id, i === 1 ? {} : { schedule: slots(true) })) });
+  w.request = async () => { throw new Error('holding must not depend on any node'); };
+  const before = structuredClone(w.db);
+  await w.run({ mode: 'hold', apply: true });
+  assert.deepEqual(w.writes.map(write => `${write.collection}:${write.mode}:${write.docID}`),
+    [TV_LIBRARIES[0], TV_LIBRARIES[2]].map(id => `LibrarySettingsJSONDB:update:${id}`));
+  for (const write of w.writes) assert.deepEqual(Object.keys(write.obj), ['schedule']);
+  for (const id of TV_LIBRARIES) {
+    assert.deepEqual(w.library(id), { ...before.LibrarySettingsJSONDB.find(row => row._id === id), schedule: slots(false) });
+  }
+  assert.deepEqual([w.db.FlowsJSONDB, w.db.VariablesJSONDB], [before.FlowsJSONDB, before.VariablesJSONDB]);
+  assert.equal(w.backups().length, 1);
+  assert.deepEqual(w.calls.filter(call => call[0] === 'access'), [], 'holding needs no module or cache');
+  assert(!w.calls.some(call => call[0] === 'mkdir' && call[1] === PRIVATE_ROOT), 'holding creates no private state');
+  assert(w.logs.at(-1).startsWith('Verified via API. Flows, caches, worker limits'), w.logs.at(-1));
+  assert(w.logs.some(line => line.includes(': uncheck every schedule slot')), 'the preview names the change');
+  w.writes.length = 0;
+  await w.run({ mode: 'hold', apply: true });
+  assert.deepEqual(w.writes, [], 'a second hold changes nothing');
+});
+
+test('releasing checks only the held libraries, on nodes that match their flow', async () => {
+  const offload = () => TV_LIBRARIES.map((id, i) => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT, ...(i === 1 ? { schedule: slots(true) } : {}) }));
+  const w = world({ libraries: offload() });
+  const before = structuredClone(w.db.LibrarySettingsJSONDB);
+  await w.run({ mode: 'release', apply: true });
+  assert.deepEqual(w.writes.map(write => `${write.collection}:${write.mode}:${write.docID}`),
+    [TV_LIBRARIES[0], TV_LIBRARIES[2]].map(id => `LibrarySettingsJSONDB:update:${id}`));
+  for (const id of TV_LIBRARIES) {
+    assert.deepEqual(w.library(id), { ...before.find(row => row._id === id), schedule: slots(true) });
+  }
+  assert.deepEqual(w.calls.filter(call => call[0] === 'access'), [], 'releasing needs no module or cache');
+  assert(w.logs.some(line => line.includes(': check every schedule slot')), 'the preview names the change');
+  assert.equal(w.backups().length, 1);
+  w.writes.length = 0;
+  w.nodes.a.workerLimits.transcodecpu = 4; // nothing left to release, so an idempotent re-run needs no node preconditions
+  await w.run({ mode: 'release', apply: true });
+  assert.deepEqual(w.writes, []);
+  const linuxFlow = world({ nodes: { a: linux({}, { transcodecpu: 4 }), b: mac({ nodePaused: true }) } });
+  await linuxFlow.run({ mode: 'release', apply: true });
+  assert.equal(linuxFlow.writes.length, 3, 'libraries on the Linux flow release once Linux can encode and the Mac is quiet');
+});
+
+test('releasing is refused until the nodes and the libraries agree', async () => {
+  const offload = () => TV_LIBRARIES.map(id => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT }));
+  const onLinux = () => TV_LIBRARIES.map(id => tv(id));
+  const quietMac = mac({ nodePaused: true });
+  const cases = {
+    'offload flow with Linux CPU workers still allowed': [offload(), { a: linux({}, { transcodecpu: 4 }), b: mac() }, /Set HomeServer transcodecpu to 0/],
+    'offload flow with the Mac missing': [offload(), { a: linux() }, /not connected/],
+    'offload flow with no Linux GPU worker': [offload(), { a: linux({}, { transcodegpu: 0 }), b: mac() }, /GPU worker is required/],
+    'offload flow with a running Linux CPU encode': [offload(), { a: linux({ workers: { w: { workerType: 'transcodecpu', idle: false } } }), b: mac() }, /running CPU encode/],
+    'Linux flow with no Linux CPU worker': [onLinux(), { a: linux(), b: quietMac }, /Restore a Linux node CPU worker/],
+    'Linux flow with an active Mac': [onLinux(), { a: linux({}, { transcodecpu: 4 }), b: mac() }, /Pause Studio-Native/],
+    'one library still on the Linux flow': [offload().map((library, i) => (i === 0 ? tv(library._id) : library)), { a: linux(), b: mac() }, /finish the cutover or rollback/],
+    'a library on another flow': [offload().map((library, i) => (i === 0 ? { ...library, flowId: 'zRnXMGq83' } : library)), { a: linux(), b: mac() }, /finish the cutover or rollback/],
+    'a library on the offload flow with the Linux cache': [offload().map((library, i) => (i === 0 ? { ...library, cache: SAFE_CACHE } : library)), { a: linux(), b: mac() }, /finish the cutover or rollback/],
+    'a library on the Linux flow with the Mac cache': [onLinux().map((library, i) => (i === 0 ? { ...library, cache: CACHE_ROOT } : library)), { a: linux({}, { transcodecpu: 4 }), b: quietMac }, /finish the cutover or rollback/],
+  };
+  for (const [name, [libraries, nodes, message]] of Object.entries(cases)) {
+    const w = world({ libraries, nodes });
+    await assert.rejects(w.run({ mode: 'release', apply: true }), message, name);
+    untouched(w);
+  }
+});
+
+test('hold and release refuse a schedule they could not restore exactly', async () => {
+  const partial = { schedule: slots(false).map((slot, i) => ({ ...slot, checked: i === 0 })) };
+  const refused = [['a partial schedule', partial, /partial schedule/], ['no schedule data', { schedule: undefined }, /no schedule data/],
+    ['an empty schedule', { schedule: [] }, /no schedule data/]];
+  for (const mode of ['hold', 'release']) {
+    for (const [name, overrides, message] of refused) {
+      const w = world({ libraries: TV_LIBRARIES.map((id, i) => tv(id, i === 2 ? overrides : { schedule: slots(mode === 'release' ? false : true) })) });
+      await assert.rejects(w.run({ mode, apply: true }), message, `${mode} with ${name}`);
+      untouched(w);
+    }
+    const w = world({ libraries: TV_LIBRARIES.slice(1).map(id => tv(id)) });
+    await assert.rejects(w.run({ mode, apply: true }), /three existing TV libraries/, mode);
+    untouched(w);
+  }
 });
 
 test('a write that Tdarr does not store is detected', async () => {

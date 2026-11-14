@@ -22,6 +22,7 @@ const USAGE = [
   'Usage: node install-offload-flow.cjs [--pools N] [--apply]                       (flow + disabled canary)',
   '       node install-offload-flow.cjs --adopt [--pools N] [--mac-node NAME] [--apply]  (TV libraries -> Mac)',
   '       node install-offload-flow.cjs --rollback [--mac-node NAME] [--apply]           (TV libraries -> Linux)',
+  '       node install-offload-flow.cjs --hold | --release [--mac-node NAME] [--apply]    (TV schedules off / on)',
 ].join('\n');
 
 // The same flow runs on both nodes: the platform picks which copy of the module a step loads.
@@ -160,13 +161,40 @@ function cutoverPlan({ direction, libraries, variables, staged }) {
   return { pending, to };
 }
 
+// Hold unchecks every schedule slot of the TV libraries so nothing new starts (running jobs finish); release
+// checks them again. Only all-or-nothing schedules are toggled, so release restores exactly what hold changed,
+// and a release is only allowed once the nodes match the flow the libraries use.
+function schedulePlan({ mode, libraries, nodes, macName }) {
+  const hold = mode === 'hold';
+  const targets = TV_LIBRARIES.map(id => libraries.find(l => l._id === id));
+  assert(targets.every(Boolean), 'Expected exactly the three existing TV libraries');
+  const filled = library => Array.isArray(library.schedule) && library.schedule.length > 0;
+  const on = library => filled(library) && library.schedule.every(slot => slot.checked);
+  const off = library => filled(library) && library.schedule.every(slot => !slot.checked);
+  for (const library of targets) {
+    assert(filled(library), `${library.name} has no schedule data`);
+    assert(on(library) || off(library),
+      `${library.name} has a partial schedule; --hold and --release only toggle an all-or-nothing schedule`);
+  }
+  const pending = targets.filter(library => (hold ? on(library) : off(library)));
+  if (!hold && pending.length) {
+    const uses = (library, flowId, cache) => library.flowId === flowId && library.cache === cache;
+    const direction = targets.every(library => uses(library, FLOW_ID, CACHE_ROOT)) ? 'adopt'
+      : targets.every(library => uses(library, SAFE_FLOW, SAFE_CACHE)) ? 'rollback' : undefined;
+    assert(direction, 'The TV libraries are not all on the offload flow or all on the Linux flow; '
+      + 'finish the cutover or rollback before releasing them');
+    checkNodes(direction, nodes, macName);
+  }
+  return pending.map(library => [library, library.schedule.map(slot => ({ ...slot, checked: !hold }))]);
+}
+
 function parseArgs(argv) {
   const options = { mode: 'canary', apply: false, macNode: DEFAULT_MAC_NODE };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--apply') options.apply = true;
-    else if (arg === '--adopt' || arg === '--rollback') {
-      assert.equal(options.mode, 'canary', 'Use only one of --adopt and --rollback');
+    else if (['--adopt', '--rollback', '--hold', '--release'].includes(arg)) {
+      assert.equal(options.mode, 'canary', 'Use only one of --adopt, --rollback, --hold and --release');
       options.mode = arg.slice(2);
     } else if (arg === '--pools') options.pools = Number(argv[++i]);
     else if (arg === '--mac-node') options.macNode = argv[++i];
@@ -174,20 +202,29 @@ function parseArgs(argv) {
   }
   if (options.pools !== undefined) assertPools(options.pools);
   assert(options.macNode && !options.macNode.startsWith('--'), '--mac-node needs a node name');
-  assert(!(options.mode === 'rollback' && options.pools !== undefined), '--pools does not apply to --rollback');
+  assert(!(['rollback', 'hold', 'release'].includes(options.mode) && options.pools !== undefined),
+    `--pools does not apply to --${options.mode}`);
   return options;
 }
 
 async function install({ crud, request, options = {}, defaults, log = console.log, io = fs }) {
   const { mode = 'canary', apply = false, macNode = DEFAULT_MAC_NODE } = options;
-  assert(['canary', 'adopt', 'rollback'].includes(mode), `Unknown mode ${mode}`);
+  assert(['canary', 'adopt', 'rollback', 'hold', 'release'].includes(mode), `Unknown mode ${mode}`);
   const [flows, libraries, variables] = await Promise.all([
     crud('FlowsJSONDB', 'getAll'), crud('LibrarySettingsJSONDB', 'getAll'), crud('VariablesJSONDB', 'getAll'),
   ]);
   const plan = [];
   const put = (collection, action, docID, obj, note) => plan.push({ collection, action, docID, obj, note });
+  const schedules = mode === 'hold' || mode === 'release';
+  const needsModules = mode === 'canary' || mode === 'adopt';
 
-  if (mode === 'rollback') assert(flows.some(f => f._id === SAFE_FLOW), `Flow ${SAFE_FLOW} is required for a rollback`);
+  if (schedules) {
+    const nodes = mode === 'release' ? await request('get-nodes', undefined, 'GET') : undefined;
+    for (const [library, schedule] of schedulePlan({ mode, libraries, nodes, macName: macNode })) {
+      put('LibrarySettingsJSONDB', 'update', library._id, { schedule },
+        `${library.name}: ${mode === 'hold' ? 'uncheck' : 'check'} every schedule slot`);
+    }
+  } else if (mode === 'rollback') assert(flows.some(f => f._id === SAFE_FLOW), `Flow ${SAFE_FLOW} is required for a rollback`);
   else {
     const existing = flows.find(f => f._id === FLOW_ID);
     const notify = (existing ?? flows.find(f => f._id === SAFE_FLOW))?.flowPlugins
@@ -230,7 +267,7 @@ async function install({ crud, request, options = {}, defaults, log = console.lo
         _id: `${LIBRARY_ID}-crf`, key: 'crf', value: '20', type: `library:${LIBRARY_ID}`, date: Date.now(),
       }, 'canary CRF 20');
     }
-  } else {
+  } else if (!schedules) {
     const [staged, nodes] = await Promise.all([
       crud('StagedJSONDB', 'getAll'), request('get-nodes', undefined, 'GET'),
     ]);
@@ -245,20 +282,22 @@ async function install({ crud, request, options = {}, defaults, log = console.lo
   for (const item of plan) log(`  ${item.action} ${item.note}`);
   if (!apply || !plan.length) return plan;
 
-  if (mode !== 'rollback') {
+  if (needsModules) {
     for (const file of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs']) await io.access(`${ROOT}/${file}`);
     await io.access(CACHE_ROOT); // Provisioned separately: never create or export a broader cache here.
   }
   await io.mkdir(`${ROOT}/backups`, { recursive: true, mode: 0o700 });
   await io.writeFile(`${ROOT}/backups/offload-flow-${Date.now()}.json`,
     JSON.stringify({ flows, libraries, variables }, null, 2), { flag: 'wx', mode: 0o600 });
-  if (mode !== 'rollback') await io.mkdir(PRIVATE_ROOT, { recursive: true, mode: 0o700 });
+  if (needsModules) await io.mkdir(PRIVATE_ROOT, { recursive: true, mode: 0o700 });
   for (const { collection, action, docID, obj } of plan) {
     await crud(collection, action, { docID, obj });
     const stored = await crud(collection, 'getById', { docID });
     for (const key of Object.keys(obj)) assert.deepEqual(stored[key], obj[key], `${collection} ${docID}: ${key} was not stored`);
   }
-  log('Verified via API. Library schedules, worker limits and the Mac node are unchanged.');
+  log(schedules
+    ? 'Verified via API. Flows, caches, worker limits and the Mac node are unchanged.'
+    : 'Verified via API. Library schedules, worker limits and the Mac node are unchanged.');
   return plan;
 }
 
