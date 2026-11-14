@@ -213,7 +213,7 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
 .services-stopped input, .service-column-option input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
 .services-column-picker { position: relative; font-size: 12px; }
 .services-column-picker > summary { cursor: pointer; border: 1px solid #334354; border-radius: 7px; padding: 13px; min-height: 44px; }
-.services-column-picker[open] { position: absolute; right: 16px; top: 66px; width: min(340px, calc(100% - 32px)); max-height: calc(100% - 80px); overflow: auto; z-index: 4; background: #15212e; padding: 8px; border: 1px solid #42715f; border-radius: 8px; box-shadow: 0 12px 40px #0009; }
+.services-column-menu { position: absolute; right: 0; top: calc(100% + 6px); width: min(340px, calc(100vw - 32px)); max-height: min(580px, max(140px, calc(var(--sheet-height, 100dvh) - 280px))); overflow: auto; z-index: 4; background: #15212e; padding: 8px; border: 1px solid #42715f; border-radius: 8px; box-shadow: 0 12px 40px #0009; }
 .service-column-option { display: flex; align-items: center; gap: 6px; min-height: 44px; }
 .service-column-option label { display: flex; flex: 1; align-items: center; gap: 9px; cursor: pointer; min-height: 44px; }
 .service-column-option button { min-width: 48px; min-height: 44px; padding: 6px; font-size: 11px; }
@@ -260,7 +260,6 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
   .service-icon, .service-icon-fallback, .service-icon-box { width: 20px; height: 20px; }
   .service-name { gap: 4px; }
   .services-table tbody td { min-width: 96px; padding: 8px; }
-  .services-column-picker[open] { top: 60px; right: 10px; max-height: calc(100% - 72px); }
   .services-notes summary { min-height: 44px; }
 }
 @media (max-width: 880px) { .inventory-grid { grid-template-columns: repeat(2, 1fr); } }
