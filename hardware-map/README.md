@@ -134,8 +134,10 @@ restart. Do not copy serial-keyed observations directly over WWN-keyed state.
 Existing identity hashes and history remain unchanged.
 Raw serials/WWNs never belong in the repository or public demo fixture.
 
-Deployment source is a committed clone under `/srv/server-atlas/source`.
-As root, run `hardware-map/deploy.sh`. It builds only the collector's Nix unit
+The running web release uses a committed clone under
+`~danteb/.local/share/server-atlas/source`, independently of `/srv/homeserver`.
+For a collector installation, run `hardware-map/deploy.sh` as root from a clean
+committed checkout. It builds only the collector's Nix unit
 closure, installs it in the host's supported persistent
 `/usr/local/lib/systemd/system` search path (including a multi-user wants
 symlink), and retains the closure with `/srv/server-atlas/collector-unit`.
@@ -154,11 +156,13 @@ unexpected configurations. The former hostname redirects with HTTP 308;
 `/metrics` returns 404 at the public proxy.
 The existing `docker/monitoring/prometheus.yml` includes the internal scrape;
 validate with `promtool check config` and reload Prometheus with SIGHUP.
-Until this feature branch is integrated, production has only the additive
-ChasEx scrape/dashboard blocks in its existing checkout; the running ChasEx
-release is pinned separately. Preserve those blocks during monitoring or
-dashboard configuration changes. Private pre-change backups live outside Git
-under `/srv/server-atlas/backups`.
+The application, collector module and scrape/dashboard integration are tracked
+together on `main`. `/srv/homeserver` must stay clean and fast-forwardable for
+the nightly updater; the integrations need no production-only edits. The running
+web release remains pinned separately: pulling `main` does not rebuild it, run
+the collector installer or restart ChasEx. Do not add it to the main Compose
+project without a separate ownership migration. Private pre-change backups live
+outside Git under `/srv/server-atlas/backups`.
 
 Backend checks (synthetic fixtures, no real identifiers):
 
