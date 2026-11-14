@@ -211,21 +211,26 @@ def stable_id(disk):
     return None
 
 
-def assign_slots(disks, assignments):
+def assign_slots(disks, assignments, confirmed_assignments=None):
     """Reserve absent devices forever; never use an sdX name as an identity."""
     assignments = dict(assignments)
+    confirmed_assignments = {} if confirmed_assignments is None else confirmed_assignments
     valid_slots = set(sum(SLOTS.values(), []))
     if any(not isinstance(key, str) or not key.startswith(("wwn:", "serial:"))
            or slot not in valid_slots for key, slot in assignments.items()):
         raise ValueError("Invalid persisted disk assignment")
     if len(set(assignments.values())) != len(assignments):
         raise ValueError("Duplicate persisted slot")
+    if not isinstance(confirmed_assignments, dict) or any(
+            identity not in assignments or assignments[identity] != slot
+            for identity, slot in confirmed_assignments.items()):
+        raise ValueError("Physical confirmation does not match persisted assignment")
     identities = [stable_id(disk) for disk in disks if stable_id(disk)]
     duplicates = {identity for identity in identities if identities.count(identity) > 1}
     issues = []
     for disk in sorted(disks, key=lambda d: (str(d.get("serial") or ""), d["id"])):
         identity = stable_id(disk)
-        disk.update(stableId=identity, slot=None, mapping="provisional")
+        disk.update(stableId=identity, slot=None, mapping="unknown")
         if not identity or identity in duplicates:
             issues.append(f"{disk['id']}: stable identity unavailable or duplicated; no slot assigned")
             disk["stableId"] = None
@@ -240,7 +245,14 @@ def assign_slots(disks, assignments):
             else:
                 issues.append(f"{disk['id']}: no unused provisional slot")
         disk["slot"] = assignments.get(identity)
+        if disk["slot"]:
+            disk["mapping"] = "confirmed" if identity in confirmed_assignments else "provisional"
     return assignments, issues
+
+
+def mapping_status(disks):
+    states = {disk["mapping"] for disk in disks}
+    return next(iter(states)) if len(states) == 1 else "mixed" if states else "unknown"
 
 
 def metric_key(identity, field):
@@ -338,11 +350,15 @@ class Collector:
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="atlas-read") if background else None
         self.smart_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="atlas-smart") if background else None
         self.pending = {}
-        self.assignments = {}
+        self.assignments, self.confirmed_assignments = {}, {}
         assignment_file = self.state_dir / "assignments.json"
         if assignment_file.exists():
-            self.assignments = json.loads(assignment_file.read_text(encoding="utf-8"))["assignments"]
-            assign_slots([], self.assignments)  # Fail closed rather than reshuffling corrupt state.
+            saved = json.loads(assignment_file.read_text(encoding="utf-8"))
+            self.assignments = saved["assignments"]
+            self.confirmed_assignments = saved.get("confirmedAssignments", {})
+            if not isinstance(self.confirmed_assignments, dict):
+                raise ValueError("Invalid persisted physical confirmations")
+            assign_slots([], self.assignments, self.confirmed_assignments)
 
     def text(self, path):
         return Path(path).read_text(encoding="utf-8").strip()
@@ -429,10 +445,10 @@ class Collector:
                 walk(entry.get("children", []), name)
 
         walk(payload["blockdevices"])
-        self.assignments, issues = assign_slots(list(disks.values()), self.assignments)
+        self.assignments, issues = assign_slots(list(disks.values()), self.assignments, self.confirmed_assignments)
         atomic_write(self.state_dir / "assignments.json", json.dumps({
-            "version": 1, "mapping": "provisional", "method": "serial-sorted",
-            "assignments": self.assignments}, allow_nan=False))
+            "version": 2, "assignments": self.assignments,
+            "confirmedAssignments": self.confirmed_assignments}, allow_nan=False))
         raids, bonds, associations = [], [], []
         for name, node in list(nodes.items()):
             base = self.sys / "class" / "block" / name
@@ -580,22 +596,25 @@ class Collector:
                                      "note": "Known onboard-LAN bond shown as a group only. LAN1/LAN2-to-interface "
                                              "pairing remains unverified; PCI function order is not physical port evidence."})
         for disk in disks.values():
-            nodes[disk["id"]]["summary"] += " · Provisional serial-sorted mapping; not physically confirmed"
+            placement = ("Physically confirmed placement" if disk["mapping"] == "confirmed" else
+                         "Provisional serial-sorted placement, NOT physically confirmed." if disk["slot"] else
+                         "Physical placement unknown")
+            nodes[disk["id"]]["summary"] += " · " + placement
             if disk["slot"]:
                 targets = ["drive-" + disk["slot"]]
                 if disk["kind"] == "nvme":
                     targets.append(disk["slot"])
                 associations.append({"targets": targets, "nodes": [disk["id"]],
-                                     "note": "Provisional serial-sorted placement, NOT physically confirmed."})
+                                     "note": placement})
         for kind, targets in (("hdd", ["disk-bays", "disks"]),
                               ("nvme", ["nvme-group"])):
             associations.append({"targets": targets,
                                  "nodes": [d["id"] for d in disks.values() if d["kind"] == kind],
-                                 "note": "Live inventory; individual provisional assignments are not physical evidence."})
+                                 "note": "Live inventory; placement confidence is recorded per disk."})
         topology = {"schemaVersion": 1, "capturedAt": utc(self.clock()),
                     "source": "Live read-only lsblk, sysfs md and network state; optional lvs --readonly.",
-                    "note": "Names are current aliases; serial-sorted placements remain provisional.",
-                    "limitations": "Not an atomic hardware snapshot. No physical cable, bay, header or port confirmation. "
+                    "note": "Names are current aliases; only explicitly recorded physical placements are confirmed.",
+                    "limitations": "Not an atomic hardware snapshot. Placement confirmation does not establish cable, header or port routing. "
                                     "Kernel dependencies do not prove exact LVM extent allocation or cache occupancy.",
                     "nodes": list(nodes.values()), "raids": raids, "bonds": bonds,
                     "associations": associations}
@@ -694,8 +713,7 @@ class Collector:
             "gpu-power", "temp-cpu", "temp-gpu", "temp-board", "temp-lan", "fan-cpu1",
             "fan-cpu2", "fan-hub", "fan-gpu", "memory-used", "memory-apps", "memory-cache",
             "memory-kernel", "memory-free", "swap", "data-used", "root-used"))
-        issues = ["Disk placement is provisional/serial-sorted, never physically confirmed.",
-                  "memory-apps is residual other/anonymous memory, not per-process RSS.",
+        issues = ["memory-apps is residual other/anonymous memory, not per-process RSS.",
                   "Rear fan 2000 RPM values are ASSUMPTIONS, not measured; FAN3 is one shared six-fan hub reading.",
                   "Optional NVMe secondary is SMART temperature sensor 1; vendor-specific physical meaning is unverified.",
                   "GPU 3D/copy/shared memory remain unavailable (no supported source).",
@@ -901,7 +919,8 @@ class Collector:
                 "retentionDays": 90, "metrics": metrics, "capacities": capacities, "available": available,
                 "inventory": {"disks": inventory["disks"], "cpu": cpu, "snapshot": inventory["snapshot"],
                               "lvm": inventory.get("lvm"), "cache": cache_reading,
-                              "mapping": "provisional", "mappingMethod": "serial-sorted"},
+                              "mapping": mapping_status(inventory["disks"]),
+                              "mappingMethod": "per-device-confirmation-with-serial-sorted-fallback"},
                 "issues": issues, "channelKeys": channel_keys, "sources": dict(self.sources)}
 
     def write(self, snapshot):

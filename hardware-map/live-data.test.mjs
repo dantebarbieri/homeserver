@@ -145,11 +145,17 @@ test("live inventory replaces provisional NVMe card bindings without depending o
   const card = metricCards.find(item => item.id === "nvme-root");
   assert.equal(card.anchor, "drive-M2_2");
   assert.equal(card.device, "nvme9n1");
+  assert.match(card.label, /provisional/);
   assert.deepEqual(card.series, ["disk-nvme9n1-read", "disk-nvme9n1-write"]);
   assert.ok(metrics.has("disk-nvme9n1-read"));
   assert.ok(metrics.has("temp-nvme9"));
   assert.equal(metrics.get("memory-used").maximum, 123.5);
   assert.deepEqual(metricBadges.find(item => item.id === "temp-hdd-range").ids, ["temp-sda"]);
+  data.inventory.disks[0].mapping = "confirmed";
+  applyLiveSnapshot(data);
+  assert.match(card.label, /M2_2/);
+  assert.doesNotMatch(card.label, /provisional/);
+  assert.equal(card.anchor, "drive-M2_2");
   applyLiveSnapshot({ inventory: { ...data.inventory, disks: [] } });
   assert.equal(card.device, undefined);
   assert.equal(card.anchor, "nvme-group");

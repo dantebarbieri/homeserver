@@ -385,7 +385,7 @@ export function applyLiveSnapshot(data) {
   for (const sensor of demoSensors) {
     if (sensor.id.startsWith("temp-nvme")) {
       sensor.label = `${sensor.id.slice(5)} · SMART ${sensor.id.endsWith("secondary") ? "sensor 1 (vendor meaning unverified)" : "composite"}`;
-      sensor.location = "NVMe: each drive reports its own SMART temperature information; composite and optional sensor 1 do not establish controller/NAND probe positions. Socket assignments are provisional serial-sorted placeholders, NOT physically verified.";
+      sensor.location = "NVMe: each drive reports its own SMART temperature information; composite and optional sensor 1 do not establish controller/NAND probe positions. Socket placement follows the per-device inventory confirmation.";
       metrics.get(sensor.id).label = sensor.label;
     }
   }
@@ -419,7 +419,7 @@ export function applyLiveSnapshot(data) {
       continue;
     }
     card.device = binding.id;
-    card.label = `${binding.id} · ${cardId === "nvme-root" ? "root + swap" : "/data cache + extents"} · provisional`;
+    card.label = `${binding.id} · ${cardId === "nvme-root" ? "root + swap" : "/data cache + extents"}${binding.mapping === "confirmed" ? ` · ${binding.slot}` : " · provisional"}`;
     card.series = [`disk-${binding.id}-read`, `disk-${binding.id}-write`];
     card.anchor = binding.slot ? `drive-${binding.slot}` : "nvme-group";
   }

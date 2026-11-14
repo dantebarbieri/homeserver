@@ -386,8 +386,8 @@ function renderBoard() {
   for (const id of ["M2_2", "M2_1"]) {
     const connector = connectorById.get(id);
     const drive = hardwarePart(`drive-${id}`, null, `${id} / bare Samsung 2280`, "Drive direction follows inspection evidence: perpendicular to PCIe slots across PCIE6→PCIE2. Outline and GPU overhang are approximate; clearance is unmeasured.", [id], {
-      model: "Samsung 990 EVO · MZ-V9E2T0B · bare 2280 SSD", capacity: "2 TB nominal per drive · logical A/B binding unknown",
-      status: "Models/capacities user-confirmed; bare populated sockets photo-confirmed",
+      model: "Samsung 990 EVO · MZ-V9E2T0 · bare 2280 SSD", capacity: "2 TB nominal per drive · no heatsink",
+      status: "Installed labels and socket placements photo-confirmed",
       note: "The GPU shroud overhangs both drives. The photo-estimated few-mm gap is not a measured heatsink allowance. NVMe A/B telemetry is deliberately not assigned to a physical socket.",
     });
     const bounds = landscapeBounds({ x: connector.x + 25, y: 513, width: 40, height: 236 });
@@ -732,7 +732,7 @@ function applyCollectedInventory(data) {
     if (!part.bindingId || bindings.some(binding => `drive-${binding.slot}` === id)) continue;
     part.bindingId = undefined;
     part.label = `${id.slice(6)} · current inventory unavailable`;
-    part.status = "No current disk observed for this provisional slot; not proof of physical removal.";
+    part.status = "No current disk observed for this reserved slot; not proof of physical removal.";
     part.note = "The persisted slot reservation is retained. No previous device identity is substituted for missing inventory.";
     part.model = "Unavailable";
     part.capacity = "Unavailable";
@@ -749,13 +749,14 @@ function applyCollectedInventory(data) {
     part.bindingId = binding.id;
     part.model = binding.model;
     part.capacity = `${(binding.sizeBytes / 2 ** 40).toFixed(2)} TiB`;
-    part.status = "PROVISIONAL · serial-sorted assignment, NOT physically verified";
-    part.note = `Serial: ${binding.serial ?? "unavailable"}. Stable identity: ${binding.stableId ?? "unavailable"}. This private mapping persists across Linux device renumbering. Correct it after physical inspection; do not infer cabling from this placeholder.`;
+    const confirmed = binding.mapping === "confirmed";
+    part.status = confirmed ? "Physical placement confirmed" : "PROVISIONAL · serial-sorted assignment, NOT physically verified";
+    part.note = `Serial: ${binding.serial ?? "unavailable"}. Stable identity: ${binding.stableId ?? "unavailable"}. This private mapping persists across Linux device renumbering. ${confirmed ? "Installed-label inspection establishes this placement, not individual cable routing." : "Correct it after physical inspection; do not infer cabling from this placeholder."}`;
     const node = $("board").querySelector(`.hardware-part[data-id="${id}"]`);
     node?.setAttribute("aria-label", part.label);
     const label = node?.querySelector(".disk-linux-label");
     const disk = linuxTopology.nodes.get(binding.id);
-    if (label) label.textContent = `/dev/${binding.id} *${disk?.memberships?.some(member => member.state.includes("spare")) ? " · SPARE" : ""}`;
+    if (label) label.textContent = `/dev/${binding.id}${confirmed ? "" : " *"}${disk?.memberships?.some(member => member.state.includes("spare")) ? " · SPARE" : ""}`;
   }
   appliedSnapshot = data;
   if ($("inspector-dialog").open) renderSelection();

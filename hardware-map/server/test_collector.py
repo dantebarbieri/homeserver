@@ -210,6 +210,52 @@ class AssignmentTests(WorkspaceTest):
             collector.assign_slots([], {"serial:SYNTH-A": "M2_1", "serial:SYNTH-B": "M2_1"})
         self.assertEqual(collector.stable_id({"wwn": "SYNTH-W", "serial": "SYNTH-S"}), "wwn:SYNTH-W")
 
+    def test_confirmed_placements_survive_renumbering_and_inventory_refresh(self):
+        state = self.root / "state"
+        assignments = {"wwn:SYNTH-HDD": "cage-3-bay-4", "wwn:SYNTH-NVME": "M2_2"}
+        confirmed = {"wwn:SYNTH-HDD": "cage-3-bay-4"}
+        collector.atomic_write(state / "assignments.json", json.dumps({
+            "version": 2, "assignments": assignments, "confirmedAssignments": confirmed}))
+        devices = [
+            {"name": "sdq", "type": "disk", "serial": "SYNTH-SERIAL", "wwn": "SYNTH-HDD"},
+            {"name": "nvme9n1", "type": "disk", "serial": "SYNTH-N", "wwn": "SYNTH-NVME"},
+        ]
+
+        def runner(source):
+            return json.dumps({"blockdevices": devices}) if source == "lsblk" else '{"report":[]}'
+
+        instance = collector.Collector(state, sys=self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        disks = {disk["id"]: disk for disk in inventory["disks"]}
+        self.assertEqual((disks["sdq"]["slot"], disks["sdq"]["mapping"]), ("cage-3-bay-4", "confirmed"))
+        self.assertEqual(disks["nvme9n1"]["mapping"], "provisional")
+        self.assertEqual(collector.mapping_status(inventory["disks"]), "mixed")
+        association = next(a for a in inventory["snapshot"]["associations"] if
+                           "drive-cage-3-bay-4" in a["targets"])
+        self.assertEqual(association["nodes"], ["sdq"])
+        self.assertIn("Physically confirmed", association["note"])
+        self.assertNotIn("Provisional", association["note"])
+        restored = collector.Collector(state)
+        self.assertEqual(restored.confirmed_assignments, confirmed)
+        self.assertEqual(restored.assignments, assignments)
+        new = [self.disk("sda", "SYNTH-NEW")]
+        collector.assign_slots(new, restored.assignments, restored.confirmed_assignments)
+        self.assertEqual(new[0]["mapping"], "provisional")
+        self.assertEqual(restored.assignments["wwn:SYNTH-HDD"], "cage-3-bay-4")
+
+    def test_confirmation_must_match_exact_reservation_and_never_resolves_duplicate_identity(self):
+        assignments = {"serial:SYNTH-A": "cage-1-bay-1"}
+        for invalid in (None, [], {"serial:SYNTH-B": "cage-1-bay-1"},
+                        {"serial:SYNTH-A": "cage-2-bay-1"}):
+            collector.atomic_write(self.root / "assignments.json", json.dumps({
+                "assignments": assignments, "confirmedAssignments": invalid}))
+            with self.assertRaises(ValueError):
+                collector.Collector(self.root)
+        disks = [self.disk("sda", "SYNTH-A"), self.disk("sdb", "SYNTH-A")]
+        _, issues = collector.assign_slots(disks, assignments, assignments)
+        self.assertEqual(len(issues), 2)
+        self.assertTrue(all(disk["slot"] is None and disk["mapping"] == "unknown" for disk in disks))
+
     def test_missing_source_invalidates_cached_value(self):
         now = [1000]
         instance = collector.Collector(self.root, clock=lambda: now[0])

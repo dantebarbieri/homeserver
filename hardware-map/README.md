@@ -71,12 +71,28 @@ not zeroes or invented backfill. CPU/disk/NIC rates handle counter resets.
 Disk series use private stable-identity hashes, so Linux device renumbering
 does not silently splice another disk's history onto a series.
 
-**Provisional disk placement:** initial disk serials are lexicographically
+**Physical disk placement:** initial disk serials are lexicographically
 sorted and assigned to sorted installed slots (three cages, bays 1–4; M2_1/2).
 Private `assignments.json` preserves those assignments across renumbering;
 absent devices retain their reserved slots and new identities use unused ones.
-Unknown/duplicate identities are not assigned. Labels, popups and card leaders
-explicitly distinguish this arbitrary mapping from physical verification.
+Version 2 adds `confirmedAssignments`, a dictionary repeating only the exact
+stable-identity/slot pairs verified by physical inspection. Legacy state without
+that field remains provisional. Confirmation of an absent or different reservation
+is rejected at startup; unknown/duplicate identities are not assigned or confirmed.
+Labels, topology notes and card anchors distinguish confirmed and provisional
+placements per device. Confirmations survive refreshes and Linux renumbering;
+new identities never inherit a previous disk's confirmation.
+
+The November 13 installed-label inspection established all 12 occupied HDD
+bays and both M.2 sockets. HDD serials (allowing Linux's `WD-` prefix) and the
+NVMe label EUIs were uniquely reconciled against live inventory after reassembly.
+M2_2 matches the root NVMe; M2_1 matches the cache/data NVMe. These observations
+do not establish individual SATA cable routing or change the observed storage topology.
+To install private confirmations, stop the collector, retain a private state backup,
+reconcile observations to its existing WWN-first identities, validate the entire
+replacement batch including absent reservations, atomically replace the state and
+restart. Do not copy serial-keyed observations directly over WWN-keyed state.
+Existing identity hashes and history remain unchanged.
 Raw serials/WWNs never belong in the repository or public demo fixture.
 
 Deployment source is a committed clone under `/srv/server-atlas/source`.
@@ -215,8 +231,10 @@ current UI controls. The read-only interface above supersedes it.
   The latter means the data LV is **not entirely RAID-protected**. Privileged
   LVM metadata was unavailable: exact extents and current cache mode are not
   claimed from this inspection.
-  Bay-to-disk, M.2-to-NVMe and LAN1/LAN2-to-interface mappings remain unassigned;
-  no device is assigned from list order, PCI function order or old A/B sensors.
+  The bundled dated snapshot leaves bay-to-disk, M.2-to-NVMe and
+  LAN1/LAN2-to-interface mappings unassigned; live disk placements now use the
+  separate private inspection confirmations. No device is assigned from PCI
+  function order or old A/B sensors.
   The separate AMI USB virtual NIC is not the dedicated BMC LAN socket.
   `linux-snapshot.mjs` separates observed nodes, dependencies, RAID membership,
   bond roles and physical associations. `buildLinuxTopology(snapshot)` derives
@@ -311,7 +329,7 @@ FAN3 tach is a relayed BMC observation, not an independent cable trace.
 | Installed PSU label photo, November 13 | Corsair HX1000i **CP-9020259 / RPS0131 / 75-005684**, **1000 W rated**. The label confirms the previously identified purchase family; the retail `-NA` suffix is not printed on this label. The current retail title does not establish a newer ATX certification for this unit. The original photo and serial remain private. |
 | User-confirmed, November 13 | **Three separate SATA power harnesses, four HDDs each**; a **fourth SATA harness dedicated to the hub**; **one separate Molex harness for both rear fans**. This supersedes the old one-harness-for-12-HDDs suspicion and stale port counts. Individual PSU port IDs, cable part numbers, load limits and spare-port counts remain unverified. **PSU USB/iCUE is not connected**. Do not infer modular-cable compatibility from connector shape or package quantities. |
 | Photo-confirmed / inferred | IMG_4570 shows **PANEL1** with readable **POWER SW** and other switch/LED plugs. The red/white/green/black lower-edge flat cable is likely part of that loom; exact continuity and individual pin assignments remain untraced. The earlier USB 2.0 suggestion was not established. |
-| User-confirmed, November 13 | **12 installed HDDs**, three five-bay cages, **bottom bay empty in each front-view left/center/right cage**. Each cage contains four drives; no drives being added. Logical-drive-to-bay and individual data-cable mapping remain unknown. |
+| User-confirmed, November 13 | **12 installed HDDs**, three five-bay cages, **bottom bay empty in each front-view left/center/right cage**. Each cage contains four drives; no drives being added. All 12 serial-to-bay observations were recorded privately in the user's photo order (cage 3, then 2, then 1; four occupied bays top-down) and uniquely matched to live inventory. Individual data-cable routing remains untraced. |
 | User-confirmed, November 13 | **No separate temperature probes** on TR1/TR2. Component-temperature snapshots are not air measurements. |
 
 User-reported occupied headers remain inferred rather than independently
