@@ -20,7 +20,7 @@ from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler, Requ
 
 STATIC = frozenset(("index.html", "styles.css", "favicon.svg", "app.mjs", "board.mjs",
                     "model.mjs", "metric-model.mjs", "metrics.mjs", "live-data.mjs", "linux-snapshot.mjs",
-                    "mobile-ui.mjs", "pwa.mjs", "services.mjs", "service-model.mjs", "sw.js", "manifest.webmanifest",
+                    "mobile-ui.mjs", "pwa.mjs", "reorder.mjs", "services.mjs", "service-model.mjs", "sw.js", "manifest.webmanifest",
                     "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"))
 MAX_FILE = 8 * 1024 * 1024
 KEY = re.compile(r"[A-Za-z0-9_.:-]{1,160}\Z")

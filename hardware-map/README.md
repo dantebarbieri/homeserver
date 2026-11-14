@@ -170,8 +170,12 @@ uv run --no-project --with pyyaml python -B -m unittest discover -s hardware-map
 ### Services
 
 Open **Services** for a Task Manager-style table. The default columns are CPU,
-memory, disk and network; use **Columns** to add/remove metrics or move them
-left/right. Selection and order persist locally, independently of map settings.
+memory, disk and network; use **Columns** to add/remove metrics. Reorder
+columns by dragging a heading (mouse/pen, or press and hold on touch) or the
+⋮⋮ grip in **Columns**; with a grip focused, the arrow keys move it one place
+and Home/End send it to either end, with each move announced. **Name** stays
+first. Rows pause updating mid-drag and Escape cancels. Selection and order
+persist locally, independently of map settings.
 Click a heading to sort, search by service/container/process, and expand a
 container to inspect its host processes. Stopped containers are optional.
 

@@ -30,6 +30,14 @@ export function moveColumn(value, id, offset) {
   return result;
 }
 
+export function placeColumn(value, id, index) {
+  const result = selectedColumns(value), from = result.indexOf(id);
+  if (from < 0) return result;
+  result.splice(from, 1);
+  result.splice(Math.max(0, Math.min(result.length, index)), 0, id);
+  return result;
+}
+
 export function metricValue(row, id) {
   const values = row.values ?? {};
   const pair = id === "disk" ? ["diskRead", "diskWrite"] : id === "network" ? ["rx", "tx"] : null;

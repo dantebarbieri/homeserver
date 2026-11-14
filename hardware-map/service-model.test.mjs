@@ -1,12 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaults, selectedColumns, moveColumn, metricValue, sortRows, formatValue } from "./service-model.mjs";
+import { defaults, selectedColumns, moveColumn, placeColumn, metricValue, sortRows, formatValue } from "./service-model.mjs";
+import { dropIndex } from "./reorder.mjs";
 
 test("columns can be selected and reordered without changing saved input; invalid settings are refused", () => {
   const selected = selectedColumns(defaults);
   assert.deepEqual(moveColumn(selected, "network", -1), ["cpu", "memory", "network", "disk"]);
   assert.deepEqual(defaults, ["cpu", "memory", "disk", "network"]);
   for (const invalid of [[], ["cpu", "cpu"], ["not-a-column"], {}, null]) assert.throws(() => selectedColumns(invalid));
+});
+
+test("dragging places a column at an absolute slot, clamped, without mutating or accepting unknown input", () => {
+  assert.deepEqual(placeColumn(defaults, "network", 0), ["network", "cpu", "memory", "disk"]);
+  assert.deepEqual(placeColumn(defaults, "cpu", 3), ["memory", "disk", "network", "cpu"]);
+  assert.deepEqual(placeColumn(defaults, "memory", 99), ["cpu", "disk", "network", "memory"]);
+  assert.deepEqual(placeColumn(defaults, "memory", -4), ["memory", "cpu", "disk", "network"]);
+  assert.deepEqual(placeColumn(defaults, "gpu", 1), defaults);
+  assert.deepEqual(defaults, ["cpu", "memory", "disk", "network"]);
+  assert.throws(() => placeColumn(["cpu", "cpu"], "cpu", 0));
+});
+
+test("the drop slot counts the other items whose centres precede the dragged item", () => {
+  assert.equal(dropIndex([50, 150, 250], 10), 0);
+  assert.equal(dropIndex([50, 150, 250], 160), 2);
+  assert.equal(dropIndex([50, 150, 250], 900), 3);
+  assert.equal(dropIndex([], 5), 0);
 });
 
 test("aggregate rates require both directions; missing readings never become idle zeros", () => {

@@ -1,4 +1,5 @@
-import { columns, defaults, preferenceKey, selectedColumns, moveColumn, metricValue, sortRows, formatValue } from "./service-model.mjs";
+import { columns, defaults, preferenceKey, selectedColumns, moveColumn, placeColumn, metricValue, sortRows, formatValue } from "./service-model.mjs";
+import { createReorder } from "./reorder.mjs";
 
 const byId = new Map(columns.map(column => [column.id, column]));
 const node = (tag, text, className) => {
@@ -16,9 +17,10 @@ export function createServicesUI({ enabled, openPopup, onError }) {
   const settings = document.getElementById("services-columns");
   const search = document.getElementById("services-search");
   const stopped = document.getElementById("services-stopped");
+  const announcer = document.getElementById("services-announce");
   const expanded = new Set();
   let visible = [...defaults], sort = "cpu", direction = -1, snapshot = null;
-  let timer = null, controller = null, generation = 0, pending = false;
+  let timer = null, controller = null, generation = 0, pending = false, dragging = false, stale = false;
   try {
     const raw = localStorage.getItem(preferenceKey);
     if (raw !== null) visible = selectedColumns(JSON.parse(raw));
@@ -40,10 +42,23 @@ export function createServicesUI({ enabled, openPopup, onError }) {
     renderRows();
   }
 
+  function announce(text) {
+    announcer.textContent = "";
+    setTimeout(() => { announcer.textContent = text; }, 30);
+  }
+
+  function reorder(id, next, focus) {
+    const position = next.indexOf(id) + 1, label = byId.get(id).label;
+    changeColumns(next);
+    if (focus) settings.querySelector(`button[data-column="${id}"]`)?.focus();
+    announce(`${label} moved to position ${position} of ${next.length}`);
+  }
+
   function renderColumns() {
     settings.replaceChildren();
     for (const id of [...visible, ...columns.map(column => column.id).filter(id => !visible.includes(id))]) {
       const column = byId.get(id), line = node("div", "", "service-column-option");
+      line.dataset.column = id;
       const label = node("label");
       const input = node("input");
       input.type = "checkbox";
@@ -56,22 +71,22 @@ export function createServicesUI({ enabled, openPopup, onError }) {
         changeColumns(input.checked ? [...visible, id] : visible.filter(value => value !== id));
         settings.querySelector(`input[data-column="${id}"]`)?.focus();
       });
-      line.append(label);
-      if (input.checked) for (const [offset, text] of [[-1, "Left"], [1, "Right"]]) {
-        const button = node("button", text);
-        button.type = "button";
-        button.dataset.column = id;
-        button.dataset.action = text;
-        button.setAttribute("aria-label", `Move ${column.label} ${text.toLowerCase()}`);
-        button.disabled = visible.indexOf(id) + offset < 0 || visible.indexOf(id) + offset >= visible.length;
-        button.addEventListener("click", () => {
-          changeColumns(moveColumn(visible, id, offset));
-          const next = [...settings.querySelectorAll("button")].find(candidate =>
-            candidate.dataset.column === id && candidate.dataset.action === text && !candidate.disabled);
-          (next ?? settings.querySelector(`input[data-column="${id}"]`))?.focus();
+      if (input.checked) {
+        line.dataset.visible = "";
+        const grip = node("button", "\u22ee\u22ee", "service-column-grip");
+        grip.type = "button";
+        grip.dataset.column = id;
+        grip.dataset.grip = "";
+        grip.setAttribute("aria-label", `Reorder ${column.label}: drag, or use the arrow keys`);
+        grip.addEventListener("keydown", event => {
+          const move = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[event.key];
+          if (move === undefined && event.key !== "Home" && event.key !== "End") return;
+          event.preventDefault();
+          reorder(id, move === undefined ? placeColumn(visible, id, event.key === "Home" ? 0 : visible.length) : moveColumn(visible, id, move), true);
         });
-        line.append(button);
+        line.append(grip);
       }
+      line.append(label);
       settings.append(line);
     }
   }
@@ -85,7 +100,8 @@ export function createServicesUI({ enabled, openPopup, onError }) {
       cell.setAttribute("aria-sort", id === sort ? direction === -1 ? "descending" : "ascending" : "none");
       const button = node("button", `${column?.label ?? "Name"}${sort === id ? direction === -1 ? " \u2193" : " \u2191" : ""}`);
       button.type = "button";
-      button.title = column?.note ?? "Service names and icons come from Homepage. Other containers keep their Docker names.";
+      button.title = column ? `${column.note}\n\nDrag to reorder; on touch, press and hold first. Keyboard: use Columns.` :
+        "Service names and icons come from Homepage. Other containers keep their Docker names.";
       button.addEventListener("click", () => {
         direction = sort === id ? -direction : id === "name" ? 1 : -1;
         sort = id;
@@ -100,6 +116,8 @@ export function createServicesUI({ enabled, openPopup, onError }) {
   }
 
   function renderRows() {
+    if (dragging) { stale = true; return; }
+    stale = false;
     const focus = document.activeElement?.dataset.serviceToggle;
     const fragment = document.createDocumentFragment();
     const all = snapshot?.services ?? [];
@@ -202,6 +220,8 @@ export function createServicesUI({ enabled, openPopup, onError }) {
     generation++;
     clearTimeout(timer);
     controller?.abort();
+    headReorder.cancel();
+    menuReorder.cancel();
     snapshot = null;
     status.textContent = "Waiting for live accounting";
     renderRows();
@@ -258,6 +278,40 @@ export function createServicesUI({ enabled, openPopup, onError }) {
   search.addEventListener("input", renderRows);
   stopped.addEventListener("change", renderRows);
   document.getElementById("services-reset-columns").addEventListener("click", () => changeColumns([...defaults]));
+  const scrollRegion = document.querySelector(".services-table-scroll");
+  const metricCells = () => [...head.querySelectorAll("th[data-column]")].filter(cell => cell.dataset.column !== "name");
+  const endDrag = changed => {
+    dragging = false;
+    if (!changed && stale) renderRows();
+  };
+  const headReorder = createReorder({
+    root: head,
+    axis: "x",
+    scroller: scrollRegion,
+    bounds: () => [head.querySelector('th[data-column="name"]').getBoundingClientRect().right, scrollRegion.getBoundingClientRect().right],
+    resolve: event => {
+      const cell = event.target.closest?.("th[data-column]");
+      return cell && cell.dataset.column !== "name" ? { id: cell.dataset.column, element: cell } : null;
+    },
+    items: () => metricCells().map(cell => ({ id: cell.dataset.column, element: cell })),
+    follow: id => body.querySelectorAll(`td[data-column="${id}"]`),
+    onStart: () => { dragging = true; },
+    onEnd: endDrag,
+    onCommit: (id, index) => reorder(id, placeColumn(visible, id, index), false),
+  });
+  const menuReorder = createReorder({
+    root: settings,
+    axis: "y",
+    scroller: settings.closest(".services-column-menu"),
+    resolve: event => {
+      const grip = event.target.closest?.("[data-grip]");
+      return grip ? { id: grip.dataset.column, element: grip.closest(".service-column-option"), handle: grip, immediate: true } : null;
+    },
+    items: () => [...settings.querySelectorAll(".service-column-option[data-visible]")].map(row => ({ id: row.dataset.column, element: row })),
+    onStart: () => { dragging = true; },
+    onEnd: endDrag,
+    onCommit: (id, index) => reorder(id, placeColumn(visible, id, index), true),
+  });
   renderColumns();
   renderHead();
   renderRows();

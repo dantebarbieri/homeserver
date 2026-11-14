@@ -109,8 +109,9 @@
       <div class="services-toolbar">
         <label class="services-search"><span class="sr-only">Search services or processes</span><input id="services-search" type="search" placeholder="Search services or processes" autocomplete="off"></label>
         <label class="services-stopped"><input id="services-stopped" type="checkbox">Show stopped</label>
-        <details class="services-column-picker"><summary>Columns</summary><div class="services-column-menu" data-sheet-scroll><div id="services-columns"></div><button id="services-reset-columns" type="button">Reset columns</button></div></details>
+        <details class="services-column-picker"><summary>Columns</summary><div class="services-column-menu" data-sheet-scroll><p class="services-column-hint">Drag a grip to reorder. With a keyboard, focus a grip and use the arrow keys. Table headings can also be dragged; on touch, press and hold first.</p><div id="services-columns"></div><button id="services-reset-columns" type="button">Reset columns</button></div></details>
       </div>
+      <p id="services-announce" class="sr-only" role="status" aria-live="polite"></p>
       <div class="services-live"><output id="services-status" role="status">Waiting for live accounting</output><span id="services-count"></span></div>
       <div class="services-table-scroll" data-sheet-scroll tabindex="0" role="region" aria-label="Service resource usage; scroll horizontally for more columns">
         <table class="services-table"><caption class="sr-only">Docker services and their processes. Values update every five seconds. Select a column heading to sort.</caption><thead id="services-head"></thead><tbody id="services-body"></tbody></table>
