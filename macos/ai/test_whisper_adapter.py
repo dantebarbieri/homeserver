@@ -49,11 +49,22 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("00:00:00,000 --> 00:00:01,000", response.text)
 
     async def test_status_reports_version_while_a_job_runs(self):
-        await whisper_adapter.job_lock.acquire()
-        try:
+        started = asyncio.Event()
+        finish = asyncio.Event()
+
+        async def fake_worker(mode, path, language, timeout):
+            started.set()
+            await finish.wait()
+            return b'{"language_code":"en","detected_language":"english"}'
+
+        with patch.object(whisper_adapter, "run_worker", fake_worker):
+            job = asyncio.create_task(self.client.post(
+                "/detect-language?encode=false", files={"audio_file": ("audio", b"\0\0")}
+            ))
+            await started.wait()
             response = await self.client.get("/status")
-        finally:
-            whisper_adapter.job_lock.release()
+            finish.set()
+            self.assertEqual((await job).status_code, 200)
         self.assertEqual(response.status_code, 200)
         self.assertRegex(
             response.json()["version"],

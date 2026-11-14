@@ -36,19 +36,6 @@ job_lock = asyncio.Lock()
 WORKER = Path(__file__).with_name("whisper_worker.py")
 
 
-def engine_versions():
-    versions = []
-    for package in ("mlx-whisper", "faster-whisper"):
-        try:
-            versions.append(f"{package} {metadata.version(package)}")
-        except metadata.PackageNotFoundError:
-            versions.append(f"{package} missing")
-    return ", ".join(versions)
-
-
-VERSION = f"Studio Whisper ({engine_versions()})"
-
-
 @app.middleware("http")
 async def bound_request(request, call_next):
     if request.url.path not in {"/asr", "/detect-language"} or request.method != "POST":
@@ -161,6 +148,19 @@ async def process(request, mode, language=None):
                 raise HTTPException(504, "Speech worker timed out")
     finally:
         await form.close()
+
+
+def engine_versions():
+    versions = []
+    for package in ("mlx-whisper", "faster-whisper"):
+        try:
+            versions.append(f"{package} {metadata.version(package)}")
+        except metadata.PackageNotFoundError:
+            versions.append(f"{package} missing")
+    return ", ".join(versions)
+
+
+VERSION = f"Studio Whisper ({engine_versions()})"
 
 
 @app.get("/status")
