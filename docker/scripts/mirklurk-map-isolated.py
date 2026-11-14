@@ -44,7 +44,7 @@ def git(root, *args):
 
 
 def state(root):
-    status = git(root, "status", "--porcelain=v1", "-z").decode().split("\0")
+    status = git(root, "status", "--porcelain=v1", "--untracked-files=all", "-z").decode().split("\0")
     require(sorted(s for s in status if s) == sorted(" M " + p for p in PRESERVED),
             "Canonical edits are not exactly the two authorized unstaged paths")
     result = {}

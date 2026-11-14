@@ -83,6 +83,7 @@ class IsolatedPeerTests(unittest.TestCase):
         self.assertEqual(self.git(self.canonical, "rev-parse", "HEAD"), self.revision)
 
     def test_extra_or_staged_canonical_edits_fail_closed(self):
+        self.git(self.canonical, "config", "status.showUntrackedFiles", "no")
         (self.canonical / "extra").write_text("unexpected")
         with self.assertRaisesRegex(RuntimeError, "exactly the two"):
             isolated.state(self.canonical)
