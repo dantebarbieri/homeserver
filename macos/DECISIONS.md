@@ -274,6 +274,9 @@ that Telugu first match the server.
   the Bazarr container through this endpoint.
 - Bazarr still picks the first audio stream of multi-audio files when no
   audio language matches; audio-language preferences were not changed.
+- The adapter answers `GET /status` with its engine versions, so Bazarr's
+  provider **Test Connection** shows them instead of "Connected but no
+  version found (possibly whisper-asr?)". It never takes the job lock.
 
 Timing overlap and API success are not quality approval, and this is AI
 review against subtitle references, not listening-based verification.

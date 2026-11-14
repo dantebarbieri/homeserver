@@ -48,6 +48,18 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("00:00:00,000 --> 00:00:01,000", response.text)
 
+    async def test_status_reports_version_while_a_job_runs(self):
+        await whisper_adapter.job_lock.acquire()
+        try:
+            response = await self.client.get("/status")
+        finally:
+            whisper_adapter.job_lock.release()
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            response.json()["version"],
+            r"^Studio Whisper \(mlx-whisper \S+, faster-whisper \S+\)$",
+        )
+
     async def test_detect_language_response(self):
         async def fake_worker(mode, path, language, timeout):
             self.assertEqual((mode, language), ("detect", None))
