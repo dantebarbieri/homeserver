@@ -29,6 +29,7 @@ STATE = Path(os.environ.get("STATE_DIR", "/state"))
 MUSIC = Path(os.environ.get("MUSIC_ROOT", "/music"))
 PLEX_ROOT = PurePosixPath("/data/media/music")
 INTERVAL = 86400
+PLEX_WAIT = 900  # the container starts with the host, usually before Plex answers
 RECHECK = 30 * 86400
 MAX_BYTES = 2 * 1024 * 1024
 SIDECARS = {".lrc", ".txt", ".yaml", ".yml", ".ttml", ".elrc", ".srt"}
@@ -143,6 +144,19 @@ class Plex:
 
     def api(self, path, method="GET"):
         return self.web.request(self.url + path, headers=self.headers, method=method)
+
+    def wait(self, limit=PLEX_WAIT, pause=15):
+        """Give a booting or restarting Plex time before a run is declared failed."""
+        deadline = time.monotonic() + limit
+        while True:
+            try:
+                with self.web.opener.open(self.url + "/identity", timeout=10):
+                    return
+            except (OSError, ValueError):
+                if time.monotonic() + pause > deadline:
+                    return  # let the run fail and alert as usual
+                LOG.info("waiting for plex")
+                time.sleep(pause)
 
     def tracks(self):
         start, tracks = 0, []
@@ -483,7 +497,9 @@ def main():
             if not args.dry_run:
                 save("health.json", {"at": time.time(), "ok": True})
             web = Web()
-            run(Plex(web), web, args)
+            plex = Plex(web)
+            plex.wait()
+            run(plex, web, args)
         except (OSError, ValueError, KeyError, TypeError, RuntimeError, mutagen.MutagenError, yaml.YAMLError):
             LOG.exception("lyrics run failed")
             if not args.dry_run:

@@ -1,12 +1,16 @@
 # AI services stack
-# whisperasr (GPU speech-to-text; Bazarr's previous Whisper endpoint)
+# whisperasr (GPU speech-to-text; Bazarr's previous endpoint, rollback only)
 # studio-whisper (tunnel to the Mac Studio's Whisper API for Bazarr)
 
 services:
+  # Retired 2026-11-14: the Mac Studio serves Bazarr now. Kept out of normal
+  # `up` runs; for a rollback (macos/ai/README.md) start it explicitly with
+  # `docker compose --profile whisper-rollback up -d whisperasr`.
   whisperasr:
     extends:
       file: compose.common.yml
       service: gpu-service
+    profiles: ["whisper-rollback"]
     image: onerahmet/openai-whisper-asr-webservice:latest-gpu
     container_name: whisperasr
     environment:

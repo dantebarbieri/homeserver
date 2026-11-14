@@ -159,9 +159,11 @@ dcu() (
   _dc_build || return 1
   _dc_up --remove-orphans || return 1
 
-  # Light cleanup — only dangling images and unused networks
+  # Light cleanup — dangling images, unused networks, orphaned anonymous
+  # volumes (named volumes are never touched without --all)
   docker image prune -f
   docker network prune -f
+  docker volume prune -f
 
   _dc_report_failed_builds
 )
@@ -194,6 +196,7 @@ dcupdate() (
   # MirkLurk wiki releases: they are rollback/forensic images, not cache.
   docker image prune -af --filter "label!=org.opencontainers.image.source=https://github.com/dantebarbieri/mirklurk-wiki"
   docker network prune -f
+  docker volume prune -f  # anonymous only; named volumes need --all
   docker builder prune -af
 
   _dc_report_failed_builds

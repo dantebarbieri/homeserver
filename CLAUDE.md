@@ -64,7 +64,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 | File | Services |
 |------|----------|
-| `compose.ai.yml` | whisperasr, studio-whisper |
+| `compose.ai.yml` | studio-whisper, studio-ollama (profile `arr-ai`), whisperasr (retired; profile `whisper-rollback`) |
 | `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
 | `compose.dashboards.yml` | homepage, homepage-socket-proxy, dashdot |
