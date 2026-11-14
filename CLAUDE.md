@@ -64,7 +64,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 | File | Services |
 |------|----------|
-| `compose.ai.yml` | studio-whisper, studio-ollama (profile `arr-ai`), whisperasr (retired; profile `whisper-rollback`) |
+| `compose.ai.yml` | studio-whisper, studio-ollama (profile `arr-ai`) |
 | `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
 | `compose.dashboards.yml` | homepage, homepage-socket-proxy, dashdot |
@@ -169,8 +169,8 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 | `dci <svc>` | `dci bazarr` | Show image info (repo, tag, digest, created) |
 | `dce <svc> <cmd...>` | `dce postgres psql -U myuser mydb` | Exec command in running container |
 | `dcs <svc>` | `dcs bazarr` | Interactive shell (tries bash, then sh) |
-| `dcl [-s <time>] <svcs...>` | `dcl -s 30m bazarr whisperasr` | Follow logs with optional --since |
-| `dcr [svcs...]` | `dcr bazarr whisperasr` | Restart/recreate services |
+| `dcl [-s <time>] <svcs...>` | `dcl -s 30m bazarr studio-whisper` | Follow logs with optional --since |
+| `dcr [svcs...]` | `dcr bazarr studio-whisper` | Restart/recreate services |
 | `dcu` | `dcu` | Quick update: git pull, pull/build/up, light prune (a failed image build only holds back that service; never touches the `mirklurk-release` wiki frontend) |
 | `dcupdate` | `dcupdate` | Full update: git pull+push, pull/build, then down/up (skips the teardown if an image fails to build), heavy prune that keeps retained wiki images |
 

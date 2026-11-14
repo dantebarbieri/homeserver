@@ -58,8 +58,8 @@ dcs() (
 )
 
 # View logs — follows with timestamps, optional --since filter
-# Usage: dcl bazarr whisperasr          (all logs, following)
-#        dcl -s 30m bazarr whisperasr   (last 30 min, following)
+# Usage: dcl bazarr studio-whisper      (all logs, following)
+#        dcl -s 30m bazarr studio-whisper (last 30 min, following)
 #        dcl -s 2h bazarr               (last 2 hours, following)
 dcl() (
   cd /srv/docker/compose || return 1
@@ -78,7 +78,7 @@ dcl() (
 )
 
 # Restart services — recreates containers to pick up any changes
-# Usage: dcr bazarr whisperasr
+# Usage: dcr bazarr studio-whisper
 dcr() (
   cd /srv/docker/compose || return 1
 
