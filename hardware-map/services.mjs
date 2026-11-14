@@ -1,5 +1,6 @@
 import { columns, defaults, preferenceKey, selectedColumns, moveColumn, placeColumn, metricValue, sortRows, formatValue } from "./service-model.mjs";
 import { createReorder } from "./reorder.mjs";
+import { anchorPopover } from "./popover.mjs";
 
 const byId = new Map(columns.map(column => [column.id, column]));
 const node = (tag, text, className) => {
@@ -19,6 +20,7 @@ export function createServicesUI({ enabled, openPopup, onError }) {
   const stopped = document.getElementById("services-stopped");
   const announcer = document.getElementById("services-announce");
   const expanded = new Set();
+  anchorPopover(document.getElementById("services-columns-button"), document.getElementById("services-column-menu"));
   let visible = [...defaults], sort = "cpu", direction = -1, snapshot = null;
   let timer = null, controller = null, generation = 0, pending = false, dragging = false, stale = false;
   try {

@@ -1,5 +1,29 @@
 export const sheetMedia = "(max-width: 700px), (pointer: coarse) and (max-width: 1100px)";
 
+// Map zoom is a percentage of the fitted size. Buttons move between 25% stops;
+// pinch and trackpad gestures set any value in range.
+export const zoomRange = { minimum: 75, maximum: 400, step: 25 };
+
+export function clampZoom(value) {
+  return Number.isFinite(value) ? Math.max(zoomRange.minimum, Math.min(zoomRange.maximum, value)) : 100;
+}
+
+export function stepZoom(zoom, direction) {
+  const stops = zoom / zoomRange.step;
+  return clampZoom((direction > 0 ? Math.floor(stops + 1e-6) + 1 : Math.ceil(stops - 1e-6) - 1) * zoomRange.step);
+}
+
+export function pinchZoom(startZoom, startDistance, distance) {
+  return clampZoom(startZoom * distance / Math.max(1, startDistance));
+}
+
+// Scroll offsets that keep the content under `point` (relative to the scroll
+// box) in place while the content grows from one zoom to another.
+export function zoomedScroll(scroll, point, from, to) {
+  const ratio = to / from;
+  return { left: Math.max(0, (scroll.left + point.x) * ratio - point.x), top: Math.max(0, (scroll.top + point.y) * ratio - point.y) };
+}
+
 export function sheetHeights(viewport, natural, minimum = 0) {
   const full = Math.max(0, Math.min(natural, viewport - 56));
   return { half: Math.min(full, Math.max(Math.round(viewport / 2), minimum)), full };

@@ -1,6 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createBottomSheet, sheetHeights, sheetSnap, dragsSheet } from "./mobile-ui.mjs";
+import { createBottomSheet, sheetHeights, sheetSnap, dragsSheet, zoomRange, clampZoom, stepZoom, pinchZoom, zoomedScroll } from "./mobile-ui.mjs";
+
+test("zoom buttons move between 25% stops from any pinched value", () => {
+  assert.equal(stepZoom(100, 1), 125);
+  assert.equal(stepZoom(100, -1), 75);
+  assert.equal(stepZoom(137.4, 1), 150);
+  assert.equal(stepZoom(137.4, -1), 125);
+  assert.equal(stepZoom(zoomRange.maximum, 1), zoomRange.maximum);
+  assert.equal(stepZoom(zoomRange.minimum, -1), zoomRange.minimum);
+});
+
+test("pinch scales from where it started and stays in range", () => {
+  assert.equal(pinchZoom(100, 120, 240), 200);
+  assert.equal(pinchZoom(200, 240, 120), 100);
+  assert.equal(pinchZoom(300, 100, 900), zoomRange.maximum);
+  assert.equal(pinchZoom(100, 0, 50), zoomRange.maximum);
+  assert.equal(clampZoom(NaN), 100);
+});
+
+test("zooming keeps the point under the fingers in place", () => {
+  // Content x = 100 + 50 = 150 doubles to 300, so the box must scroll to 250.
+  assert.deepEqual(zoomedScroll({ left: 100, top: 40 }, { x: 50, y: 60 }, 100, 200), { left: 250, top: 140 });
+  assert.deepEqual(zoomedScroll({ left: 250, top: 140 }, { x: 50, y: 60 }, 200, 100), { left: 100, top: 40 });
+  assert.deepEqual(zoomedScroll({ left: 0, top: 0 }, { x: 50, y: 60 }, 200, 100), { left: 0, top: 0 });
+});
 
 test("sheets respect short content, viewport headroom and controls in short landscape windows", () => {
   assert.deepEqual(sheetHeights(800, 170), { half: 170, full: 170 });

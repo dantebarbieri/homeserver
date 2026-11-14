@@ -21,6 +21,7 @@ node --test hardware-map\model.test.mjs hardware-map\metric-model.test.mjs
 node --test hardware-map\live-data.test.mjs
 node --test hardware-map\mobile-ui.test.mjs
 node --test hardware-map\pwa.test.mjs
+node --test hardware-map\status.test.mjs
 ```
 
 ## Phone installation
@@ -46,11 +47,61 @@ metric names and private state directories retain `server-atlas` for continuity.
 Browser preferences are origin-local and do not automatically move to the new
 hostname.
 
-On phones, the header controls use a compact grid, with extra breathing room
-above the top safe-area inset. The original logo accompanies the title on wider
-screens; at 420 px and below only the logo is visible, while the heading still
-names ChasEx for screen readers. Metric-family buttons wrap into centered grid
-cells rather than shrinking their labels.
+### Layout
+
+The page has two rows of controls above the map at every size: an app bar
+(logo, status chip, **Performance / Services / About**) and a filter bar
+(**Hardware | Connectors**, category chips that scroll sideways, and one menu
+button: **Layers** in hardware mode, **List** in connector mode). Zoom and
+**Fan motion** float in the map's bottom-left corner. Nothing above the map
+appears or disappears on its own, so the map never jumps.
+
+| Viewport | Views | Inspector | Chart cards |
+|----------|-------|-----------|-------------|
+| Phone, ≤ 700 px | Fixed bottom bar | Bottom sheet | Row below the map; the page scrolls |
+| Small touch screen, ≤ 1100 px | App bar | Bottom sheet | Row below the map; the page scrolls |
+| Narrow or portrait window with a mouse | App bar | Centered dialog up to 1100 px, docked above | Dock under the map |
+| Landscape desktop | App bar | Docked beside the map | Dock column at the right |
+| Over 1800 px wide and 900 px high | App bar | Docked beside the map | Floating, draggable, with leader lines |
+
+The map zooms from 75% to 400%. Pinch with two fingers on a touch screen, or
+pinch on a trackpad (Ctrl + wheel); the point under the fingers or cursor
+stays put. One finger is left to the browser, so it scrolls the page, or pans
+the map once it is zoomed in. The −/+ buttons move between 25% stops and the
+percentage between them resets to 100%. Browser zoom is not disabled anywhere;
+only the map area handles its own pinch. Safari's desktop trackpad pinch is
+not handled and zooms the page as before. The arithmetic is in `mobile-ui.mjs`.
+
+The docked inspector is not modal: the map stays usable, selecting another
+part updates it in place without taking keyboard focus from the map, and
+Escape closes it. Below 1500 px the chart dock hides while it is open, since
+the inspector shows that part's own charts. A dialog opened on top of another
+(for example **Full performance view** from a modal inspector) labels its
+close button **← Back**.
+
+**Layers**, **List**, the status details and the Services **Columns** picker
+are all the same kind of menu (`popover.mjs`, on the native Popover API): they
+open over the page beside their button, only one is open at a time, and a tap
+outside or Escape closes them. Browsers without the Popover API get the same
+behavior without the top layer.
+
+### Status and notifications
+
+The status chip is always present and never changes size: **Live**,
+**N issues**, **No live data**, **Connecting…** or **Demo**. Its panel lists
+each problem as its own titled entry, then every collector source with its
+state (per-disk SMART sources are one row, so device identifiers are not
+shown), then any notices from this browser such as unreadable saved
+preferences, which can be dismissed.
+
+A problem is announced once as a toast, with a **Details** button, only after
+it has lasted eight seconds, so one failed request or a source that is briefly
+late does not flash anything. A second toast confirms recovery. Toasts dismiss
+themselves, stack at most three deep and sit above the bottom bar on phones.
+During an outage the panel shows the single cause (including the server's own
+reason, such as "Collector snapshot is stale") and withholds notices from the
+out-of-date snapshot. The logic is in `status.mjs`; `healthOf` is pure and
+covered by `status.test.mjs`.
 
 Inspection and performance sheets drag using frame-batched transforms with a
 fixed content layout, then snap to half/full height. Content-size measurements
@@ -257,7 +308,7 @@ threshold legends and the VRAM help tooltip remain available on demand.
 The sensor/graph semantics and retained inspection evidence are documented below.
 Legacy collectors also include seven permanent documentation notes in their
 `issues` list. The web adapter omits only those exact known notes from the
-notice banner; unknown messages, collection diagnostics and API/history errors
+status panel; unknown messages, collection diagnostics and API/history errors
 are still shown. The raw snapshot is unchanged, so this needs no collector upgrade.
 
 ### Archived prototype interfaces
