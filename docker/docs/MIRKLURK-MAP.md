@@ -497,6 +497,7 @@ service env files; the helper rejects that additional dependency.
 # freshly verified values. The caller keeps descriptor9 locked throughout.
 python3 "$isolated/docker/scripts/mirklurk-map-isolated.py" \
   --source "$isolated" --base "$canonical_before" --revision "$reviewed_main" \
+  --review-base "$reviewed_upstream_base" \
   --edits "$private_edit_fingerprints" --proxy-id "$npm_id" \
   --ipv4 "$npm_ipv4" --ipv6 "$npm_ipv6"
 ```
@@ -509,6 +510,14 @@ both accepted immutable images, wiki runtime, maintenance guards and the
 existing canonical read-only nginx bind with `create_host_path: false`.
 It fetches already-reviewed objects from the clean clone; no reset/remote
 change or direct file overwrite. No service operation occurs in the helper.
+If legitimate upstream main has advanced beyond the canonical base, pin that
+already-reviewed upstream SHA separately with `--review-base` (otherwise it
+defaults to canonical base). Verify both ancestor relationships and review
+the exact candidate against that pinned upstream base before use. Only that
+candidate diff may contain the five exception files; frozen-path history and
+clean/canonical map equivalence remain enforced across the **entire** canonical
+base to final revision. Never use this option to conceal candidate changes or
+skip an upstream preservation/contract conflict.
 No extra privileges are required. Preserve the clone/private fingerprints
 as acceptance evidence, not as a new scheduler or runtime dependency.
 

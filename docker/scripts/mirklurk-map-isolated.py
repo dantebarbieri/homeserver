@@ -70,8 +70,9 @@ def same_edits(root, expected):
     require(state(root) == expected, "Authorized canonical edits or their index/identity changed")
 
 
-def source_guard(source, canonical, base, revision):
-    require(re.fullmatch("[0-9a-f]{40}", base) and re.fullmatch("[0-9a-f]{40}", revision),
+def source_guard(source, canonical, base, revision, review_base=None):
+    review_base = base if review_base is None else review_base
+    require(all(re.fullmatch("[0-9a-f]{40}", value) for value in (base, revision, review_base)),
             "Full exact source revisions required")
     require(source.resolve() != canonical.resolve()
             and not source.resolve().is_relative_to(canonical.resolve())
@@ -82,8 +83,9 @@ def source_guard(source, canonical, base, revision):
     require(not git(source, "status", "--porcelain", "--untracked-files=all", "--ignored"),
             "Isolated source is not wholly clean (including ignored files)")
     require((source / ".git").is_dir(), "Use a standalone clone, not a shared-index worktree")
-    command("git", "-C", str(source), "merge-base", "--is-ancestor", base, revision)
-    changed = set(git(source, "diff", "--name-only", base, revision).decode().splitlines())
+    command("git", "-C", str(source), "merge-base", "--is-ancestor", base, review_base)
+    command("git", "-C", str(source), "merge-base", "--is-ancestor", review_base, revision)
+    changed = set(git(source, "diff", "--name-only", review_base, revision).decode().splitlines())
     require(changed <= CHANGES, "Candidate changes exceed exact-peer mechanism scope")
     require("docker/nginx/mirklurk-map.conf" in changed, "Candidate does not correct exact peers")
     require(not git(source, "log", "--full-history", "--diff-merges=separate", "--format=",
@@ -246,7 +248,7 @@ def prepare(args):
             == (args.revision if args.verify_only else args.base),
             "Canonical base changed")
     same_edits(canonical, expected)
-    source_guard(source, canonical, args.base, args.revision)
+    source_guard(source, canonical, args.base, args.revision, args.review_base)
     config_guard(canonical, source, args.ipv4, args.ipv6)
     proxy_guard(args.proxy_id, args.ipv4, args.ipv6)
     clean = model(source, canonical)
@@ -266,7 +268,7 @@ def prepare(args):
     require(git(canonical, "rev-parse", "HEAD").decode().strip() == args.revision,
             "Canonical fast-forward did not reach exact reviewed source")
     same_edits(canonical, expected)
-    source_guard(source, canonical, args.base, args.revision)
+    source_guard(source, canonical, args.base, args.revision, args.review_base)
     models_guard(clean, model(canonical, canonical), source, canonical)
     runtime_guard()
     proxy_guard(args.proxy_id, args.ipv4, args.ipv6)
@@ -278,6 +280,7 @@ def main():
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--base", required=True)
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--review-base", help="Exact already-reviewed upstream main used as this PR's base; defaults to canonical base")
     parser.add_argument("--edits", required=True, type=Path,
                         help="Private prior fingerprint JSON; no edit contents")
     parser.add_argument("--proxy-id", required=True)

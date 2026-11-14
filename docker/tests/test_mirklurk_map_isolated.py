@@ -224,7 +224,7 @@ class IsolatedPeerTests(unittest.TestCase):
         fingerprints.write_text(json.dumps(expected))
         args = SimpleNamespace(source=self.source, base=self.base, revision=self.revision,
                                edits=fingerprints, proxy_id="a" * 64, ipv4="192.168.128.36",
-                               ipv6="fd2b:92df:1a5b:1::24", verify_only=False)
+                               ipv6="fd2b:92df:1a5b:1::24", verify_only=False, review_base=None)
         clean, live = self.models()
         with patch.object(isolated, "CANONICAL", self.canonical), \
                 patch.object(isolated, "__file__", str(self.source / "docker/scripts/mirklurk-map-isolated.py")), \
@@ -245,6 +245,21 @@ class IsolatedPeerTests(unittest.TestCase):
                 isolated.prepare(args)
             self.assertNotIn("fetch", calls)
             self.assertNotIn("merge", calls)
+
+    def test_pinned_review_base_preserves_prior_reviewed_upstream_without_broadening_candidate_scope(self):
+        self.git(self.source, "checkout", "--quiet", "--detach", self.base)
+        (self.source / "unrelated.txt").write_text("already reviewed upstream\n")
+        self.git(self.source, "add", "unrelated.txt")
+        self.git(self.source, "commit", "--quiet", "-m", "upstream")
+        review_base = self.git(self.source, "rev-parse", "HEAD")
+        (self.source / "docker/nginx/mirklurk-map.conf").write_text(
+            self.config.replace(".23;", ".36;").replace("::17;", "::24;"))
+        self.git(self.source, "commit", "--quiet", "-am", "candidate peers")
+        revision = self.git(self.source, "rev-parse", "HEAD")
+        with patch.object(isolated, "__file__", str(self.source / "docker/scripts/mirklurk-map-isolated.py")):
+            isolated.source_guard(self.source, self.canonical, self.base, revision, review_base)
+            with self.assertRaisesRegex(RuntimeError, "scope"):
+                isolated.source_guard(self.source, self.canonical, self.base, revision, self.base)
 
     def runtime_fixture(self):
         containers = []
