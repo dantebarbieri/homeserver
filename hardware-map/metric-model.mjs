@@ -20,57 +20,86 @@ export const cpuClockSpecification = { base: 3, boost: 3.7 };
 export const historyWindows = [60, 120, 300, 900, 1800, 3600, 7200, 21600, 86400];
 export const defaultHistoryWindows = { cpu: 120, gpu: 120, network: 120, memory: 900, storage: 7200, temperatures: 1800, fans: 300 };
 export const historyLabel = seconds => seconds >= 3600 ? `${seconds / 3600}h` : `${seconds / 60}m`;
-export function placeMetricCard(card, viewport, occupied) {
-  const gap = 10;
-  const right = Math.max(gap, viewport.width - card.width - gap);
-  const bottom = Math.max(gap, viewport.height - card.height - gap);
-  const clamp = point => ({ x: Math.max(gap, Math.min(right, point.x)), y: Math.max(gap, Math.min(bottom, point.y)) });
-  const preferred = clamp(card);
-  const overlap = point => occupied.reduce((area, rect) => area +
-    Math.max(0, Math.min(point.x + card.width + gap, rect.x + rect.width) - Math.max(point.x - gap, rect.x)) *
-    Math.max(0, Math.min(point.y + card.height + gap, rect.y + rect.height) - Math.max(point.y - gap, rect.y)), 0);
-  let best = preferred, bestArea = overlap(best), bestDistance = 0;
-  if (!bestArea) return best;
-  function consider(point) {
-    const candidate = clamp(point);
-    const distance = (candidate.x - preferred.x) ** 2 + (candidate.y - preferred.y) ** 2;
-    if (!bestArea && distance >= bestDistance) return;
-    const area = overlap(candidate);
-    if (area < bestArea || area === bestArea && distance < bestDistance) {
-      best = candidate; bestArea = area; bestDistance = distance;
-    }
-  }
-  for (const rect of occupied) {
-    for (const x of [rect.x - card.width - gap, rect.x + rect.width + gap]) {
-      for (const y of [preferred.y, rect.y, rect.y + rect.height - card.height]) consider({ x, y });
-    }
-    for (const y of [rect.y - card.height - gap, rect.y + rect.height + gap]) consider({ x: preferred.x, y });
-  }
-  for (let x = gap; x < right + 32; x += 32) {
-    for (let y = gap; y < bottom + 32; y += 32) consider({ x, y });
-  }
-  return best;
+function cardOverlap(card, occupied, gap = 10) {
+  return occupied.reduce((area, rect) => area +
+    Math.max(0, Math.min(card.x + card.width + gap, rect.x + rect.width) - Math.max(card.x - gap, rect.x)) *
+    Math.max(0, Math.min(card.y + card.height + gap, rect.y + rect.height) - Math.max(card.y - gap, rect.y)), 0);
 }
-export const metricCardRows = {
-  top: ["nvme-root", "gpu", "network"],
-  bottom: ["nvme", "cpu", "memory"],
-};
-export function placeMetricRow(cards, viewport, occupied, edge) {
-  if (!Object.hasOwn(metricCardRows, edge)) throw new Error("Unknown metric card row");
-  if (!cards.length) return [];
-  const gap = 10, height = Math.max(...cards.map(card => card.height));
-  const width = cards.reduce((sum, card) => sum + card.width, 0) + gap * (cards.length - 1);
-  const offset = edge === "bottom" ? viewport.height / 2 : 0;
-  const region = { width: viewport.width, height: viewport.height / 2 };
-  const position = placeMetricCard({
-    x: viewport.width - width - gap, y: edge === "bottom" ? region.height - height - gap : gap, width, height,
-  }, region, occupied.map(rect => ({ ...rect, y: rect.y - offset })));
-  let x = position.x;
-  return cards.map(card => {
-    const placed = { ...card, x, y: position.y + offset + (edge === "bottom" ? height - card.height : 0) };
-    x += card.width + gap;
-    return placed;
+export function rayBoxEdge(origin, through, box) {
+  let dx = through.x - origin.x, dy = through.y - origin.y;
+  if (!dx && !dy) dy = -1;
+  const tx = dx ? ((dx > 0 ? box.x + box.width : box.x) - origin.x) / dx : Infinity;
+  const ty = dy ? ((dy > 0 ? box.y + box.height : box.y) - origin.y) / dy : Infinity;
+  const distance = Math.min(tx, ty);
+  return { x: origin.x + dx * distance, y: origin.y + dy * distance,
+    edge: tx < ty ? dx > 0 ? "right" : "left" : dy > 0 ? "bottom" : "top" };
+}
+function leadersCross(a, b) {
+  if (!a.anchor || !b.anchor) return false;
+  const end = card => rayBoxEdge({ x: card.x + card.width / 2, y: card.y + card.height / 2 }, card.anchor, card);
+  const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const p = end(a), q = end(b);
+  return cross(a.anchor, p, b.anchor) * cross(a.anchor, p, q) < -1e-6 &&
+    cross(b.anchor, q, a.anchor) * cross(b.anchor, q, p) < -1e-6;
+}
+export function placeMetricCards(cards, viewport, enclosure, origin, occupied, fixed = []) {
+  const gap = 10;
+  const targets = cards.map(card => {
+    const target = rayBoxEdge(origin, card.anchor, enclosure);
+    const x = target.edge === "left" ? target.x - card.width - gap : target.edge === "right" ? target.x + gap : target.x - card.width / 2;
+    const y = target.edge === "top" ? target.y - card.height - gap : target.edge === "bottom" ? target.y + gap : target.y - card.height / 2;
+    return { ...card, target, x: Math.max(gap, Math.min(viewport.width - card.width - gap, x)),
+      y: Math.max(gap, Math.min(viewport.height - card.height - gap, y)) };
   });
+  const compare = (a, b) => a.collisions - b.collisions || a.crossings - b.crossings ||
+    a.overlap - b.overlap || a.distance - b.distance;
+  let layouts = [{ positions: [], collisions: 0, crossings: 0, overlap: 0, distance: 0 }];
+  const horizontalEdge = card => card.target.edge === "top" || card.target.edge === "bottom";
+  const cornerDistance = card => horizontalEdge(card)
+    ? Math.min(card.target.x - enclosure.x, enclosure.x + enclosure.width - card.target.x)
+    : Math.min(card.target.y - enclosure.y, enclosure.y + enclosure.height - card.target.y);
+  for (const card of [...targets].sort((a, b) => Number(horizontalEdge(a)) - Number(horizontalEdge(b)) ||
+    b.width * b.height - a.width * a.height || cornerDistance(a) - cornerDistance(b) || a.id.localeCompare(b.id))) {
+    const edge = card.target.edge;
+    const horizontal = edge === "top" || edge === "bottom", axis = horizontal ? "x" : "y", extent = horizontal ? "width" : "height";
+    const maximum = Math.max(gap, viewport[extent] - card[extent] - gap);
+    const coordinates = new Set([gap, maximum, card[axis]]);
+    for (let value = gap; value < maximum; value += 24) coordinates.add(value);
+    for (const rect of occupied) {
+      coordinates.add(rect[axis] - card[extent] - gap);
+      coordinates.add(rect[axis] + rect[extent] + gap);
+    }
+    const candidates = new Map(), next = [];
+    for (const layout of layouts) {
+      const values = new Set(coordinates);
+      for (const rect of layout.positions) {
+        values.add(rect[axis] - card[extent] - gap);
+        values.add(rect[axis] + rect[extent] + gap);
+      }
+      for (const value of values) {
+        if (value < gap || value > maximum) continue;
+        if (!candidates.has(value)) {
+          const position = { id: card.id, x: card.x, y: card.y, width: card.width, height: card.height,
+            [axis]: value, anchor: card.anchor, edge, target: card.target };
+          candidates.set(value, { position, overlap: cardOverlap(position, occupied, gap),
+            collisions: cardOverlap(position, fixed, gap),
+            crossings: fixed.filter(rect => leadersCross(position, rect)).length,
+            distance: (value - card[axis]) ** 2 });
+        }
+        const candidate = candidates.get(value);
+        next.push({
+          positions: [...layout.positions, candidate.position],
+          collisions: layout.collisions + candidate.collisions + cardOverlap(candidate.position, layout.positions, gap),
+          crossings: layout.crossings + candidate.crossings + layout.positions.filter(rect => leadersCross(candidate.position, rect)).length,
+          overlap: layout.overlap + candidate.overlap, distance: layout.distance + candidate.distance,
+        });
+      }
+    }
+    // Retain alternatives so a locally clear corner cannot fix every later card's position.
+    layouts = next.sort(compare).slice(0, 64);
+  }
+  const placed = new Map(layouts[0].positions.map(position => [position.id, position]));
+  return cards.map(card => placed.get(card.id));
 }
 export const temperatureLevels = [
   { label: "Cold", icon: "↓", color: "#83c9f4" }, { label: "Cool", icon: "◌", color: "#72d3cc" },

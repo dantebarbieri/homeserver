@@ -495,12 +495,15 @@ card's grip, or focus it and use arrow keys (Shift moves farther). Charts can
 move anywhere inside the visible background, including beyond the chassis and
 SVG drawing bounds. Default placement avoids installed components, visible
 connector outlines, fixed sensor badges and other cards, using clear perimeter
-space before accepting overlap when space is exhausted. Default cards form two
-ordered rows, listed **left to right**: **top — root NVMe, GPU, bond0;
-bottom — cache NVMe, EPYC, system memory**. Rows move as groups around
-obstacles rather than letting collision avoidance shuffle their order.
-The HDD card retains its existing left-side placement preferences and is
-reserved before the rows. Saved manual placements remain authoritative;
+space before accepting overlap when space is exhausted. Default placement casts
+a ray from the motherboard outline's center through each card's component center
+to the case boundary. Cards sit just outside that edge where the viewport allows,
+sliding along it to avoid hardware, badges and other cards. Joint placement
+prioritizes separating cards and reducing crossed leaders before minimizing
+hardware occlusion and distance from each ray target. Leaders connect straight
+to the facing card boundary. Current live M.2 bindings determine which
+socket each NVMe card follows; unbound demo devices share the NVMe group anchor.
+Saved manual placements remain authoritative and reserve space before defaults;
 **Reset layout** restores the new defaults without changing other preferences.
 Temperature badges stay by their reference
 hardware. CPU FAN1 sits on the PSU-side cooler fan and FAN2 on the GPU-side fan.
@@ -511,8 +514,8 @@ always follow displayed values; manual and snapshot previews have been retired.
 Hide/show fan speeds also covers the GPU fan percentage.
 Narrow screens, windows at most 900 px high, and landscape windows up to 1800 px
 wide dock cards in a horizontally scrollable tray instead of crowding the hardware.
-The tray follows the rows' left-to-right reading order, retaining the HDD card's
-fourth position between the two groups. Hardware filters retain
+The tray retains its reading order: root NVMe, GPU, network, HDDs, cache NVMe,
+CPU, memory, then sensor cards. Hardware filters retain
 only relevant overlays; connector inspection hides the overlay hit targets.
 Click a chart title, sensor badge, or a component's performance button for
 detailed graphs in a dismissible dialog.

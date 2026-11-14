@@ -1,51 +1,86 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { metrics, metricCardRows, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, placeMetricCard, placeMetricRow } from "./metric-model.mjs";
+import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, placeMetricCards, rayBoxEdge } from "./metric-model.mjs";
 
-test("card rows keep the requested order and align unequal card heights at the correct edge", () => {
-  const viewport = { width: 1200, height: 900 };
-  for (const [edge, ids] of Object.entries(metricCardRows)) {
-    const cards = ids.map((id, index) => ({ id, width: 206, height: 160 + index * 30 }));
-    const placed = placeMetricRow(cards, viewport, [], edge);
-    assert.deepEqual(placed.map(card => card.id), edge === "top" ? ["nvme-root", "gpu", "network"] : ["nvme", "cpu", "memory"]);
-    for (let index = 0; index < placed.length; index++) {
-      const card = placed[index];
-      assert.ok(card.x >= 10 && card.x + card.width <= viewport.width - 10);
-      assert.ok(card.y >= (edge === "top" ? 10 : viewport.height / 2));
-      assert.ok(card.y + card.height <= (edge === "top" ? viewport.height / 2 : viewport.height - 10));
-      if (index) {
-        assert.ok(card.x >= placed[index - 1].x + placed[index - 1].width + 10);
-        assert.equal(edge === "top" ? card.y : card.y + card.height,
-          edge === "top" ? placed[0].y : placed[0].y + placed[0].height);
-      }
-    }
+test("motherboard-centered rays hit the case boundary through the actual component", () => {
+  const box = { x: 100, y: 100, width: 900, height: 600 }, origin = { x: 700, y: 400 };
+  for (const [through, expected] of [
+    [{ x: 800, y: 400 }, { x: 1000, y: 400, edge: "right" }],
+    [{ x: 600, y: 400 }, { x: 100, y: 400, edge: "left" }],
+    [{ x: 700, y: 300 }, { x: 700, y: 100, edge: "top" }],
+    [{ x: 700, y: 500 }, { x: 700, y: 700, edge: "bottom" }],
+    [{ x: 750, y: 300 }, { x: 850, y: 100, edge: "top" }],
+    [origin, { x: 700, y: 100, edge: "top" }],
+  ]) assert.deepEqual(rayBoxEdge(origin, through, box), expected);
+});
+
+test("radial cards slide along their edge without reversing ray order or covering reserved objects", () => {
+  const viewport = { width: 1200, height: 900 }, enclosure = { x: 100, y: 200, width: 800, height: 400 };
+  const origin = { x: 500, y: 400 }, reserved = [{ x: 450, y: 20, width: 200, height: 170 }];
+  const cards = [400, 500, 600].map((x, i) => ({ id: String(i), width: 206, height: 160, anchor: { x, y: 300 } }));
+  const original = structuredClone({ cards, reserved });
+  const placed = placeMetricCards(cards, viewport, enclosure, origin, reserved);
+  for (const [index, card] of placed.entries()) {
+    assert.equal(card.edge, "top");
+    assert.equal(card.y, 30);
+    assert.ok(card.x >= 10 && card.x + card.width <= viewport.width - 10);
+    assert.ok(card.x + card.width <= reserved[0].x - 10 || card.x >= reserved[0].x + reserved[0].width + 10);
+    if (index) assert.ok(card.x >= placed[index - 1].x + placed[index - 1].width + 10);
+  }
+  assert.deepEqual(placeMetricCards([...cards].reverse(), viewport, enclosure, origin, reserved).reverse(), placed);
+  assert.deepEqual({ cards, reserved }, original);
+  assert.deepEqual(placeMetricCards([], viewport, enclosure, origin, reserved), []);
+});
+
+test("crowded shared ray targets remain finite and within the viewport", () => {
+  const cards = Array.from({ length: 4 }, (_, i) => ({ id: String(i), width: 100, height: 90, anchor: { x: 150, y: 150 } }));
+  const placed = placeMetricCards(cards, { width: 300, height: 500 }, { x: 30, y: 200, width: 240, height: 200 }, { x: 150, y: 300 }, []);
+  assert.equal(placed.length, 4);
+  for (const card of placed) {
+    assert.ok(card.x >= 10 && card.x + card.width <= 290);
+    assert.ok(card.y >= 10 && card.y + card.height <= 490);
   }
 });
 
-test("row placement avoids reserved hardware or custom cards without reordering or mutating them", () => {
-  const viewport = { width: 1200, height: 900 }, reserved = [{ x: 900, y: 10, width: 280, height: 300 }];
-  const cards = metricCardRows.top.map(id => ({ id, width: 206, height: 200 }));
-  const original = structuredClone({ cards, reserved });
-  const placed = placeMetricRow(cards, viewport, reserved, "top");
-  assert.ok(placed.at(-1).x + placed.at(-1).width <= reserved[0].x - 10);
-  assert.deepEqual({ cards, reserved }, original);
-  assert.deepEqual(placeMetricRow([], viewport, reserved, "bottom"), []);
+test("avoiding a reserved card takes priority over avoiding hardware when perimeter space is limited", () => {
+  const hardware = { x: 0, y: 0, width: 700, height: 300 }, fixed = { x: 800, y: 10, width: 190, height: 210 };
+  const [placed] = placeMetricCards(
+    [{ id: "gpu", width: 200, height: 200, anchor: { x: 800, y: 200 } }],
+    { width: 1000, height: 800 }, { x: 100, y: 150, width: 800, height: 500 },
+    { x: 600, y: 350 }, [hardware, fixed], [fixed]);
+  assert.ok(placed.x + placed.width <= fixed.x - 10);
 });
 
-test("automatic callouts find clear background beyond nearby candidates without covering hardware", () => {
-  const card = { x: 700, y: 80, width: 206, height: 234 };
-  const board = { x: 250, y: 0, width: 700, height: 700 };
-  const position = placeMetricCard(card, { width: 1200, height: 700 }, [board]);
-  assert.ok(position.x + card.width <= board.x - 10 || position.x >= board.x + board.width + 10);
-  assert.ok(position.y >= 10 && position.y + card.height <= 690);
+test("cards on adjacent case edges share crowded corners without overlapping", () => {
+  const cards = [
+    { id: "gpu", width: 200, height: 300, anchor: { x: 730, y: 200 } },
+    { id: "memory", width: 200, height: 280, anchor: { x: 730, y: 500 } },
+    { id: "network", width: 200, height: 140, anchor: { x: 850, y: 350 } },
+  ];
+  const placed = placeMetricCards(cards, { width: 1000, height: 700 },
+    { x: 40, y: 40, width: 920, height: 620 }, { x: 700, y: 350 },
+    [{ x: 0, y: 0, width: 780, height: 700 }]);
+  for (const [index, a] of placed.entries()) for (const b of placed.slice(index + 1)) {
+    assert.ok(a.x + a.width <= b.x - 10 || b.x + b.width <= a.x - 10 ||
+      a.y + a.height <= b.y - 10 || b.y + b.height <= a.y - 10);
+  }
 });
 
-test("automatic callouts preserve clear preferences and avoid other cards", () => {
-  const viewport = { width: 1000, height: 800 }, card = { x: 100, y: 100, width: 206, height: 234 };
-  assert.deepEqual(placeMetricCard(card, viewport, []), { x: 100, y: 100 });
-  const next = placeMetricCard(card, viewport, [card]);
-  assert.ok(next.x >= card.x + card.width + 10 || next.y >= card.y + card.height + 10);
-  assert.deepEqual(placeMetricCard(card, viewport, [card]), next);
+test("separately bound NVMe cards and the GPU fan out without crossed leaders", () => {
+  const cards = [
+    { id: "gpu", width: 176, height: 355, anchor: { x: 838, y: 425 } },
+    { id: "nvme-root", width: 176, height: 232, anchor: { x: 783, y: 442 } },
+    { id: "nvme", width: 176, height: 232, anchor: { x: 727, y: 442 } },
+  ];
+  const placed = placeMetricCards(cards, { width: 1117, height: 1153 },
+    { x: 27, y: 301, width: 1059, height: 562 }, { x: 818, y: 527 },
+    [{ x: 640, y: 300, width: 400, height: 80 }]);
+  const end = card => rayBoxEdge({ x: card.x + card.width / 2, y: card.y + card.height / 2 }, card.anchor, card);
+  const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  for (const [index, a] of placed.entries()) for (const b of placed.slice(index + 1)) {
+    assert.ok(cross(a.anchor, end(a), b.anchor) * cross(a.anchor, end(a), end(b)) >= 0 ||
+      cross(b.anchor, end(b), a.anchor) * cross(b.anchor, end(b), end(a)) >= 0);
+  }
 });
 
 test("synthetic channels are deterministic and remain inside their declared graph ranges", () => {

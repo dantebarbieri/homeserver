@@ -1,4 +1,4 @@
-import { metricGroups, memoryColors, metricCards, metricCardRows, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, metricTopology, cpuClockSpecification, placeMetricCard, placeMetricRow } from "./metric-model.mjs";
+import { metricGroups, memoryColors, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, metricTopology, cpuClockSpecification, placeMetricCards, rayBoxEdge } from "./metric-model.mjs";
 
 const $ = id => document.getElementById(id);
 function el(tag, attrs = {}, text = "") {
@@ -404,27 +404,31 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       occupied.push({ x: rect.left - bounds.left, y: rect.top - bounds.top, width: rect.width, height: rect.height });
     }
     const visible = metricCards.filter(definition => !cards.get(definition.id).hidden && !definition.mobileOnly);
-    const positions = new Map(), rowIds = new Set(Object.values(metricCardRows).flat());
+    const positions = new Map();
     const reserve = (definition, p) => {
-      const node = cards.get(definition.id);
-      positions.set(definition.id, p);
+      const node = cards.get(definition.id), anchor = anchorBounds(definition.anchor);
+      positions.set(definition.id, { ...p, width: node.offsetWidth, height: node.offsetHeight,
+        anchor: point(anchor.x + anchor.width / 2, anchor.y + anchor.height / 2) });
       occupied.push({ ...p, width: node.offsetWidth, height: node.offsetHeight });
     };
     for (const definition of visible.filter(card => settings.positions[card.id])) {
       const node = cards.get(definition.id), p = point(...settings.positions[definition.id]);
       reserve(definition, { x: Math.max(8, Math.min(bounds.width - node.offsetWidth - 8, p.x)), y: Math.max(8, Math.min(bounds.height - node.offsetHeight - 8, p.y)) });
     }
-    for (const definition of visible.filter(card => !settings.positions[card.id] && !rowIds.has(card.id))) {
-      const node = cards.get(definition.id);
-      reserve(definition, placeMetricCard({ ...point(definition.x, definition.y), width: node.offsetWidth, height: node.offsetHeight }, bounds, occupied));
-    }
-    for (const [edge, ids] of Object.entries(metricCardRows)) {
-      const row = ids.flatMap(id => {
-        const definition = visible.find(card => card.id === id);
-        const node = cards.get(id);
-        return definition && !settings.positions[id] ? [{ id, width: node.offsetWidth, height: node.offsetHeight }] : [];
-      });
-      for (const p of placeMetricRow(row, bounds, occupied, edge)) reserve(visible.find(card => card.id === p.id), p);
+    const screenRect = rect => {
+      const start = point(rect.x, rect.y), end = point(rect.x + rect.width, rect.y + rect.height);
+      return { ...start, width: end.x - start.x, height: end.y - start.y };
+    };
+    const enclosure = screenRect(document.querySelector(".chassis-shell").getBBox());
+    const motherboard = screenRect(document.querySelector(".board-outline").getBBox());
+    const origin = { x: motherboard.x + motherboard.width / 2, y: motherboard.y + motherboard.height / 2 };
+    const defaults = visible.filter(card => !settings.positions[card.id]).map(definition => {
+      const node = cards.get(definition.id), anchor = anchorBounds(definition.anchor);
+      return { id: definition.id, width: node.offsetWidth, height: node.offsetHeight,
+        anchor: point(anchor.x + anchor.width / 2, anchor.y + anchor.height / 2) };
+    });
+    for (const p of placeMetricCards(defaults, bounds, enclosure, origin, occupied, [...positions.values()])) {
+      reserve(visible.find(card => card.id === p.id), p);
     }
     for (const definition of metricCards) {
       const node = cards.get(definition.id);
@@ -436,8 +440,9 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const anchor = anchorBounds(definition.anchor);
       if (anchor) {
         const a = point(anchor.x + anchor.width / 2, anchor.y + anchor.height / 2);
-        const edge = p.x + (a.x > p.x + node.offsetWidth / 2 ? node.offsetWidth : 0), mid = p.y + Math.min(40, node.offsetHeight / 2);
-        line.setAttribute("d", `M${a.x},${a.y}L${edge + (a.x > edge ? 12 : -12)},${mid}L${edge},${mid}`);
+        const edge = rayBoxEdge({ x: p.x + node.offsetWidth / 2, y: p.y + node.offsetHeight / 2 }, a,
+          { ...p, width: node.offsetWidth, height: node.offsetHeight });
+        line.setAttribute("d", `M${a.x},${a.y}L${edge.x},${edge.y}`);
       }
       if (!anchor) line.style.display = "none";
     }
