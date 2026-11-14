@@ -252,11 +252,6 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     onFanFrame?.({ hubRpm: value("fan-hub"), rearRpm: 2000, provenance: live ? "live" : "synthetic" });
     $("metric-clock").textContent = live ? dataSource.snapshot ? `Updated ${new Date(dataSource.snapshot.capturedAt).toLocaleTimeString()}` : "Waiting for collector" : `${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} simulated`;
     if (live) {
-      const status = $("live-status");
-      const issues = dataSource.issues;
-      status.hidden = !issues.length && !dataSource.stale;
-      $("live-summary").textContent = `${dataSource.stale ? "Telemetry stale or unavailable" : "Telemetry notices"}${issues.length ? ` · ${issues.length}` : ""}`;
-      $("live-issues").textContent = issues.join("; ");
       for (const label of document.querySelectorAll(".metric-provenance")) label.textContent = provenance();
       const records = charts.filter(record => !record.box.closest("[hidden]") && (!record.box.closest("dialog") || record.box.closest("dialog").open));
       void dataSource.requestHistory(records.map(record => ({ seconds: record.seconds, ids: record.ids.flatMap(id => id === "temp-hdd-average" ? hddSensors() : [id]) })));
@@ -406,6 +401,8 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const rect = node.getBoundingClientRect();
       occupied.push({ x: rect.left - bounds.left, y: rect.top - bounds.top, width: rect.width, height: rect.height });
     }
+    const controlBounds = document.querySelector(".map-controls").getBoundingClientRect();
+    occupied.push({ x: controlBounds.left - bounds.left - 6, y: controlBounds.top - bounds.top - 6, width: controlBounds.width + 12, height: controlBounds.height + 12 });
     const visible = metricCards.filter(definition => !cards.get(definition.id).hidden && !definition.mobileOnly);
     const positions = new Map();
     const reserve = (definition, p) => {
@@ -475,6 +472,8 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       node.setAttribute("aria-pressed", String(visible));
       node.textContent = `${node.dataset.sensorToggle === "temperatures" ? "Temperatures" : "Fan speeds"}: ${visible ? "shown" : "hidden"}`;
     }
+    const shown = Object.values(settings.groups).filter(Boolean).length;
+    $("layers-count").textContent = `${shown}/${Object.keys(settings.groups).length}`;
     $("metric-window").value = String(settings.windows[historyGroup()]);
     $("metric-window").disabled = activePanel === "layers";
   }
@@ -725,7 +724,6 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     controls(); updateCharts();
   });
   if (live) {
-    $("metrics-button").textContent = "Performance · LIVE";
     $("metric-controls").setAttribute("aria-label", "Collected server metric layers");
     $("metric-layer").setAttribute("aria-label", "Collected hardware metric overlays");
   }

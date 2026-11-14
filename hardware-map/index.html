@@ -21,37 +21,45 @@
 <body>
   <main>
     <section id="board-view" class="board-workspace" aria-label="Server hardware map">
-      <header class="map-toolbar">
-        <h1><img class="brand-logo" src="./favicon.svg" width="32" height="32" alt=""><span class="brand-name">ChasEx</span></h1>
-        <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
-        <button id="fan-rotation-toggle" type="button" aria-pressed="false">Animate fans</button>
-        <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Performance · DEMO</button>
-        <button id="services-button" type="button" aria-haspopup="dialog" aria-controls="services-dialog">Services</button>
-        <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">About</button>
+      <header class="app-bar">
+        <h1><img class="brand-logo" src="./favicon.svg" width="28" height="28" alt=""><span class="brand-name">ChasEx</span></h1>
+        <button id="status-chip" class="status-chip" type="button" data-level="connecting" aria-haspopup="dialog"><i class="status-dot" aria-hidden="true"></i><span class="status-label">Connecting…</span><span class="status-badge" hidden></span></button>
+        <nav class="app-nav" aria-label="Views">
+          <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Performance</button>
+          <button id="services-button" type="button" aria-haspopup="dialog" aria-controls="services-dialog">Services</button>
+          <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">About</button>
+        </nav>
       </header>
-      <section class="connector-nav panel" aria-label="Hardware and connector filters">
-        <div id="focus-modes" role="group" aria-label="Inspect">
+      <section class="filter-bar panel" aria-label="Map filters">
+        <div id="focus-modes" class="segmented" role="group" aria-label="Inspect">
           <button type="button" data-mode="hardware" aria-pressed="true">Hardware</button>
           <button type="button" data-mode="connectors" aria-pressed="false">Connectors</button>
         </div>
         <nav id="categories" aria-label="Hardware categories"></nav>
         <p id="focus-status" class="sr-only" role="status"></p>
-        <details id="connector-picker" hidden><summary>Connector list</summary><div id="connector-list" class="connector-list"></div></details>
+        <button id="connector-button" class="menu-button" type="button" hidden>List</button>
+        <button id="layers-button" class="menu-button" type="button">Layers <span id="layers-count" class="menu-count"></span></button>
       </section>
-      <section id="metric-controls" class="metric-controls" aria-label="Metric map layers">
-        <strong class="metric-provenance">DEMO</strong>
-        <div id="metric-group-controls" role="group" aria-label="Show or hide metric families"></div>
-        <button id="metric-show-all" type="button" title="Show all metric layers">All</button>
-        <button id="metric-hide-all" type="button" title="Hide all metric layers">None</button>
-      </section>
-      <details id="live-status" class="live-status" hidden><summary id="live-summary" role="status"></summary><p id="live-issues"></p></details>
       <div class="map-panel panel">
-        <div class="map-scroll"><svg id="board" viewBox="0 0 1440 840" role="group" aria-label="Server chassis and installed hardware"></svg></div>
+        <div class="map-stage">
+          <div class="map-scroll"><svg id="board" viewBox="0 0 1440 840" role="group" aria-label="Server chassis and installed hardware"></svg></div>
+          <div class="map-controls" role="group" aria-label="Map view">
+            <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><button id="zoom-label" type="button" title="Reset zoom to fit">100%</button><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
+            <button id="fan-rotation-toggle" type="button" aria-pressed="false">Fan motion</button>
+          </div>
+        </div>
         <div id="metric-layer" class="metric-layer" aria-label="Hardware metric overlays"><svg id="metric-leaders" aria-hidden="true"></svg></div>
       </div>
     </section>
-    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   </main>
+  <div id="connector-list" class="connector-list" role="group" aria-label="Connectors"></div>
+  <div id="metric-controls" class="layers-menu" role="group" aria-label="Metric map layers">
+    <p class="menu-title">Charts shown on the map <strong class="metric-provenance">DEMO</strong></p>
+    <div id="metric-group-controls" role="group" aria-label="Show or hide metric families"></div>
+    <div class="menu-actions"><button id="metric-show-all" type="button">Show all</button><button id="metric-hide-all" type="button">Hide all</button></div>
+  </div>
+  <div id="status-panel" class="status-panel" role="group" aria-label="Status details"></div>
+  <div id="toasts" class="toasts" role="region" aria-label="Notifications"></div>
   <dialog id="inspector-dialog" class="popup" aria-labelledby="inspector-title">
     <header class="popup-heading"><h2 id="inspector-title" tabindex="-1">Hardware</h2><button id="close-inspector" type="button" autofocus>Close ×</button></header>
     <div class="popup-body details">
@@ -114,7 +122,7 @@
       <div class="services-toolbar">
         <label class="services-search"><span class="sr-only">Search services or processes</span><input id="services-search" type="search" placeholder="Search services or processes" autocomplete="off"></label>
         <label class="services-stopped"><input id="services-stopped" type="checkbox">Show stopped</label>
-        <details class="services-column-picker"><summary>Columns</summary><div class="services-column-menu" data-sheet-scroll><p class="services-column-hint">Drag a grip to reorder. With a keyboard, focus a grip and use the arrow keys. Table headings can also be dragged; on touch, press and hold first.</p><div id="services-columns"></div><button id="services-reset-columns" type="button">Reset columns</button></div></details>
+        <button id="services-columns-button" class="menu-button" type="button">Columns</button><div id="services-column-menu" class="services-column-menu" data-sheet-scroll><p class="services-column-hint">Drag a grip to reorder. With a keyboard, focus a grip and use the arrow keys. Table headings can also be dragged; on touch, press and hold first.</p><div id="services-columns"></div><button id="services-reset-columns" type="button">Reset columns</button></div>
       </div>
       <p id="services-announce" class="sr-only" role="status" aria-live="polite"></p>
       <div class="services-live"><output id="services-status" role="status">Waiting for live accounting</output><span id="services-count"></span></div>

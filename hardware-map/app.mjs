@@ -4,9 +4,11 @@ import { linuxSnapshot } from "./linux-snapshot.mjs";
 import { createMetricUI } from "./metrics.mjs";
 import { applyLiveSnapshot } from "./metric-model.mjs";
 import { LiveData } from "./live-data.mjs";
-import { createBottomSheet } from "./mobile-ui.mjs";
+import { createBottomSheet, zoomRange, clampZoom, stepZoom, pinchZoom, zoomedScroll } from "./mobile-ui.mjs";
 import { setupPwa } from "./pwa.mjs";
 import { createServicesUI } from "./services.mjs";
+import { createStatusCenter, healthOf } from "./status.mjs";
+import { anchorPopover } from "./popover.mjs";
 import { driveBayId, caseFanId, rearFanId, driveInfo, relationsFor, psuSocketLinks, flaggedProvenance } from "./relations.mjs";
 
 const $ = id => document.getElementById(id);
@@ -31,13 +33,14 @@ const unresolvedLinks = new Set();
 const popupContexts = new Map();
 const popupSheets = new Map();
 
-function notify(message, error = false) {
-  const notice = $("notice");
-  notice.textContent = message;
-  notice.classList.toggle("error", error);
-  notice.setAttribute("role", error ? "alert" : "status");
-  notice.hidden = false;
-}
+const statusCenter = createStatusCenter({ chip: $("status-chip"), panel: $("status-panel"), region: $("toasts") });
+const notify = (message, error = false) => statusCenter.notify(message, error);
+const reportHealth = () => statusCenter.update(healthOf(dataSource));
+reportHealth();
+const layersMenu = anchorPopover($("layers-button"), $("metric-controls"));
+const connectorMenu = anchorPopover($("connector-button"), $("connector-list"));
+// Wide screens dock the inspector beside the map instead of covering it.
+const dockInspector = matchMedia("(min-width: 1101px)");
 setupPwa(message => notify(message, true));
 
 try {
@@ -79,15 +82,32 @@ function capturePopupContext() {
   };
 }
 
+function inspectorDocked() {
+  return $("inspector-dialog").open && $("inspector-dialog").classList.contains("docked");
+}
+
 function openPopup(dialog, context = capturePopupContext()) {
   if (dialog.open) return;
   popupContexts.set(dialog, context);
-  dialog.showModal();
+  const docked = dialog.id === "inspector-dialog" && dockInspector.matches;
+  // A dialog opened over another one closes back to it, so say so.
+  const stacked = !docked && [...document.querySelectorAll("dialog[open]")].some(other => !other.classList.contains("docked"));
+  dialog.querySelector(".popup-heading button").textContent = stacked ? "← Back" : "Close ×";
+  dialog.classList.toggle("docked", docked);
+  document.documentElement.classList.toggle("inspector-docked", docked || inspectorDocked());
+  if (docked) dialog.show();
+  else dialog.showModal();
   popupSheets.get(dialog)?.open();
+  statusCenter.raise();
 }
 
 function inspect(changeSelection, { keepTrail = false, focusTitle = false } = {}) {
   const context = $("inspector-dialog").open ? null : capturePopupContext();
+  // Docked beside the map, the inspector follows the selection without taking focus from it.
+  const stay = dockInspector.matches && !focusTitle && !$("inspector-dialog").contains(document.activeElement);
+  const held = popupContexts.get($("inspector-dialog"));
+  if (stay && !context && held) held.opener = document.activeElement;
+  connectorMenu.hide();
   if (!keepTrail) linkTrail.length = 0;
   changeSelection();
   renderSelection();
@@ -96,7 +116,9 @@ function inspect(changeSelection, { keepTrail = false, focusTitle = false } = {}
   if (!$("inspector-dialog").open) openPopup($("inspector-dialog"), context);
   metricUI?.refresh();
   $("inspector-dialog").querySelector(".popup-body").scrollTop = 0;
-  (focusTitle ? $("inspector-title") : $("close-inspector")).focus({ preventScroll: true });
+  // show() runs native dialog focus steps even for the nonmodal inspector.
+  if (stay && context) context.opener.focus({ preventScroll: true });
+  if (!stay) (focusTitle ? $("inspector-title") : $("close-inspector")).focus({ preventScroll: true });
 }
 
 function currentRef() {
@@ -215,14 +237,38 @@ for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog", "service
     const context = popupContexts.get(dialog);
     popupContexts.delete(dialog);
     backdropStart = false;
+    if (dialog.id === "inspector-dialog") {
+      dialog.classList.remove("docked");
+      document.documentElement.classList.remove("inspector-docked");
+    }
     if (!context) return;
-    const opener = context.opener.isConnected ? context.opener : document.querySelector(context.selector ?? "#tools-button");
+    const opener = context.selector ? $("connector-button")
+      : context.opener.isConnected ? context.opener : $("tools-button");
     opener?.focus({ preventScroll: true });
     document.querySelector(".map-scroll").scrollTo(context.left, context.top);
     window.scrollTo(context.pageLeft, context.pageTop);
   });
 }
 $("close-inspector").addEventListener("click", () => requestPopupClose($("inspector-dialog")));
+// A docked inspector is not modal, so Escape and breakpoint changes are handled here.
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || event.defaultPrevented || !inspectorDocked()) return;
+  if (document.querySelector("dialog:modal, .menu:popover-open, .menu.menu-open")) return;
+  requestPopupClose($("inspector-dialog"));
+});
+dockInspector.addEventListener("change", () => {
+  const dialog = $("inspector-dialog");
+  if (!dialog.open || dialog.classList.contains("docked") === dockInspector.matches) return;
+  if (document.querySelector("dialog:modal") && !dialog.matches(":modal")) return;
+  const context = popupContexts.get(dialog);
+  const trail = [...linkTrail];
+  // close is queued: reopen only after the sheet, context and trail cleanup.
+  dialog.addEventListener("close", () => {
+    linkTrail.push(...trail);
+    openPopup(dialog, context);
+  }, { once: true });
+  dialog.close();
+});
 $("inspector-dialog").addEventListener("close", () => { linkTrail.length = 0; });
 $("inspector-back").addEventListener("click", () => {
   const previous = linkTrail.pop();
@@ -402,7 +448,7 @@ function applyFanMotion(fan, fraction) {
 function renderCaseFanMotion() {
   document.documentElement.classList.toggle("fan-rotation-enabled", fanRotationEnabled);
   $("fan-rotation-toggle").setAttribute("aria-pressed", String(fanRotationEnabled));
-  $("fan-rotation-toggle").textContent = `Fan motion: ${fanRotationEnabled ? "on" : "off"}`;
+  $("fan-rotation-toggle").textContent = `Fan motion ${fanRotationEnabled ? "on" : "off"}`;
   $("fan-rotation-toggle").title = reducedMotion.matches && !fanRotationEnabled
     ? "Reduced motion is enabled. Turn on to animate fans for this session."
     : "Toggle animation without changing fan speeds";
@@ -650,7 +696,10 @@ function renderList() {
   const filtered = connectors.filter(matchesFocus);
   const list = $("connector-list");
   const scrollTop = list.scrollTop;
-  $("connector-picker").hidden = !connectorFocus();
+  $("connector-button").hidden = !connectorFocus();
+  $("layers-button").hidden = connectorFocus();
+  if (!connectorFocus()) connectorMenu.hide();
+  else layersMenu.hide();
   list.replaceChildren();
   for (const connector of filtered) {
     const button = element("button", {
@@ -925,7 +974,7 @@ function renderCategories() {
     : Object.keys(hardwareCategories);
   $("categories").replaceChildren();
   $("categories").setAttribute("aria-label", focused ? "Connector categories" : "Hardware categories");
-  $("connector-picker").open = false;
+  connectorMenu.hide();
   for (const category of ["*", ...categories]) {
     const label = category === "*" ? focused ? "All connectors" : "All hardware" : category;
     const button = element("button", { type: "button", "data-category": category, "aria-pressed": "false" }, label);
@@ -946,17 +995,63 @@ for (const button of $("focus-modes").children) {
 }
 renderCategories();
 $("board-revision").textContent = `ROMED8-2T · REV ${boardRevision}`;
-function setZoom(next) {
-  zoom = Math.max(75, Math.min(175, next));
+const mapScroll = document.querySelector(".map-scroll");
+// `focal` is a viewport point that should stay under the finger or cursor;
+// without one the middle of the visible map stays put.
+function setZoom(next, focal = null) {
+  const previous = zoom, bounds = mapScroll.getBoundingClientRect();
+  zoom = clampZoom(next);
+  const point = focal ? { x: focal.clientX - bounds.left, y: focal.clientY - bounds.top }
+    : { x: mapScroll.clientWidth / 2, y: mapScroll.clientHeight / 2 };
+  const target = zoomedScroll({ left: mapScroll.scrollLeft, top: mapScroll.scrollTop }, point, previous, zoom);
   $("board").style.width = `${zoom}%`;
   $("board").style.height = `${zoom}%`;
-  $("zoom-label").textContent = `${zoom}%`;
-  $("zoom-out").disabled = zoom === 75;
-  $("zoom-in").disabled = zoom === 175;
+  mapScroll.scrollTo(target.left, target.top);
+  $("zoom-label").textContent = `${Math.round(zoom)}%`;
+  $("zoom-label").setAttribute("aria-label", `Zoom ${Math.round(zoom)}%. Reset to fit`);
+  $("zoom-out").disabled = zoom <= zoomRange.minimum;
+  $("zoom-in").disabled = zoom >= zoomRange.maximum;
   metricUI?.layout();
 }
-$("zoom-in").addEventListener("click", () => setZoom(zoom + 25));
-$("zoom-out").addEventListener("click", () => setZoom(zoom - 25));
+$("zoom-in").addEventListener("click", () => setZoom(stepZoom(zoom, 1)));
+$("zoom-out").addEventListener("click", () => setZoom(stepZoom(zoom, -1)));
+$("zoom-label").addEventListener("click", () => setZoom(100));
+// Gestures arrive faster than frames; apply the newest one per frame.
+let queuedZoom = null;
+function queueZoom(next, focal) {
+  const waiting = queuedZoom !== null;
+  queuedZoom = { next, focal };
+  if (!waiting) requestAnimationFrame(() => {
+    const { next: value, focal: at } = queuedZoom;
+    queuedZoom = null;
+    setZoom(value, at);
+  });
+}
+// Two fingers pinch the map; one finger is left to the browser so it still
+// scrolls the page, or pans the map once it is zoomed in.
+let pinch = null;
+const spread = touches => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+mapScroll.addEventListener("touchstart", event => {
+  pinch = event.touches.length === 2 ? { distance: spread(event.touches), zoom } : null;
+}, { passive: true });
+mapScroll.addEventListener("touchmove", event => {
+  if (!pinch || event.touches.length !== 2) return;
+  if (event.cancelable) event.preventDefault();
+  const [a, b] = event.touches;
+  queueZoom(pinchZoom(pinch.zoom, pinch.distance, spread(event.touches)),
+    { clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 });
+}, { passive: false });
+for (const type of ["touchend", "touchcancel"]) {
+  mapScroll.addEventListener(type, event => { if (event.touches.length < 2) pinch = null; }, { passive: true });
+}
+// A trackpad pinch (and Ctrl + wheel) arrives as a wheel event with ctrlKey.
+// Handling it here keeps the gesture from zooming the whole browser page.
+mapScroll.addEventListener("wheel", event => {
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+  const delta = Math.max(-25, Math.min(25, event.deltaY));
+  queueZoom((queuedZoom?.next ?? zoom) * Math.exp(-delta * .01), event);
+}, { passive: false });
 
 for (const component of components) {
   const card = element("article", { class: "inventory-card" });
@@ -1016,7 +1111,10 @@ if (dataSource.mode === "live") {
   await dataSource.poll();
   applyCollectedInventory(dataSource.snapshot);
   dataSource.subscribe(applyCollectedInventory);
+  dataSource.subscribe(reportHealth);
+  setInterval(() => { if (!document.hidden) reportHealth(); }, 1000);
 }
+reportHealth();
 metricUI = createMetricUI({
   dataSource,
   openPopup, closePopup: requestPopupClose, onError: message => notify(message, true),

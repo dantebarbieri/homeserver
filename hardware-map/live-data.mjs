@@ -41,9 +41,11 @@ export class LiveData {
     return this.mode === "live" && (Boolean(this.error) || !this.snapshot ||
       this.clock() - Date.parse(this.snapshot.capturedAt) > Math.max(20000, this.snapshot.intervalSeconds * 3000));
   }
+  get snapshotIssues() {
+    return (this.snapshot?.issues ?? []).filter(issue => !legacyContextNotes.has(issue));
+  }
   get issues() {
-    return [...(this.snapshot?.issues ?? []).filter(issue => !legacyContextNotes.has(issue)),
-      this.error, this.historyError].filter(Boolean);
+    return [...this.snapshotIssues, this.error, this.historyError].filter(Boolean);
   }
   value(id) {
     const value = this.snapshot?.metrics[id];
@@ -58,7 +60,11 @@ export class LiveData {
   emit() { for (const listener of this.listeners) listener(this.snapshot); }
   async json(path) {
     const response = await this.fetcher(path, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10000) });
-    if (!response.ok) throw new Error(`ChasEx API returned HTTP ${response.status}`);
+    if (!response.ok) {
+      // The server explains failures in a small JSON body; proxies may not.
+      const reason = await response.json().then(body => typeof body?.error === "string" ? body.error.slice(0, 160) : "", () => "");
+      throw new Error(`ChasEx API returned HTTP ${response.status}${reason ? ` (${reason})` : ""}`);
+    }
     return response.json();
   }
   async poll() {
