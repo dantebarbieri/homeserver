@@ -97,7 +97,8 @@ export function createStatusCenter({ chip, panel, region }) {
   const label = chip.querySelector(".status-label"), badge = chip.querySelector(".status-badge");
   const menu = anchorPopover(chip, panel, { align: "start" });
   const local = [];
-  let health = null, signature = "", pendingKey = "", pendingSince = 0, announcedKey = "";
+  const issues = new Map();
+  let health = null, signature = "", hadAnnouncement = false;
 
   const topLayer = "popover" in region && typeof region.showPopover === "function";
   if (topLayer) region.popover = "manual";
@@ -208,21 +209,23 @@ export function createStatusCenter({ chip, panel, region }) {
       health = next;
       refresh();
       const problem = health.level === "down" || health.level === "warn";
-      const key = !problem ? "" : health.level === "down" ? "down" : health.items.map(item => `${item.title}:${item.detail}`).join("|");
-      if (problem) {
-        if (key !== pendingKey) { pendingKey = key; pendingSince = now; }
-        if (now - pendingSince >= announceAfter && key !== announcedKey) {
-          announcedKey = key;
-          const [first, ...rest] = health.items;
-          toast({ level: first.severity, title: first.title, details: true, lifetime: 12000,
-            detail: rest.length ? `${first.detail} (+${rest.length} more)` : first.detail });
+      const active = new Set();
+      if (problem) for (const item of health.items) {
+        // An outage stays the same problem as its snapshot age/retry reason changes.
+        const key = health.level === "down" ? "down" : JSON.stringify([item.severity, item.title, item.detail]);
+        active.add(key);
+        if (!issues.has(key)) issues.set(key, { since: now, announced: false });
+        const issue = issues.get(key);
+        if (!issue.announced && now - issue.since >= announceAfter) {
+          issue.announced = true;
+          hadAnnouncement = true;
+          toast({ level: item.severity, title: item.title, detail: item.detail, details: true, lifetime: 12000 });
         }
-      } else {
-        pendingKey = "";
-        if (announcedKey && health.level === "ok") {
-          announcedKey = "";
-          toast({ level: "ok", title: "Live data is healthy again" });
-        }
+      }
+      for (const key of issues.keys()) if (!active.has(key)) issues.delete(key);
+      if (hadAnnouncement && health.level === "ok") {
+        hadAnnouncement = false;
+        toast({ level: "ok", title: "Live data is healthy again" });
       }
     },
     notify(message, error = false) {

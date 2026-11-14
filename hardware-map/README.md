@@ -22,6 +22,7 @@ node --test hardware-map\live-data.test.mjs
 node --test hardware-map\mobile-ui.test.mjs
 node --test hardware-map\pwa.test.mjs
 node --test hardware-map\status.test.mjs
+node --test hardware-map\app.test.mjs
 ```
 
 ## Phone installation
@@ -73,9 +74,10 @@ only the map area handles its own pinch. Safari's desktop trackpad pinch is
 not handled and zooms the page as before. The arithmetic is in `mobile-ui.mjs`.
 
 The docked inspector is not modal: the map stays usable, selecting another
-part updates it in place without taking keyboard focus from the map, and
-Escape closes it. Below 1500 px the chart dock hides while it is open, since
-the inspector shows that part's own charts. A dialog opened on top of another
+part updates it in place without taking keyboard focus from the map, including
+the first selection. Resizing between docked and modal layouts preserves the
+opener and navigation trail. Escape closes it. Below 1500 px the chart dock hides
+while it is open, since the inspector shows that part's own charts. A dialog opened on top of another
 (for example **Full performance view** from a modal inspector) labels its
 close button **← Back**.
 
@@ -83,7 +85,8 @@ close button **← Back**.
 are all the same kind of menu (`popover.mjs`, on the native Popover API): they
 open over the page beside their button, only one is open at a time, and a tap
 outside or Escape closes them. Browsers without the Popover API get the same
-behavior without the top layer.
+behavior without the top layer, including when opened by keyboard or a toast's
+**Details** button.
 
 ### Status and notifications
 
@@ -96,8 +99,11 @@ preferences, which can be dismissed.
 
 A problem is announced once as a toast, with a **Details** button, only after
 it has lasted eight seconds, so one failed request or a source that is briefly
-late does not flash anything. A second toast confirms recovery. Toasts dismiss
-themselves, stack at most three deep and sit above the bottom bar on phones.
+late does not flash anything. Each issue has its own persistence timer: unrelated
+flapping warnings cannot delay it, and new persistent issues announce their own
+messages without repeating existing ones. A second toast confirms recovery once
+all live-data issues clear. Toasts dismiss themselves, stack at most three deep
+and sit above the bottom bar on phones.
 During an outage the panel shows the single cause (including the server's own
 reason, such as "Collector snapshot is stale") and withholds notices from the
 out-of-date snapshot. The logic is in `status.mjs`; `healthOf` is pure and

@@ -1,4 +1,4 @@
-const CACHE = "chasex-shell-v13";
+const CACHE = "chasex-shell-v14";
 const assets = new Map([
   ["index.html", "text/html"], ["styles.css", "text/css"], ["favicon.svg", "image/svg+xml"],
   ["manifest.webmanifest", "application/manifest+json"],

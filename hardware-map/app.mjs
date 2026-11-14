@@ -116,6 +116,8 @@ function inspect(changeSelection, { keepTrail = false, focusTitle = false } = {}
   if (!$("inspector-dialog").open) openPopup($("inspector-dialog"), context);
   metricUI?.refresh();
   $("inspector-dialog").querySelector(".popup-body").scrollTop = 0;
+  // show() runs native dialog focus steps even for the nonmodal inspector.
+  if (stay && context) context.opener.focus({ preventScroll: true });
   if (!stay) (focusTitle ? $("inspector-title") : $("close-inspector")).focus({ preventScroll: true });
 }
 
@@ -259,9 +261,13 @@ dockInspector.addEventListener("change", () => {
   if (!dialog.open || dialog.classList.contains("docked") === dockInspector.matches) return;
   if (document.querySelector("dialog:modal") && !dialog.matches(":modal")) return;
   const context = popupContexts.get(dialog);
-  popupContexts.delete(dialog);
+  const trail = [...linkTrail];
+  // close is queued: reopen only after the sheet, context and trail cleanup.
+  dialog.addEventListener("close", () => {
+    linkTrail.push(...trail);
+    openPopup(dialog, context);
+  }, { once: true });
   dialog.close();
-  openPopup(dialog, context);
 });
 $("inspector-dialog").addEventListener("close", () => { linkTrail.length = 0; });
 $("inspector-back").addEventListener("click", () => {

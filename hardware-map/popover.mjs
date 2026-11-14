@@ -2,6 +2,8 @@
 // dismissal, Escape and "one menu at a time"; this module only places the
 // panel beside its button and keeps aria-expanded current.
 
+let activeFallback = null;
+
 export function placePopover(anchor, size, viewport, { align = "end", gap = 6, margin = 8 } = {}) {
   const below = viewport.height - anchor.bottom - gap - margin;
   const above = anchor.top - gap - margin;
@@ -57,6 +59,10 @@ export function anchorPopover(button, panel, { align = "end", onOpen, onClose } 
     // Older browsers: same behavior without the top layer.
     const set = open => {
       if (open === isOpen()) return;
+      if (open) {
+        activeFallback?.(false);
+        activeFallback = set;
+      } else if (activeFallback === set) activeFallback = null;
       panel.classList.toggle("menu-open", open);
       changed(open);
     };
