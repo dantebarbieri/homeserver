@@ -1,5 +1,7 @@
 import copy
 import importlib.util
+import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -119,6 +121,19 @@ class IsolatedPeerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "history touches"):
             self.source_guard()
 
+    def test_merged_touch_and_revert_branch_is_a_preservation_conflict(self):
+        self.git(self.source, "checkout", "--quiet", "-b", "side")
+        name = self.source / isolated.PRESERVED[0]
+        name.write_text("side branch touch")
+        self.git(self.source, "commit", "--quiet", "-am", "touch")
+        name.write_text("tracked\n")
+        self.git(self.source, "commit", "--quiet", "-am", "revert")
+        self.git(self.source, "checkout", "--quiet", "main")
+        self.git(self.source, "merge", "--quiet", "--no-ff", "-m", "merge", "side")
+        self.revision = self.git(self.source, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(RuntimeError, "history touches"):
+            self.source_guard()
+
     def test_ignored_or_untracked_candidate_files_and_wrong_sha_are_rejected(self):
         (self.source / ".env").write_text("unexpected")
         with self.assertRaisesRegex(RuntimeError, "wholly clean"):
@@ -204,7 +219,6 @@ class IsolatedPeerTests(unittest.TestCase):
         self.assertFalse((docker / ".env").exists())
 
     def test_prepare_and_verify_mode_keep_edits_and_verify_mode_never_mutates_git(self):
-        import json
         expected = isolated.state(self.canonical)
         fingerprints = self.root / "fingerprints.json"
         fingerprints.write_text(json.dumps(expected))
@@ -231,6 +245,107 @@ class IsolatedPeerTests(unittest.TestCase):
                 isolated.prepare(args)
             self.assertNotIn("fetch", calls)
             self.assertNotIn("merge", calls)
+
+    def runtime_fixture(self):
+        containers = []
+        for name, image in zip(isolated.SERVICES, isolated.IMAGES):
+            containers.append({
+                "Image": image, "Config": {"Labels": {
+                    "org.opencontainers.image.revision": isolated.SOURCE,
+                    "com.docker.compose.project": "compose", "com.docker.compose.service": name}},
+                "State": {"Running": True, "Health": {"Status": "healthy"}}, "Mounts": []})
+        containers[0]["Mounts"] = [{"Type": "bind", "RW": False,
+                                    "Source": str(isolated.CANONICAL / "docker/nginx/mirklurk-map.conf"),
+                                    "Destination": "/etc/nginx/conf.d/default.conf"}]
+        volume = {"Name": "compose_mirklurk-map-shares", "Mountpoint": "/volume/_data",
+                  "Labels": {"com.docker.compose.project": "compose",
+                             "com.docker.compose.volume": "mirklurk-map-shares"}}
+        containers[1]["Mounts"] = [{"Type": "volume", "RW": True, "Name": volume["Name"],
+                                    "Source": volume["Mountpoint"], "Destination": "/data"}]
+        containers.append({
+            "Image": "sha256:5d90e74b09219f239bf54ead1371fd82574a4de469b4a01d9a10cb78b8fc473e",
+            "Config": {"Labels": {"org.opencontainers.image.revision":
+                                  "0111204dd4d8625763c7fec6c57e37357e654333"}},
+            "State": {"Running": True, "Health": {"Status": "healthy"}}})
+        return containers, volume
+
+    def check_runtime(self, containers, volume, active=False, marker=False):
+        def response(*args):
+            if args[0] == "systemctl":
+                return b"active\n" if active else b"inactive\n"
+            if args[:3] == ("docker", "volume", "inspect"):
+                return json.dumps([volume]).encode()
+            self.assertEqual(args[:2], ("docker", "inspect"))
+            return json.dumps(containers).encode()
+
+        with patch.object(isolated, "command", side_effect=response), \
+                patch.object(isolated.os.path, "lexists", return_value=marker):
+            isolated.runtime_guard()
+
+    def test_runtime_guard_rejects_stopped_targets_wrong_image_storage_and_active_jobs(self):
+        containers, volume = self.runtime_fixture()
+        self.check_runtime(containers, volume)
+        for index in range(3):
+            with self.subTest(stopped=index):
+                changed = copy.deepcopy(containers)
+                changed[index]["State"]["Running"] = False
+                with self.assertRaisesRegex(RuntimeError, "stopped"):
+                    self.check_runtime(changed, volume)
+        changed = copy.deepcopy(containers)
+        changed[1]["Image"] = "sha256:" + "a" * 64
+        with self.assertRaisesRegex(RuntimeError, "source/image changed"):
+            self.check_runtime(changed, volume)
+        changed = copy.deepcopy(containers)
+        changed[1]["Mounts"][0]["Name"] = "wrong_shares"
+        with self.assertRaisesRegex(RuntimeError, "storage differs"):
+            self.check_runtime(changed, volume)
+        with self.assertRaisesRegex(RuntimeError, "Active maintenance"):
+            self.check_runtime(containers, volume, active=True)
+        with self.assertRaisesRegex(RuntimeError, "hold/marker"):
+            self.check_runtime(containers, volume, marker=True)
+
+    def test_proxy_guard_rejects_wrong_owner_for_either_address(self):
+        identity = "a" * 64
+        ipv4, ipv6 = "192.168.128.36", "fd2b:92df:1a5b:1::24"
+        npm = [{"Id": identity, "State": {"Running": True}}]
+        good = {"Containers": {identity: {"IPv4Address": ipv4 + "/20", "IPv6Address": ipv6 + "/64"}}}
+        with patch.object(isolated, "command", side_effect=[json.dumps(npm).encode(),
+                                                          json.dumps([good]).encode()]):
+            isolated.proxy_guard(identity, ipv4, ipv6)
+        for field in ("IPv4Address", "IPv6Address"):
+            changed = copy.deepcopy(good)
+            address = changed["Containers"][identity][field]
+            changed["Containers"][identity][field] = ""
+            changed["Containers"]["b" * 64] = {"IPv4Address": "", "IPv6Address": "", field: address}
+            with self.subTest(field=field), patch.object(isolated, "command", side_effect=[
+                    json.dumps(npm).encode(), json.dumps([changed]).encode()]):
+                with self.assertRaisesRegex(RuntimeError, "exclusive"):
+                    isolated.proxy_guard(identity, ipv4, ipv6)
+
+    @unittest.skipIf(os.name == "nt", "Real flock descriptor checks run on Linux")
+    def test_lock_guard_uses_existing_descriptor_and_rejects_contention_and_wrong_inode(self):
+        import fcntl
+        import sys
+        lock = self.root / "lock"
+        other = self.root / "other"
+        lock.touch()
+        other.touch()
+        script = (
+            "import importlib.util,os,pathlib,sys;"
+            "s=importlib.util.spec_from_file_location('isolated',sys.argv[1]);"
+            "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+            "m.LOCK=pathlib.Path(sys.argv[2]);"
+            "fd=os.open(sys.argv[3],os.O_RDONLY);os.dup2(fd,9);m.lock_guard()")
+
+        def child(opened):
+            return subprocess.run([sys.executable, "-B", "-c", script,
+                                   isolated.__file__, str(lock), str(opened)], capture_output=True)
+
+        self.assertEqual(child(lock).returncode, 0)
+        self.assertNotEqual(child(other).returncode, 0)
+        with lock.open("rb") as owned:
+            fcntl.flock(owned, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.assertNotEqual(child(lock).returncode, 0)
 
 
 if __name__ == "__main__":

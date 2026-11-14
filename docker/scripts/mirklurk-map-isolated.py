@@ -11,6 +11,7 @@ import subprocess
 
 
 CANONICAL = Path("/srv/homeserver")
+LOCK = Path("/run/lock/homeserver-compose.lock")
 PRESERVED = ("docker/monitoring/prometheus.yml", "homepage/services.yaml")
 CHANGES = {
     "docker/scripts/mirklurk-map-isolated.py",
@@ -85,7 +86,8 @@ def source_guard(source, canonical, base, revision):
     changed = set(git(source, "diff", "--name-only", base, revision).decode().splitlines())
     require(changed <= CHANGES, "Candidate changes exceed exact-peer mechanism scope")
     require("docker/nginx/mirklurk-map.conf" in changed, "Candidate does not correct exact peers")
-    require(not git(source, "log", "--format=", "--name-only", base + ".." + revision, "--", *PRESERVED),
+    require(not git(source, "log", "--full-history", "--diff-merges=separate", "--format=",
+                    "--name-only", base + ".." + revision, "--", *PRESERVED),
             "Upstream history touches a preserved canonical path")
     for name in PRESERVED:
         require(git(source, "rev-parse", f"{base}:{name}")
@@ -183,7 +185,7 @@ def models_guard(clean, live, source, canonical):
 
 def lock_guard():
     import fcntl
-    path = Path("/run/lock/homeserver-compose.lock")
+    path = LOCK
     require(not path.is_symlink(), "Shared lock is unexpectedly a symlink")
     opened, named = os.fstat(9), path.stat()
     require((opened.st_dev, opened.st_ino) == (named.st_dev, named.st_ino),
@@ -208,16 +210,26 @@ def runtime_guard():
         require(labels["com.docker.compose.project"] == "compose"
                 and labels["com.docker.compose.service"] == service,
                 "Existing map Compose identity differs")
-        require(container["State"]["Health"]["Status"] == "healthy", "Map target is unhealthy")
+        require(container["State"]["Running"] and container["State"]["Health"]["Status"] == "healthy",
+                "Map target is stopped or unhealthy")
     mount = next(v for v in containers[0]["Mounts"] if v["Destination"] == "/etc/nginx/conf.d/default.conf")
     require(mount["Type"] == "bind" and not mount["RW"]
             and mount["Source"] == str(CANONICAL / "docker/nginx/mirklurk-map.conf"),
             "Live nginx bind source differs")
+    storage = next(v for v in containers[1]["Mounts"] if v["Destination"] == "/data")
+    volume = json.loads(command("docker", "volume", "inspect", "compose_mirklurk-map-shares"))[0]
+    require(storage["Type"] == "volume" and storage["RW"]
+            and storage["Name"] == volume["Name"] == "compose_mirklurk-map-shares"
+            and storage["Source"] == volume["Mountpoint"]
+            and volume["Labels"]["com.docker.compose.project"] == "compose"
+            and volume["Labels"]["com.docker.compose.volume"] == "mirklurk-map-shares",
+            "Live uploads storage differs from canonical named-volume contract")
     wiki = containers[2]
     require(wiki["Image"] == "sha256:5d90e74b09219f239bf54ead1371fd82574a4de469b4a01d9a10cb78b8fc473e"
             and wiki["Config"]["Labels"]["org.opencontainers.image.revision"]
             == "0111204dd4d8625763c7fec6c57e37357e654333"
-            and wiki["State"]["Health"]["Status"] == "healthy", "Accepted wiki runtime changed")
+            and wiki["State"]["Running"] and wiki["State"]["Health"]["Status"] == "healthy",
+            "Accepted wiki runtime changed, stopped or unhealthy")
 
 
 def prepare(args):
