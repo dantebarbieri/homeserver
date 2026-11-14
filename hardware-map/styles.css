@@ -335,8 +335,41 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
 .metric-memory-legend strong { color: #dce5eb; font-weight: 500; }
 .metrics-popup .toolbar { flex-wrap: wrap; }
 .metrics-popup .toolbar button { font-size: 11px; padding: 7px 10px; }
+.sheet-grabber { display: none; }
+@keyframes sheet-appear { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1100px) {
+  .popup.touch-sheet {
+    position: fixed; inset: auto 0 0; width: 100%; max-width: 100%;
+    height: var(--sheet-height, 50dvh); max-height: calc(100dvh - 24px); margin: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px); border-radius: 16px 16px 0 0;
+    transition: height .2s ease-out, transform .2s ease-out;
+  }
+  .touch-sheet[open] { animation: sheet-appear .2s ease-out; }
+  .touch-sheet.sheet-dragging { transition: none; animation: none; }
+  .touch-sheet.sheet-closing { transform: translateY(100%); animation: none; }
+  .touch-sheet .sheet-grabber {
+    display: flex; justify-content: center; align-items: center; width: 100%; min-height: 44px;
+    padding: 0; border: 0; background: transparent; flex-shrink: 0; touch-action: none;
+  }
+  .sheet-grabber::after { content: ""; width: 40px; height: 5px; background: #91a1b2; border-radius: 4px; }
+  .touch-sheet .popup-heading { padding-top: 0; }
+  .touch-sheet .popup-body { padding: 16px; }
+  .touch-sheet button, .touch-sheet select, .touch-sheet summary,
+  .touch-sheet .reference a, .touch-sheet .linux-node-button { min-height: 44px; }
+  .touch-sheet button, .touch-sheet select { min-width: 44px; font-size: 14px; }
+  .touch-sheet .popup-heading button { min-width: 64px; }
+  .touch-sheet .reference a { display: inline-flex; align-items: center; }
+  .touch-sheet .metric-panel-nav button { flex-shrink: 0; }
+  .touch-sheet .metric-lab-controls { flex-wrap: wrap; }
+  .touch-sheet .metric-lab-controls label { flex: 1; min-width: 120px; }
+  .touch-sheet .metric-lab-controls select { font-size: 16px; }
+  .touch-sheet .related-connectors button { flex: 1 0 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popup.touch-sheet, .touch-sheet[open] { transition: none; animation: none; }
+}
 @media (max-width: 1200px) and (min-width: 1001px) { .metric-card { width: 176px; padding: 7px; } .metric-card-title { font-size: 9px; } .metric-chart-values { font-size: 11px; } .metric-badge { font-size: 8px; } }
-@media (max-width: 1000px), (max-height: 900px), (max-width: 1800px) and (min-aspect-ratio: 1/1) {
+@media (max-width: 1000px), (max-height: 900px), (max-width: 1800px) and (min-aspect-ratio: 1/1), (pointer: coarse) and (max-width: 1100px) {
   .metric-layer { top: auto; bottom: 8px; left: 8px; right: 8px; height: 290px; display: flex; align-items: start; gap: 8px; overflow-x: auto; overflow-y: auto; pointer-events: auto; scrollbar-width: thin; }
   .metric-card { position: relative; left: auto !important; top: auto !important; flex: 0 0 220px; }
   .map-scroll { padding-bottom: 297px; }
@@ -355,4 +388,37 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
   .metric-panel-nav { padding: 8px 14px; }
   .metric-playback-note { padding: 5px 14px; }
   #metric-clock { display: none; }
+}
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1100px) {
+  body { overflow: auto; }
+  html:has(dialog[open]) { overflow: hidden; }
+  .board-workspace { height: auto; min-height: 100dvh; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+  .map-toolbar { flex-wrap: wrap; gap: 6px; padding: 0; }
+  .map-toolbar h1 { flex: 1; font-size: 17px; }
+  .map-toolbar button, .zoom-controls button { min-width: 44px; min-height: 44px; font-size: 13px; }
+  .map-toolbar .zoom-controls { margin-left: 0; }
+  .connector-nav { padding: 4px; gap: 4px; }
+  #focus-modes { width: 100%; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; }
+  #focus-modes button { flex: 1; min-height: 44px; font-size: 13px; }
+  #categories { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
+  #categories button { flex-shrink: 0; min-height: 44px; font-size: 13px; }
+  #connector-picker { width: 100%; }
+  #connector-picker summary { min-height: 44px; display: flex; align-items: center; font-size: 14px; }
+  .connector-list { left: 0; right: 0; width: 100%; max-height: 50dvh; }
+  .connector-item { min-height: 44px; font-size: 14px; }
+  .metric-controls { flex-wrap: wrap; }
+  #metric-group-controls { order: 1; flex: 1 0 100%; }
+  .metric-controls button { min-width: 44px; min-height: 44px; font-size: 13px; padding: 8px; }
+  .metric-controls > .metric-provenance { flex: 1; }
+  .metric-controls > button { padding: 6px 12px; }
+  .map-panel { flex: none; display: flex; flex-direction: column; }
+  .map-scroll { flex: none; height: auto; aspect-ratio: 1440 / 840; padding-bottom: 0; }
+  .portrait-map .map-scroll { aspect-ratio: 840 / 1440; }
+  #board { min-width: 0; min-height: 0; }
+  .metric-layer { position: relative; inset: auto; flex: none; height: 290px; margin: 8px; }
+  .metric-card-title, .metric-card-close { min-height: 44px; font-size: 13px; }
+  .metric-card-close { min-width: 44px; }
+  .metric-card-heading { grid-template-columns: minmax(0, 1fr) 44px; }
+  .summary { grid-template-columns: repeat(2, 1fr); }
+  .inventory-grid { grid-template-columns: 1fr; }
 }

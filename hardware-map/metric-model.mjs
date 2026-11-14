@@ -20,6 +20,12 @@ export const cpuClockSpecification = { base: 3, boost: 3.7 };
 export const historyWindows = [60, 120, 300, 900, 1800, 3600, 7200, 21600, 86400];
 export const defaultHistoryWindows = { cpu: 120, gpu: 120, network: 120, memory: 900, storage: 7200, temperatures: 1800, fans: 300 };
 export const historyLabel = seconds => seconds >= 3600 ? `${seconds / 3600}h` : `${seconds / 60}m`;
+export function projectBounds(rect, project) {
+  const points = [project(rect.x, rect.y), project(rect.x + rect.width, rect.y),
+    project(rect.x, rect.y + rect.height), project(rect.x + rect.width, rect.y + rect.height)];
+  const x = Math.min(...points.map(point => point.x)), y = Math.min(...points.map(point => point.y));
+  return { x, y, width: Math.max(...points.map(point => point.x)) - x, height: Math.max(...points.map(point => point.y)) - y };
+}
 function cardOverlap(card, occupied, gap = 10) {
   return occupied.reduce((area, rect) => area +
     Math.max(0, Math.min(card.x + card.width + gap, rect.x + rect.width) - Math.max(card.x - gap, rect.x)) *

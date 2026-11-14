@@ -4,6 +4,7 @@ import { linuxSnapshot } from "./linux-snapshot.mjs";
 import { createMetricUI } from "./metrics.mjs";
 import { applyLiveSnapshot } from "./metric-model.mjs";
 import { LiveData } from "./live-data.mjs";
+import { createBottomSheet } from "./mobile-ui.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -23,6 +24,7 @@ let fanRotationEnabled = !reducedMotion.matches;
 let fanRotationOverride = false;
 let linuxReturnId = null;
 const popupContexts = new Map();
+const popupSheets = new Map();
 
 function notify(message, error = false) {
   const notice = $("notice");
@@ -67,7 +69,7 @@ function capturePopupContext() {
   return {
     opener,
     selector: opener.matches(".connector-item") ? `.connector-item[data-id="${opener.dataset.id}"]` : null,
-    left: map.scrollLeft, top: map.scrollTop,
+    left: map.scrollLeft, top: map.scrollTop, pageLeft: scrollX, pageTop: scrollY,
   };
 }
 
@@ -75,6 +77,7 @@ function openPopup(dialog, context = capturePopupContext()) {
   if (dialog.open) return;
   popupContexts.set(dialog, context);
   dialog.showModal();
+  popupSheets.get(dialog)?.open();
 }
 
 function inspect(changeSelection) {
@@ -89,11 +92,12 @@ function inspect(changeSelection) {
 }
 
 function requestPopupClose(dialog) {
-  dialog.close();
+  popupSheets.get(dialog)?.close();
 }
 
 for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog"]) {
   const dialog = $(id);
+  popupSheets.set(dialog, createBottomSheet(dialog, () => dialog.close()));
   let backdropStart = false;
   const outside = event => {
     const bounds = dialog.getBoundingClientRect();
@@ -117,6 +121,7 @@ for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog"]) {
     const opener = context.opener.isConnected ? context.opener : document.querySelector(context.selector ?? "#tools-button");
     opener?.focus({ preventScroll: true });
     document.querySelector(".map-scroll").scrollTo(context.left, context.top);
+    window.scrollTo(context.pageLeft, context.pageTop);
   });
 }
 $("close-inspector").addEventListener("click", () => requestPopupClose($("inspector-dialog")));
@@ -441,6 +446,9 @@ function renderBoard() {
   hba.append(svgElement("text", { x: 1152, y: hbaSlot.y + 12, class: "hardware-label" }, "9300-8i / PCIE1"));
   hardware.append(hba);
   board.append(hardware);
+  const scene = svgElement("g", { id: "server-scene" });
+  scene.append(...board.childNodes);
+  board.append(scene);
 }
 
 function renderList() {
@@ -722,6 +730,15 @@ for (const component of components) {
   $("inventory-grid").append(card);
 }
 renderBoard();
+const portraitMap = matchMedia("(orientation: portrait)");
+function orientMap() {
+  $("board").setAttribute("viewBox", portraitMap.matches ? "0 0 840 1440" : "0 0 1440 840");
+  $("server-scene").setAttribute("transform", portraitMap.matches ? "translate(840 0) rotate(90)" : "");
+  $("board-view").classList.toggle("portrait-map", portraitMap.matches);
+  metricUI?.layout();
+}
+portraitMap.addEventListener("change", orientMap);
+orientMap();
 let appliedSnapshot = null;
 function applyCollectedInventory(data) {
   if (!data || data === appliedSnapshot) return;

@@ -66,6 +66,11 @@ class APITests(unittest.TestCase):
         self.assertEqual((status, raw), (200, b""))
 
     def test_static_allowlist_traversals_and_methods(self):
+        source = b"export const sheet = true;"
+        (self.web / "mobile-ui.mjs").write_bytes(source)
+        status, headers, raw = self.request("/mobile-ui.mjs")
+        self.assertEqual((status, raw), (200, source))
+        self.assertIn("javascript", headers["Content-Type"])
         for path in ("/server/server.py", "/secret.json", "/../snapshot.json",
                      "/%2e%2e/snapshot.json", "/%2e%2e%5csnapshot.json",
                      "//secret.json", "/index.html/anything"):

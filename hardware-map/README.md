@@ -19,6 +19,7 @@ Tests require Node.js and no packages:
 ```powershell
 node --test hardware-map\model.test.mjs hardware-map\metric-model.test.mjs
 node --test hardware-map\live-data.test.mjs
+node --test hardware-map\mobile-ui.test.mjs
 ```
 
 ## Live service
@@ -519,6 +520,22 @@ CPU, memory, then sensor cards. Hardware filters retain
 only relevant overlays; connector inspection hides the overlay hit targets.
 Click a chart title, sensor badge, or a component's performance button for
 detailed graphs in a dismissible dialog.
+
+Portrait windows rotate the server clockwise, with drive cages at the top and
+rear I/O at the bottom. Scene transforms also apply to badges, leaders and saved
+card coordinates; keyboard movement still follows screen directions. On phones,
+the map fits the page width and the cards follow below it rather than covering
+the hardware. The page and zoomed map can scroll independently.
+
+Phone-sized windows and compact coarse-pointer screens use modal bottom sheets,
+adapted from MirkMap's half/full/dismiss gesture pattern. Drag the grabber, tap it
+or use its arrow keys to resize. Swiping up in half-height content expands the
+sheet; expanded content scrolls normally. Swiping down only drags content when
+its scroll position is at the top. Horizontal gestures remain native. Downward
+drags can dismiss; Close, Escape, backdrop dismissal, nested modal focus and
+return-to-map scroll restoration remain available. Short content stays short;
+safe-area insets, reduced motion and viewport resizing are respected. Phone
+buttons and connector-list rows have at least 44 px touch targets.
 
 Changing numbers occupy dedicated rows and fixed series columns, with tabular
 digits and non-wrapping readouts. Capacity, clock and memory summaries keep

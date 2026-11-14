@@ -1,4 +1,4 @@
-import { metricGroups, memoryColors, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, metricTopology, cpuClockSpecification, placeMetricCards, rayBoxEdge } from "./metric-model.mjs";
+import { metricGroups, memoryColors, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, metricTopology, cpuClockSpecification, placeMetricCards, rayBoxEdge, projectBounds } from "./metric-model.mjs";
 
 const $ = id => document.getElementById(id);
 function el(tag, attrs = {}, text = "") {
@@ -42,7 +42,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   } catch (error) {
     onError(`Viewing preferences could not be loaded: ${error.message}. Default layout is in use; saved data was not changed.`);
   }
-  const compactLayout = matchMedia("(max-width: 1000px), (max-height: 900px), (max-width: 1800px) and (min-aspect-ratio: 1/1)");
+  const compactLayout = matchMedia("(max-width: 1000px), (max-height: 900px), (max-width: 1800px) and (min-aspect-ratio: 1/1), (pointer: coarse) and (max-width: 1100px)");
   let second = 86400, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores", sensor = "all";
   let charts = [];
   let chartSequence = 0, helpSequence = 0, componentKey = "";
@@ -359,12 +359,13 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
       if (!delta) return;
       event.preventDefault();
-      const current = currentPosition(definition.id), step = event.shiftKey ? 40 : 10;
-      move(definition, current[0] + delta[0] * step, current[1] + delta[1] * step); save();
+      const bounds = card.getBoundingClientRect(), step = event.shiftKey ? 40 : 10;
+      const next = scenePoint(bounds.left + delta[0] * step, bounds.top + delta[1] * step);
+      move(definition, next.x, next.y); save();
     });
   }
   function scenePoint(x, y) {
-    return new DOMPoint(x, y).matrixTransform($("board").getScreenCTM().inverse());
+    return new DOMPoint(x, y).matrixTransform($("server-scene").getScreenCTM().inverse());
   }
   function currentPosition(id) {
     const bounds = cards.get(id).getBoundingClientRect(), point = scenePoint(bounds.left, bounds.top);
@@ -372,8 +373,10 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   }
   function move(definition, x, y) {
     const card = cards.get(definition.id), bounds = $("metric-layer").getBoundingClientRect();
-    const low = scenePoint(bounds.left + 8, bounds.top + 8), high = scenePoint(bounds.right - card.offsetWidth - 8, bounds.bottom - card.offsetHeight - 8);
-    settings.positions[definition.id] = [Math.max(low.x, Math.min(high.x, x)), Math.max(low.y, Math.min(high.y, y))];
+    const screen = new DOMPoint(x, y).matrixTransform($("server-scene").getScreenCTM());
+    const point = scenePoint(Math.max(bounds.left + 8, Math.min(bounds.right - card.offsetWidth - 8, screen.x)),
+      Math.max(bounds.top + 8, Math.min(bounds.bottom - card.offsetHeight - 8, screen.y)));
+    settings.positions[definition.id] = [point.x, point.y];
     layout();
   }
   for (const definition of metricBadges) {
@@ -383,7 +386,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     $("metric-layer").append(node); badges.set(definition.id, node);
   }
   function layout() {
-    const bounds = $("metric-layer").getBoundingClientRect(), matrix = $("board").getScreenCTM();
+    const bounds = $("metric-layer").getBoundingClientRect(), matrix = $("server-scene").getScreenCTM();
     if (!matrix || $("metric-layer").hidden || compactLayout.matches) return;
     $("metric-leaders").setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
     const point = (x, y) => {
@@ -415,10 +418,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const node = cards.get(definition.id), p = point(...settings.positions[definition.id]);
       reserve(definition, { x: Math.max(8, Math.min(bounds.width - node.offsetWidth - 8, p.x)), y: Math.max(8, Math.min(bounds.height - node.offsetHeight - 8, p.y)) });
     }
-    const screenRect = rect => {
-      const start = point(rect.x, rect.y), end = point(rect.x + rect.width, rect.y + rect.height);
-      return { ...start, width: end.x - start.x, height: end.y - start.y };
-    };
+    const screenRect = rect => projectBounds(rect, point);
     const enclosure = screenRect(document.querySelector(".chassis-shell").getBBox());
     const motherboard = screenRect(document.querySelector(".board-outline").getBBox());
     const origin = { x: motherboard.x + motherboard.width / 2, y: motherboard.y + motherboard.height / 2 };

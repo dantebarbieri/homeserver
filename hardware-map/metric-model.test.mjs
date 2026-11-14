@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, placeMetricCards, rayBoxEdge } from "./metric-model.mjs";
+import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, placeMetricCards, rayBoxEdge, projectBounds } from "./metric-model.mjs";
+
+test("portrait projection retains positive case bounds and correct component coordinates", () => {
+  const portrait = (x, y) => ({ x: 840 - y, y: x });
+  assert.deepEqual(projectBounds({ x: 35, y: 65, width: 1365, height: 725 }, portrait),
+    { x: 50, y: 35, width: 725, height: 1365 });
+});
 
 test("motherboard-centered rays hit the case boundary through the actual component", () => {
   const box = { x: 100, y: 100, width: 900, height: 600 }, origin = { x: 700, y: 400 };
