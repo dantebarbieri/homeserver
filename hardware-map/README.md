@@ -168,6 +168,20 @@ uv run --no-project --with pyyaml python -B -m unittest discover -s hardware-map
 
 ## Read-only interface
 
+### Linked navigation
+
+Component and connector pages have a **Connected to** list that jumps to the
+related hardware, with **Back** (and a small trail) to return. A drive links to
+the other drives in its cage, its PSU socket and, in cage 1, the HBA; a connector
+page lists the hardware on it, so a drive → SATA connector → another drive works
+too. In the PSU modular-panel table each populated socket links to what it
+feeds. Case fans link to the hub and to each other; no hub port numbers are
+claimed because they have not been traced. Navigation never changes the
+selected view mode or category. Links are defined in `relations.mjs`; the
+CPU and motherboard are reached through the `ATX12V1`/`ATXPWR1` connector pages
+rather than directly from the PSU. Provenance that is not confirmed appears
+beside or inside the link (button tooltip for user-reported sockets).
+
 ### Services
 
 Open **Services** for a Task Manager-style table. The default columns are CPU,

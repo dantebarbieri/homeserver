@@ -1,4 +1,4 @@
-import { connectors, connectorById, components, driveCages, psuPorts, inspectedJumpers, pcie2Modes, hardwareCategories, partReferences, boardRevision, landscapeBounds, occupancyLabels } from "./board.mjs";
+import { connectors, connectorById, components, driveCages, psuPorts, inspectedJumpers, pcie2Modes, hardwareCategories, partReferences, boardRevision, landscapeBounds, occupancyLabels, provenanceLabels } from "./board.mjs";
 import { emptyDocument, emptyConnection, loadDocument, withInspectionDefaults, occupancyCounts, matchesHardware, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, pcie2ModeFor, storageKey } from "./model.mjs";
 import { linuxSnapshot } from "./linux-snapshot.mjs";
 import { createMetricUI } from "./metrics.mjs";
@@ -7,6 +7,7 @@ import { LiveData } from "./live-data.mjs";
 import { createBottomSheet } from "./mobile-ui.mjs";
 import { setupPwa } from "./pwa.mjs";
 import { createServicesUI } from "./services.mjs";
+import { driveBayId, caseFanId, rearFanId, driveInfo, relationsFor, psuSocketLinks } from "./relations.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -25,6 +26,8 @@ const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let fanRotationEnabled = !reducedMotion.matches;
 let fanRotationOverride = false;
 let linuxReturnId = null;
+const linkTrail = [];
+const unresolvedLinks = new Set();
 const popupContexts = new Map();
 const popupSheets = new Map();
 
@@ -83,15 +86,107 @@ function openPopup(dialog, context = capturePopupContext()) {
   popupSheets.get(dialog)?.open();
 }
 
-function inspect(changeSelection) {
+function inspect(changeSelection, { keepTrail = false, focusTitle = false } = {}) {
   const context = $("inspector-dialog").open ? null : capturePopupContext();
+  if (!keepTrail) linkTrail.length = 0;
   changeSelection();
   renderSelection();
   $("inspector-title").textContent = selectedPartId ? sceneParts.get(selectedPartId).label : selectedId;
+  renderTrail();
   if (!$("inspector-dialog").open) openPopup($("inspector-dialog"), context);
   metricUI?.refresh();
   $("inspector-dialog").querySelector(".popup-body").scrollTop = 0;
-  $("close-inspector").focus({ preventScroll: true });
+  (focusTitle ? $("inspector-title") : $("close-inspector")).focus({ preventScroll: true });
+}
+
+function currentRef() {
+  return selectedPartId ? { kind: "part", id: selectedPartId } : { kind: "connector", id: selectedId };
+}
+
+function refLabel({ kind, id }) {
+  return kind === "part" ? sceneParts.get(id)?.label ?? id : id;
+}
+
+function showRef(ref, { record = true, restoreFocusTo = null } = {}) {
+  if (ref.kind === "part" ? !sceneParts.has(ref.id) : !connectorById.has(ref.id)) return;
+  if (record) {
+    linkTrail.push(currentRef());
+    if (linkTrail.length > 25) linkTrail.shift();
+  }
+  inspect(() => {
+    if (ref.kind === "part") selectedPartId = ref.id;
+    else {
+      selectedId = ref.id;
+      selectedPartId = null;
+    }
+  }, { keepTrail: true, focusTitle: true });
+  const origin = restoreFocusTo && findLinkButton(restoreFocusTo);
+  origin?.focus();
+}
+
+function renderTrail() {
+  const previous = linkTrail.at(-1);
+  $("inspector-trail").hidden = !previous;
+  if (previous) $("inspector-back").textContent = `← Back to ${refLabel(previous)}`;
+}
+
+function linkButton(link) {
+  const target = link.kind === "part" ? sceneParts.get(link.id) : connectorById.get(link.id);
+  if (!target) {
+    if (!unresolvedLinks.has(`${link.kind}:${link.id}`)) {
+      unresolvedLinks.add(`${link.kind}:${link.id}`);
+      console.warn(`Relationship target ${link.kind} "${link.id}" is not in the map; link omitted.`);
+    }
+    return null;
+  }
+  const label = link.kind === "part" ? target.label : link.id;
+  const button = element("button", {
+    type: "button", class: "link-button", "data-link-id": link.id, "data-link-kind": link.kind,
+    title: link.provenance ? `${label} · ${provenanceLabels[link.provenance]}` : label,
+  }, link.short ?? label);
+  if (link.provenance) button.dataset.provenance = link.provenance;
+  button.addEventListener("click", () => showRef({ kind: link.kind, id: link.id }));
+  return button;
+}
+
+function appendLinkGroups(host, groups) {
+  host.replaceChildren();
+  for (const { title, links } of groups) {
+    const buttons = links.map(link => [link, linkButton(link)]).filter(([, button]) => button);
+    if (!buttons.length) continue;
+    const section = element("div", { class: "link-group" });
+    section.append(element("h5", {}, title));
+    const list = element("ul", { class: "link-list" });
+    for (const [link, button] of buttons) {
+      const row = element("li");
+      row.append(button);
+      if (link.detail) row.append(element("span", { class: "compact muted" }, link.detail));
+      if (["photo-inferred", "photo-uncertain", "unverified"].includes(link.provenance)) {
+        row.append(element("span", { class: "link-provenance" }, provenanceLabels[link.provenance]));
+      }
+      list.append(row);
+    }
+    section.append(list);
+    host.append(section);
+  }
+  return host.childElementCount > 0;
+}
+
+function connectorHardwareGroups(connectorId) {
+  const links = [...sceneParts.values()]
+    .filter(part => part.id !== "disk-bays" && part.connectorIds.includes(connectorId))
+    .map(part => {
+      const drive = driveInfo(part.id);
+      return { kind: "part", id: part.id, detail: drive ? `lead ${drive.lead}` : undefined };
+    });
+  return links.length ? [{ title: "Hardware on this connector", links }] : [];
+}
+
+function renderLinks() {
+  const host = selectedPartId ? $("component-details") : $("connector-details");
+  host.insertBefore($("links-section"), selectedPartId ? $("component-metrics-button") : $("pin-section"));
+  const groups = selectedPartId ? relationsFor(selectedPartId) : connectorHardwareGroups(selectedId);
+  $("links-section").hidden = !appendLinkGroups($("links-list"), groups);
 }
 
 function requestPopupClose(dialog) {
@@ -128,6 +223,11 @@ for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog", "service
   });
 }
 $("close-inspector").addEventListener("click", () => requestPopupClose($("inspector-dialog")));
+$("inspector-dialog").addEventListener("close", () => { linkTrail.length = 0; });
+$("inspector-back").addEventListener("click", () => {
+  const previous = linkTrail.pop();
+  if (previous) showRef(previous, { record: false, restoreFocusTo: currentRef() });
+});
 $("close-tools").addEventListener("click", () => requestPopupClose($("tools-dialog")));
 $("close-services").addEventListener("click", () => requestPopupClose($("services-dialog")));
 createServicesUI({ enabled: dataSource.mode === "live", openPopup, onError: message => notify(message, true) });
@@ -422,7 +522,7 @@ function renderBoard() {
     disks.append(svgElement("rect", { x: 172, y, width: 231, height: 173, rx: 4, class: "drive-cage part-outline" }));
     disks.append(svgElement("text", { x: 173, y: y - 5, class: "scene-note" }, `CAGE ${routing.number} / ${routing.number === 1 ? "HBA" : routing.route}`));
     for (let bay = 0; bay < 5; bay += 1) {
-      const drive = bay < 4 ? hardwarePart(`drive-cage-${cage + 1}-bay-${bay + 1}`, "disks", `Cage ${cage + 1} / bay ${bay + 1}`, "Physical disk identity is unverified unless a confirmed live binding is present; provisional serial-sorted identities are not physical observations.", [routing.connectorId], {
+      const drive = bay < 4 ? hardwarePart(driveBayId(cage + 1, bay + 1), "disks", `Cage ${cage + 1} / bay ${bay + 1}`, "Physical disk identity is unverified unless a confirmed live binding is present; provisional serial-sorted identities are not physical observations.", [routing.connectorId], {
         connectionNote: `Cage ${routing.number}, bay ${bay + 1} (top-to-bottom) → ${routing.route}, cable lead ${routing.leads[bay]}. SATA power from PSU ${psuPorts.find(port => port.targetId === `cage-${routing.number}`).id}.`,
       }) : disks;
       drive.append(svgElement("rect", { x: 185, y: y + 15 + bay * 29, width: 205, height: 22, rx: 2, class: bay === 4 ? "drive-bay empty" : "drive-bay part-outline" }));
@@ -441,7 +541,7 @@ function renderBoard() {
   hardware.append(...individualDisks);
   for (const [region, x] of [["front", 60], ["middle", 440]]) {
     for (let i = 0; i < 3; i += 1) {
-      const id = `${region}-fan-${i + 1}`;
+      const id = caseFanId(region, i + 1);
       const returnsTach = componentById.get("case-fans").tachPartId === id;
       const fan = hardwarePart(id, "case-fans", `${region === "front" ? "Front" : "Middle"} Noctua NF-P12 redux-1700 PWM ${i + 1} · ${returnsTach ? "FAN3 tach return" : "shared FAN3 hub"}`, `User confirms all six blow front to rear. ${returnsTach ? "This is the PSU-side middle fan supplying the hub's single tach return (user-confirmed 2026-11-13)." : "No individual RPM reading or hub-port assignment is known for this fan."} Positions are schematic and fan faces are unfolded, not a cable or measured airflow trace.`, ["FAN3"], returnsTach ? { readingId: "FAN3" } : {});
       drawFan(fan, x, 159 + i * 196, 94, true);
@@ -467,7 +567,7 @@ function renderBoard() {
   hub.append(svgElement("text", { x: 682, y: 455, class: "hardware-subtitle" }, "6 FANS / 1 TACH"));
   hardware.append(hub);
   for (let i = 0; i < 2; i += 1) {
-    const fan = hardwarePart(`rear-fan-${i + 1}`, "rear-fans", `Rear 80 mm fan ${i + 1} · Molex chain B`, "Rear bank is photo-informed; centers and mounting geometry are approximate. Width is specification-based plus user-confirmed factory-original fans, not photo-measured.", [], {
+    const fan = hardwarePart(rearFanId(i + 1), "rear-fans", `Rear 80 mm fan ${i + 1} · Molex chain B`, "Rear bank is photo-informed; centers and mounting geometry are approximate. Width is specification-based plus user-confirmed factory-original fans, not photo-measured.", [], {
       connectionNote: "Shared Molex harness from PSU S6. No motherboard tach/control connection.",
     });
     drawFan(fan, 1314, 420 + i * 111, 63);
@@ -626,9 +726,16 @@ function renderComponentDetails() {
   if (!portMap.hidden) {
     for (const port of psuPorts) {
       const row = element("tr", { "data-port-id": port.id });
+      const connection = element("td", {}, port.target);
+      const links = psuSocketLinks(port.id).map(linkButton).filter(Boolean);
+      if (links.length) {
+        const wrap = element("div", { class: "socket-links" });
+        wrap.append(...links);
+        connection.append(wrap);
+      }
       row.append(element("th", { scope: "row" }, port.id),
         element("td", {}, `${port.group} · ${port.position}`),
-        element("td", {}, port.target));
+        connection);
       $("component-port-rows").append(row);
     }
   }
@@ -642,8 +749,8 @@ function renderComponentDetails() {
   appendReferences($("component-reference-links"), partReferences[part.componentId ?? selectedPartId] ?? []);
   $("component-connectors").replaceChildren();
   for (const id of part.connectorIds) {
-    const button = element("button", { type: "button" }, id);
-    button.addEventListener("click", () => selectConnector(id));
+    const button = element("button", { type: "button", "data-link-id": id, "data-link-kind": "connector" }, id);
+    button.addEventListener("click", () => showRef({ kind: "connector", id }));
     $("component-connectors").append(button);
   }
   if (!part.connectorIds.length) {
@@ -738,6 +845,18 @@ function renderLinuxAssociation(target) {
 }
 
 function renderSelection() {
+  const active = document.activeElement;
+  const focusedLink = active?.dataset?.linkId ? { id: active.dataset.linkId, kind: active.dataset.linkKind } : null;
+  renderSelectionContent();
+  if (focusedLink && !active.isConnected) findLinkButton(focusedLink)?.focus({ preventScroll: true });
+}
+
+function findLinkButton({ id, kind }) {
+  return [...$("inspector-dialog").querySelectorAll("[data-link-id]")]
+    .find(button => button.dataset.linkId === id && button.dataset.linkKind === kind);
+}
+
+function renderSelectionContent() {
   const connector = connectorById.get(selectedId);
   const connection = connectionFor(selectedId);
   for (const group of $("board").querySelectorAll(".connector")) {
@@ -762,8 +881,10 @@ function renderSelection() {
   if (!$("jumper-section").hidden) renderJumperConfigurations();
   if (selectedPartId) {
     renderComponentDetails();
+    renderLinks();
     return;
   }
+  renderLinks();
   renderLinuxAssociation(selectedId);
   $("detail-category").textContent = `${connector.category.toUpperCase()} / SELECTED CONNECTOR`;
   $("detail-name").textContent = connector.id;

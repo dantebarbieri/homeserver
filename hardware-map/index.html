@@ -53,8 +53,9 @@
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   </main>
   <dialog id="inspector-dialog" class="popup" aria-labelledby="inspector-title">
-    <header class="popup-heading"><h2 id="inspector-title">Hardware</h2><button id="close-inspector" type="button" autofocus>Close ×</button></header>
+    <header class="popup-heading"><h2 id="inspector-title" tabindex="-1">Hardware</h2><button id="close-inspector" type="button" autofocus>Close ×</button></header>
     <div class="popup-body details">
+      <nav id="inspector-trail" class="link-trail" hidden aria-label="Navigation trail"><button id="inspector-back" type="button"></button></nav>
       <section id="component-details" hidden>
         <div class="detail-title"><h3 id="component-name"></h3></div>
         <p id="component-model" class="component-model"></p><p id="component-capacity" class="component-capacity"></p>
@@ -64,6 +65,10 @@
           <h4 id="component-port-title">PSU modular sockets</h4>
           <p class="compact muted">Viewed as in the reference photo. Labels identify socket positions, not Corsair socket numbers or electrical pinouts.</p>
           <table><thead><tr><th>Socket</th><th>Group / position</th><th>Connection</th></tr></thead><tbody id="component-port-rows"></tbody></table>
+        </section>
+        <section id="links-section" class="links-section" hidden aria-labelledby="links-title">
+          <h4 id="links-title">Connected to</h4>
+          <div id="links-list"></div>
         </section>
         <button id="component-metrics-button" type="button" hidden>Full performance view ↗</button>
         <section id="component-performance" class="metric-detail-grid" aria-label="Selected component performance" hidden></section>
