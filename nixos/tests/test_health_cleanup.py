@@ -1034,6 +1034,8 @@ class HealthCleanupTests(unittest.TestCase):
                     self.assertIn("DOCKER:compose up -d --force-recreate homepage", lines)
                     self.assertIn("DOCKER:image prune -f", lines)
                     self.assertIn("DOCKER:network prune -f", lines)
+                    # Never --all: that would delete unused named volumes.
+                    self.assertIn("DOCKER:volume prune -f", lines)
 
     def test_scrub_monitor_state_and_error_paths(self):
         harness = """

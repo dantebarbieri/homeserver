@@ -271,9 +271,10 @@ Set it up in this order, keeping an admin SSH session to the Studio open:
    take up to eight hours on the CPU. The values are `whisperai.endpoint` and
    `whisperai.timeout` in `${DATA}/bazarr/config/config/config.yaml`.
 
-To roll back, point the endpoint back at `http://whisperasr:9000` and
-restore its previous `10800`-second job timeout (connection timeout `60`).
-The server service remains running. The private
+The server's `whisperasr` service was removed on 2026-11-14. To roll back,
+restore it to `docker/compose.ai.yml` from git (last present in `66fa2ee`),
+start it, point the endpoint back at `http://whisperasr:9000` and restore its previous
+`10800`-second job timeout (connection timeout `60`). The private
 `/srv/docker/data/bazarr/config/studio-migration-20261113/` directory holds
 the pre-cutover config, a consistent SQLite backup and aggregate request
 results; the original image is tagged `bazarr-before-studio:20261113`.

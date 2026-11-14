@@ -1,22 +1,7 @@
 # AI services stack
-# whisperasr (GPU speech-to-text; Bazarr's previous Whisper endpoint)
 # studio-whisper (tunnel to the Mac Studio's Whisper API for Bazarr)
 
 services:
-  whisperasr:
-    extends:
-      file: compose.common.yml
-      service: gpu-service
-    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
-    container_name: whisperasr
-    environment:
-      ASR_ENGINE: faster_whisper
-      ASR_MODEL: large-v3
-      ASR_DEVICE: cuda
-      ASR_QUANTIZATION: float16
-    networks:
-      - starr
-
   # Bazarr's SSH-authenticated path to the Mac Studio's loopback-only Whisper
   # API (http://studio-whisper:9000). Only Bazarr shares its network; no port
   # is published. Setup: macos/ai/README.md (Bazarr transport).
@@ -75,6 +60,5 @@ services:
       start_period: 30s
 
 networks:
-  starr:
   studio-whisper:
   arr-ai:

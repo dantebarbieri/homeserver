@@ -269,7 +269,9 @@ that Telugu first match the server.
   transcription and Telugu-to-English translation through that endpoint.
   Both subtitle responses had valid, nonoverlapping timing. These bounded
   checks did not write library subtitles or establish translation quality.
-  The original server `whisperasr` remains running for rollback.
+  The original server `whisperasr` was removed on 2026-11-14 (*Dante*) after
+  detection, English transcription and the Telugu engine were rechecked from
+  the Bazarr container through this endpoint.
 - Bazarr still picks the first audio stream of multi-audio files when no
   audio language matches; audio-language preferences were not changed.
 
@@ -494,7 +496,7 @@ is not a leftover model download.
 | sshd | `/etc/ssh/sshd_config` is a root-owned copy shadowing the Nix symlink, plus a `studio-tunnel` Match block; backups in `/var/backups/studio-transfer/` | Restore the Nix symlink and reload sshd. Once `ssh.nix` with the same Match block is on `main`, a NixOS activation does this and keeps the tunnel; before that, activation drops the block (the tunnel fails closed) |
 | Tunnel account | `studio-tunnel`, `/etc/ssh/studio-transfer-keys` | `userdel`, delete the file, drop it from `users.nix`/`ssh.nix` |
 | Studio admin key | `~/.ssh/authorized_keys`, `users.nix` | Delete the line |
-| Bazarr's Whisper link | `studio-whisper` container; key and pinned Studio host key in `/srv/docker/data/studio-whisper-tunnel`; Bazarr's `whisperai` endpoint and timeout | Point Bazarr back at `whisperasr`, then [remove the transport](ai/README.md#bazarr-transport-and-cutover) |
+| Bazarr's Whisper link | `studio-whisper` container; key and pinned Studio host key in `/srv/docker/data/studio-whisper-tunnel`; Bazarr's `whisperai` endpoint and timeout | Restore the `whisperasr` service to `compose.ai.yml` from git (last present in `66fa2ee`), point Bazarr back at it, then [remove the transport](ai/README.md#bazarr-transport-and-cutover) |
 | Bazarr migration rollback/evidence | `/srv/docker/data/bazarr/config/studio-migration-20261113/`: pre-cutover config and SQLite backup, aggregate `smoke-result.json`; original image tagged `bazarr-before-studio:20261113` | Backups contain secrets; keep private. Endpoint rollback normally needs only the settings change, not database restoration |
 | Tdarr | `Studio-Native` node, canary library and flow, dedicated API key, snapshots in `/srv/docker/data/tdarr/server/Tdarr/Custom/backups/` (mode 0600; may hold credentials) | Delete in the UI and revoke the key |
 | AdGuard | Two `home.arpa` rewrites | AdGuard UI, DNS rewrites |
@@ -506,8 +508,8 @@ is not a leftover model download.
 3. Use `home.arpa` for future service integrations. Admin SSH migration is
    complete on the reachable hosts; the MacBook is intentionally unchanged.
 4. Speech: Bazarr's cutover is complete
-   ([details](ai/README.md#bazarr-transport-and-cutover)); decide whether to
-   retire the server's rollback `whisperasr`. English remains a proofread
+   ([details](ai/README.md#bazarr-transport-and-cutover)) and the server's
+   `whisperasr` has been removed. English remains a proofread
    fallback; Japanese and Telugu still need audio-grounded review, not more
    overlap scoring.
 5. Ollama: pick a first automation, or remove it.

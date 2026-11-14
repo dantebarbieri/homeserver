@@ -765,14 +765,6 @@
           url: http://homepage-inventory:8080/containers/sorry
 
 - Media Helpers:
-    - Whisper ASR:
-        icon: openai-light.svg
-        description: Powers Bazarr - speech-to-text subtitles
-        server: my-docker
-        container: whisperasr
-        widget:
-          <<: *container-info
-          url: http://homepage-inventory:8080/containers/whisperasr
     - Recyclarr:
         icon: recyclarr.svg
         description: Supports Radarr & Sonarr - quality profile sync
