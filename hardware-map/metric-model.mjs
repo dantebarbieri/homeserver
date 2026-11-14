@@ -51,6 +51,27 @@ export function placeMetricCard(card, viewport, occupied) {
   }
   return best;
 }
+export const metricCardRows = {
+  top: ["nvme-root", "gpu", "network"],
+  bottom: ["nvme", "cpu", "memory"],
+};
+export function placeMetricRow(cards, viewport, occupied, edge) {
+  if (!Object.hasOwn(metricCardRows, edge)) throw new Error("Unknown metric card row");
+  if (!cards.length) return [];
+  const gap = 10, height = Math.max(...cards.map(card => card.height));
+  const width = cards.reduce((sum, card) => sum + card.width, 0) + gap * (cards.length - 1);
+  const offset = edge === "bottom" ? viewport.height / 2 : 0;
+  const region = { width: viewport.width, height: viewport.height / 2 };
+  const position = placeMetricCard({
+    x: viewport.width - width - gap, y: edge === "bottom" ? region.height - height - gap : gap, width, height,
+  }, region, occupied.map(rect => ({ ...rect, y: rect.y - offset })));
+  let x = position.x;
+  return cards.map(card => {
+    const placed = { ...card, x, y: position.y + offset + (edge === "bottom" ? height - card.height : 0) };
+    x += card.width + gap;
+    return placed;
+  });
+}
 export const temperatureLevels = [
   { label: "Cold", icon: "↓", color: "#83c9f4" }, { label: "Cool", icon: "◌", color: "#72d3cc" },
   { label: "Moderate", icon: "●", color: "#b5d590" }, { label: "Warm", icon: "♨", color: "#eac26f" },
@@ -334,13 +355,13 @@ export function metricNumber(value, unit) {
 }
 
 export const metricCards = [
-  { id: "cpu", group: "cpu", label: "EPYC · 16C / 32T", anchor: "cpu", x: 585, y: 535, series: ["cpu"], footer: ["cpu-clock", "cpu-power"] },
-  { id: "memory", group: "memory", label: "System memory · 128 GiB", anchor: "dimm-DDR4_A1", x: 1450, y: 480, series: ["memory-used"], footer: ["memory-cache"] },
-  { id: "gpu", group: "gpu", label: "RTX 2070 SUPER", anchor: "gpu", x: 585, y: 130, series: ["gpu-util", "gpu-encode"], footer: ["gpu-power"], fullness: "gpu-dedicated" },
+  { id: "nvme-root", group: "storage", label: "nvme0n1 · root + swap", anchor: "nvme-group", series: ["disk-nvme0n1-read", "disk-nvme0n1-write"], footer: [], fullness: "root-used", device: "nvme0n1" },
+  { id: "gpu", group: "gpu", label: "RTX 2070 SUPER", anchor: "gpu", series: ["gpu-util", "gpu-encode"], footer: ["gpu-power"], fullness: "gpu-dedicated" },
+  { id: "network", group: "network", label: "bond0 · 10GbE active-backup", anchor: "network-ports", series: ["net-bond0-rx", "net-bond0-tx"], footer: [] },
   { id: "storage", group: "storage", label: "HDD set · /data", anchor: "disk-bays", x: -220, y: 300, series: ["disk-array-read", "disk-array-write"], footer: [], fullness: "data-used", device: "array" },
-  { id: "nvme-root", group: "storage", label: "nvme0n1 · root + swap", anchor: "nvme-group", x: 1450, y: 0, series: ["disk-nvme0n1-read", "disk-nvme0n1-write"], footer: [], fullness: "root-used", device: "nvme0n1" },
-  { id: "nvme", group: "storage", label: "nvme1n1 · /data cache + extents", anchor: "nvme-group", x: 1450, y: 240, series: ["disk-nvme1n1-read", "disk-nvme1n1-write"], footer: [], fullness: "cache-used", device: "nvme1n1" },
-  { id: "network", group: "network", label: "bond0 · 10GbE active-backup", anchor: "network-ports", x: 585, y: -80, series: ["net-bond0-rx", "net-bond0-tx"], footer: [] },
+  { id: "nvme", group: "storage", label: "nvme1n1 · /data cache + extents", anchor: "nvme-group", series: ["disk-nvme1n1-read", "disk-nvme1n1-write"], footer: [], fullness: "cache-used", device: "nvme1n1" },
+  { id: "cpu", group: "cpu", label: "EPYC · 16C / 32T", anchor: "cpu", series: ["cpu"], footer: ["cpu-clock", "cpu-power"] },
+  { id: "memory", group: "memory", label: "System memory · 128 GiB", anchor: "dimm-DDR4_A1", series: ["memory-used"], footer: ["memory-cache"] },
   { id: "temperatures", group: "temperatures", label: "Component temperatures", anchor: "motherboard", x: 820, y: 660, series: ["temp-cpu", "temp-gpu"], footer: [], mobileOnly: true },
   { id: "fans", group: "fans", label: "Fan speeds · synthetic", anchor: "fan-hub", x: 440, y: 705, series: ["fan-hub"], footer: [], mobileOnly: true },
 ];

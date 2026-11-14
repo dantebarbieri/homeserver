@@ -472,9 +472,13 @@ card's grip, or focus it and use arrow keys (Shift moves farther). Charts can
 move anywhere inside the visible background, including beyond the chassis and
 SVG drawing bounds. Default placement avoids installed components, visible
 connector outlines, fixed sensor badges and other cards, using clear perimeter
-space before accepting overlap when space is exhausted. GPU/CPU cards get the
-nearby open case space; NVMe and memory cards prefer the right perimeter, and
-HDD charts prefer the left. Saved manual placements remain authoritative.
+space before accepting overlap when space is exhausted. Default cards form two
+ordered rows, listed **left to right**: **top — root NVMe, GPU, bond0;
+bottom — cache NVMe, EPYC, system memory**. Rows move as groups around
+obstacles rather than letting collision avoidance shuffle their order.
+The HDD card retains its existing left-side placement preferences and is
+reserved before the rows. Saved manual placements remain authoritative;
+**Reset layout** restores the new defaults without changing other preferences.
 Temperature badges stay by their reference
 hardware. CPU FAN1 sits on the PSU-side cooler fan and FAN2 on the GPU-side fan.
 Case fans have one standardized readout per bank (front three, middle three,
@@ -482,8 +486,10 @@ rear pair), without duplicate per-fan numeric captions. Both three-fan badges
 use the same FAN3 channel, not independent measurements. Artwork and readouts
 always follow displayed values; manual and snapshot previews have been retired.
 Hide/show fan speeds also covers the GPU fan percentage.
-Narrow screens and landscape windows up to 1800 px wide dock cards in a
-horizontally scrollable tray instead of crowding the hardware. Hardware filters retain
+Narrow screens, windows at most 900 px high, and landscape windows up to 1800 px
+wide dock cards in a horizontally scrollable tray instead of crowding the hardware.
+The tray follows the rows' left-to-right reading order, retaining the HDD card's
+fourth position between the two groups. Hardware filters retain
 only relevant overlays; connector inspection hides the overlay hit targets.
 Click a chart title, sensor badge, or a component's performance button for
 detailed graphs in a dismissible dialog.

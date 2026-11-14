@@ -1,6 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { metrics, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, placeMetricCard } from "./metric-model.mjs";
+import { metrics, metricCardRows, demoProfiles, demoValue, demoMemory, demoSeries, metricPath, metricNumber, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, placeMetricCard, placeMetricRow } from "./metric-model.mjs";
+
+test("card rows keep the requested order and align unequal card heights at the correct edge", () => {
+  const viewport = { width: 1200, height: 900 };
+  for (const [edge, ids] of Object.entries(metricCardRows)) {
+    const cards = ids.map((id, index) => ({ id, width: 206, height: 160 + index * 30 }));
+    const placed = placeMetricRow(cards, viewport, [], edge);
+    assert.deepEqual(placed.map(card => card.id), edge === "top" ? ["nvme-root", "gpu", "network"] : ["nvme", "cpu", "memory"]);
+    for (let index = 0; index < placed.length; index++) {
+      const card = placed[index];
+      assert.ok(card.x >= 10 && card.x + card.width <= viewport.width - 10);
+      assert.ok(card.y >= (edge === "top" ? 10 : viewport.height / 2));
+      assert.ok(card.y + card.height <= (edge === "top" ? viewport.height / 2 : viewport.height - 10));
+      if (index) {
+        assert.ok(card.x >= placed[index - 1].x + placed[index - 1].width + 10);
+        assert.equal(edge === "top" ? card.y : card.y + card.height,
+          edge === "top" ? placed[0].y : placed[0].y + placed[0].height);
+      }
+    }
+  }
+});
+
+test("row placement avoids reserved hardware or custom cards without reordering or mutating them", () => {
+  const viewport = { width: 1200, height: 900 }, reserved = [{ x: 900, y: 10, width: 280, height: 300 }];
+  const cards = metricCardRows.top.map(id => ({ id, width: 206, height: 200 }));
+  const original = structuredClone({ cards, reserved });
+  const placed = placeMetricRow(cards, viewport, reserved, "top");
+  assert.ok(placed.at(-1).x + placed.at(-1).width <= reserved[0].x - 10);
+  assert.deepEqual({ cards, reserved }, original);
+  assert.deepEqual(placeMetricRow([], viewport, reserved, "bottom"), []);
+});
 
 test("automatic callouts find clear background beyond nearby candidates without covering hardware", () => {
   const card = { x: 700, y: 80, width: 206, height: 234 };

@@ -1,4 +1,4 @@
-import { metricGroups, memoryColors, metricCards, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, metricTopology, cpuClockSpecification, placeMetricCard } from "./metric-model.mjs";
+import { metricGroups, memoryColors, metricCards, metricCardRows, metricBadges, metrics, demoProfiles, demoDisks, demoNics, demoSensors, demoFans, demoValue, demoSeries, demoMemory, metricPath, metricNumber, historyWindows, defaultHistoryWindows, historyLabel, sharedMetricScale, windowMetricScale, chartNumber, temperatureLevel, temperatureLevels, temperatureProfile, temperatureStops, temperatureAverage, performanceContext, storageDetails, metricTopology, cpuClockSpecification, placeMetricCard, placeMetricRow } from "./metric-model.mjs";
 
 const $ = id => document.getElementById(id);
 function el(tag, attrs = {}, text = "") {
@@ -42,7 +42,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
   } catch (error) {
     onError(`Viewing preferences could not be loaded: ${error.message}. Default layout is in use; saved data was not changed.`);
   }
-  const compactLayout = matchMedia("(max-width: 1000px), (max-width: 1800px) and (min-aspect-ratio: 1/1)");
+  const compactLayout = matchMedia("(max-width: 1000px), (max-height: 900px), (max-width: 1800px) and (min-aspect-ratio: 1/1)");
   let second = 86400, activePanel = "layers", disk = "array", nic = "bond0", cpuView = "cores", sensor = "all";
   let charts = [];
   let chartSequence = 0, helpSequence = 0, componentKey = "";
@@ -403,18 +403,36 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
       const rect = node.getBoundingClientRect();
       occupied.push({ x: rect.left - bounds.left, y: rect.top - bounds.top, width: rect.width, height: rect.height });
     }
-    const priority = ["gpu", "cpu", "nvme-root", "nvme", "memory", "network", "storage", "temperatures", "fans"];
-    const ordered = [...metricCards].sort((a, b) => Number(Boolean(settings.positions[b.id])) - Number(Boolean(settings.positions[a.id])) || priority.indexOf(a.id) - priority.indexOf(b.id));
-    for (const definition of ordered) {
-      const node = cards.get(definition.id), position = settings.positions[definition.id] ?? [definition.x, definition.y];
+    const visible = metricCards.filter(definition => !cards.get(definition.id).hidden && !definition.mobileOnly);
+    const positions = new Map(), rowIds = new Set(Object.values(metricCardRows).flat());
+    const reserve = (definition, p) => {
+      const node = cards.get(definition.id);
+      positions.set(definition.id, p);
+      occupied.push({ ...p, width: node.offsetWidth, height: node.offsetHeight });
+    };
+    for (const definition of visible.filter(card => settings.positions[card.id])) {
+      const node = cards.get(definition.id), p = point(...settings.positions[definition.id]);
+      reserve(definition, { x: Math.max(8, Math.min(bounds.width - node.offsetWidth - 8, p.x)), y: Math.max(8, Math.min(bounds.height - node.offsetHeight - 8, p.y)) });
+    }
+    for (const definition of visible.filter(card => !settings.positions[card.id] && !rowIds.has(card.id))) {
+      const node = cards.get(definition.id);
+      reserve(definition, placeMetricCard({ ...point(definition.x, definition.y), width: node.offsetWidth, height: node.offsetHeight }, bounds, occupied));
+    }
+    for (const [edge, ids] of Object.entries(metricCardRows)) {
+      const row = ids.flatMap(id => {
+        const definition = visible.find(card => card.id === id);
+        const node = cards.get(id);
+        return definition && !settings.positions[id] ? [{ id, width: node.offsetWidth, height: node.offsetHeight }] : [];
+      });
+      for (const p of placeMetricRow(row, bounds, occupied, edge)) reserve(visible.find(card => card.id === p.id), p);
+    }
+    for (const definition of metricCards) {
+      const node = cards.get(definition.id);
       const line = lines.get(definition.id);
       line.style.display = node.hidden || definition.mobileOnly ? "none" : "";
       if (node.hidden || definition.mobileOnly) continue;
-      const clampPoint = p => ({ x: Math.max(8, Math.min(bounds.width - node.offsetWidth - 8, p.x)), y: Math.max(8, Math.min(bounds.height - node.offsetHeight - 8, p.y)) });
-      let p = clampPoint(point(...position));
-      if (!settings.positions[definition.id]) p = placeMetricCard({ ...p, width: node.offsetWidth, height: node.offsetHeight }, bounds, occupied);
+      const p = positions.get(definition.id);
       node.style.left = `${p.x}px`; node.style.top = `${p.y}px`;
-      occupied.push({ ...p, width: node.offsetWidth, height: node.offsetHeight });
       const anchor = anchorBounds(definition.anchor);
       if (anchor) {
         const a = point(anchor.x + anchor.width / 2, anchor.y + anchor.height / 2);
