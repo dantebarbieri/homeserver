@@ -236,6 +236,10 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
 .mobile-metric-card { display: none; }
 .performance-chart { position: relative; min-width: 0; border: 1px solid #2c3b48; border-radius: 8px; padding: 12px; background: #101b26; }
 .metric-chart-heading { display: grid; gap: 6px; margin-bottom: 9px; font-size: 11px; color: #acbfce; }
+.metric-chart-labels { display: flex; flex-direction: row; justify-content: space-between; align-items: flex-end; gap: 6px; }
+.metric-series-label { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.metric-chart-separator { flex: none; }
+.metric-series-label:last-child:not(:first-child), .metric-chart-values > span:last-child:not(:first-child) { text-align: right; }
 .metric-chart-values { color: #e1e9ed; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; display: grid; grid-template-columns: repeat(var(--metric-series-count), minmax(0, 1fr)); gap: 8px; }
 .metric-chart-values > span { white-space: nowrap; }
 .metric-thresholds { margin-top: 10px; font-size: 10px; color: #a9bdcb; }

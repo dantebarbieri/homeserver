@@ -353,8 +353,8 @@ unchanged; this is not a schema migration.
 
 Each physical part's popup links its manual or datasheet; About's inventory
 omits repeated references and evidence text. URLs and qualifications live in `partReferences` in
-`board.mjs`. Except for the explicitly qualified AMD download below, linked
-PDFs were opened and matched to their stated product or family; vendor
+`board.mjs`. Linked PDFs were opened and matched to their stated product or
+family (AMD download availability subsequently confirmed by the user); vendor
 files/artwork are not bundled. The references include the
 Noctua cooler installation guide and redux specifications, exact Kingston
 datasheet, Samsung 990 EVO revision 1.1 datasheet, WD Red Plus product brief,
@@ -364,12 +364,13 @@ The Gigabyte PDF is a **generic graphics installation guide**, accompanied by
 the model-specific support page. The Broadcom 9300-8i guide is explicitly
 **candidate-model documentation**, not proof of the installed controller.
 Thermalright publishes an x8 hub PDF link, but it returned **HTTP 404** during
-verification; its official product page is linked with that limitation instead.
+verification and the user independently confirmed the 404; its working official
+product page is linked with that limitation instead.
 No x8 IR variant documentation is substituted. Manufacturer specifications and
 PDF references do not turn inferred hardware identities into confirmed facts.
-AMD's published EPYC 7003 family PDF could not be retrieved by the validation
-client; its link is labeled download-unverified and accompanied by the exact
-7313P specification page.
+AMD's published EPYC 7003 family PDF initially could not be retrieved by the
+validation client, but the user subsequently opened it successfully. Its
+download-unverified label is removed; the exact 7313P specification page remains.
 
 ## Sources and interpretation
 
@@ -490,6 +491,9 @@ detailed graphs in a dismissible dialog.
 Changing numbers occupy dedicated rows and fixed series columns, with tabular
 digits and non-wrapping readouts. Capacity, clock and memory summaries keep
 their label/value lines separate so updates do not resize cards or shift plots.
+Paired-series headings use a left label, centered separator and right label,
+bottom-aligned in a flex row. Their values use the same outer alignment and
+series colors in map cards, detail graphs and hardware popups.
 
 Performance includes CPU totals and 16-core/32-thread views, non-overlapping memory
 composition and swap (including a swap bar on the memory card), physical-disk

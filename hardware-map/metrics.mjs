@@ -103,13 +103,13 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     const box = el("article", { class: `performance-chart${compact ? " mini-chart" : ""}` });
     box.style.setProperty("--metric-series-count", ids.length);
     const header = el("div", { class: "metric-chart-heading" });
-    header.append(el("span", {}, title), el("span", { class: "metric-chart-values" }));
+    header.append(el("div", { class: "metric-chart-labels" }, title), el("div", { class: "metric-chart-values" }));
     if (ids.length > 1) {
       const labels = title.split(" / ");
       header.firstChild.replaceChildren(...ids.flatMap((id, index) => {
-        const label = el("span", {}, labels.length === ids.length ? labels[index] : metrics.get(id).label);
+        const label = el("span", { class: "metric-series-label" }, labels.length === ids.length ? labels[index] : metrics.get(id).label);
         label.style.color = traceColor(id, index, true);
-        return index ? [document.createTextNode(" / "), label] : [label];
+        return index ? [el("span", { class: "metric-chart-separator", "aria-hidden": "true" }, " / "), label] : [label];
       }));
     }
     const plot = svg("svg", { viewBox: "0 0 300 80", preserveAspectRatio: "none", role: "img", "aria-label": `${title} · synthetic history` });

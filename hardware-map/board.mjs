@@ -277,9 +277,9 @@ export const partReferences = {
     label: "Noctua NH-U9 TR4-SP3 installation manual (PDF)",
     url: "https://cdn.noctua.at/media/noctua_nh_u9_tr4-sp3_manual_en.pdf?download=true",
   }, {
-    label: "AMD EPYC 7003 family datasheet (PDF; download unverified)",
+    label: "AMD EPYC 7003 family datasheet (PDF)",
     url: "https://www.amd.com/content/dam/amd/en/documents/epyc-business-docs/datasheets/amd-epyc-7003-series-product-datasheet.pdf",
-    note: "Manufacturer-published family reference. Automated retrieval failed; use the exact-model specification page below if the PDF does not open.",
+    note: "Manufacturer-published family reference. Download opened successfully by the user; exact-model specifications are linked below.",
   }, {
     label: "AMD EPYC 7313P specifications (HTML)",
     url: "https://www.amd.com/en/products/processors/server/epyc/7003-series/amd-epyc-7313p.html",
