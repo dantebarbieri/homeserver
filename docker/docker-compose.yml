@@ -38,6 +38,10 @@ networks:
     ipam:
       config:
         - subnet: 10.253.240.8/29
+  arr-ai:
+    ipam:
+      config:
+        - subnet: 10.253.240.16/29
 
 # Centralized secrets for security visibility
 secrets:

@@ -29,7 +29,8 @@ class MissingSearchTests(unittest.TestCase):
     def app(self, movies, queue=()):
         app = radarr.App()
         app.api = Mock(side_effect=lambda path, *args: (
-            {"records": list(queue)} if path.startswith("/queue") else
+            {"records": [dict(r, id=i) for i, r in enumerate(queue)], "totalRecords": len(queue)}
+            if path.startswith("/queue") else
             movies if path == "/movie" else [] if not args else {"id": 123}
         ))
         return app
@@ -98,7 +99,7 @@ class UpgradeSearchTests(unittest.TestCase):
             app = lidarr.App()
         app.missing_hours = 0
         app.api = Mock(side_effect=lambda path, *args: (
-            {"records": []} if path.startswith("/queue") else
+            {"records": [], "totalRecords": 0} if path.startswith("/queue") else
             list(commands) if path == "/command" and not args else [] if not args else {"id": 1}
         ))
         with patch.object(engine, "DRY", dry), patch.object(engine, "QBIT_USER", ""), \

@@ -42,6 +42,39 @@ services:
     networks:
       - studio-whisper
 
+  # Opt in with COMPOSE_PROFILES=arr-ai after provisioning its independent key.
+  # Only maintenance helpers share this network; Ollama stays off the LAN.
+  studio-ollama:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    profiles: ["arr-ai"]
+    image: studio-ollama-tunnel
+    build:
+      context: dockerfiles/studio-whisper-tunnel
+      pull: true
+      args:
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
+    container_name: studio-ollama
+    dns: [192.168.50.100]
+    environment:
+      STUDIO_USER: _arrmaint
+      STUDIO_PORT: "11434"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ${DATA}/studio-ollama-tunnel:/state:ro
+    networks:
+      - arr-ai
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:11434/api/version"]
+      interval: 1m
+      timeout: 10s
+      start_period: 30s
+
 networks:
   starr:
   studio-whisper:
+  arr-ai:

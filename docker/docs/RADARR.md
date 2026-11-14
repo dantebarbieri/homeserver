@@ -7,6 +7,10 @@ checks Radarr's queue every 30 minutes. It only acts on items that have been
 stuck for at least 20 minutes (`GRACE_MINUTES`), so Radarr's own import and
 failure handling gets the first try.
 
+An optional [local AI recovery layer](ARR-MAINT-AI.md) runs after these rules.
+It can request native retries or metadata refreshes, but cannot force a movie
+mapping, override quality/availability or delete library files.
+
 | Stuck pattern | Fix |
 |---------------|-----|
 | Import blocked: "matched by ID, Manual Import required" (non-scene names such as `(Comedy) Netflix Originals - ...`), with exactly one file Radarr accepts | Manual import into the queued movie (copy for torrents to keep hardlinks, move for usenet) |

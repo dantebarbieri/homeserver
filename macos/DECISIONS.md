@@ -113,6 +113,9 @@ requirement.
   key from the server's address, and can only forward to the Whisper adapter
   ([`ai/002-bazarr-forwarding.conf`](ai/002-bazarr-forwarding.conf),
   [setup](ai/README.md#bazarr-transport-and-cutover)).
+- Maintenance's independent `_arrmaint` account has the same forward-only
+  restrictions but can reach only Ollama at `127.0.0.1:11434`
+  ([setup](ai/README.md#ollama-transport)); it cannot reach Whisper.
 - Alternative Dante raised: reach the Studio only through the server
   (`ProxyJump`).
 
@@ -193,8 +196,9 @@ yet applied. DNS naming and transport are independent: use
 - **SSH tunnels** remain appropriate for private non-HTTP resources (today:
   Samba and the Tdarr node port); an HTTP reverse proxy does not replace them.
 
-Today Whisper and Ollama listen only on the Studio's loopback. Only Bazarr
-reaches Whisper, through its SSH forward; nothing reaches Ollama.
+Whisper and Ollama listen only on the Studio's loopback. Only Bazarr reaches
+Whisper. The three *arr maintenance helpers reach Ollama through their
+separate `studio-ollama` SSH forward on the private `arr-ai` Docker network.
 
 ## Offload speech-to-text (Whisper)
 
@@ -282,11 +286,32 @@ media, so they are not in git.
 **Intent:** local models that can later add judgement to maintenance
 automations and notifications (for example, AI-enhanced notification events).
 
-**Current:** Ollama with `qwen3:8b` (5.2 GB, Q4); LaunchDaemon
-`com.danteb.studio-ollama` as `_studio` on `127.0.0.1:11434`; cloud features
-off. Only a structured-output smoke test has run, and nothing uses it. An agent
-picked the runtime and model; choose them for real when the first automation
-exists.
+**Current:** Ollama's `com.danteb.studio-ollama` LaunchDaemon runs as `_studio`
+on `127.0.0.1:11434`, with cloud features off. The *arr maintenance integration
+selects `qwen3.5:9b-q4_K_M` (6.6 GB); the original `qwen3:8b` (5.2 GB) is
+retained. Both runtime and model remain agent-chosen implementations.
+
+**Dante's requirement (2026-11-14):** reduce manual interventions and reliance
+on the cloud "Lidarr queue watch" by using local decisions for Radarr, Sonarr
+and Lidarr (possibly Bazarr later). He permits model-assisted removal and
+blocklisting only when independent checks also agree.
+
+**Implementation:** existing deterministic maintenance runs first, then a
+bounded local decision layer can request native import/metadata retries,
+recheck missing-file torrents, or remove confirmed imported orphan torrent
+entries **without deleting any files**. The model cannot execute code, force
+identity mappings, override profiles or delete library files. State, retries,
+pre-execution checks and later verification live in the server helpers.
+The new `_arrmaint` SSH account and server-only key give only the helpers
+access to Ollama. Bazarr's subtitle work and the cloud watch schedule are not
+changed by this integration.
+
+The old model chose the expected action on 6/10 synthetic raw cases (7/10 with
+thinking); the selected 9B GGUF model chose 10/10 with thinking off, around a
+second per warm request. Hard code vetoes remain mandatory. The plain
+`qwen3.5:9b` alias selected a runtime variant without structured-output support,
+so the explicit quantized tag is deliberate. These results are not a general
+safety or accuracy guarantee. See [scope, evaluation and rollout](../docker/docs/ARR-MAINT-AI.md).
 
 ## Offload video encoding (Tdarr)
 
@@ -436,6 +461,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Admin setup | `/etc/ssh/sshd_config.d/000-studio-hardening.conf`, `/etc/resolver/home.arpa`, dotfiles, `~/.ssh` | Keep unless replacing |
 | Whisper, Ollama | `com.danteb.studio-whisper`, `com.danteb.studio-ollama`; models in the worker home | `sudo launchctl bootout system/<label>`, delete the plist and worker data |
 | Bazarr forwarding account | `_bazarr`, `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf`, `/etc/ssh/bazarr-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#bazarr-transport-and-cutover) |
+| Maintenance forwarding account | `_arrmaint`, `/etc/ssh/sshd_config.d/003-arr-maint-forwarding.conf`, `/etc/ssh/arr-maint-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#ollama-transport) |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
 | Isolated Tdarr lab (removed 2026-11-13) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-media.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Removed after explicit authorization. Preflight found regular files/directories only, no symlinks or special files; post-check confirmed all five targets absent |

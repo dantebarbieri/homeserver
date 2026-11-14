@@ -213,9 +213,13 @@ services:
       NTFY_URL: https://ntfy.danteb.com
       NTFY_TOPIC: homeserver-alerts
       NTFY_TOKEN_FILE: /run/secrets/ntfy-publisher-token
+      ARR_AI_MODE: ${ARR_AI_MODE:-off}
+      ARR_AI_URL: http://studio-ollama:11434
+      ARR_AI_MODEL: qwen3.5:9b-q4_K_M
     networks:
       - proxy
       - starr
+      - arr-ai
     volumes:
       - ${DATA}/lidarr/config/config.xml:/lidarr/config.xml:ro
       - ${DATA}/lidarr-maint:/state
@@ -308,3 +312,4 @@ networks:
   music-maintenance:
   flaresolverr:
   studio-whisper:
+  arr-ai:

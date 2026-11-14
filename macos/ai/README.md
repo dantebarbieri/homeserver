@@ -75,6 +75,60 @@ not truth or safety: automation must independently validate all outputs and
 initially produce read-only shadow recommendations. Never give the model shell,
 deletion or restart authority.
 
+## Ollama transport
+
+The *arr maintenance integration uses `qwen3.5:9b-q4_K_M` (6.6 GB), selected
+through [read-only model comparisons and deterministic guard tests](../../docker/docs/ARR-MAINT-AI.md).
+Keep the explicit GGUF tag: `qwen3.5:9b` selected a different runtime variant
+on this Mac which returned HTTP 501 for schema-constrained output.
+The old `qwen3:8b` remains available, but is not the integration's selected model.
+
+The server's `studio-ollama` container reuses the SSH forward image with
+`STUDIO_PORT=11434` and its own `_arrmaint` identity. Only `lidarr-maint`,
+`radarr-maint` and `sonarr-maint` share `arr-ai` with it. There is no published
+port, proxy host or access through Bazarr's Whisper network.
+The client sends the upstream loopback `Host` header through the tunnel;
+Ollama otherwise rejects POSTs using the Docker service hostname with HTTP 403.
+Do not weaken Ollama's origin protection with a wildcard to work around this.
+
+Provision it independently of Bazarr:
+
+```sh
+# Server: create a private key directory; never copy the private key to Studio.
+sudo install -d -o danteb -m 700 /srv/docker/data/studio-ollama-tunnel
+umask 077
+ssh-keygen -t ed25519 -N '' -C arr-maint@homeserver -f /srv/docker/data/studio-ollama-tunnel/id_ed25519
+ssh studio cat /etc/ssh/ssh_host_ed25519_key.pub | awk '{print "ai-studio", $1, $2}' > /srv/docker/data/studio-ollama-tunnel/known_hosts
+```
+
+Copy only `id_ed25519.pub` to a trusted Studio staging directory. From a trusted
+checkout of this directory on Studio:
+
+```sh
+sudo /bin/bash provision-ai-forwarding.sh ollama /path/to/id_ed25519.pub
+OLLAMA_HOST=127.0.0.1:11434 ollama pull qwen3.5:9b-q4_K_M
+```
+
+The installer verifies candidate/live sshd policy and preserves the admin
+policy. `_arrmaint` uses `/var/empty`, has no usable password, belongs to the
+Remote Login group but not `admin`/`wheel`, and cannot open a session. Its
+root-owned `/etc/ssh/arr-maint-forwarding-keys` and
+`/etc/ssh/sshd_config.d/003-arr-maint-forwarding.conf` restrict its server key
+to forwarding only `127.0.0.1:11434` from the homeserver's address.
+`provision-bazarr-forwarding.sh` now delegates its unchanged Whisper setup to
+the same installer; the two accounts, keys and allowed destinations stay separate.
+
+Enable the `arr-ai` Compose profile and start in `ARR_AI_MODE=shadow`, then
+switch to `auto` only after checking real recommendations. See the integration
+document for rollout, verification, budgets and rollback.
+
+To retire the connection, first disable model assistance and stop
+`studio-ollama`. Remove its key directory on the server and the two
+`arr-maint-forwarding-*`/`003-arr-maint-forwarding.conf` files on Studio;
+remove `_arrmaint` from `com.apple.access_ssh`, then delete that service account.
+Validate sshd before closing the existing admin session. Ollama and the
+Whisper/Tdarr accounts need not be changed.
+
 ## Bazarr-compatible adapter
 
 The adapter implements the Bazarr Whisper provider's raw 16 kHz, mono,

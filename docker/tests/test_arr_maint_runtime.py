@@ -40,7 +40,7 @@ class RuntimeGuardTests(unittest.TestCase):
         app.qbit = Mock()
         app.api = Mock(side_effect=lambda path, *args: (
             movies if path == "/movie" else list(events) if path.startswith("/history/movie") else
-            {"records": []} if path.startswith("/queue") else [] if not args else None
+            {"records": [], "totalRecords": 0} if path.startswith("/queue") else [] if not args else None
         ))
         return app
 
@@ -163,7 +163,7 @@ class AlertTests(unittest.TestCase):
         app = FakeApp()
         app.connect_qbit = Mock(return_value=qbit)
         app.api = Mock(side_effect=lambda path, *args: (
-            {"records": rows} if path.startswith("/queue") else
+            {"records": rows, "totalRecords": len(rows)} if path.startswith("/queue") else
             [{"implementation": "QBittorrent", "fields": [{"name": "musicCategory", "value": "music"}]}]
             if path == "/downloadclient" else []))
         with patch.object(engine, "DRY", False), patch.object(engine, "GRACE", 0), patch.object(engine, "QBIT_USER", "user"), \
