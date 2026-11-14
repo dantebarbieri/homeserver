@@ -7,6 +7,7 @@
     defaultUserShell = pkgs.zsh;
     users.danteb = {
       isNormalUser = true;
+      linger = true;
       extraGroups = [ "docker" "wheel" ];
       openssh.authorizedKeys.keys = [
         "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBH5PB799wDZ5lqHUn0HDnEudAaUk9ihMYk2/vE7O8ZZ+ykEEycFa1BFxVP4EnIe9J9jyD9GVYs2vgngMNFEmeAE=" # Dante's iPhone (Termius)
