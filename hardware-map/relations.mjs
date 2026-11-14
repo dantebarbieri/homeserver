@@ -8,6 +8,8 @@ const baysPerCage = [1, 2, 3, 4];
 export const driveIds = driveCages.flatMap(cage => baysPerCage.map(bay => driveBayId(cage.number, bay)));
 export const caseFanIds = ["front", "middle"].flatMap(region => [1, 2, 3].map(number => caseFanId(region, number)));
 export const rearFanIds = [1, 2].map(rearFanId);
+// Only genuinely uncertain sources are marked on the site; user-supplied facts are shown plainly.
+export const flaggedProvenance = new Set(["photo-inferred", "photo-uncertain", "unverified"]);
 
 const tachFanId = components.find(component => component.id === "case-fans").tachPartId;
 const driveRoutes = new Map(driveCages.flatMap(cage => baysPerCage.map(bay => [

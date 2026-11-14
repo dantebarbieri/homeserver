@@ -7,7 +7,7 @@ import { LiveData } from "./live-data.mjs";
 import { createBottomSheet } from "./mobile-ui.mjs";
 import { setupPwa } from "./pwa.mjs";
 import { createServicesUI } from "./services.mjs";
-import { driveBayId, caseFanId, rearFanId, driveInfo, relationsFor, psuSocketLinks } from "./relations.mjs";
+import { driveBayId, caseFanId, rearFanId, driveInfo, relationsFor, psuSocketLinks, flaggedProvenance } from "./relations.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -142,9 +142,9 @@ function linkButton(link) {
   const label = link.kind === "part" ? target.label : link.id;
   const button = element("button", {
     type: "button", class: "link-button", "data-link-id": link.id, "data-link-kind": link.kind,
-    title: link.provenance ? `${label} · ${provenanceLabels[link.provenance]}` : label,
+    title: label,
   }, link.short ?? label);
-  if (link.provenance) button.dataset.provenance = link.provenance;
+  if (flaggedProvenance.has(link.provenance)) button.dataset.provenance = link.provenance;
   button.addEventListener("click", () => showRef({ kind: link.kind, id: link.id }));
   return button;
 }
@@ -161,7 +161,7 @@ function appendLinkGroups(host, groups) {
       const row = element("li");
       row.append(button);
       if (link.detail) row.append(element("span", { class: "compact muted" }, link.detail));
-      if (["photo-inferred", "photo-uncertain", "unverified"].includes(link.provenance)) {
+      if (flaggedProvenance.has(link.provenance)) {
         row.append(element("span", { class: "link-provenance" }, provenanceLabels[link.provenance]));
       }
       list.append(row);
@@ -441,8 +441,8 @@ function renderBoard() {
   board.replaceChildren();
   const enclosure = hardwarePart("chassis", null, "Rosewill RSV-L4500U", "Original top-view schematic informed by inspection photos. Case-part positions, proportions and component outlines are approximate, not measured.", [], {
     model: "Rosewill RSV-L4500U · 4U rack chassis", capacity: "15 HDD bays · 12 installed / 3 empty",
-    status: "Chassis model user-reported; bay capacity and installed count user-confirmed",
-    note: "Fan faces are unfolded for identification, not mounting angle. User confirms four HDDs plus the bottom bay empty in each front-view cage. Cage 1 uses HBA leads P1–P4 top-to-bottom; cage 2 uses SATA 4–7 leads 0–3; cage 3 uses SATA 0–3 leads 0–3, both top-to-bottom. Mounting clearances remain unmeasured.",
+    status: "Chassis model, bay capacity and installed count established",
+    note: "Fan faces are unfolded for identification, not mounting angle. Each front-view cage has four HDDs plus an empty bottom bay. Cage 1 uses HBA leads P1–P4 top-to-bottom; cage 2 uses SATA 4–7 leads 0–3; cage 3 uses SATA 0–3 leads 0–3, both top-to-bottom. Mounting clearances remain unmeasured.",
   });
   enclosure.append(svgElement("rect", { x: 35, y: 65, width: 1365, height: 725, rx: 9, class: "chassis-shell part-outline" }));
   for (const y of [81, 774]) enclosure.append(svgElement("path", { d: `M50 ${y} H1383`, class: "chassis-rail" }));
@@ -512,7 +512,7 @@ function renderBoard() {
   lan.append(svgElement("rect", { x: 1260, y: 275, width: 42, height: 43, rx: 2, class: "lan-chip part-outline" }));
   lan.append(svgElement("text", { x: 1281, y: 300, class: "hardware-label centered" }, "X550"));
   hardware.append(lan);
-  const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. User confirms four HDDs with the bottom bay empty in each cage.", driveCages.map(cage => cage.connectorId), {
+  const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. Each cage has four HDDs with its bottom bay empty.", driveCages.map(cage => cage.connectorId), {
     connectionNote: "Cage 1 → SAS 9300-8i, P1–P4 top-to-bottom; cage 2 → SATA 4–7, leads 0–3 top-to-bottom; cage 3 → SATA 0–3, leads 0–3 top-to-bottom. Separate SATA power harnesses from PSU S4/S5/S2 respectively. Four spare HBA SATA data ends have no drives or SATA power.",
   });
   const individualDisks = [];
@@ -543,7 +543,7 @@ function renderBoard() {
     for (let i = 0; i < 3; i += 1) {
       const id = caseFanId(region, i + 1);
       const returnsTach = componentById.get("case-fans").tachPartId === id;
-      const fan = hardwarePart(id, "case-fans", `${region === "front" ? "Front" : "Middle"} Noctua NF-P12 redux-1700 PWM ${i + 1} · ${returnsTach ? "FAN3 tach return" : "shared FAN3 hub"}`, `User confirms all six blow front to rear. ${returnsTach ? "This is the PSU-side middle fan supplying the hub's single tach return (user-confirmed 2026-11-13)." : "No individual RPM reading or hub-port assignment is known for this fan."} Positions are schematic and fan faces are unfolded, not a cable or measured airflow trace.`, ["FAN3"], returnsTach ? { readingId: "FAN3" } : {});
+      const fan = hardwarePart(id, "case-fans", `${region === "front" ? "Front" : "Middle"} Noctua NF-P12 redux-1700 PWM ${i + 1} · ${returnsTach ? "FAN3 tach return" : "shared FAN3 hub"}`, `All six blow front to rear. ${returnsTach ? "This is the PSU-side middle fan supplying the hub's single tach return." : "No individual RPM reading or hub-port assignment is known for this fan."} Positions are schematic and fan faces are unfolded, not a cable or measured airflow trace.`, ["FAN3"], returnsTach ? { readingId: "FAN3" } : {});
       drawFan(fan, x, 159 + i * 196, 94, true);
       hardware.append(fan);
     }
@@ -567,7 +567,7 @@ function renderBoard() {
   hub.append(svgElement("text", { x: 682, y: 455, class: "hardware-subtitle" }, "6 FANS / 1 TACH"));
   hardware.append(hub);
   for (let i = 0; i < 2; i += 1) {
-    const fan = hardwarePart(rearFanId(i + 1), "rear-fans", `Rear 80 mm fan ${i + 1} · Molex chain B`, "Rear bank is photo-informed; centers and mounting geometry are approximate. Width is specification-based plus user-confirmed factory-original fans, not photo-measured.", [], {
+    const fan = hardwarePart(rearFanId(i + 1), "rear-fans", `Rear 80 mm fan ${i + 1} · Molex chain B`, "Rear bank is photo-informed; centers and mounting geometry are approximate. Width is specification-based for the factory-original fans, not photo-measured.", [], {
       connectionNote: "Shared Molex harness from PSU S6. No motherboard tach/control connection.",
     });
     drawFan(fan, 1314, 420 + i * 111, 63);
@@ -590,7 +590,7 @@ function renderBoard() {
   }
   for (const socket of ["DDR4_A1", "DDR4_B1", "DDR4_G1", "DDR4_H1"]) {
     const { x, y, width, height } = landscapeBounds(connectorById.get(socket));
-    const dimm = hardwarePart(`dimm-${socket}`, "memory", `${socket} / Kingston 32 GB ECC DIMM`, "User confirms KSM32RD4/32HDR modules, 32 GB each, in A1/B1/G1/H1. Board positions follow the manual; module heights and appearance are schematic.", [socket]);
+    const dimm = hardwarePart(`dimm-${socket}`, "memory", `${socket} / Kingston 32 GB ECC DIMM`, "KSM32RD4/32HDR modules, 32 GB each, in A1/B1/G1/H1. Board positions follow the manual; module heights and appearance are schematic.", [socket]);
     dimm.append(svgElement("rect", { x, y: y - 4, width, height: height + 5, rx: 1, class: `dimm-body part-outline ${["DDR4_A1", "DDR4_H1"].includes(socket) ? "blue-slot" : ""}` }));
     for (let i = 0; i < 8; i += 1) {
       dimm.append(svgElement("rect", { x: x + 8 + i * 25, y: y - 1, width: 17, height: height - 1, class: "dimm-chip" }));
@@ -617,7 +617,7 @@ function renderBoard() {
   cpu.append(svgElement("text", { x: cpuBounds.x + cpuBounds.width / 2, y: cpuBounds.y + 61, class: "cooler-sublabel" }, "UNDER NH-U9 TR4-SP3"));
   hardware.append(cpu);
 
-  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / PCIE4", "PCIE4 placement and PCIE3/PCIE2 cooler obstruction are user-confirmed. Outline, exact footprint and M.2 clearance are unmeasured.", ["PCIE4", "PCIE3", "PCIE2"], {
+  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / PCIE4", "Sits in PCIE4; its cooler covers PCIE3/PCIE2. Outline, exact footprint and M.2 clearance are unmeasured.", ["PCIE4", "PCIE3", "PCIE2"], {
     readingId: "gpu",
     connectionNote: "Auxiliary GPU power comes directly from PSU C1. The motherboard's separate GFX_12V1 connector is empty.",
   });
@@ -628,7 +628,7 @@ function renderBoard() {
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 26, class: "hardware-label" }, "GIGABYTE / RTX 2070 SUPER"));
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 45, class: "hardware-subtitle" }, "PCIE4 · PCIE3/2 COVERED · M.2 OVERHANG"));
   hardware.append(gpu);
-  const hba = hardwarePart("hba", "hba", "SAS 9300-8i / PCIE1", "Model, PCIE1 placement and cage 1 routing are user-confirmed. Outline, spacing and airflow impact are not measurements.", ["PCIE1", "HBA_DATA"], {
+  const hba = hardwarePart("hba", "hba", "SAS 9300-8i / PCIE1", "Sits in PCIE1 and serves cage 1. Outline, spacing and airflow impact are not measurements.", ["PCIE1", "HBA_DATA"], {
     connectionNote: "Cage 1 uses breakout leads P1, P2, P3, P4 top-to-bottom. The second breakout has four spare SATA data ends with no drives or SATA power.",
   });
   const hbaSlot = landscapeBounds(connectorById.get("PCIE1"));
@@ -756,7 +756,7 @@ function renderComponentDetails() {
   if (!part.connectorIds.length) {
     $("component-connectors").append(element("p", { class: "compact muted" },
       part.componentId === "rear-fans"
-        ? "Reported PSU/Molex power only; no motherboard tach or control connection."
+        ? "PSU Molex power only; no motherboard tach or control connection."
         : "No connector assigned"));
   }
 }

@@ -60,7 +60,7 @@ export const linuxSnapshot = {
   bonds: [{ id: "bond0", mode: "active-backup", activeSlave: "enp66s0f1", members: ["enp66s0f0", "enp66s0f1"] }],
   associations: [
     { targets: ["disk-bays", "disks"], nodes: hddIds, note: "These are the twelve installed HDDs as Linux sees them. None is assigned to a specific cage/bay; list order is NOT physical placement." },
-    { targets: ["hba", "PCIE1"], nodes: ["hba-controller", "sda", "sdb", "sdc", "sdd"], note: "Kernel sysfs paths attach these four HDDs to the mpt3sas controller. PCIE1 is the user-confirmed HBA location; PCI IDs describe the controller rather than independently establishing the board SKU." },
+    { targets: ["hba", "PCIE1"], nodes: ["hba-controller", "sda", "sdb", "sdc", "sdd"], note: "Kernel sysfs paths attach these four HDDs to the mpt3sas controller. PCIE1 is the HBA location; PCI IDs describe the controller rather than independently establishing the board SKU." },
     { targets: ["SATA_0_3", "SATA_4_7"], nodes: sataIds, note: "Eight HDDs use onboard ahci controllers. The split between these two physical breakout headers is not traced; these are candidates, not eight connections on this header." },
     { targets: ["drive-M2_1", "drive-M2_2", "M2_1", "M2_2"], nodes: ["nvme0n1", "nvme1n1"], note: "Both Linux NVMe devices are known, but their M2_1/M2_2 socket assignments are not. Older sensor labels NVMe A/B are also unbound; do not identify a socket by list order." },
     { targets: ["network-ports", "rear-io"], nodes: ["enp66s0f0", "enp66s0f1", "bond0", "enp72s0f3u2u3c2"], note: "Two Intel interfaces form bond0; the AMI USB virtual NIC is separate. LAN1/LAN2-to-interface pairing is not established, and the dedicated BMC LAN has no host-interface binding." },

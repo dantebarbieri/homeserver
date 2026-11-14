@@ -179,8 +179,9 @@ feeds. Case fans link to the hub and to each other; no hub port numbers are
 claimed because they have not been traced. Navigation never changes the
 selected view mode or category. Links are defined in `relations.mjs`; the
 CPU and motherboard are reached through the `ATX12V1`/`ATXPWR1` connector pages
-rather than directly from the PSU. Provenance that is not confirmed appears
-beside or inside the link (button tooltip for user-reported sockets).
+rather than directly from the PSU. Facts the owner supplied are shown plainly;
+only uncertain provenance (photo-inferred, photo-uncertain, unverified) gets a
+marker beside the link (`flaggedProvenance` in `relations.mjs`).
 
 ### Services
 

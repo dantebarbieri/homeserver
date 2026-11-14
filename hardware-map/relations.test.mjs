@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { connectorById, driveCages, psuPorts } from "./board.mjs";
-import { caseFanIds, driveBayId, driveIds, driveInfo, psuSocketLinks, relationsFor, rearFanIds } from "./relations.mjs";
+import { connectorById, connectors, driveCages, inspectionConnections, psuPorts } from "./board.mjs";
+import { caseFanIds, driveBayId, driveIds, driveInfo, flaggedProvenance, psuSocketLinks, relationsFor, rearFanIds } from "./relations.mjs";
 
 const source = readFileSync(new URL("./app.mjs", import.meta.url), "utf8");
 const staticParts = [...source.matchAll(/hardwarePart\("([^"]+)"/g)].map(match => match[1]);
@@ -82,4 +82,20 @@ test("PSU sockets link only to what they feed", () => {
   assert.deepEqual(byId.S6, rearFanIds);
   for (const port of psuPorts) assert.equal(byId[port.id].length === 0, !port.targetId, `${port.id} empty state`);
   assert.deepEqual(relationsFor("psu"), []);
+});
+
+test("site-visible hardware text never attributes facts to the user", () => {
+  const attribution = /user[- ]?(reported|confirmed)|user (confirms|reports|accepts)|\(user|tentative/i;
+  const linkText = links => links.flatMap(link => [link.detail, link.short]);
+  const visible = [
+    ...connectors.map(connector => connector.detail),
+    ...Object.values(inspectionConnections).map(connection => connection.target),
+    ...psuPorts.map(port => port.target),
+    ...psuPorts.flatMap(port => linkText(psuSocketLinks(port.id))),
+    ...[...partIds].flatMap(id => relationsFor(id).flatMap(group => [group.title, ...linkText(group.links)])),
+    ...[...source.matchAll(/connectionNote: [`"]([^`"]+)/g)].map(match => match[1]),
+  ].filter(Boolean);
+  for (const text of visible) assert.doesNotMatch(text, attribution);
+  assert.ok(!flaggedProvenance.has("user-reported") && !flaggedProvenance.has("user-confirmed"));
+  assert.doesNotMatch(source, /title:[^\n]*provenance/, "link tooltips must not carry provenance");
 });
