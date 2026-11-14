@@ -232,6 +232,8 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
 .metric-badge { position: absolute; z-index: 2; font-size: 9px; padding: 4px 7px; color: var(--metric-color); background: #111c25f2; border-color: #475252; white-space: nowrap; pointer-events: auto; box-shadow: 0 2px 5px #0004; font-variant-numeric: tabular-nums; transform: translateY(-50%); }
 .metric-badge[data-align="center"] { transform: translate(-50%, -50%); }
 .metric-badge[data-align="end"] { transform: translate(-100%, -50%); }
+.portrait-map .metric-badge[data-badge="fan-cpu1"] { transform: translate(-50%, calc(-100% - 3px)); }
+.portrait-map .metric-badge[data-badge="fan-cpu2"] { transform: translate(-50%, 3px); }
 .metric-sensor-locations { margin: 12px 0; padding: 12px; border: 1px solid #3b4a50; border-radius: 6px; color: #b6cad8; font-size: 12px; line-height: 1.6; }
 .metric-sensor-locations summary { cursor: pointer; color: #dce5eb; }
 .metric-sensor-locations p { margin-top: 10px; }

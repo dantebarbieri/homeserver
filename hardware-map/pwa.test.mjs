@@ -89,12 +89,13 @@ test("installation rejects intercepted assets and activation only removes old Ch
   await assert.rejects(rejected.lifecycle("install"), /offline asset unavailable/);
   const sw = worker();
   await sw.lifecycle("install");
+  const [current] = sw.stores.keys();
   sw.stores.set("chasex-shell-old", new Map());
   sw.stores.set("unrelated-app", new Map());
   await sw.lifecycle("activate");
   assert.ok(!sw.stores.has("chasex-shell-old"));
   assert.ok(sw.stores.has("unrelated-app"));
-  assert.ok(sw.stores.has("chasex-shell-v1"));
+  assert.ok(sw.stores.has(current));
 });
 
 test("install metadata supplies real correctly sized Apple, standard and maskable PNG icons", async () => {
