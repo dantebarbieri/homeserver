@@ -53,6 +53,8 @@ services:
       pull: true
     image: jellyfin-finity:latest
     restart: unless-stopped
+    # 90-day cAdvisor total-memory peak was 58.93 GiB, including page cache.
+    mem_limit: 80g
     user: "${HOST_UID}:${HOST_GID}"
     environment:
       TZ: ${TZ}

@@ -189,6 +189,28 @@ class HealthCleanupTests(unittest.TestCase):
             self.assertNotIn(package, self.config["packages"])
         self.assertNotIn("khal list", self.config["shellInit"])
 
+    def test_fastfetch_layout_tracks_terminal_width_only_in_initial_shell(self):
+        script = re.search(
+            r"^if \[\[ \$SHLVL -eq 1 \]\]; then\n.*?^fi$",
+            self.config["shellInit"],
+            re.MULTILINE | re.DOTALL,
+        ).group(0)
+        for level in (1, 2):
+            for columns in (0, 1, 80, 95, 96, 120):
+                with self.subTest(level=level, columns=columns):
+                    result = subprocess.run(
+                        ["bash", "-c",
+                         "fastfetch() { printf '<%s>\\n' \"$*\"; }\n"
+                         f"SHLVL={level}\nCOLUMNS={columns}\n{script}"],
+                        check=True, capture_output=True, text=True,
+                    )
+                    expected = ""
+                    if level == 1:
+                        expected = (
+                            "<--logo-position top>\n" if 0 < columns < 96 else "<>\n"
+                        )
+                    self.assertEqual(result.stdout, expected)
+
     def test_nix_locate_uses_the_prebuilt_database(self):
         nix_index = self.config["nixIndex"]
         # Only the database-wrapped package works without a local index, and

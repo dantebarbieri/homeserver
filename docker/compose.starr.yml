@@ -68,10 +68,14 @@ services:
       file: compose.common.yml
       service: hotio-service
     container_name: bazarr
-    image: ghcr.io/hotio/bazarr:nightly
+    build:
+      context: dockerfiles/bazarr
+      pull: true
+    image: bazarr-whisper-status:latest
     networks:
       - proxy
       - starr
+      - studio-whisper
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DATA}/bazarr/config:/config
@@ -303,3 +307,4 @@ networks:
   starr:
   music-maintenance:
   flaresolverr:
+  studio-whisper:

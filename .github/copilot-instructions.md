@@ -8,10 +8,13 @@ This is a monorepo for a NixOS-based homeserver running 50+ Docker containers. D
 
 - `docker/` — Docker Compose orchestration (18 category files, 50+ services)
 - `nixos/` — NixOS system configuration (flake; `configuration.nix` imports `modules/`; Home Manager in `home/`)
+- `macos/` — Mac Studio (`ai-studio`) compute companion: isolated native speech/models and a disabled native Tdarr node
 - `homepage/` — Homepage dashboard YAML config
 - `mail-config/` — Portable email/contacts setup (aerc, khard, vdirsyncer)
 - `recyclarr-configs/` — TRaSH Guides quality profiles for Sonarr/Radarr
 - `production-configs/` — Gitignored dir for production config copies (only `README.md` tracked)
+
+The Mac Studio is set up by hand, not declaratively. Read `macos/DECISIONS.md` before changing it: it separates Dante's intents from agent-chosen implementations (which may be replaced with better solutions), and lists where every piece lives and how to remove it. Update it with any Studio change. Server cooling findings are in `docs/SERVER-COOLING.md`.
 
 ### Production Server
 

@@ -1,0 +1,85 @@
+# Private file and control-plane transport for the native Mac Studio Tdarr node.
+services:
+  studio-media-share:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: ghcr.io/servercontainers/samba@sha256:31b90ea7fe3258d30fccd971c85743b92694605f4b43dc8a4df23a202fced06a
+    container_name: studio-media-share
+    profiles: [studio-transfer]
+    env_file:
+      - path: ${DATA}/studio-transfer/samba.env
+        required: true
+    environment:
+      TZ: ${TZ}
+      UID_studio: ${HOST_UID}
+      AVAHI_DISABLE: "1"
+      WSDD2_DISABLE: "1"
+      NETBIOS_DISABLE: "1"
+      FAIL_FAST: "1"
+      SAMBA_CONF_MAP_TO_GUEST: Never
+      SAMBA_GLOBAL_STANZA: "server min protocol = SMB3; server signing = mandatory; smb ports = 445; wide links = no; follow symlinks = no"
+      SAMBA_VOLUME_CONFIG_media: "[media]; path = /shares/media; valid users = studio; guest ok = no; read only = yes; browseable = no; wide links = no; follow symlinks = no"
+      SAMBA_VOLUME_CONFIG_cache: "[cache]; path = /shares/cache; valid users = studio; guest ok = no; read only = no; browseable = no; force user = studio; create mask = 0664; directory mask = 0775; wide links = no; follow symlinks = no"
+    healthcheck:
+      test: ["CMD", "smbcontrol", "smbd", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ${RAID}/shared/media:/shares/media:ro
+      - /tmp/tdarr_transcode_cache/studio-native:/shares/cache
+    networks:
+      - studio-transfer
+  # Docker does not publish ports on internal-only networks. This relay has no
+  # media mounts or credentials; smbd retains its isolated backend network.
+  studio-transfer-relay:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: alpine/socat@sha256:e8a6e8868a8e6e01d9c2c321a8f8d4474d2d741d962462e5c5a124a8e66a0055
+    container_name: studio-transfer-relay
+    profiles: [studio-transfer]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - "TCP-LISTEN:1445,fork,reuseaddr,max-children=16"
+      - "TCP:studio-media-share:445,connect-timeout=5"
+    depends_on:
+      studio-media-share:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:1445:1445/tcp"
+    networks:
+      - studio-transfer
+      - studio-transfer-listener
+  studio-tdarr-relay:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    image: alpine/socat@sha256:e8a6e8868a8e6e01d9c2c321a8f8d4474d2d741d962462e5c5a124a8e66a0055
+    container_name: studio-tdarr-relay
+    profiles: [studio-transfer]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - "TCP-LISTEN:8266,fork,reuseaddr,max-children=16"
+      - "TCP:tdarr:8266,connect-timeout=5"
+    ports:
+      - "127.0.0.1:8266:8266/tcp"
+    networks:
+      - starr
+
+networks:
+  starr:
+  studio-transfer:
+    internal: true
+  studio-transfer-listener:
+    # Default Docker pools are exhausted; this /29 does not overlap host routes.
+    ipam:
+      config:
+        - subnet: 10.253.240.0/29
