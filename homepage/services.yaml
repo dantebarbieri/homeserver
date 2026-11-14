@@ -442,11 +442,11 @@
             - { field: enabled, label: Enabled, format: text }
 
 - Monitoring:
-    - Server Atlas:
+    - ChasEx:
         icon: mdi-server
-        href: https://server-atlas.danteb.com
+        href: https://chasex.danteb.com
         description: Interactive Hardware & Live Telemetry
-        siteMonitor: https://server-atlas.danteb.com
+        siteMonitor: https://chasex.danteb.com
         server: my-docker
         container: server-atlas
     - Grafana:

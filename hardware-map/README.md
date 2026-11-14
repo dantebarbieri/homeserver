@@ -39,8 +39,12 @@ Online requests still go to the server, so SSO and live updates remain in force.
 Authentication may be required again when first opening the installed app.
 Keep the worker's asset list and cache version current when changing the shell.
 
-The existing URL, `server-atlas` container/unit identifiers, Prometheus metric
-names, private state directories and browser preferences remain unchanged.
+The canonical URL is <https://chasex.danteb.com>; the former
+`server-atlas.danteb.com` hostname redirects there, preserving paths and queries.
+Install the PWA from the canonical URL. Container/unit identifiers, Prometheus
+metric names and private state directories retain `server-atlas` for continuity.
+Browser preferences are origin-local and do not automatically move to the new
+hostname.
 
 ## Live service
 
@@ -126,7 +130,7 @@ The imported Nix module is the declarative equivalent for future rebuilds.
 Do not install both competing unit versions; the installer refuses to replace
 an already NixOS-managed unit. The Docker service has `restart: unless-stopped`.
 
-Before exposing it, add `server-atlas.danteb.com` to Authelia's **admins /
+Before exposing it, add `chasex.danteb.com` to Authelia's **admins /
 two_factor** rule, validate the configuration and restart only Authelia.
 `hardware-map/setup-proxy.sh` uses NPM's supported API and existing private
 monitor credentials, requires the existing wildcard certificate, and creates
