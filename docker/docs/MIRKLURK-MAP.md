@@ -399,7 +399,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.23** and **fd2b:92df:1a5b:1::17**, not
+`compose_proxy` addresses **192.168.128.36** and **fd2b:92df:1a5b:1::24**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -448,12 +448,86 @@ containers, including the scheduled 0111204 wiki runtime. Recreate only web
 using its actual image-ID override; do not rebuild, pull, rerun the wiki
 updater or change NPM. Revalidate complete IPv4/IPv6 bytes, protections,
 actual client identities, spoof resistance and one sharing/cleanup lifecycle.
+On 2026-11-14 the same NPM container restarted at 02:22 UTC and acquired
+.36 / ::24; Prowlarr owns the stale .23 / ::17 pair. Replace only those
+two entries after fresh exclusive ownership checks. Keep the accepted
+21abd3a images and recreate only web; no NPM API apply is indicated.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
 `X-Forwarded-For` / `X-Real-IP` / `X-Upload-IP` cannot change them.
 
 ## Guarded release
+
+### Explicit opt-in isolated source preparation for frozen unrelated edits
+
+Ordinary deployment still requires its existing whole-clean canonical tree.
+Do not silently ignore dirty paths, use another project, change nginx's mount,
+or change the daily updater. The separately authorized November14 exception
+uses `scripts/mirklurk-map-isolated.py` **from a standalone, wholly clean clone
+of the exact reviewed merged homeserver main**. It validates isolated source,
+then fast-forwards canonical main to that same revision without touching the
+two frozen unrelated edits. Activation remains the canonical main-entry
+same-image WEB-ONLY procedure; this is not an alternate runtime mount/stack.
+
+The exception accepts exactly **unstaged** modifications to
+`docker/monitoring/prometheus.yml` and `homepage/services.yaml`. Record their
+SHA256, device/inode, mode, size, mtime and index entries privately before
+preparation. `state(Path("/srv/homeserver"))` in the reviewed helper supplies
+that JSON without contents. Both paths must remain byte-for-byte/in place,
+and the entire candidate history must never touch them. Any other tracked,
+untracked or staged change, preservation conflict or host drift is a blocker.
+Candidate changes are restricted to this helper/tests/runbook/two nginx peers.
+The clone must have no tracked, untracked **or ignored** files, including .env.
+
+Before any host use, complete normal PR checks/review/authorized merge and
+exact merged-main CI. Reconfirm no operator window, current source/image and
+exclusive actual NPM addresses. Under the **existing** exclusive descriptor9
+shared lock, create a private standalone HTTPS clone, detach at the exact
+approved SHA, verify clean identity, and record prior edit fingerprints.
+Do not copy production credentials/environment into the clone. The helper
+passes canonical `docker/.env` directly to Compose without printing values.
+Rendering uses `config --no-env-resolution`: CLI interpolation still uses
+that canonical file, but unrelated service-level env files (such as Immich's)
+are not read from the clean clone. Map services must not declare any unresolved
+service env files; the helper rejects that additional dependency.
+
+```bash
+# Inside the coordinated exclusive-lock window; all arguments are exact,
+# freshly verified values. The caller keeps descriptor9 locked throughout.
+python3 "$isolated/docker/scripts/mirklurk-map-isolated.py" \
+  --source "$isolated" --base "$canonical_before" --revision "$reviewed_main" \
+  --edits "$private_edit_fingerprints" --proxy-id "$npm_id" \
+  --ipv4 "$npm_ipv4" --ipv6 "$npm_ipv6"
+```
+
+The helper requires ancestor-only canonical fast-forward, unchanged frozen
+edit identities/index, no dirty-path deployment dependency overlap, and
+clean/canonical map model equivalence after normalizing only clone-root paths.
+It validates project `compose`, referenced network/volume/secret identities,
+both accepted immutable images, wiki runtime, maintenance guards and the
+existing canonical read-only nginx bind with `create_host_path: false`.
+It fetches already-reviewed objects from the clean clone; no reset/remote
+change or direct file overwrite. No service operation occurs in the helper.
+No extra privileges are required. Preserve the clone/private fingerprints
+as acceptance evidence, not as a new scheduler or runtime dependency.
+
+After preparation, revalidate the same guards and use the existing private
+image-ID override with canonical `docker/docker-compose.yml`, project
+`compose`, `--no-deps --no-build --pull never --force-recreate --wait`
+for **mirklurk-map only**. Run the helper again with `--verify-only` before
+activation and after complete byte/protection acceptance; that mode requires
+exact canonical reviewed main and does not fetch/merge. Keep the lock until
+full IPv4/IPv6 file verification and unchanged-container/timer/mount checks
+finish. Then perform exactly one normal sharing/cleanup and independent
+client/identity acceptance, plus final frozen-edit verification.
+
+Recovery retains the same immutable web image and **current reviewed trust**
+at the same canonical bind source; never reinstate stale peers or alter the
+two edits. If preservation/contract checks fail, stop and report; do not
+clean/stash/commit/move edits or reset canonical. A prepared canonical tree
+remains intentionally dirty in only those two paths, so ordinary clean-tree
+deployments remain blocked until separately resolved by their owner.
 
 Update both image tags, full-SHA Git contexts, revision labels, this runbook,
 and the nginx contract together. Use only merged source with successful exact
