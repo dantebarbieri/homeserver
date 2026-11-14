@@ -108,7 +108,43 @@ Backend checks (synthetic fixtures, no real identifiers):
 uv run --no-project python -B -m unittest discover -s hardware-map\server -p "test_*.py"
 ```
 
-## What works
+## Read-only interface
+
+The public UI is a monitor, not an inventory editor. Select hardware or a
+connector for current graphs, logical devices, connection targets and pin
+functions. **About** holds the compact inventory and connector counts. Detailed
+inspection evidence, historical readings, source qualifications and drawing
+limitations live in these notes rather than repeated paragraphs on the map.
+
+History windows, layer visibility, graph scaling, chart placement, categories,
+zoom and **Fan motion: on/off** are viewing preferences only. The animation
+toggle honors Reduced Motion by default and allows an explicit session override;
+fan bands always follow displayed RPMs. There are no text-entry fields,
+annotation-save/import/export actions, manual RPM presets, scenario/playback
+controls or air-interpolation sliders. The static preview remains clearly
+**DEMO**; the deployed monitor is **LIVE**. Collection failures, missing/stale
+readings, provisional display-slot assignments and assumed rear RPM remain
+distinguishable. Removing evidence text does not upgrade uncertain identities
+or physical mappings.
+
+Existing browser annotations are still read and never rewritten by the UI.
+Their versioned model/validation helpers remain for compatibility and private
+maintenance; no storage key is cleared or migrated. Viewing preferences use a
+separate key. Legacy annotations can be backed up through browser developer
+tools using the `storageKey` exported by `model.mjs`; treat that content as private.
+
+Memory composition, its legend and the Applications / File cache / Kernel
+histories share `memoryColors`. Free RAM keeps the bar's dark blue-gray and uses
+a lighter related trace for contrast. Swap remains separate from RAM composition.
+Long explanatory text has been removed from the performance pages, while
+threshold legends and the VRAM help tooltip remain available on demand.
+The sensor/graph semantics and retained inspection evidence are documented below.
+
+### Archived prototype interfaces
+
+The following records the original inspection prototype and its retired editing,
+fan-study and interpolation interfaces. It is historical context, not a list of
+current UI controls. The read-only interface above supersedes it.
 
 - Explore a wide landscape chassis view with selectable installed hardware:
   EPYC under its NH-U9 cooler, reported populated DIMMs, GPU, HBA, bare M.2
@@ -311,8 +347,8 @@ unchanged; this is not a schema migration.
 
 ### Part documentation
 
-Each physical part's popup links its manual or datasheet; inventory cards expose
-the same references. URLs and qualifications live in `partReferences` in
+Each physical part's popup links its manual or datasheet; About's inventory
+omits repeated references and evidence text. URLs and qualifications live in `partReferences` in
 `board.mjs`. Except for the explicitly qualified AMD download below, linked
 PDFs were opened and matched to their stated product or family; vendor
 files/artwork are not bundled. The references include the
@@ -438,9 +474,9 @@ Temperature badges stay by their reference
 hardware. CPU FAN1 sits on the PSU-side cooler fan and FAN2 on the GPU-side fan.
 Case fans have one standardized readout per bank (front three, middle three,
 rear pair), without duplicate per-fan numeric captions. Both three-fan badges
-use the same FAN3 channel, not independent measurements. Snapshot/manual motion
-previews update these bank readouts as well as artwork; histories remain
-explicitly synthetic. Hide/show fan speeds also covers the GPU fan percentage.
+use the same FAN3 channel, not independent measurements. Artwork and readouts
+always follow displayed values; manual and snapshot previews have been retired.
+Hide/show fan speeds also covers the GPU fan percentage.
 Narrow screens and landscape windows up to 1800 px wide dock cards in a
 horizontally scrollable tray instead of crowding the hardware. Hardware filters retain
 only relevant overlays; connector inspection hides the overlay hit targets.
@@ -451,21 +487,20 @@ Changing numbers occupy dedicated rows and fixed series columns, with tabular
 digits and non-wrapping readouts. Capacity, clock and memory summaries keep
 their label/value lines separate so updates do not resize cards or shift plots.
 
-The lab includes CPU totals and 16-core/32-thread views, non-overlapping memory
+Performance includes CPU totals and 16-core/32-thread views, non-overlapping memory
 composition and swap (including a swap bar on the memory card), physical-disk
 busy time/read/write/latency/queue depth and a twelve-HDD comparison table,
-prominent filesystem fullness, GPU graphics/copy/encode/decode/dedicated and
-host-allocation graphs, network receive/send, and illustrative sensor/fan
-histories. Hover a plot to inspect past samples. Choose mixed, idle, transcode
-or transfer scenarios and windows from 1 minute to 24 hours; changing scenarios regenerates
-the entire invented history. **Play / Pause** controls one-second updates.
-Reduced Motion starts playback paused; Play is an explicit opt-in. Hidden
-browser tabs do not advance the simulated clock. Default histories are CPU/GPU/
+prominent filesystem fullness, GPU activity/encode/decode/dedicated-memory
+graphs, network receive/send, and sensor/fan histories. Unsupported GPU
+3D/copy/shared-memory plots are not offered. Hover a plot to inspect past
+samples and choose history windows from 1 minute to 24 hours. There are no
+scenario or playback controls. Hidden browser tabs skip plot redraws; live
+history remains in Prometheus. Default histories are CPU/GPU/
 network 2 minutes, memory 15 minutes, temperatures 30 minutes, fans 5 minutes,
 and storage 2 hours. Choices persist per view family rather than changing all
-graphs together. Long histories use at most 301 point samples, not peak-preserving
-aggregation or real retained measurements. A production collector should use
-appropriate downsampling and retention; these synthetic histories need no server.
+graphs together. Long histories use at most 301 points and are not
+peak-preserving aggregation. Production queries retained Prometheus history;
+the separate static preview generates explicitly synthetic fixtures.
 
 RX/TX and GPU-activity/encode overlays each share one explicit y-axis and
 consistent displayed units. Activity axes default to the peak of all overlaid
@@ -486,8 +521,7 @@ activity axes without discarding positions or annotations.
 The GPU card separates its prominent used/total/percent VRAM allocation and
 capacity-scaled VRAM history from the 0–100% engine activity/encode history.
 Allocated memory can persist while engines are idle; it does not prove that
-the GPU is busy. GPU power appears separately. 3D/copy/decode remain separate
-detail plots. General GPU utilization
+the GPU is busy. GPU power and encode/decode appear separately. General GPU utilization
 is neither 3D-only activity nor SM occupancy, and different engines must not be
 summed. CPU details include temperature plus FAN1 (PSU side) and FAN2 (GPU side);
 the card compares clock with the rated 3.7 GHz boost ceiling and 3 GHz base,
@@ -499,8 +533,8 @@ include core temperature and intended fan percentage; individual storage
 details include each device's available SMART temperatures. These contextual
 graphs remain visible when map/sensor-browser temperature or fan layers are
 hidden. The sensor browser uses pressed-state toggles with explicit shown/hidden
-labels. LIVE pages hide synthetic scenario/playback controls and the demo-only
-disclaimer. GPU allocation guidance is a keyboard-focusable/hover `?` tooltip.
+labels. Scenario/playback controls and repeated source disclaimers are removed
+from both modes. GPU allocation guidance is a keyboard-focusable/hover `?` tooltip.
 
 Hardware popups embed a subset of the same graph components and a saved
 per-family history selector. Disk popups use the current collected logical
@@ -526,18 +560,19 @@ controller/NAND probes. Individual HDD SMART temperatures depend on
 drive/controller support. NVMe and HDD badges remain grouped until physical
 socket/bay assignments are verified.
 
-GPU details and a shroud-side badge include one synthetic fan-speed percentage,
+GPU details and a shroud-side badge include one fan-speed percentage,
 not invented RPM or three independently measured fans. NVIDIA
 [NVML fan queries](https://docs.nvidia.com/deploy/archive/R535/nvml-api/group__nvmlDeviceQueries.html)
 report **intended speed** as a percentage; this does not prove physical rotation.
 The demo uses a 0–100% graph scale; it is not a universal NVML bound.
 Actual fan channel count, RPM support and zero-RPM behavior on this GPU/driver
-still need a later read-only capability check. No server query was made.
+are not inferred from that percentage.
 
 Two NVMe cards distinguish root/swap from `/data` cache **and ordinary extents**.
-Both anchor to the M.2 group, without guessing socket assignments. Cache
-occupancy is a synthetic used-block metric in this demo, not filesystem fullness or LV
-allocation. Storage details trace the existing snapshot's partitions, mdadm,
+Each anchors to its persisted display socket, which is not a physically verified
+binding. Cache occupancy comes from dm-cache in LIVE mode (synthetic only in
+the static preview), not filesystem fullness or LV allocation.
+Storage details trace the collected inventory's partitions, mdadm,
 volume groups, internal cache/origin LVs and mounts, preserving spare/member
 roles. Raw HDDs have no individual filesystem-fullness percentage.
 

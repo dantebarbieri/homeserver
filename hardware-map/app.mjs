@@ -1,5 +1,5 @@
-import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, inspectionConnections, occupancyLabels, provenanceLabels, snapshotDate, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, loadDocument, saveDocument, updateConnection, serializeDocument, parseDocument, withInspectionDefaults, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, readingFor, interpolateAir, maxImportBytes, storageKey } from "./model.mjs";
+import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, occupancyLabels } from "./board.mjs";
+import { emptyDocument, emptyConnection, loadDocument, withInspectionDefaults, occupancyCounts, matchesHardware, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, storageKey } from "./model.mjs";
 import { linuxSnapshot } from "./linux-snapshot.mjs";
 import { createMetricUI } from "./metrics.mjs";
 import { applyLiveSnapshot } from "./metric-model.mjs";
@@ -16,35 +16,26 @@ const sceneParts = new Map();
 let metricUI = null;
 let linuxTopology = buildLinuxTopology(linuxSnapshot);
 const dataSource = new LiveData({ enabled: document.querySelector('meta[name="atlas-data"]').content === "live" && new URLSearchParams(location.search).get("demo") !== "1" });
-let mode = "snapshot";
 let zoom = 100;
-let fanMotionPreview = "data";
 let metricFanFrame = null;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let fanRotationEnabled = !reducedMotion.matches;
 let fanRotationOverride = false;
 let linuxReturnId = null;
-let dirty = false;
-let storageBlocked = false;
-let pendingPersistence = false;
-let discardAction = null;
 const popupContexts = new Map();
 
 function notify(message, error = false) {
-  for (const id of ["notice", "detail-notice", "tools-notice"]) {
-    const notice = $(id);
-    notice.textContent = message;
-    notice.classList.toggle("error", error);
-    notice.setAttribute("role", error ? "alert" : "status");
-    notice.hidden = false;
-  }
+  const notice = $("notice");
+  notice.textContent = message;
+  notice.classList.toggle("error", error);
+  notice.setAttribute("role", error ? "alert" : "status");
+  notice.hidden = false;
 }
 
 try {
   inventory = withInspectionDefaults(loadDocument(window.localStorage));
 } catch (error) {
-  storageBlocked = true;
-  notify(`Saved map could not be loaded: ${error.message} Existing data was not overwritten. Import a valid JSON export to replace it; exports remain available for this tab.`, true);
+  notify(`Saved map could not be loaded: ${error.message} Inspection defaults are shown; existing browser data was not changed.`, true);
 }
 
 function element(tag, attributes = {}, text = "") {
@@ -61,31 +52,13 @@ function svgElement(tag, attributes, text = "") {
   return node;
 }
 
-function currentReadings() {
-  return mode === "snapshot" ? observedReadings : syntheticReadings;
-}
-
-function formatValue(value) {
-  return new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(value);
-}
-
-function formatReadingValue(reading) {
-  return `${reading.approximate ? "≈ " : ""}${formatValue(reading.value)}`;
-}
-
-function readingLabel(reading) {
-  return mode === "snapshot"
-    ? reading.observedAt ? `Observed ${reading.observedAt}; not live` : "Observed; capture date unavailable, not live"
-    : "Synthetic example";
-}
-
 function connectionFor(id) {
   return inventory.connections[id] ?? emptyConnection();
 }
 
 function describeConnection(id) {
   const connection = connectionFor(id);
-  return `${id}, ${occupancyLabels[connection.occupancy]}, ${connection.confidence} evidence, ${provenanceLabels[connection.provenance]}${connection.target ? ` to ${connection.target}` : ""}`;
+  return `${id}, ${occupancyLabels[connection.occupancy]}${connection.target ? ` · ${connection.target}` : ""}`;
 }
 
 function capturePopupContext() {
@@ -104,39 +77,22 @@ function openPopup(dialog, context = capturePopupContext()) {
   dialog.showModal();
 }
 
-function withCleanForm(action, label = "Discard edits & continue") {
-  if (!dirty) {
-    action();
-    return;
-  }
-  discardAction = action;
-  $("discard-edits").textContent = label;
-  $("discard-prompt").hidden = false;
-  $("keep-editing").focus({ preventScroll: true });
-}
-
 function inspect(changeSelection) {
-  withCleanForm(() => {
-    const context = $("inspector-dialog").open ? null : capturePopupContext();
-    changeSelection();
-    renderSelection();
-    $("inspector-title").textContent = selectedPartId ? sceneParts.get(selectedPartId).label : selectedId;
-    if (!$("inspector-dialog").open) openPopup($("inspector-dialog"), context);
-    metricUI?.refresh();
-    $("inspector-dialog").querySelector(".popup-body").scrollTop = 0;
-    $("close-inspector").focus({ preventScroll: true });
-  });
+  const context = $("inspector-dialog").open ? null : capturePopupContext();
+  changeSelection();
+  renderSelection();
+  $("inspector-title").textContent = selectedPartId ? sceneParts.get(selectedPartId).label : selectedId;
+  if (!$("inspector-dialog").open) openPopup($("inspector-dialog"), context);
+  metricUI?.refresh();
+  $("inspector-dialog").querySelector(".popup-body").scrollTop = 0;
+  $("close-inspector").focus({ preventScroll: true });
 }
 
 function requestPopupClose(dialog) {
-  if (dialog === $("inspector-dialog")) {
-    withCleanForm(() => dialog.close(), "Discard edits & close");
-  } else {
-    dialog.close();
-  }
+  dialog.close();
 }
 
-for (const id of ["inspector-dialog", "tools-dialog", "fan-motion-dialog", "metrics-dialog"]) {
+for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog"]) {
   const dialog = $(id);
   let backdropStart = false;
   const outside = event => {
@@ -157,10 +113,6 @@ for (const id of ["inspector-dialog", "tools-dialog", "fan-motion-dialog", "metr
     const context = popupContexts.get(dialog);
     popupContexts.delete(dialog);
     backdropStart = false;
-    if (dialog === $("inspector-dialog")) {
-      $("discard-prompt").hidden = true;
-      discardAction = null;
-    }
     if (!context) return;
     const opener = context.opener.isConnected ? context.opener : document.querySelector(context.selector ?? "#tools-button");
     opener?.focus({ preventScroll: true });
@@ -169,28 +121,10 @@ for (const id of ["inspector-dialog", "tools-dialog", "fan-motion-dialog", "metr
 }
 $("close-inspector").addEventListener("click", () => requestPopupClose($("inspector-dialog")));
 $("close-tools").addEventListener("click", () => requestPopupClose($("tools-dialog")));
-$("close-fan-motion").addEventListener("click", () => requestPopupClose($("fan-motion-dialog")));
-$("fan-motion-button").addEventListener("click", () => {
-  $("fan-motion-button").focus({ preventScroll: true });
-  openPopup($("fan-motion-dialog"));
-});
 $("tools-button").addEventListener("click", () => {
   $("tools-button").focus({ preventScroll: true });
   openPopup($("tools-dialog"));
 });
-$("keep-editing").addEventListener("click", () => {
-  discardAction = null;
-  $("discard-prompt").hidden = true;
-  $("note").focus({ preventScroll: true });
-});
-$("discard-edits").addEventListener("click", () => {
-  const action = discardAction;
-  discardAction = null;
-  dirty = false;
-  $("discard-prompt").hidden = true;
-  action();
-});
-
 function selectConnector(id) {
   if (!connectorById.has(id)) return;
   inspect(() => {
@@ -209,14 +143,12 @@ function connectorFocus() {
 }
 
 function matchesFocus(connector) {
-  const search = $("filter").value.trim().toLowerCase();
-  return (activeCategory === "*" || connector.category === activeCategory) &&
-    `${connector.id} ${connector.label} ${connector.category}`.toLowerCase().includes(search);
+  return activeCategory === "*" || connector.category === activeCategory;
 }
 
 function matchesPart(part) {
   const component = componentById.get(part.componentId);
-  return matchesHardware({ ...part, model: component?.model ?? part.model }, activeCategory, $("filter").value);
+  return matchesHardware({ ...part, model: component?.model ?? part.model }, activeCategory, "");
 }
 
 function interactiveGroup(className, id, label, onSelect) {
@@ -297,39 +229,27 @@ function applyFanMotion(fan, fraction) {
       }));
     }
   }
-  fan.querySelector("title").textContent = stage ? `Animation demo: ${stage.label}. Not a measured speed.` : "No live speed assigned. Static artwork is not a stopped-fan reading.";
+  fan.querySelector("title").textContent = stage ? stage.label : "Speed unavailable";
   const caption = fan.querySelector(".fan-motion-caption");
   if (caption) caption.textContent = stage ? `DEMO · ${stage.label}` : "";
 }
 
-function renderComponentMotion() {
-  const fan = selectedPartId ? $("board").querySelector(`.hardware-part[data-id="${selectedPartId}"] .fan-face`) : null;
-  $("component-motion").hidden = !fan;
-  if (fan) {
-    $("component-motion").textContent = `${fan.querySelector("title").textContent}${!fanRotationEnabled ? " Rotation is paused." : ""}`;
-  }
-}
-
 function renderCaseFanMotion() {
   document.documentElement.classList.toggle("fan-rotation-enabled", fanRotationEnabled);
-  $("fan-rotation-enabled").checked = fanRotationEnabled;
-  $("fan-motion-preference").textContent = reducedMotion.matches
-    ? fanRotationEnabled ? "Your browser requests reduced motion; rotation is explicitly enabled for this session." : "Your browser requests reduced motion. Check Spin fans to explicitly enable rotation for this session."
-    : fanRotationEnabled ? "Rotation enabled; frames and hubs remain stationary." : "Rotation paused; speed-line patterns remain visible.";
-  const selected = fanMotionStages.find(stage => stage.id === fanMotionPreview);
-  const dataMode = fanMotionPreview === "data", snapshotMode = fanMotionPreview === "snapshot";
+  $("fan-rotation-toggle").setAttribute("aria-pressed", String(fanRotationEnabled));
+  $("fan-rotation-toggle").textContent = `Fan motion: ${fanRotationEnabled ? "on" : "off"}`;
+  $("fan-rotation-toggle").title = reducedMotion.matches && !fanRotationEnabled
+    ? "Reduced motion is enabled. Turn on to animate fans for this session."
+    : "Toggle animation without changing fan speeds";
   for (const [index, fan] of [...$("board").querySelectorAll(".fan-face")].entries()) {
-    const rpm = snapshotMode ? index < 6 ? readingFor(observedReadings, "FAN3")?.value : 2000
-      : dataMode ? index < 6 ? metricFanFrame?.hubRpm : metricFanFrame?.rearRpm : null;
-    const stage = dataMode || snapshotMode ? fanMotionForSpeed(Number.isFinite(rpm) ? rpm / (index < 6 ? 1700 : 2000) : null) : fanMotionPreview === "compare"
-      ? fanMotionStages[index < 6 ? index : index === 6 ? 2 : 5]
-      : selected;
-    if ((!dataMode && !snapshotMode) || fan.dataset.motionStage !== (stage?.id ?? "unknown")) applyFanMotion(fan, stage?.example ?? null);
-    if ((dataMode || snapshotMode) && Number.isFinite(rpm)) {
+    const rpm = index < 6 ? metricFanFrame?.hubRpm : metricFanFrame?.rearRpm;
+    const stage = fanMotionForSpeed(Number.isFinite(rpm) ? rpm / (index < 6 ? 1700 : 2000) : null);
+    if (fan.dataset.motionStage !== (stage?.id ?? "unknown")) applyFanMotion(fan, stage?.example ?? null);
+    if (Number.isFinite(rpm)) {
       fan.dataset.rpm = rpm;
-      fan.dataset.rpmSource = index < 6 ? snapshotMode ? "reported-shared-assumption" : metricFanFrame?.provenance === "live" ? "collected-shared-assumption" : "synthetic-shared-assumption" : "assumed-constant";
-      const source = index < 6 ? snapshotMode ? "REPORTED ~" : metricFanFrame?.provenance === "live" ? "LIVE " : "DEMO " : "ASSUMED ";
-      fan.querySelector("title").textContent = `${source}${Math.round(rpm)} RPM. ${index < 6 ? "One hub tach applied to all six by user assumption; not six measured speeds." : "Constant 2000 RPM assumed by the user; no tach."} Artistic speed band, not physical-rate rotation.`;
+      fan.dataset.rpmSource = index < 6 ? metricFanFrame?.provenance === "live" ? "collected-shared-assumption" : "synthetic-shared-assumption" : "assumed-constant";
+      const source = index < 6 ? metricFanFrame?.provenance === "live" ? "" : "DEMO " : "ASSUMED ";
+      fan.querySelector("title").textContent = `${source}${Math.round(rpm)} RPM${index < 6 ? " · shared hub speed" : ""}`;
       fan.querySelector(".fan-motion-caption").textContent = "";
     } else {
       delete fan.dataset.rpm;
@@ -340,46 +260,9 @@ function renderCaseFanMotion() {
     part.setAttribute("aria-label", label);
     part.querySelector("title").textContent = label;
   }
-  const demo = !["data", "snapshot", "off"].includes(fanMotionPreview);
-  $("fan-motion-button").textContent = dataMode ? "Fan motion · RPM" : snapshotMode ? "Fan motion · snapshot" : demo ? "Fan motion · DEMO" : "Fan motion";
-  $("fan-motion-button").classList.toggle("demo-active", demo);
-  $("fan-motion-status").textContent = demo
-    ? `ANIMATION DEMO · ${selected?.label ?? "Compare all six stages"} on the map. No RPM readings or fan settings are changed.${!fanRotationEnabled ? " Rotation is paused." : ""}`
-    : dataMode ? `Animations follow displayed ${dataSource.mode === "live" ? "collected" : "synthetic"} RPMs: one hub value for all six front/middle fans; rear fans assumed constant 2000 RPM. Spin fans controls rotation and honors Reduced Motion.`
-      : snapshotMode ? "Reported snapshot: approximately 1100 RPM shared across the six hub fans; rear fans assumed constant 2000 RPM. This is not live telemetry."
-        : "No live animation data assigned. Static artwork does not mean stopped.";
-  for (const button of $("fan-motion-presets").children) {
-    const active = button.dataset.stage === fanMotionPreview;
-    button.setAttribute("aria-pressed", String(active));
-  }
-  $("compare-fan-motion").setAttribute("aria-pressed", String(fanMotionPreview === "compare"));
-  $("clear-fan-motion").setAttribute("aria-pressed", String(dataMode));
-  $("snapshot-fan-motion").setAttribute("aria-pressed", String(snapshotMode));
-  metricUI?.setCaseFanPreview(dataMode ? null : snapshotMode
-    ? { mode: "snapshot", hubRpm: readingFor(observedReadings, "FAN3")?.value, rearRpm: 2000 }
-    : { mode: fanMotionPreview === "off" ? "off" : "study" });
-  renderComponentMotion();
 }
-
-function previewFanMotion(stage) {
-  fanMotionPreview = stage;
-  renderCaseFanMotion();
-  requestPopupClose($("fan-motion-dialog"));
-}
-
-for (const stage of fanMotionStages) {
-  const button = element("button", { type: "button", "data-stage": stage.id, "aria-pressed": "false", "aria-label": `Preview ${stage.label} animation on all case fans` });
-  const preview = svgElement("svg", { viewBox: "0 0 100 100", "aria-hidden": "true" });
-  drawFan(preview, 3, 3, 94, true, stage.example);
-  button.append(preview, element("strong", {}, stage.label), element("small", {}, `${Math.round(stage.example * 100)}% demo`));
-  button.addEventListener("click", () => previewFanMotion(stage.id));
-  $("fan-motion-presets").append(button);
-}
-$("compare-fan-motion").addEventListener("click", () => previewFanMotion("compare"));
-$("clear-fan-motion").addEventListener("click", () => previewFanMotion("data"));
-$("snapshot-fan-motion").addEventListener("click", () => previewFanMotion("snapshot"));
-$("fan-rotation-enabled").addEventListener("change", () => {
-  fanRotationEnabled = $("fan-rotation-enabled").checked;
+$("fan-rotation-toggle").addEventListener("click", () => {
+  fanRotationEnabled = !fanRotationEnabled;
   fanRotationOverride = true;
   renderCaseFanMotion();
 });
@@ -405,7 +288,6 @@ function renderBoard() {
   board.append(svgElement("text", { x: 55, y: 38, class: "scene-heading" }, "ROSEWILL / RSV-L4500U"));
   board.append(svgElement("text", { x: 55, y: 59, class: "scene-note" }, "FRONT / DRIVE CAGES"));
   board.append(svgElement("text", { x: 1220, y: 38, class: "scene-heading" }, "REAR / I/O"));
-  board.append(svgElement("text", { x: 55, y: 817, class: "scene-note" }, "ORIGINAL SCHEMATIC · APPROXIMATE POSITIONS · FAN FACES UNFOLDED · NO CABLE ROUTES OR CLEARANCE GUARANTEE"));
 
   const motherboard = hardwarePart("motherboard", "board", "ROMED8-2T REV 1.03", "Connector neighbors and ordering follow the manual, rotated 180° with rear I/O on the right. Distances are schematic; physical pin-1 orientation remains unverified.");
   motherboard.append(svgElement("rect", { ...landscapeBounds({ x: 65, y: 10, width: 675, height: 910 }), rx: 5, class: "board-outline part-outline" }));
@@ -554,8 +436,6 @@ function renderBoard() {
   for (let x = 1133; x < 1185; x += 5) hba.append(svgElement("path", { d: `M${x} ${hbaSlot.y - 5} v25`, class: "hba-fin" }));
   hba.append(svgElement("text", { x: 1193, y: hbaSlot.y + 12, class: "hardware-label" }, "HBA / PCIE1"));
   hardware.append(hba);
-  hardware.append(svgElement("text", { x: 590, y: 742, class: "scene-note" }, "COMPONENT OUTLINES ≠ MEASURED FOOTPRINTS"));
-  hardware.append(svgElement("text", { x: 590, y: 761, class: "scene-note" }, "HARDWARE FILTERS PARTS · CONNECTORS REVEAL HEADERS"));
   board.append(hardware);
 }
 
@@ -606,7 +486,7 @@ function renderFocus() {
   }
   for (const group of $("board").querySelectorAll(".connector")) {
     const available = focused && matchesFocus(connectorById.get(group.dataset.id));
-    group.classList.toggle("out-of-focus", focused ? !available : activeCategory !== "*" || Boolean($("filter").value.trim()));
+    group.classList.toggle("out-of-focus", focused ? !available : activeCategory !== "*");
     group.setAttribute("aria-disabled", String(!available));
     group.setAttribute("tabindex", available ? "0" : "-1");
   }
@@ -621,7 +501,6 @@ function appendReferences(container, references) {
   for (const reference of references) {
     const row = element("p", { class: "compact" });
     row.append(element("a", { href: reference.url, target: "_blank", rel: "noopener noreferrer" }, reference.label));
-    if (reference.note) row.append(element("span", { class: "muted" }, ` — ${reference.note}`));
     container.append(row);
   }
 }
@@ -632,19 +511,14 @@ function renderComponentDetails() {
   $("component-name").textContent = part.label;
   $("component-model").textContent = component.model;
   $("component-capacity").textContent = component.capacity;
-  $("component-provenance").textContent = component.status;
-  $("component-note").textContent = component.note ?? "";
-  $("component-placement").textContent = part.placement;
-  renderComponentMotion();
+  const binding = dataSource.snapshot?.inventory?.disks?.find(disk => disk.id === part.bindingId);
+  $("component-identifiers").hidden = !binding;
+  $("component-identifiers").textContent = binding ? `Display slot mapping · Serial: ${binding.serial ?? "unavailable"}` : "";
   renderLinuxAssociation(selectedPartId);
   $("component-metrics-button").hidden = !metricUI?.panelFor(selectedPartId);
   metricUI?.renderComponent(selectedPartId, part.bindingId);
   $("component-reference-links").replaceChildren();
   appendReferences($("component-reference-links"), partReferences[part.componentId ?? selectedPartId] ?? []);
-  const reading = part.readingId ? readingFor(currentReadings(), part.readingId) : null;
-  $("component-reading").textContent = reading
-    ? `${readingLabel(reading)}: ${formatReadingValue(reading)} ${reading.unit}. ${reading.source}.`
-    : "No sensor reading assigned to this physical component. Ratings, reported capacities and snapshot telemetry are separate evidence.";
   $("component-connectors").replaceChildren();
   for (const id of part.connectorIds) {
     const button = element("button", { type: "button" }, id);
@@ -655,7 +529,7 @@ function renderComponentDetails() {
     $("component-connectors").append(element("p", { class: "compact muted" },
       part.componentId === "rear-fans"
         ? "Reported PSU/Molex power only; no motherboard tach or control connection."
-        : "No specific board connector is assigned here. Do not infer a cable route from placement."));
+        : "No connector assigned"));
   }
 }
 
@@ -717,9 +591,6 @@ function renderLinuxAssociation(target) {
   if (!association) return;
   const host = selectedPartId ? $("component-details") : $("connector-details");
   host.insertBefore($("linux-details"), selectedPartId ? $("component-reference-links").closest(".reference") : $("pin-section"));
-  $("linux-captured").textContent = `${dataSource.mode === "live" ? "COLLECTED INVENTORY" : "OBSERVED SNAPSHOT · NOT LIVE"} · ${new Date(snapshot.capturedAt).toLocaleString()} · ${snapshot.source}`;
-  $("linux-association").textContent = association.note;
-  $("linux-limitations").textContent = `${snapshot.note} ${snapshot.limitations}`;
   $("linux-node").hidden = true;
   const list = $("linux-list");
   list.hidden = false;
@@ -762,13 +633,6 @@ function renderSelection() {
   for (const occupancy of Object.keys(occupancyLabels)) {
     $(`${occupancy}-count`).textContent = counts[occupancy];
   }
-  const availability = fanAvailability(inventory);
-  $("fan-availability").textContent = `${availability.free} / ${availability.occupied}`;
-  const reportedOccupied = connectors.filter(connector =>
-    connector.category === "Fans" && connectionFor(connector.id).provenance === "user-reported" &&
-    connectionFor(connector.id).confidence !== "confirmed" && connectionFor(connector.id).occupancy === "occupied",
-  ).length;
-  $("fan-unverified").textContent = `${availability.unverified} not independently verified${reportedOccupied ? `; ${reportedOccupied} user-reported occupied` : ""}`;
   $("component-details").hidden = !selectedPartId;
   $("connector-details").hidden = Boolean(selectedPartId);
   if (selectedPartId) {
@@ -778,25 +642,11 @@ function renderSelection() {
   renderLinuxAssociation(selectedId);
   $("detail-category").textContent = `${connector.category.toUpperCase()} / SELECTED CONNECTOR`;
   $("detail-name").textContent = connector.id;
-  $("detail-confidence").textContent = `Evidence: ${connection.confidence}`;
   $("detail-occupancy").className = `badge ${connection.occupancy}`;
   $("detail-occupancy").textContent = occupancyLabels[connection.occupancy];
-  $("detail-provenance").textContent = provenanceLabels[connection.provenance];
-  const observation = inspectionConnections[selectedId];
-  $("inspection-observation").hidden = !observation;
-  $("inspection-observation").textContent = observation
-    ? `Supplied inspection record — ${provenanceLabels[observation.provenance]}; ${observation.confidence}, ${observation.occupancy}${observation.target ? `: ${observation.target}` : ""}. ${observation.evidence} ${observation.note}`
-    : "";
   $("detail-description").textContent = connector.detail;
-  $("detail-source").textContent = connector.source;
-  const reading = readingFor(currentReadings(), selectedId);
-  $("detail-reading").textContent = reading
-    ? `${readingLabel(reading)}: ${formatReadingValue(reading)} ${reading.unit}. ${reading.source}.`
-    : connector.category === "Fans"
-      ? "No reading in this dataset. This does not prove that the header is empty or that a fan is stopped."
-      : "Physical cable / slot assignment is separate from the reported installed inventory.";
+  $("connection-target").textContent = connection.target || occupancyLabels[connection.occupancy];
   $("pin-section").hidden = connector.pins.length === 0;
-  $("no-pins").hidden = connector.pins.length !== 0;
   $("pin-strip").replaceChildren();
   $("pin-table").replaceChildren();
   $("fan-location").textContent = connector.location ?? "";
@@ -810,97 +660,18 @@ function renderSelection() {
     row.append(element("td", {}, String(pin.number)), signal);
     $("pin-table").append(row);
   }
-  $("pin-caution").textContent = connector.caution ?? "";
-  for (const key of ["target", "confidence", "occupancy", "provenance", "evidence", "note"]) $(key).value = connection[key];
-  $("save-status").textContent = pendingPersistence
-    ? "NOT PERSISTED — tab-only changes. Export JSON to keep them."
-    : connection.updatedAt
-      ? `Last annotated ${new Date(connection.updatedAt).toLocaleString()}. Browser-local; export a backup.`
-      : observation ? "Inspection default / existing annotation; no local edit timestamp. Export a backup." : "Saved only in this browser. Export a backup.";
 }
 
-$("connection-form").addEventListener("input", () => { dirty = true; });
-$("connection-form").addEventListener("submit", event => {
-  event.preventDefault();
-  const fields = Object.fromEntries(["target", "confidence", "occupancy", "provenance", "evidence", "note"].map(key => [key, $(key).value]));
-  let next;
-  try {
-    next = updateConnection(inventory, selectedId, fields);
-  } catch (error) {
-    notify(error.message, true);
-    return;
-  }
-  inventory = next;
-  dirty = false;
-  let persisted = false;
-  try {
-    if (storageBlocked) throw new Error("Existing browser data could not be loaded; import a valid export before replacing it.");
-    saveDocument(window.localStorage, inventory);
-    persisted = true;
-    pendingPersistence = false;
-  } catch (error) {
-    pendingPersistence = true;
-    notify(`Changes are in this tab only: ${error.message} Export JSON now to keep them.`, true);
-  }
-  renderSelection();
-  if (persisted) notify(`${selectedId} saved in this browser. Nothing was sent to the server.`);
-});
-
-function downloadDocument() {
-  const blob = new Blob([serializeDocument(inventory)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = element("a", { href: url, download: "server-atlas-connections.json" });
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function exportAnnotations() {
-  if (dirty) {
-    notify("Save the current form before exporting. Unsaved fields are not included.", true);
-    return;
-  }
-  downloadDocument();
-  notify("JSON export downloaded. Treat your private notes as private; exports are not uploaded.");
-}
-$("export").addEventListener("click", exportAnnotations);
-$("detail-export").addEventListener("click", exportAnnotations);
-$("import-button").addEventListener("click", () => $("import-file").click());
-$("import-file").addEventListener("change", async event => {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    if (file.size > maxImportBytes) throw new Error("Import must be smaller than 256 KiB.");
-    const next = withInspectionDefaults(parseDocument(await file.text()));
-    if (!window.confirm("Replace this browser's connection annotations with the imported map? Export first if you need a backup.")) return;
-    saveDocument(window.localStorage, next);
-    inventory = next;
-    dirty = false;
-    storageBlocked = false;
-    pendingPersistence = false;
-    renderSelection();
-    notify("Map imported and saved in this browser. Inspection defaults fill only missing connectors; imported annotations take precedence. Imported labels are assertions, not independent verification.");
-  } catch (error) {
-    notify(`Import failed: ${error.message} Existing annotations were not replaced.`, true);
-  } finally {
-    event.target.value = "";
-  }
-});
-
-window.addEventListener("beforeunload", event => {
-  if (dirty || pendingPersistence) {
-    event.preventDefault();
-    event.returnValue = "";
-  }
-});
 window.addEventListener("storage", event => {
   if (event.key === storageKey || event.key === null) {
-    storageBlocked = true;
-    notify("Annotations changed in another tab. Saving is blocked to avoid overwriting them. Export this tab's work, then reload to read the latest saved map.", true);
+    try {
+      inventory = withInspectionDefaults(loadDocument(window.localStorage));
+      renderSelection();
+    } catch (error) {
+      notify(`Saved map update could not be loaded: ${error.message} Previous view retained; browser data was not changed.`, true);
+    }
   }
 });
-$("filter").addEventListener("input", renderFocus);
 function renderCategories() {
   const focused = connectorFocus();
   const categories = focused
@@ -908,15 +679,12 @@ function renderCategories() {
     : Object.keys(hardwareCategories);
   $("categories").replaceChildren();
   $("categories").setAttribute("aria-label", focused ? "Connector categories" : "Hardware categories");
-  $("filter-label").textContent = focused ? "Find a connector" : "Find hardware";
-  $("filter").placeholder = focused ? "Find a header or slot…" : "Find a component…";
   $("connector-picker").open = false;
   for (const category of ["*", ...categories]) {
     const label = category === "*" ? focused ? "All connectors" : "All hardware" : category;
     const button = element("button", { type: "button", "data-category": category, "aria-pressed": "false" }, label);
     button.addEventListener("click", () => {
       activeCategory = category;
-      $("filter").value = "";
       renderFocus();
     });
     $("categories").append(button);
@@ -926,15 +694,12 @@ for (const button of $("focus-modes").children) {
   button.addEventListener("click", () => {
     focusMode = button.dataset.mode;
     activeCategory = "*";
-    $("filter").value = "";
     renderCategories();
     renderFocus();
   });
 }
 renderCategories();
-for (const [value, label] of Object.entries(provenanceLabels)) $("provenance").append(element("option", { value }, label));
 $("board-revision").textContent = `ROMED8-2T · REV ${boardRevision}`;
-for (const component of components) $("component-options").append(element("option", { value: component.model }));
 function setZoom(next) {
   zoom = Math.max(75, Math.min(175, next));
   $("board").style.width = `${zoom}%`;
@@ -947,66 +712,9 @@ function setZoom(next) {
 $("zoom-in").addEventListener("click", () => setZoom(zoom + 25));
 $("zoom-out").addEventListener("click", () => setZoom(zoom - 25));
 
-function setView(view) {
-  for (const id of ["info", "case"]) {
-    $(`${id}-view`).hidden = id !== view;
-    $(`${id}-tab`).classList.toggle("active", id === view);
-    $(`${id}-tab`).setAttribute("aria-pressed", String(id === view));
-  }
-}
-$("info-tab").addEventListener("click", () => setView("info"));
-$("case-tab").addEventListener("click", () => setView("case"));
-
-function renderAir() {
-  const readings = currentReadings();
-  const position = Number($("air-position").value) / 100;
-  const value = interpolateAir(readings, position, mode);
-  $("air-position").disabled = value === null;
-  $("air-result").textContent = value === null ? "Unavailable" : `≈ ${formatValue(value)} °C at ${Math.round(position * 100)}%`;
-  $("air-field").setAttribute("opacity", value === null ? "0" : ".28");
-  $("air-front-label").textContent = value === null ? "INLET AIR: UNKNOWN" : "SYNTHETIC INLET: 24 °C";
-  $("air-mid-label").textContent = value === null ? "NO SEPARATE AIR PROBES INSTALLED" : "LERP MIDPOINT: ≈31.5 °C";
-  $("air-rear-label").textContent = value === null ? "OUTLET AIR: UNKNOWN" : "SYNTHETIC OUTLET: 39 °C";
-  $("air-explanation").textContent = value === null
-    ? "No air estimate: the user confirms no separate TR1/TR2 probes are installed. There are no located air-temperature measurements in this dataset; component temperatures are intentionally excluded."
-    : "SYNTHETIC ESTIMATE — linear interpolation between two invented air probes. Not measured air, an airflow simulation, or evidence of real hot spots. Case geometry and airflow are conceptual.";
-}
-
-function renderTelemetry() {
-  $("observed-mode").classList.toggle("active", mode === "snapshot");
-  $("synthetic-mode").classList.toggle("active", mode === "synthetic");
-  $("observed-mode").setAttribute("aria-pressed", String(mode === "snapshot"));
-  $("synthetic-mode").setAttribute("aria-pressed", String(mode === "synthetic"));
-  $("telemetry-warning").classList.toggle("synthetic", mode === "synthetic");
-  $("telemetry-warning").textContent = mode === "snapshot"
-    ? `OBSERVED SNAPSHOTS · ${snapshotDate} readings plus a later relayed FAN3 hub tach with unknown capture time. Not live or synchronized. GPU / HDD temperatures and case air remain unknown.`
-    : "SYNTHETIC DEMO · Every displayed sensor value below is invented. The air overlay is an estimated interpolation of invented probes, not a measurement.";
-  $("reading-grid").replaceChildren();
-  for (const reading of currentReadings()) {
-    const card = element("article", { class: `reading-card ${reading.provenance}` });
-    card.append(element("h4", {}, reading.label));
-    const value = element("div", { class: "reading-value" }, formatReadingValue(reading));
-    value.append(element("small", {}, reading.unit));
-    card.append(value, element("div", { class: "reading-provenance" }, readingLabel(reading)));
-    card.append(element("p", {}, reading.source));
-    $("reading-grid").append(card);
-  }
-  const unknown = element("article", { class: "reading-card" });
-  unknown.append(element("h4", {}, "Unobserved channels"), element("div", { class: "reading-value" }, "Unknown"));
-  unknown.append(element("p", {}, "GPU and HDD temperatures; FAN4–FAN7 and all secondary tach channels. FAN3 returns one hub tach, not six individual fan speeds. Missing data is not zero."));
-  $("reading-grid").append(unknown);
-  renderAir();
-  // Updating mode must not replace unsaved connection form fields.
-  if (!dirty && $("inspector-dialog").open) renderSelection();
-}
-$("observed-mode").addEventListener("click", () => { mode = "snapshot"; renderTelemetry(); });
-$("synthetic-mode").addEventListener("click", () => { mode = "synthetic"; renderTelemetry(); });
-$("air-position").addEventListener("input", renderAir);
 for (const component of components) {
   const card = element("article", { class: "inventory-card" });
-  card.append(element("h4", {}, component.label), element("p", {}, component.model), element("strong", {}, component.capacity), element("p", {}, component.status));
-  if (component.note) card.append(element("p", {}, component.note));
-  appendReferences(card, partReferences[component.id] ?? []);
+  card.append(element("h4", {}, component.label), element("p", {}, component.model), element("strong", {}, component.capacity));
   $("inventory-grid").append(card);
 }
 renderBoard();
@@ -1033,7 +741,7 @@ function applyCollectedInventory(data) {
     if (!binding.slot) continue;
     const id = `drive-${binding.slot}`, part = sceneParts.get(id);
     if (!part) continue;
-    part.label = `${binding.slot} · /dev/${binding.id} · PROVISIONAL`;
+    part.label = `${binding.slot} · /dev/${binding.id}`;
     part.bindingId = binding.id;
     part.model = binding.model;
     part.capacity = `${(binding.sizeBytes / 2 ** 40).toFixed(2)} TiB`;
@@ -1046,7 +754,7 @@ function applyCollectedInventory(data) {
     if (label) label.textContent = `/dev/${binding.id} *${disk?.memberships?.some(member => member.state.includes("spare")) ? " · SPARE" : ""}`;
   }
   appliedSnapshot = data;
-  if ($("inspector-dialog").open && !dirty) renderSelection();
+  if ($("inspector-dialog").open) renderSelection();
 }
 if (dataSource.mode === "live") {
   await dataSource.poll();
@@ -1058,7 +766,7 @@ metricUI = createMetricUI({
   openPopup, closePopup: requestPopupClose, onError: message => notify(message, true),
   onFanFrame: frame => {
     metricFanFrame = frame;
-    if (fanMotionPreview === "data") renderCaseFanMotion();
+    renderCaseFanMotion();
   },
   isVisible: id => !connectorFocus() && (id === null || (id === "nvme-group"
     ? ["drive-M2_1", "drive-M2_2"].some(part => document.querySelector(`.hardware-part[data-id="${part}"][aria-disabled="false"]`))
@@ -1068,5 +776,4 @@ dataSource.start();
 $("component-metrics-button").addEventListener("click", () => metricUI.openComponent(selectedPartId, sceneParts.get(selectedPartId)?.bindingId));
 renderCaseFanMotion();
 renderSelection();
-renderTelemetry();
 document.documentElement.dataset.ready = "true";

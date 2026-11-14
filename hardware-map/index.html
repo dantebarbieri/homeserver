@@ -16,11 +16,10 @@
     <section id="board-view" class="board-workspace" aria-label="Server hardware map">
       <header class="map-toolbar">
         <h1>Server Atlas</h1>
-        <label id="filter-label" class="sr-only" for="filter">Find hardware</label><input id="filter" type="search" placeholder="Find a component…">
         <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
-        <button id="fan-motion-button" type="button" aria-haspopup="dialog" aria-controls="fan-motion-dialog">Fan motion</button>
-        <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Metrics · DEMO</button>
-        <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">Tools & info</button>
+        <button id="fan-rotation-toggle" type="button" aria-pressed="false">Animate fans</button>
+        <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Performance · DEMO</button>
+        <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">About</button>
       </header>
       <section class="connector-nav panel" aria-label="Hardware and connector filters">
         <div id="focus-modes" role="group" aria-label="Inspect">
@@ -31,153 +30,71 @@
         <p id="focus-status" class="sr-only" role="status"></p>
         <details id="connector-picker" hidden><summary>Connector list</summary><div id="connector-list" class="connector-list"></div></details>
       </section>
-      <section id="metric-controls" class="metric-controls" aria-label="Synthetic metric map layers">
-        <strong class="metric-provenance">SIMULATED</strong>
-        <button id="metric-play" type="button">Play demo</button>
+      <section id="metric-controls" class="metric-controls" aria-label="Metric map layers">
+        <strong class="metric-provenance">DEMO</strong>
         <div id="metric-group-controls" role="group" aria-label="Show or hide metric families"></div>
         <button id="metric-show-all" type="button" title="Show all metric layers">All</button>
         <button id="metric-hide-all" type="button" title="Hide all metric layers">None</button>
       </section>
       <details id="live-status" class="live-status" hidden><summary id="live-summary" role="status"></summary><p id="live-issues"></p></details>
       <div class="map-panel panel">
-        <div class="map-scroll"><svg id="board" viewBox="0 0 1440 840" role="group" aria-label="Interactive Rosewill chassis and installed motherboard hardware"></svg></div>
-        <div id="metric-layer" class="metric-layer" aria-label="Synthetic hardware metric overlays"><svg id="metric-leaders" aria-hidden="true"></svg></div>
+        <div class="map-scroll"><svg id="board" viewBox="0 0 1440 840" role="group" aria-label="Server chassis and installed hardware"></svg></div>
+        <div id="metric-layer" class="metric-layer" aria-label="Hardware metric overlays"><svg id="metric-leaders" aria-hidden="true"></svg></div>
       </div>
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   </main>
   <dialog id="inspector-dialog" class="popup" aria-labelledby="inspector-title">
-    <header class="popup-heading"><h2 id="inspector-title">Hardware details</h2><button id="close-inspector" type="button" autofocus>Close ×</button></header>
-    <section id="discard-prompt" class="discard-prompt" role="alert" hidden>
-      <p>You have unsaved annotation fields. Discarding them does not change saved annotations.</p>
-      <div><button id="keep-editing" type="button">Keep editing</button><button id="discard-edits" type="button">Discard edits & close</button></div>
-    </section>
-    <div id="detail-notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <header class="popup-heading"><h2 id="inspector-title">Hardware</h2><button id="close-inspector" type="button" autofocus>Close ×</button></header>
     <div class="popup-body details">
-        <section id="component-details" hidden aria-live="polite">
-          <div class="detail-title"><p class="eyebrow">INSTALLED HARDWARE / SELECTED COMPONENT</p><h3 id="component-name"></h3></div>
-          <p id="component-model" class="component-model"></p><p id="component-capacity" class="component-capacity"></p>
-          <p id="component-provenance" class="reading-note"></p><p id="component-note" class="muted"></p><p id="component-placement" class="caution"></p>
-          <p id="component-reading" class="reading-note"></p>
-          <p id="component-motion" class="reading-note" hidden></p>
-          <button id="component-metrics-button" type="button" hidden>View synthetic performance graphs ↗</button>
-          <section id="component-performance" class="metric-detail-grid" aria-label="Selected component performance" hidden></section>
-          <section id="linux-details" class="linux-details" hidden aria-labelledby="linux-title">
-            <h4 id="linux-title">Linux devices & layers</h4>
-            <p id="linux-captured" class="compact muted"></p>
-            <p id="linux-association" class="reading-note"></p>
-            <div id="linux-list"></div>
-            <div id="linux-node" hidden></div>
-            <p id="linux-limitations" class="compact muted"></p>
-          </section>
-          <div class="reference"><h4>Manuals & specifications</h4><div id="component-reference-links"></div></div>
-          <h4>Related connectors</h4><div id="component-connectors" class="related-connectors"></div>
-          <p class="compact muted">Connector annotations, confidence and pin functions are available in connector focus. Component placement is schematic, not a wiring or fit guide.</p>
+      <section id="component-details" hidden>
+        <div class="detail-title"><h3 id="component-name"></h3></div>
+        <p id="component-model" class="component-model"></p><p id="component-capacity" class="component-capacity"></p>
+        <p id="component-identifiers" class="compact muted" hidden></p>
+        <button id="component-metrics-button" type="button" hidden>Full performance view ↗</button>
+        <section id="component-performance" class="metric-detail-grid" aria-label="Selected component performance" hidden></section>
+        <section id="linux-details" class="linux-details" hidden aria-labelledby="linux-title">
+          <h4 id="linux-title">Linux devices & layers</h4>
+          <div id="linux-list"></div><div id="linux-node" hidden></div>
         </section>
-        <section id="connector-details">
-        <div class="detail-title"><p id="detail-category" class="eyebrow"></p><h3 id="detail-name"></h3><span id="detail-occupancy" class="badge unverified">Unverified</span> <span id="detail-confidence" class="badge">Evidence: unknown</span></div>
-        <p id="detail-provenance" class="reading-provenance"></p>
-        <p id="detail-description" class="muted"></p>
-        <div id="detail-reading" class="reading-note"></div>
-        <p id="inspection-observation" class="reading-note" hidden></p>
-        <section id="pin-section" hidden><h4>Individual pin functions</h4><p id="fan-location" class="compact muted"></p><p class="pin-view-label">MANUAL REFERENCE VIEW · TWO HOUSING BARS AS DRAWN · PHYSICAL KEYING UNVERIFIED</p><div id="pin-strip" class="pin-strip"></div><table><thead><tr><th>Pin</th><th>Signal / function</th></tr></thead><tbody id="pin-table"></tbody></table><p id="pin-caution" class="caution"></p><div class="fan-compatibility"><h4>Fan-shopping boundaries</h4><p><strong>4-pin PWM:</strong> photos show the existing Noctua plugs seated on pins 1–4 at FAN1/FAN2. This verifies those plugs' in-situ fit, not universal fit or physical keying. Pins 1–4 have the usual ground / supply / tach / control roles.</p><p><strong>3-pin:</strong> no PWM wire. DC/voltage speed-control support is unverified. Do not assume it can be regulated.</p><p><strong>Electrical:</strong> manual fan maximum 5 A / 60 W. Per-header versus shared total is not explicit. Verify fan voltage, startup current, splitter and cable ratings; do not buy to that limit alone.</p><p><strong>Groups:</strong> one control signal and two tach inputs per header. Independent BMC control across seven headers is unverified. PSU/Molex power alone provides no board tach/control connection.</p></div></section>
-        <p id="no-pins" class="muted compact">Pin-level wiring is not modeled for this connector. Consult the official manual; do not use this schematic as a wiring guide.</p>
-        <form id="connection-form">
-          <h4>What is connected here?</h4>
-          <label for="target">Component / cable / splitter</label><input id="target" list="component-options" maxlength="200" placeholder="Unknown — awaiting inspection"><datalist id="component-options"></datalist>
-          <label for="confidence">Connection confidence</label><select id="confidence"><option value="unknown">Unknown / not inspected</option><option value="inferred">Inferred / explain the reasoning</option><option value="confirmed">Confirmed / physical evidence</option></select>
-          <label for="occupancy">Physical connector state</label><select id="occupancy"><option value="unverified">Unverified / not traced</option><option value="occupied">Occupied / cable attached</option><option value="free">Free / no cable attached</option><option value="blocked">Blocked / physical obstruction</option></select>
-          <label for="provenance">Evidence source</label><select id="provenance"></select>
-          <label for="evidence">Evidence / observation</label><input id="evidence" maxlength="600" placeholder="e.g. traced cable during inspection">
-          <label for="note">Notes</label><textarea id="note" rows="3" maxlength="2000" placeholder="Fan model, splitter branches, airflow arrow…"></textarea>
-          <button type="submit" class="primary">Save connection</button>
-          <button id="detail-export" type="button" class="backup-button">Export saved / tab-only annotations</button>
-          <p id="save-status" class="compact muted">Saved only in this browser. Export a backup.</p>
-        </form>
-        <div class="reference"><h4>Reference</h4><p id="detail-source"></p><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf" target="_blank" rel="noopener noreferrer">Open official manual ↗</a></div>
+        <div class="reference"><h4>Specifications</h4><div id="component-reference-links"></div></div>
+        <h4>Connectors</h4><div id="component-connectors" class="related-connectors"></div>
+      </section>
+      <section id="connector-details">
+        <div class="detail-title"><p id="detail-category" class="eyebrow"></p><h3 id="detail-name"></h3><span id="detail-occupancy" class="badge unverified">Unknown</span></div>
+        <p id="detail-description" class="muted"></p><p id="connection-target" class="reading-note"></p>
+        <section id="pin-section" hidden>
+          <h4>Pin functions</h4><p id="fan-location" class="compact muted"></p>
+          <div id="pin-strip" class="pin-strip"></div>
+          <table><thead><tr><th>Pin</th><th>Signal / function</th></tr></thead><tbody id="pin-table"></tbody></table>
+          <p class="compact muted">Reference view; verify header orientation before wiring.</p>
         </section>
+      </section>
     </div>
   </dialog>
   <dialog id="metrics-dialog" class="popup metrics-popup" aria-labelledby="metrics-title">
-    <header class="popup-heading"><h2 id="metrics-title">Performance lab <span class="metric-provenance">SYNTHETIC / NOT LIVE</span></h2><button id="close-metrics" type="button" autofocus>Close ×</button></header>
+    <header class="popup-heading"><h2 id="metrics-title">Performance <span class="metric-provenance">DEMO</span></h2><button id="close-metrics" type="button" autofocus>Close ×</button></header>
     <div class="metric-lab-controls">
-      <button id="metric-play-dialog" type="button">Play demo</button>
-      <label id="metric-scenario">Scenario<select id="metric-profile"></select></label>
-      <label>History · this view<select id="metric-window"></select></label>
-      <button id="metric-reset-layout" type="button">Reset chart positions</button>
-      <output id="metric-clock"></output>
+      <label>History<select id="metric-window"></select></label>
+      <button id="metric-reset-layout" type="button">Reset layout</button><output id="metric-clock"></output>
     </div>
-    <p id="metric-playback-note" class="metric-playback-note"></p>
     <nav id="metric-panel-nav" class="metric-panel-nav" aria-label="Performance views"></nav>
-    <div class="popup-body"><p id="metric-source-note" class="metric-source-note">Every value and history here is invented. Hardware names provide context only. This is not current server activity, sensor discovery or a thermal simulation.</p><div id="metric-panel"></div></div>
-  </dialog>
-  <dialog id="fan-motion-dialog" class="popup" aria-labelledby="fan-motion-title">
-    <header class="popup-heading"><h2 id="fan-motion-title">Case fan motion study</h2><button id="close-fan-motion" type="button" autofocus>Close ×</button></header>
-    <div class="popup-body">
-      <p class="muted compact">By default, the six front/middle fans follow the displayed hub RPM (collected in LIVE mode, invented in DEMO); both rear fans use your assumed constant 2000 RPM. Use the historical snapshot or override with an artistic stage below. None of these controls changes real fan settings. CPU/GPU artwork is unchanged.</p>
-      <label class="fan-rotation-toggle"><input id="fan-rotation-enabled" type="checkbox" aria-describedby="fan-motion-preference">Spin fans</label>
-      <p id="fan-motion-preference" class="muted compact"></p>
-      <div id="fan-motion-presets" class="fan-motion-presets" role="group" aria-label="Fan speed animation variants"></div>
-      <div class="toolbar fan-motion-actions"><button id="compare-fan-motion" type="button">Compare on map</button><button id="clear-fan-motion" type="button">Use displayed RPMs</button><button id="snapshot-fan-motion" type="button">Reported ~1100 RPM snapshot</button></div>
-      <p id="fan-motion-status" class="reading-note" role="status"></p>
-      <p class="muted compact">Faster stages use repeated blade impressions (animation multiples), not actual blade counts. RPM selects a speed band, not physical-rate rotation or PWM duty. Reduced-motion preferences pause rotation unless you explicitly enable Spin fans. The reported snapshot is approximate and undated; there is still no live collector. A shared-speed assumption cannot detect one failed hub fan.</p>
-    </div>
+    <div class="popup-body"><div id="metric-panel"></div></div>
   </dialog>
   <dialog id="tools-dialog" class="popup tools-popup" aria-labelledby="tools-title">
-    <header class="popup-heading"><h2 id="tools-title">Workspace tools</h2><button id="close-tools" type="button" autofocus>Close ×</button></header>
-    <div id="tools-notice" class="notice" role="status" aria-live="polite" hidden></div>
-    <nav class="tools-nav segmented" aria-label="Workspace tools">
-      <button id="info-tab" class="active" aria-pressed="true" aria-controls="info-view" type="button">Info & backups</button>
-      <button id="case-tab" aria-pressed="false" aria-controls="case-view" type="button">Telemetry & inventory</button>
-    </nav>
+    <header class="popup-heading"><h2 id="tools-title">Server Atlas</h2><button id="close-tools" type="button" autofocus>Close ×</button></header>
     <div class="popup-body">
-    <section id="info-view">
       <h3 id="board-revision">ROMED8-2T</h3>
-      <p class="muted compact">Local-first prototype. Click hardware or a connector to open its popup. Close, Escape or a backdrop click returns to the same map. Categories reveal connectors beneath dimmed hardware; Hardware restores component selection.</p>
-      <section class="summary" aria-label="Connector occupancy summary and color key">
-        <div><span class="summary-label"><i class="legend-dot occupied"></i>CONNECTED</span><strong id="occupied-count">0</strong><small>Component / cable attached</small></div>
-        <div><span class="summary-label"><i class="legend-dot free"></i>EMPTY</span><strong id="free-count">0</strong><small>No component / cable attached</small></div>
-        <div><span class="summary-label"><i class="legend-dot blocked"></i>BLOCKED</span><strong id="blocked-count">0</strong><small>Physically obstructed, not connected</small></div>
-        <div><span class="summary-label"><i class="legend-dot unverified"></i>UNVERIFIED</span><strong id="unverified-count">0</strong><small>Not assumed empty</small></div>
+      <p class="muted compact">Select hardware for performance and Linux devices, or switch to Connectors for pin details. Viewing controls do not change the server.</p>
+      <section class="summary" aria-label="Connector occupancy">
+        <div><span class="summary-label"><i class="legend-dot occupied"></i>CONNECTED</span><strong id="occupied-count">0</strong></div>
+        <div><span class="summary-label"><i class="legend-dot free"></i>EMPTY</span><strong id="free-count">0</strong></div>
+        <div><span class="summary-label"><i class="legend-dot blocked"></i>BLOCKED</span><strong id="blocked-count">0</strong></div>
+        <div><span class="summary-label"><i class="legend-dot unverified"></i>UNKNOWN</span><strong id="unverified-count">0</strong></div>
       </section>
-      <h4>Private annotation backups</h4>
-      <div class="toolbar"><button id="export" type="button">↓ Export JSON</button><button id="import-button" type="button">↑ Import JSON</button><input id="import-file" type="file" accept=".json,application/json" hidden></div>
-      <p class="muted compact">Notes stay in this browser. Export a backup before clearing browser data or replacing annotations with an import. Nothing is sent to the server.</p>
-      <h4>Fan planning / availability and electrical limits</h4>
-      <section class="fan-overview" aria-label="Fan planning facts">
-        <div><span class="summary-label">FAN HEADERS</span><strong>7 × 6-pin</strong><small>FAN1–FAN7 · not seven verified free sockets</small></div>
-        <div><span class="summary-label">VERIFIED FREE / OCCUPIED</span><strong id="fan-availability">0 / 0</strong><small id="fan-unverified">7 headers unverified</small></div>
-        <div><span class="summary-label">TACH ≠ FAN COUNT ≠ CONTROL GROUP</span><strong>2 tach / 1 control per header</strong><small>14 potential tach channels; firmware grouping unknown</small></div>
-        <div><span class="summary-label">MANUAL FAN MAXIMUM</span><strong>5 A / 60 W</strong><small>Per-header vs combined budget not explicit; splitter limits unknown</small></div>
-      </section>
-      <section class="inspection panel"><div><p class="eyebrow">PHYSICAL INSPECTION</p><h3>Follow the cable, then make it confirmed.</h3></div><p>Power off and unplug before handling hardware. Photograph FAN1–FAN7 labels and plugs; trace each fan, splitter and PSU-powered branch; record fan models and airflow arrows. Note board revision, GPU/HBA slots, M.2 labels, SATA breakout routing and DIMM population. Do not move jumpers or unplug cables just for this map.</p></section>
-      <div class="reference"><h4>Sources & limitations</h4><p>Original schematic, approximate positions and outlines; not a wiring, airflow or clearance guide. Official ASRock Rack manual rev. 1.30 / April 2026. No analytics, credentials, live server connection or remote writes.</p><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf" target="_blank" rel="noopener noreferrer">Official motherboard manual ↗</a> · <a href="./README.md" target="_blank" rel="noopener noreferrer">Sources & limitations ↗</a></div>
-    </section>
-    <section id="case-view" hidden aria-label="Case and telemetry explorer">
-      <div class="telemetry-toolbar"><div><h3>Same hardware. Different layers of evidence.</h3><p class="muted">Historical inspection evidence and a separate interpolation demo; current collection appears in the performance overlay. Component sensors are not air-temperature probes.</p></div><div class="segmented" aria-label="Telemetry provenance"><button id="observed-mode" class="active" aria-pressed="true">Observed snapshot</button><button id="synthetic-mode" aria-pressed="false">Synthetic demo</button></div></div>
-      <div id="telemetry-warning" class="provenance-banner"></div>
-      <div class="case-layout">
-        <section class="panel case-panel"><div class="panel-heading"><h3>RSV-L4500U / conceptual top view</h3><span>NOT A BAY MAP</span></div>
-          <svg id="case-diagram" viewBox="0 0 1000 390" role="img" aria-labelledby="case-svg-title case-svg-description">
-            <title id="case-svg-title">Conceptual server case layout</title><desc id="case-svg-description">Front drive region on the left and rear motherboard region on the right. Physical bays, fan routing and component positions remain unverified. Air interpolation is synthetic only.</desc>
-            <defs><linearGradient id="air-gradient"><stop offset="0%" stop-color="#34858c"></stop><stop offset="100%" stop-color="#ae683f"></stop></linearGradient></defs>
-            <rect class="case-shell" x="30" y="35" width="940" height="300" rx="18"></rect>
-            <rect id="air-field" x="42" y="47" width="916" height="276" rx="12" fill="url(#air-gradient)" opacity="0"></rect>
-            <text class="case-orientation" x="55" y="20">FRONT</text><text class="case-orientation" x="900" y="20">REAR</text>
-            <rect class="case-region" x="65" y="83" width="230" height="195" rx="10"></rect><text class="case-region-title" x="88" y="115">DRIVE REGION</text><text x="88" y="148">12 HDDs / 15 bays · 3 empty</text><text x="88" y="178">8 onboard / 4 via HBA</text><text class="case-small" x="88" y="247">Actual bay identities unknown</text>
-            <path class="air-path" d="M325 183 L410 183 M395 173 L410 183 L395 193"></path>
-            <text class="case-small" x="315" y="242">Air direction assumed</text>
-            <rect class="case-region" x="465" y="83" width="465" height="195" rx="10"></rect><text class="case-region-title" x="490" y="115">MOTHERBOARD REGION</text><text x="490" y="148">EPYC · ECC RAM · 2 × NVMe</text><text x="490" y="178">GPU PCIE4 / HBA PCIE1 (user-confirmed)</text><text class="case-small" x="490" y="247">6 redux → SATA hub / FAN3 · 2 rear → Molex</text>
-            <text id="air-front-label" class="case-air-label" x="65" y="365"></text><text id="air-mid-label" class="case-air-label" x="380" y="365"></text><text id="air-rear-label" class="case-air-label" x="755" y="365"></text>
-          </svg>
-          <div class="air-controls"><label for="air-position">Front-to-rear sample position</label><input id="air-position" type="range" min="0" max="100" value="50"><output id="air-result"></output></div>
-          <p id="air-explanation" class="muted compact"></p>
-        </section>
-        <aside class="panel boundaries"><p class="eyebrow">WHAT THIS DOES NOT KNOW</p><h3>A sensor is not a location.</h3><p>FAN1 / FAN2 RPM does not tell us which fans they drive. NVMe A / B does not identify M2_1 / M2_2.</p><p>No verified inlet or exhaust air probes exist in this dataset. CPU, SSD and LAN temperatures cannot stand in for case air.</p><p>Interpolation is a one-dimensional visual estimate between air probes, not CFD, airflow measurement or a safe-temperature prediction.</p></aside>
-      </div>
-      <div id="reading-grid" class="reading-grid"></div>
-      <h3 class="inventory-heading">Installed inventory <span>Photo-confirmed, user-reported and unverified details labeled separately</span></h3><div id="inventory-grid" class="inventory-grid"></div>
-    </section>
+      <div id="inventory-grid" class="inventory-grid"></div>
+      <p class="compact muted">Disk bay/socket assignments are display mappings, not verified physical locations. Rear fans use an assumed 2000 RPM; other missing readings stay unavailable.</p>
+      <div class="reference"><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf" target="_blank" rel="noopener noreferrer">Motherboard manual ↗</a></div>
     </div>
   </dialog>
 </body>

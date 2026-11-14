@@ -10,6 +10,9 @@ export const metricGroups = {
   temperatures: { label: "Temps", color: "#e7a47f" },
   fans: { label: "Fans", color: "#becbd3" },
 };
+export const memoryColors = {
+  apps: "#b9a2df", cache: "#7c9fa7", kernel: "#d8ad89", free: "#263646", freeTrace: "#a4bfda",
+};
 export const demoProfiles = { mixed: "Mixed workload", idle: "Mostly idle", transcode: "Transcode", transfer: "Storage transfer" };
 export let metricTopology = buildLinuxTopology(linuxSnapshot);
 let topology = metricTopology;
