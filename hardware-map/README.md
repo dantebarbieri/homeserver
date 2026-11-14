@@ -162,10 +162,45 @@ under `/srv/server-atlas/backups`.
 Backend checks (synthetic fixtures, no real identifiers):
 
 ```powershell
-uv run --no-project python -B -m unittest discover -s hardware-map\server -p "test_*.py"
+uv run --no-project --with pyyaml python -B -m unittest discover -s hardware-map\server -p "test_*.py"
 ```
 
 ## Read-only interface
+
+### Services
+
+Open **Services** for a Task Manager-style table. The default columns are CPU,
+memory, disk and network; use **Columns** to add/remove metrics or move them
+left/right. Selection and order persist locally, independently of map settings.
+Click a heading to sort, search by service/container/process, and expand a
+container to inspect its host processes. Stopped containers are optional.
+
+The root collector reads only allowlisted Docker GET endpoints (inventory,
+one-shot stats and process names/PIDs), `/proc` counters and NVIDIA `pmon`.
+Homepage YAML supplies only explicitly mapped local container names, categories
+and validated icon URLs; widget keys, environment, labels and process arguments
+are never published. PyYAML is included in the collector's Nix closure. The web
+container receives only the private, atomically written `services.json` through
+its existing read-only state mount, **not** the Docker socket or host `/proc`.
+Service sampling runs independently every five seconds; the private no-store
+API rejects data older than twenty seconds. Services and process data are never
+stored in the PWA shell cache. The existing Prometheus hardware histories are
+unchanged; this first services view is current accounting, not retained per-PID
+history.
+
+CPU is normalized to the whole host (one full thread on 32 logical CPUs is
+3.125%). Container memory is working set; process memory is RSS and shared
+pages need not add up. Disk columns are byte throughput, not physical-drive busy
+percent; parent RAID/LVM devices are excluded to avoid counting the same I/O
+twice. Process I/O uses kernel-accounted bytes and differs from cgroup I/O under
+buffering/writeback. Network is Docker namespace receive/send, not uplink
+utilization; tunnel interfaces are excluded, shared namespaces are counted only
+on their owner, and host-network/process attribution stays unavailable. Do not
+sum service network rates into a host total: inter-container traffic appears at
+both ends. Optional GPU columns use only supported per-process SM, encode,
+decode and framebuffer allocation; they never repeat a host-wide GPU percentage
+across containers. First samples, resets, stale data and unsupported counters
+remain unavailable rather than becoming zero.
 
 The public UI is a monitor, not an inventory editor. Select hardware or a
 connector for current graphs, logical devices, connection targets and pin

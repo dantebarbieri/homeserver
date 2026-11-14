@@ -59,6 +59,7 @@ function sheetFixture(t, reduced = false) {
       return { height: parseFloat(this.style.getPropertyValue("--sheet-height")) || 44 };
     }
     prepend(child) { this.children.unshift(child); }
+    querySelectorAll() { return []; }
   }
   const body = new Element(), dialog = new Element(), media = new EventTarget();
   dialog.id = "test-sheet";
@@ -172,6 +173,11 @@ test("reduced motion settles immediately and content scroll gestures remain nati
   assert.equal(gesture(200, 300).defaultPrevented, false);
   f.dispatch(f.body, "touchend");
   f.body.scrollTop = 0;
+  const nested = { scrollTop: 40 };
+  f.body.closest = () => nested;
+  assert.equal(gesture(200, 300).defaultPrevented, false);
+  f.dispatch(f.body, "touchend");
+  nested.scrollTop = 0;
   assert.equal(gesture(200, 240).defaultPrevented, true);
   f.dispatch(f.body, "touchmove", { touches: [{ clientX: 20, clientY: 240 }, { clientX: 40, clientY: 240 }] });
   assert.equal(f.dialog.style.getPropertyValue("--sheet-height"), "744px");

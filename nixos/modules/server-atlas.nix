@@ -8,7 +8,7 @@
     path = with pkgs; [ util-linux smartmontools ipmitool lvm2 coreutils "/run/current-system/sw" ];
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${pkgs.python3}/bin/python3 ${../../hardware-map/server/collector.py} --state-dir /var/lib/server-atlas";
+      ExecStart = "${pkgs.python3.withPackages (ps: [ ps.pyyaml ])}/bin/python3 ${../../hardware-map/server}/collector.py --state-dir /var/lib/server-atlas";
       Restart = "on-failure";
       RestartSec = 10;
       Group = "nogroup";

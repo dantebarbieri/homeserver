@@ -111,6 +111,23 @@ class APITests(unittest.TestCase):
                       "ids=cpu%22%7D&seconds=60"):
             self.assertEqual(self.request("/api/history?" + query)[0], 400, query)
 
+    def test_services_are_private_bounded_fresh_and_not_a_host_socket_proxy(self):
+        path = self.root / "services.json"
+        data = {"version": 1, "mode": "live", "status": "ok",
+                "capturedAt": server.utc(self.now), "services": [], "issues": []}
+        path.write_text(json.dumps(data))
+        status, headers, raw = self.request("/api/services")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual(json.loads(raw)["services"], [])
+        self.now += 21
+        self.assertEqual(self.request("/api/services")[0], 503)
+        data.update(capturedAt=server.utc(self.now), status="unavailable")
+        path.write_text(json.dumps(data))
+        self.assertEqual(self.request("/api/services")[0], 503)
+        self.assertEqual(self.request("/api/services", "POST")[0], 405)
+        self.assertEqual(self.request("/containers/json")[0], 404)
+
     def test_history_preserves_missing_nonfinite_and_stale_gaps(self):
         calls = []
 

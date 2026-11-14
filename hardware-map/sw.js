@@ -1,9 +1,9 @@
-const CACHE = "chasex-shell-v3";
+const CACHE = "chasex-shell-v6";
 const assets = new Map([
   ["index.html", "text/html"], ["styles.css", "text/css"], ["favicon.svg", "image/svg+xml"],
   ["manifest.webmanifest", "application/manifest+json"],
   ...["app.mjs", "board.mjs", "model.mjs", "metric-model.mjs", "metrics.mjs",
-    "live-data.mjs", "linux-snapshot.mjs", "mobile-ui.mjs", "pwa.mjs"].map(name => [name, "javascript"]),
+    "live-data.mjs", "linux-snapshot.mjs", "mobile-ui.mjs", "pwa.mjs", "services.mjs", "service-model.mjs"].map(name => [name, "javascript"]),
   ...["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"].map(name => [name, "image/png"]),
 ].map(([name, type]) => [new URL(name, self.location.href).href, type]));
 const home = new URL("./", self.location.href).href;

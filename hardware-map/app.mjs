@@ -6,6 +6,7 @@ import { applyLiveSnapshot } from "./metric-model.mjs";
 import { LiveData } from "./live-data.mjs";
 import { createBottomSheet } from "./mobile-ui.mjs";
 import { setupPwa } from "./pwa.mjs";
+import { createServicesUI } from "./services.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -97,7 +98,7 @@ function requestPopupClose(dialog) {
   popupSheets.get(dialog)?.close();
 }
 
-for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog"]) {
+for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog", "services-dialog"]) {
   const dialog = $(id);
   popupSheets.set(dialog, createBottomSheet(dialog, () => dialog.close()));
   let backdropStart = false;
@@ -128,6 +129,8 @@ for (const id of ["inspector-dialog", "tools-dialog", "metrics-dialog"]) {
 }
 $("close-inspector").addEventListener("click", () => requestPopupClose($("inspector-dialog")));
 $("close-tools").addEventListener("click", () => requestPopupClose($("tools-dialog")));
+$("close-services").addEventListener("click", () => requestPopupClose($("services-dialog")));
+createServicesUI({ enabled: dataSource.mode === "live", openPopup, onError: message => notify(message, true) });
 $("tools-button").addEventListener("click", () => {
   $("tools-button").focus({ preventScroll: true });
   openPopup($("tools-dialog"));

@@ -20,7 +20,7 @@ from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler, Requ
 
 STATIC = frozenset(("index.html", "styles.css", "favicon.svg", "app.mjs", "board.mjs",
                     "model.mjs", "metric-model.mjs", "metrics.mjs", "live-data.mjs", "linux-snapshot.mjs",
-                    "mobile-ui.mjs", "pwa.mjs", "sw.js", "manifest.webmanifest",
+                    "mobile-ui.mjs", "pwa.mjs", "services.mjs", "service-model.mjs", "sw.js", "manifest.webmanifest",
                     "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"))
 MAX_FILE = 8 * 1024 * 1024
 KEY = re.compile(r"[A-Za-z0-9_.:-]{1,160}\Z")
@@ -148,6 +148,22 @@ class State:
         finally:
             self.history_slots.release()
 
+    def services(self):
+        try:
+            with (self.state_dir / "services.json").open("rb") as stream:
+                raw = stream.read(MAX_FILE + 1)
+            if len(raw) > MAX_FILE:
+                raise ValueError("Services snapshot too large")
+            data = strict_json(raw)
+            if data["version"] != 1 or data["mode"] != "live" or not isinstance(data["services"], list):
+                raise ValueError("Invalid services snapshot")
+            age = self.clock() - datetime.fromisoformat(data["capturedAt"].replace("Z", "+00:00")).timestamp()
+            if not -10 <= age <= 20 or data["status"] != "ok":
+                raise ValueError("Services stale or unavailable")
+            return data
+        except (OSError, ValueError, KeyError, TypeError, OverflowError):
+            raise APIError(503, "Service accounting unavailable or stale") from None
+
     def prometheus_query(self, url):
         try:
             with self.opener.open(Request(url, headers={"Accept": "application/json"}), timeout=5) as response:
@@ -208,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                         "img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'")
+                         "img-src 'self' data: https://cdn.jsdelivr.net https://*.danteb.com; connect-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'")
         self.send_header("Connection", "close")
         self.end_headers()
         self.close_connection = True
@@ -224,6 +240,8 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/snapshot":
                 snapshot, _ = state.snapshot()
                 self.respond(200, snapshot)
+            elif url.path == "/api/services":
+                self.respond(200, state.services())
             elif url.path == "/healthz":
                 snapshot, age = state.snapshot()
                 self.respond(200, {"ready": True, "capturedAt": snapshot["capturedAt"],

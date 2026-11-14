@@ -52,7 +52,9 @@ export function createBottomSheet(dialog, closeDialog) {
     const chrome = [...dialog.children].filter(child => child !== body && !child.hidden)
       .reduce((sum, child) => sum + child.getBoundingClientRect().height, 0);
     const padding = parseFloat(getComputedStyle(dialog).paddingBottom) || 0;
-    limits = sheetHeights(viewportHeight(), chrome + body.scrollHeight + padding + 2, chrome + padding + 80);
+    const nestedOverflow = [...body.querySelectorAll("[data-sheet-scroll]")].reduce(
+      (sum, region) => sum + Math.max(0, region.scrollHeight - region.clientHeight), 0);
+    limits = sheetHeights(viewportHeight(), chrome + body.scrollHeight + nestedOverflow + padding + 2, chrome + padding + 80);
     height(limits[snap]);
     handle.setAttribute("aria-expanded", String(snap === "full"));
     handle.setAttribute("aria-label", snap === "full" ? "Show less detail" : "Show more detail");
@@ -147,14 +149,15 @@ export function createBottomSheet(dialog, closeDialog) {
   body.addEventListener("touchstart", event => {
     if (!media.matches || event.touches.length !== 1) return;
     const point = event.touches[0];
-    touch = { x: point.clientX, y: point.clientY, decision: null };
+    touch = { x: point.clientX, y: point.clientY, decision: null,
+      scroll: event.target.closest?.("[data-sheet-scroll]") ?? body };
   }, { passive: true });
   body.addEventListener("touchmove", event => {
     if (!touch) return;
     if (event.touches.length !== 1) { finish(true); touch = null; return; }
     const point = event.touches[0], dx = point.clientX - touch.x, dy = point.clientY - touch.y;
     if (touch.decision === null && Math.max(Math.abs(dx), Math.abs(dy)) >= 3) {
-      touch.decision = dragsSheet(dx, dy, snap === "full" || limits.half === limits.full, body.scrollTop);
+      touch.decision = dragsSheet(dx, dy, snap === "full" || limits.half === limits.full, touch.scroll.scrollTop);
       if (touch.decision) start(touch.y);
     }
     if (touch.decision) { event.preventDefault(); move(point.clientY); }

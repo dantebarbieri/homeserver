@@ -24,5 +24,5 @@ ln -sfn ../server-atlas-collector.service /usr/local/lib/systemd/system/multi-us
 systemctl daemon-reload
 systemctl restart server-atlas-collector.service
 docker compose -f "$root/hardware-map/compose.yml" build server-atlas
-docker compose -f "$root/hardware-map/compose.yml" up -d --no-deps --timeout 10 server-atlas
+docker compose -f "$root/hardware-map/compose.yml" up -d --no-deps --timeout 10 --wait --wait-timeout 90 server-atlas
 echo "Collector and web service installed. Configure the Prometheus scrape and admin-only Authelia/NPM route before publishing."
