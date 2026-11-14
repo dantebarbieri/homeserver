@@ -238,6 +238,23 @@ class AdvisorTests(unittest.TestCase):
         restarted.handle(HASH, orphan=True)
         restarted.decide.assert_not_called()
 
+    def test_unreachable_endpoint_skips_cycle_without_per_download_cooldown(self):
+        advisor = self.advisor()
+        advisor.decide = ai.Advisor.decide.__get__(advisor)
+        refused = ai.urllib.error.URLError(ConnectionRefusedError())
+        with patch.object(ai.urllib.request, "urlopen", side_effect=refused) as urlopen:
+            done, why = advisor.handle(HASH, orphan=True, reason="stuck")
+            self.assertIsNone(done)
+            self.assertIn("unavailable (ConnectionRefusedError)", why)
+            advisor.handle(HASH, orphan=True)
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertNotIn(HASH, self.state)
+        restarted = self.advisor()
+        self.assertIn("awaiting native verification", restarted.handle(HASH, orphan=True)[0])
+        slow = ai.urllib.error.URLError(TimeoutError())
+        with patch.object(ai.urllib.request, "urlopen", side_effect=slow):
+            self.assertRaises(ai.urllib.error.URLError, ai.Advisor.decide, advisor, {}, {"review"})
+
     def test_uncertain_submission_is_not_repeated(self):
         advisor = self.advisor()
         self.app.qbit.post.side_effect = TimeoutError()

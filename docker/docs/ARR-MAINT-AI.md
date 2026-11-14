@@ -37,8 +37,11 @@ with a 60-second request timeout, 4096 context tokens, 128 output tokens,
 thinking disabled and one-minute model keep-alive. Ollama serializes inference
 and loads only one model. This is not a combined-load guarantee with Whisper.
 `ARR_AI_MAX_CALLS` permits 1-6 calls and `ARR_AI_TIMEOUT` 5-120 seconds.
-Unchanged review/shadow decisions and connection failures back off for six
-hours. A model failure stops further inference for that cycle, but leaves
+Unchanged review/shadow decisions and per-download model failures (timeouts,
+invalid or HTTP-error responses) back off for six hours. An unreachable model
+endpoint (tunnel starting, Studio asleep or rebooting) only skips the rest of
+that cycle, without a per-download cooldown, so recovery resumes on the next
+cycle. A model failure stops further inference for that cycle, but leaves
 the normal maintenance rules and attention notifications available.
 
 `/state/ai.json` records model, policy version, evidence fingerprint, decision,

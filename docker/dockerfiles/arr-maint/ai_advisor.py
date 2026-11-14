@@ -67,6 +67,10 @@ def safe_actions(evidence, actions):
     return set(actions)
 
 
+class ModelUnavailable(Exception):
+    """The model endpoint could not be reached (tunnel starting, Studio asleep)."""
+
+
 class Advisor:
     def __init__(self, app, load, save, log, dry=False):
         self.app, self.save, self.log, self.dry = app, save, log, dry
@@ -120,8 +124,16 @@ class Advisor:
             self.url + "/api/chat", data=json.dumps(payload).encode(),
             # The SSH destination is loopback; preserve Ollama's Host/origin protection.
             headers={"Content-Type": "application/json", "Host": "127.0.0.1:11434"})
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            raw = response.read(65537)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                raw = response.read(65537)
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, ConnectionError) as e:
+            cause = getattr(e, "reason", e)
+            if isinstance(cause, OSError) and not isinstance(cause, TimeoutError):
+                raise ModelUnavailable(type(cause).__name__) from None
+            raise
         if len(raw) > 65536:
             raise ValueError("oversized model response")
         result = json.loads(raw)
@@ -315,6 +327,11 @@ class Advisor:
             self.persist()
             return ("local AI removed imported orphan; files kept" if action == "remove_orphan" else
                     f"local AI submitted {action}; awaiting native verification"), None
+        except ModelUnavailable as e:
+            # Endpoint outage is not evidence about this download: no per-download cooldown.
+            self.failed = True
+            self.log("AI UNAVAILABLE:", self.app.name, str(e))
+            return None, reason + f"; local AI unavailable ({e}); normal alerts retained"
         except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, TypeError, RuntimeError) as e:
             # No response bodies, request headers, credentials or model text in logs/notifications.
             self.failed = True
