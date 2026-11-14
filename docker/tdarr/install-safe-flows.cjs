@@ -55,7 +55,8 @@ async function main() {
   assert(notify, 'Existing Sonarr notification configuration is missing');
   const targets = libraries.filter(l => ['Io-wVbVRh', 'UU_64_3Ax', 'GHlz7HL1P'].includes(l._id));
   assert.equal(targets.length, 3, 'Expected exactly the three existing TV libraries');
-  assert(targets.every(l => [previous._id, FLOW_ID].includes(l.flowId)), 'A TV library uses an unexpected flow');
+  assert(targets.every(l => [previous._id, FLOW_ID].includes(l.flowId)),
+    'A TV library uses an unexpected flow; if it uses the offload flow, run install-offload-flow.cjs --rollback first');
   await fs.access(`${ROOT}/hevc-safe-v1.cjs`);
   const backup = `${ROOT}/backups/safe-flows-${Date.now()}.json`;
   await fs.writeFile(backup, JSON.stringify({ flows, libraries, global }, null, 2), { flag: 'wx', mode: 0o600 });

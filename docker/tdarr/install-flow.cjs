@@ -23,18 +23,20 @@ function flowDefinition() {
         fpEnabled: true, inputsDB: {},
       },
       {
+        // Only the Linux GPU worker has dv5-sidecar.cjs and jellyfin-ffmpeg. This runs before
+        // classify so a CPU worker on another node, such as the Mac Studio, only hands the row over.
+        name: 'Run only on the Linux GPU worker (single GPU slot)',
+        sourceRepo: 'Community', pluginName: 'tagsWorkerType', version: '1.0.0',
+        id: 'gpu-worker', position: { x: 0, y: 150 }, fpEnabled: true,
+        inputsDB: { requiredWorkerType: 'GPU', requiredNodeTags: '' },
+      },
+      {
         name: 'Probe: skip everything except Dolby Vision Profile 5',
         sourceRepo: 'Community', pluginName: 'customFunction', version: '1.0.0',
-        id: 'classify', position: { x: 0, y: 150 }, fpEnabled: true,
+        id: 'classify', position: { x: 0, y: 300 }, fpEnabled: true,
         inputsDB: {
           code: `module.exports = async args => require('${MODULE_PATH}').classify(args);`,
         },
-      },
-      {
-        name: 'Queue eligible files for the single GPU worker',
-        sourceRepo: 'Community', pluginName: 'tagsWorkerType', version: '1.0.0',
-        id: 'gpu-worker', position: { x: 0, y: 300 }, fpEnabled: true,
-        inputsDB: { requiredWorkerType: 'GPU', requiredNodeTags: '' },
       },
       {
         name: 'Profile 5 only: validated SDR sidecar; original unchanged',
@@ -46,9 +48,9 @@ function flowDefinition() {
       },
     ],
     flowEdges: [
-      ['input', 'classify'],
-      ['classify', 'gpu-worker'],
-      ['gpu-worker', 'dv5-sidecar'],
+      ['input', 'gpu-worker'],
+      ['gpu-worker', 'classify'],
+      ['classify', 'dv5-sidecar'],
     ].map(([source, target]) => ({
       source, sourceHandle: '1', target, targetHandle: null,
       id: `${source}-to-${target}`, animated: true, type: 'smoothstep',
@@ -149,15 +151,19 @@ async function main() {
   const apply = options.includes('--apply');
   const enable = options.includes('--enable');
   const { crud, request } = await connect();
-  const defaults = require('/app/Tdarr_Server/srcug/commonModules/jobs/libraryDefaults').default;
-  assert(defaults && typeof defaults === 'object', 'Missing installed Tdarr library defaults');
-  assert(Array.isArray(defaults.schedule), 'Incomplete Tdarr library defaults');
   await fs.access(MODULE_PATH);
   const [flows, libraries] = await Promise.all([
     crud('FlowsJSONDB', 'getAll'), crud('LibrarySettingsJSONDB', 'getAll'),
   ]);
   const existingFlow = flows.find(flow => flow._id === FLOW_ID);
   const existingLibrary = libraries.find(library => library._id === LIBRARY_ID);
+  // Tdarr 3.07 no longer ships these defaults; only a brand-new library needs them.
+  const defaults = existingLibrary ? undefined
+    : require('/app/Tdarr_Server/srcug/commonModules/jobs/libraryDefaults').default;
+  if (!existingLibrary) {
+    assert(defaults && typeof defaults === 'object', 'Missing installed Tdarr library defaults');
+    assert(Array.isArray(defaults.schedule), 'Incomplete Tdarr library defaults');
+  }
   const desiredFlow = flowDefinition();
   if (existingFlow && existingFlow.name !== desiredFlow.name) {
     throw new Error(`Flow ID collision: ${FLOW_ID}`);

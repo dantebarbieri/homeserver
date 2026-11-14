@@ -1,4 +1,8 @@
 #!/bin/bash
+# Run by com.danteb.studio-tdarr-launcher (the LaunchDaemon's program), never
+# by /bin/bash directly: macOS privacy (TCC) denies every file open on the SMB
+# mounts to a tree led by an Apple binary, and only a third-party job leader
+# that holds Full Disk Access passes it to ffmpeg and Tdarr. See macos/README.md.
 set -euo pipefail
 
 [[ "$(/usr/bin/id -u)" == 0 ]] || {
