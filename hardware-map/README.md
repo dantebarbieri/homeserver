@@ -139,6 +139,10 @@ a lighter related trace for contrast. Swap remains separate from RAM composition
 Long explanatory text has been removed from the performance pages, while
 threshold legends and the VRAM help tooltip remain available on demand.
 The sensor/graph semantics and retained inspection evidence are documented below.
+Legacy collectors also include seven permanent documentation notes in their
+`issues` list. The web adapter omits only those exact known notes from the
+notice banner; unknown messages, collection diagnostics and API/history errors
+are still shown. The raw snapshot is unchanged, so this needs no collector upgrade.
 
 ### Archived prototype interfaces
 

@@ -253,7 +253,7 @@ export function createMetricUI({ openPopup, closePopup, onError, isVisible, onFa
     $("metric-clock").textContent = live ? dataSource.snapshot ? `Updated ${new Date(dataSource.snapshot.capturedAt).toLocaleTimeString()}` : "Waiting for collector" : `${Math.floor(second / 60)}:${String(second % 60).padStart(2, "0")} simulated`;
     if (live) {
       const status = $("live-status");
-      const issues = [...(dataSource.snapshot?.issues ?? []), dataSource.error, dataSource.historyError].filter(Boolean);
+      const issues = dataSource.issues;
       status.hidden = !issues.length && !dataSource.stale;
       $("live-summary").textContent = `${dataSource.stale ? "Telemetry stale or unavailable" : "Telemetry notices"}${issues.length ? ` · ${issues.length}` : ""}`;
       $("live-issues").textContent = issues.join("; ");

@@ -2,6 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { LiveData, historyValues } from "./live-data.mjs";
 
+test("telemetry notices omit legacy context but preserve diagnostics, unknown messages and API failures", () => {
+  const source = new LiveData({ enabled: true });
+  assert.deepEqual(source.issues, []);
+  const notes = [
+    "Disk placement is provisional/serial-sorted, never physically confirmed.",
+    "Cache occupancy is resident cached blocks, not filesystem fullness; a full cache can be normal.",
+  ];
+  source.snapshot = { issues: [...notes] };
+  assert.deepEqual(source.issues, []);
+  source.snapshot.issues.push("cache: kernel reports needs_check", "cpu-power: package energy source unavailable", "New source diagnostic");
+  source.error = "Atlas API returned HTTP 503";
+  source.historyError = "120s: Atlas API returned HTTP 502";
+  assert.deepEqual(source.issues, ["cache: kernel reports needs_check", "cpu-power: package energy source unavailable",
+    "New source diagnostic", source.error, source.historyError]);
+  assert.deepEqual(source.snapshot.issues.slice(0, 2), notes);
+});
+
 test("the browser fetch implementation retains its required global receiver", async () => {
   const original = globalThis.fetch;
   globalThis.fetch = async function () {

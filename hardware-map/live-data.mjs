@@ -1,3 +1,15 @@
+// Older collectors mix permanent documentation into issues. Only these exact
+// notes are hidden; unknown messages and collection failures remain visible.
+const legacyContextNotes = new Set([
+  "Disk placement is provisional/serial-sorted, never physically confirmed.",
+  "memory-apps is residual other/anonymous memory, not per-process RSS.",
+  "Rear fan 2000 RPM values are ASSUMPTIONS, not measured; FAN3 is one shared six-fan hub reading.",
+  "Optional NVMe secondary is SMART temperature sensor 1; vendor-specific physical meaning is unverified.",
+  "GPU 3D/copy/shared memory remain unavailable (no supported source).",
+  "CPU package power is an energy-counter-derived interval average, not instantaneous or whole-server power.",
+  "Cache occupancy is resident cached blocks, not filesystem fullness; a full cache can be normal.",
+]);
+
 export function historyValues(points, end, seconds, step) {
   const count = Math.min(300, Math.ceil(seconds / Math.max(1, step)));
   const values = Array(count + 1).fill(null);
@@ -28,6 +40,10 @@ export class LiveData {
   get stale() {
     return this.mode === "live" && (Boolean(this.error) || !this.snapshot ||
       this.clock() - Date.parse(this.snapshot.capturedAt) > Math.max(20000, this.snapshot.intervalSeconds * 3000));
+  }
+  get issues() {
+    return [...(this.snapshot?.issues ?? []).filter(issue => !legacyContextNotes.has(issue)),
+      this.error, this.historyError].filter(Boolean);
   }
   value(id) {
     const value = this.snapshot?.metrics[id];
