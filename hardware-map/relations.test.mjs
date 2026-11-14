@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { connectorById, connectors, driveCages, inspectionConnections, psuPorts } from "./board.mjs";
+import { connectorById, connectors, components, driveCages, inspectionConnections, observedReadings, partReferences, provenanceLabels, psuPorts, syntheticReadings } from "./board.mjs";
 import { caseFanIds, driveBayId, driveIds, driveInfo, flaggedProvenance, psuSocketLinks, relationsFor, rearFanIds } from "./relations.mjs";
 
 const source = readFileSync(new URL("./app.mjs", import.meta.url), "utf8");
@@ -84,12 +84,16 @@ test("PSU sockets link only to what they feed", () => {
   assert.deepEqual(relationsFor("psu"), []);
 });
 
-test("site-visible hardware text never attributes facts to the user", () => {
-  const attribution = /user[- ]?(reported|confirmed)|user (confirms|reports|accepts)|\(user|tentative/i;
+test("published hardware text and reference metadata never attribute facts to the user", () => {
+  const attribution = /\buser\b(?! (?:guide|manual|annotation)\b)|\bowner[- ](?:supplied|reported|confirmed)\b/i;
   const linkText = links => links.flatMap(link => [link.detail, link.short]);
   const visible = [
-    ...connectors.map(connector => connector.detail),
-    ...Object.values(inspectionConnections).map(connection => connection.target),
+    ...connectors.flatMap(connector => [connector.label, connector.detail, connector.source, connector.caution, connector.location]),
+    ...components.flatMap(component => [component.label, component.model, component.capacity, component.status, component.note]),
+    ...Object.values(inspectionConnections).flatMap(connection => [connection.target, connection.evidence, connection.note]),
+    ...[...observedReadings, ...syntheticReadings].flatMap(reading => [reading.label, reading.source]),
+    ...Object.values(partReferences).flat().flatMap(reference => [reference.label, reference.note]),
+    ...Object.values(provenanceLabels),
     ...psuPorts.map(port => port.target),
     ...psuPorts.flatMap(port => linkText(psuSocketLinks(port.id))),
     ...[...partIds].flatMap(id => relationsFor(id).flatMap(group => [group.title, ...linkText(group.links)])),

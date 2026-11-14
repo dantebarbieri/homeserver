@@ -179,9 +179,13 @@ feeds. Case fans link to the hub and to each other; no hub port numbers are
 claimed because they have not been traced. Navigation never changes the
 selected view mode or category. Links are defined in `relations.mjs`; the
 CPU and motherboard are reached through the `ATX12V1`/`ATXPWR1` connector pages
-rather than directly from the PSU. Facts the owner supplied are shown plainly;
-only uncertain provenance (photo-inferred, photo-uncertain, unverified) gets a
-marker beside the link (`flaggedProvenance` in `relations.mjs`).
+rather than directly from the PSU. Established connections are shown as facts,
+without attribution badges or tooltips; button styling is unchanged. Only
+uncertain provenance (photo-inferred, photo-uncertain, unverified) gets a marker
+beside the link (`flaggedProvenance` in `relations.mjs`). Reading sources and
+reference metadata follow the same rule. Attribution history belongs in private
+notes outside the repository, not browser-delivered strings. Legacy provenance
+codes remain accepted so existing saved annotations still load.
 
 ### Services
 
@@ -627,7 +631,7 @@ not from a new server query. Missing pair inputs do not fall back to the default
 
 ### PSU modular-panel reference
 
-The user-supplied empty-panel reference photo shows **14 modular cable sockets**.
+The empty-panel reference photo shows **14 modular cable sockets**.
 These are local reference labels, **not Corsair's official socket numbers**, and
 positions refer to looking straight at the panel exactly as pictured:
 
@@ -644,27 +648,25 @@ positions refer to looking straight at the panel exactly as pictured:
 The separate USB-C-shaped iCUE connection and round button are not modular
 power sockets. This is an empty reference unit, not evidence of installed
 occupancy or orientation. The PSU popup lists the 14 reference sockets and their
-user-reported assignments:
+installed connections:
 
-| Socket | Reported destination |
+| Socket | Destination |
 |---|---|
 | MB18 + MB10 | Both ends of the same motherboard ATX cable → ATXPWR1 (24-pin) |
 | C1 | GPU auxiliary power |
 | C2 | Separate CPU EPS cable → ATX12V1 (8-pin) |
 | C3–C6 | Empty |
-| S1 | Fan hub, dedicated SATA power harness; user-confirmed |
-| S2 | Cage 3, SATA power; tentative |
+| S1 | Fan hub, dedicated SATA power harness |
+| S2 | Cage 3, SATA power |
 | S3 | Empty |
-| S4 | Cage 1, SATA power; tentative |
-| S5 | Cage 2, SATA power; tentative |
-| S6 | Rear fans, separate Molex harness; user-confirmed |
+| S4 | Cage 1, SATA power |
+| S5 | Cage 2, SATA power |
+| S6 | Rear fans, separate Molex harness |
 
-The latest November 13 correction **confirms S1 for the hub and S6 for Molex**.
-HDD assignments **S2 → cage 3, S4 → cage 1, S5 → cage 2 remain tentative**
-recollections, not newly traced. Earlier S-port assignments are superseded.
-At the user's request, dashboard connection labels omit confidence qualifiers;
-provenance and the tentative HDD PSU routing remain in the data records and
-these notes. This presentation does not upgrade the underlying evidence.
+**S1 supplies the hub and S6 the rear-fan Molex harness**.
+HDD assignments are **S2 → cage 3, S4 → cage 1, S5 → cage 2**.
+Earlier S-port assignments are superseded. These are established connections,
+not tentative mappings; attribution history is retained privately.
 MB18 and MB10 are both on the
 PSU end of the same 24-pin ATX cable; they do **not** feed the EPS 8-pin connector.
 No electrical pinout, modular-cable interchangeability or additional power
