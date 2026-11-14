@@ -24,6 +24,7 @@ include:
   - compose.romm.yml
   - compose.searxng.yml
   - compose.starr.yml
+  - compose.studio.yml
   - compose.monitoring.yml
   - compose.utilities.yml
   - compose.websites.yml
@@ -32,6 +33,15 @@ include:
 networks:
   proxy:
     enable_ipv6: true
+  studio-whisper:
+    # Default pools are exhausted; adjacent to, not overlapping, the transfer /29.
+    ipam:
+      config:
+        - subnet: 10.253.240.8/29
+  arr-ai:
+    ipam:
+      config:
+        - subnet: 10.253.240.16/29
 
 # Centralized secrets for security visibility
 secrets:

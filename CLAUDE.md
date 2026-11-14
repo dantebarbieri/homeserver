@@ -18,10 +18,13 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 |-----------|---------|
 | `docker/` | Docker Compose orchestration — 18 category files, 50+ services |
 | `nixos/` | NixOS system configuration — flake (`flake.nix` + `flake.lock`), `configuration.nix` importing `modules/`, Home Manager in `home/` |
+| `macos/` | Mac Studio (`ai-studio`, `192.168.50.140`) compute companion — isolated native speech/models and a disabled native Tdarr node |
 | `homepage/` | Homepage dashboard YAML config |
 | `mail-config/` | Portable email/contacts setup (aerc, khard, vdirsyncer) — also used on macOS |
 | `recyclarr-configs/` | TRaSH Guides quality profiles for Sonarr/Radarr |
 | `production-configs/` | Gitignored dir for production config copies (only `README.md` tracked) |
+
+The Mac Studio is set up by hand, not declaratively. Read `macos/DECISIONS.md` before changing it: it separates Dante's intents from agent-chosen implementations (which may be replaced with better solutions), and lists where every piece lives and how to remove it. Update it with any Studio change. Server cooling findings are in `docs/SERVER-COOLING.md`.
 
 ### Production Server Paths
 
@@ -61,7 +64,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 
 | File | Services |
 |------|----------|
-| `compose.ai.yml` | whisperasr |
+| `compose.ai.yml` | studio-whisper, studio-ollama (profile `arr-ai`) |
 | `compose.core.yml` | nginxproxymanager, ddclient, endlessh, bmc-ip-monitor |
 | `compose.auth.yml` | authelia, postgres, redis |
 | `compose.dashboards.yml` | homepage, homepage-socket-proxy, dashdot |
@@ -124,6 +127,8 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 - `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
 - `dockerfiles/arr-maint/` — queue auto-fixers for Lidarr, Radarr and Sonarr: one image, a shared engine plus per-app rules, selected by `APP`
+- `dockerfiles/bazarr/` — patches Bazarr's Whisper provider to reject HTTP errors instead of saving them as subtitles; the build fails if the patch no longer fits
+- `dockerfiles/studio-whisper-tunnel/` — SSH forward that gives Bazarr (and only Bazarr) the Mac Studio's loopback Whisper API at `http://studio-whisper:9000`; setup in `macos/ai/README.md`
 - `dockerfiles/soularr-fallback/` — track-level Soulseek search + Lidarr ManualImport for releases Soularr couldn't get
 - `dockerfiles/plex-navidrome-sync/` — two-way Plex ↔ Navidrome sync of ratings, hearts, play counts and playlists
 - `dockerfiles/music-cover-fallback/` — opt-in daily shared `cover.jpg` fallback from Cover Art Archive, Apple Music and Deezer; never edits audio tags or replaces existing art
@@ -164,8 +169,8 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 | `dci <svc>` | `dci bazarr` | Show image info (repo, tag, digest, created) |
 | `dce <svc> <cmd...>` | `dce postgres psql -U myuser mydb` | Exec command in running container |
 | `dcs <svc>` | `dcs bazarr` | Interactive shell (tries bash, then sh) |
-| `dcl [-s <time>] <svcs...>` | `dcl -s 30m bazarr whisperasr` | Follow logs with optional --since |
-| `dcr [svcs...]` | `dcr bazarr whisperasr` | Restart/recreate services |
+| `dcl [-s <time>] <svcs...>` | `dcl -s 30m bazarr studio-whisper` | Follow logs with optional --since |
+| `dcr [svcs...]` | `dcr bazarr studio-whisper` | Restart/recreate services |
 | `dcu` | `dcu` | Quick update: git pull, pull/build/up, light prune (a failed image build only holds back that service; never touches the `mirklurk-release` wiki frontend) |
 | `dcupdate` | `dcupdate` | Full update: git pull+push, pull/build, then down/up (skips the teardown if an image fails to build), heavy prune that keeps retained wiki images |
 

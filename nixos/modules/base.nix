@@ -37,6 +37,20 @@
   # Flakes
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
+  # The daily auto-upgrade adds a generation most days and nothing removed
+  # them. Keep a month of rollback targets; the running and booted systems are
+  # GC roots regardless of age. Monday morning is clear of the nightly
+  # backup/update window and Sunday's scrub and weekly offsite sync.
+  nix.gc = {
+    automatic = true;
+    dates = "Mon *-*-* 05:15:00";
+    options = "--delete-older-than 30d";
+  };
+  nix.optimise = {
+    automatic = true;
+    dates = [ "Mon *-*-* 06:00:00" ];
+  };
+
   # sudo-rs — memory-safe Rust sudo with credential caching + asterisk feedback
   security = {
     sudo-rs = {

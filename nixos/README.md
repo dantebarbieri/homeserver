@@ -317,7 +317,9 @@ activated with the system by `home-manager-danteb.service`, with no separate
 
 - `~/.zshrc`, `~/.zshenv`, `~/.zprofile`: history, keymap, Zim, zoxide, iTerm2
   integration. System-wide shell setup (aliases, `dc*`/`ns*` functions,
-  fastfetch) stays in `modules/shell.nix` for every user.
+  fastfetch) stays in `modules/shell.nix` for every user. On initial shells,
+  fastfetch uses ZSH's current terminal width (`COLUMNS`): below 96 columns the
+  logo sits above the info; wider or unknown widths keep the default layout.
 - `~/.zimrc`: the Zim module list. Editing it rebuilds `~/.zim/init.zsh` on the
   next shell. zimfw itself comes from nixpkgs, so update it with the flake lock;
   `zimfw upgrade` cannot write to the store.

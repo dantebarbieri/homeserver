@@ -60,7 +60,7 @@ docker compose -f compose.gaming.yml up -d
 | **Nextcloud** | nextcloud, nextcloud_cron, nextcloud_postgres, nextcloud_redis |
 | **RomM** | romm, romm-db |
 | **SearXNG** | searxng, searxng_redis |
-| **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, whisperasr, tdarr |
+| **Starr** | radarr, sonarr, bazarr, prowlarr, recyclarr, seerr, tdarr |
 | **Utilities** | vaultwarden, syncthing, ntfy |
 | **Websites** | travel-planner, recipe, skyjo, sorry, mirklurk, mirklurk-db, mirklurk-backup, mirklurk-map, mirklurk-map-uploads |
 

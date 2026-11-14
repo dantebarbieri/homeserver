@@ -1,20 +1,64 @@
 # AI services stack
-# whisperasr (speech-to-text; used by Bazarr for subtitle generation)
+# studio-whisper (tunnel to the Mac Studio's Whisper API for Bazarr)
 
 services:
-  whisperasr:
+  # Bazarr's SSH-authenticated path to the Mac Studio's loopback-only Whisper
+  # API (http://studio-whisper:9000). Only Bazarr shares its network; no port
+  # is published. Setup: macos/ai/README.md (Bazarr transport).
+  studio-whisper:
     extends:
       file: compose.common.yml
-      service: gpu-service
-    image: onerahmet/openai-whisper-asr-webservice:latest-gpu
-    container_name: whisperasr
-    environment:
-      ASR_ENGINE: faster_whisper
-      ASR_MODEL: large-v3
-      ASR_DEVICE: cuda
-      ASR_QUANTIZATION: float16
+      service: common-service
+    image: studio-whisper-tunnel
+    build:
+      context: dockerfiles/studio-whisper-tunnel
+      pull: true
+      args:
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
+    container_name: studio-whisper
+    # home.arpa is served by AdGuard, not the host's public fallback resolvers.
+    dns: [192.168.50.100]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ${DATA}/studio-whisper-tunnel:/state:ro
     networks:
-      - starr
+      - studio-whisper
+
+  # Opt in with COMPOSE_PROFILES=arr-ai after provisioning its independent key.
+  # Only maintenance helpers share this network; Ollama stays off the LAN.
+  studio-ollama:
+    extends:
+      file: compose.common.yml
+      service: common-service
+    profiles: ["arr-ai"]
+    image: studio-ollama-tunnel
+    build:
+      context: dockerfiles/studio-whisper-tunnel
+      pull: true
+      args:
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
+    container_name: studio-ollama
+    dns: [192.168.50.100]
+    environment:
+      STUDIO_USER: _arrmaint
+      STUDIO_PORT: "11434"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ${DATA}/studio-ollama-tunnel:/state:ro
+    networks:
+      - arr-ai
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:11434/api/version"]
+      interval: 1m
+      timeout: 10s
+      start_period: 30s
 
 networks:
-  starr:
+  studio-whisper:
+  arr-ai:
