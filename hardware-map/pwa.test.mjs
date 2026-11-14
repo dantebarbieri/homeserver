@@ -60,7 +60,7 @@ test("the installed shell opens offline but private APIs, SSO and other origins 
   assert.equal(await sw.request("/app.mjs", "POST"), undefined);
   sw.fetch = async () => { throw new TypeError("Offline"); };
   const response = await sw.request("/?phone=1");
-  assert.match(await response.text(), /<h1>ChasEx<\/h1>/);
+  assert.match(await response.text(), /<h1>.*<span class="brand-name">ChasEx<\/span><\/h1>/);
   assert.match(await (await sw.request("/app.mjs")).text(), /setupPwa/);
 });
 
@@ -79,7 +79,7 @@ test("authentication errors and redirected or same-origin login HTML never repla
   }
   sw.fetch = async () => { throw new TypeError("Offline"); };
   const html = await (await sw.request("/")).text();
-  assert.match(html, /<h1>ChasEx<\/h1>/);
+  assert.match(html, /<h1>.*<span class="brand-name">ChasEx<\/span><\/h1>/);
   assert.doesNotMatch(html, /Private login form/);
 });
 

@@ -25,40 +25,85 @@ export function createBottomSheet(dialog, closeDialog) {
   handle.setAttribute("aria-controls", dialog.id);
   dialog.prepend(handle);
   let snap = "half", limits = { half: 0, full: 0 }, drag = null, touch = null, closing = null, ignoreClickUntil = 0;
+  let updateFrame = null, dragFrame = null, settling = null, opening = null;
   const viewportHeight = () => window.visualViewport?.height ?? innerHeight;
+  const clamp = value => Math.max(0, Math.min(limits.full, value));
   function height(value) {
-    dialog.style.setProperty("--sheet-height", `${Math.max(0, Math.min(limits.full, value))}px`);
+    dialog.style.setProperty("--sheet-height", `${clamp(value)}px`);
+  }
+  function offset(value) {
+    dialog.style.setProperty("--sheet-offset", `${limits.full - clamp(value)}px`);
+  }
+  function stopMotion() {
+    clearTimeout(settling); settling = null;
+    clearTimeout(opening); opening = null;
+    cancelAnimationFrame(dragFrame); dragFrame = null;
+    dialog.classList.remove("sheet-opening", "sheet-dragging", "sheet-settling");
+    dialog.style.removeProperty("--sheet-offset");
+  }
+  function visibleHeight() {
+    const transform = getComputedStyle(dialog).transform;
+    const translation = transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m42;
+    return clamp(dialog.getBoundingClientRect().height - translation);
   }
   function update() {
     dialog.classList.toggle("touch-sheet", media.matches);
-    if (!media.matches || !dialog.open) return;
+    if (!media.matches || !dialog.open || drag || settling !== null || closing !== null) return;
     const chrome = [...dialog.children].filter(child => child !== body && !child.hidden)
       .reduce((sum, child) => sum + child.getBoundingClientRect().height, 0);
     const padding = parseFloat(getComputedStyle(dialog).paddingBottom) || 0;
     limits = sheetHeights(viewportHeight(), chrome + body.scrollHeight + padding + 2, chrome + padding + 80);
-    if (!drag) height(limits[snap]);
+    height(limits[snap]);
     handle.setAttribute("aria-expanded", String(snap === "full"));
     handle.setAttribute("aria-label", snap === "full" ? "Show less detail" : "Show more detail");
   }
+  function scheduleUpdate() {
+    if (!dialog.open || drag || settling !== null || closing !== null || updateFrame !== null) return;
+    updateFrame = requestAnimationFrame(() => { updateFrame = null; update(); });
+  }
   function settle(next) {
+    const current = drag?.current ?? visibleHeight();
     drag = null;
-    dialog.classList.remove("sheet-dragging");
     if (next === "closed") return close();
+    stopMotion();
     snap = next;
-    update();
+    if (!media.matches || reduced.matches || Math.abs(current - limits[snap]) < 1) return update();
+    // Reveal fixed-height content with a transform; only snap boundaries need layout.
+    dialog.classList.add("sheet-dragging");
+    height(limits.full);
+    offset(current);
+    dialog.getBoundingClientRect();
+    dialog.classList.replace("sheet-dragging", "sheet-settling");
+    offset(limits[snap]);
+    handle.setAttribute("aria-expanded", String(snap === "full"));
+    handle.setAttribute("aria-label", snap === "full" ? "Show less detail" : "Show more detail");
+    settling = setTimeout(() => {
+      height(limits[snap]);
+      stopMotion();
+      update();
+    }, 200);
   }
   function close() {
     if (closing !== null) return;
     drag = touch = null;
+    clearTimeout(settling); settling = null;
+    clearTimeout(opening); opening = null;
+    cancelAnimationFrame(dragFrame); dragFrame = null;
+    dialog.classList.remove("sheet-opening", "sheet-settling");
     dialog.classList.remove("sheet-dragging");
     if (!media.matches || reduced.matches) return closeDialog();
     dialog.classList.add("sheet-closing");
     closing = setTimeout(() => { closing = null; closeDialog(); }, 200);
   }
   function start(y) {
-    drag = { startY: y, height: dialog.getBoundingClientRect().height, previous: snap,
+    if (closing !== null) return;
+    const current = visibleHeight();
+    stopMotion();
+    drag = { startY: y, height: current, current, previous: snap,
       moved: false, samples: [{ y, time: performance.now() }] };
     dialog.classList.add("sheet-dragging");
+    height(limits.full);
+    offset(current);
   }
   function move(y) {
     if (!drag) return;
@@ -66,14 +111,18 @@ export function createBottomSheet(dialog, closeDialog) {
     drag.moved ||= Math.abs(y - drag.startY) >= 10;
     drag.samples.push({ y, time: now });
     drag.samples = drag.samples.filter(sample => now - sample.time <= 100);
-    height(drag.height + drag.startY - y);
+    drag.current = clamp(drag.height + drag.startY - y);
+    if (dragFrame === null) dragFrame = requestAnimationFrame(() => {
+      dragFrame = null;
+      if (drag) offset(drag.current);
+    });
   }
   function finish(cancelled = false) {
     if (!drag) return;
     const previous = drag.previous, moved = drag.moved, first = drag.samples[0], last = drag.samples.at(-1);
     const velocity = performance.now() - last.time <= 100 && last.time > first.time
       ? (last.y - first.y) / (last.time - first.time) : 0;
-    const current = dialog.getBoundingClientRect().height;
+    const current = drag.current;
     if (moved) ignoreClickUntil = performance.now() + 350;
     settle(cancelled || !moved ? previous : sheetSnap(current, velocity, limits, previous));
   }
@@ -114,15 +163,33 @@ export function createBottomSheet(dialog, closeDialog) {
   body.addEventListener("touchcancel", () => { finish(true); touch = null; });
   dialog.addEventListener("close", () => {
     clearTimeout(closing);
+    cancelAnimationFrame(updateFrame); updateFrame = null;
     closing = drag = touch = null;
-    dialog.classList.remove("sheet-closing", "sheet-dragging");
+    stopMotion();
+    dialog.classList.remove("sheet-closing");
   });
-  new MutationObserver(update).observe(body, { childList: true, subtree: true, characterData: true });
-  window.addEventListener("resize", update);
-  window.visualViewport?.addEventListener("resize", update);
-  media.addEventListener("change", () => { finish(true); update(); });
+  new MutationObserver(scheduleUpdate).observe(body, { childList: true, subtree: true, characterData: true });
+  window.addEventListener("resize", scheduleUpdate);
+  window.visualViewport?.addEventListener("resize", scheduleUpdate);
+  media.addEventListener("change", () => {
+    if (!media.matches) {
+      drag = touch = null;
+      stopMotion();
+    }
+    update();
+  });
   return {
-    open() { clearTimeout(closing); closing = null; snap = "half"; dialog.classList.remove("sheet-closing"); update(); },
+    open() {
+      clearTimeout(closing); closing = drag = touch = null;
+      stopMotion();
+      snap = "half";
+      dialog.classList.remove("sheet-closing");
+      update();
+      if (media.matches && !reduced.matches) {
+        dialog.classList.add("sheet-opening");
+        opening = setTimeout(() => { opening = null; dialog.classList.remove("sheet-opening"); }, 200);
+      }
+    },
     close,
   };
 }

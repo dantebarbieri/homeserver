@@ -1,10 +1,18 @@
-import { boardId, connectorById, hardwareCategories, inspectionConnections, provenanceLabels } from "./board.mjs";
+import { boardId, connectorById, hardwareCategories, inspectionConnections, pcie2Modes, provenanceLabels } from "./board.mjs";
 
 export const storageKey = "homeserver.hardware-map.v1";
 export const confidenceValues = ["unknown", "inferred", "confirmed"];
 export const occupancyValues = ["unverified", "occupied", "free", "blocked"];
 export const maxImportBytes = 256 * 1024;
 const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
+
+export function pcie2ModeFor(pe8, pe16) {
+  for (const pair of [pe8, pe16]) {
+    if (pair != null && pair !== "1-2" && pair !== "2-3") throw new RangeError("Expected jumper pins 1-2 or 2-3");
+  }
+  if (pe8 == null || pe16 == null) return null;
+  return pcie2Modes.find(mode => mode.PE8_SEL === pe8 && mode.PE16_SEL === pe16);
+}
 
 export const fanMotionStages = [
   { id: "stopped", label: "Stopped", example: 0, ceiling: 0, period: 0, bladeOpacity: 1, rings: 0, segments: 0, sweep: 0 },

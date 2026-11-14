@@ -1,11 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { connectors, connectorById, landscapeBounds, inspectionConnections, observedReadings, syntheticReadings } from "./board.mjs";
-import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
+import { emptyDocument, emptyConnection, validateDocument, parseDocument, updateConnection, serializeDocument, loadDocument, saveDocument, withInspectionDefaults, connectionCounts, occupancyCounts, fanAvailability, matchesHardware, fanMotionStages, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, pcie2ModeFor, interpolateAir, readingFor, storageKey, maxImportBytes } from "./model.mjs";
 import { linuxSnapshot } from "./linux-snapshot.mjs";
 
 const now = "2026-11-12T21:30:00.000Z";
 const annotation = { target: "CPU cooler via splitter", confidence: "confirmed", occupancy: "occupied", evidence: "Cable physically traced; example test evidence", note: "Both branches checked" };
+
+test("PCIE2 jumper pairs select the documented lanes and mutually shared storage resources", () => {
+  for (const [pe8, pe16, expected] of [
+    ["1-2", "1-2", [16, false, false, false]],
+    ["1-2", "2-3", [8, true, true, false]],
+    ["2-3", "1-2", [0, false, false, true]],
+    ["2-3", "2-3", [0, true, true, true]],
+  ]) {
+    const mode = pcie2ModeFor(pe8, pe16);
+    assert.deepEqual([mode.pcie2Lanes, mode.m2, mode.sata, mode.oculink], expected);
+  }
+});
+
+test("missing or invalid jumper positions never select a default lane configuration", () => {
+  assert.equal(pcie2ModeFor(undefined, "2-3"), null);
+  assert.equal(pcie2ModeFor("1-2", null), null);
+  assert.equal(pcie2ModeFor(), null);
+  for (const invalid of ["1-3", "open", "", 12, [1, 2]]) {
+    assert.throws(() => pcie2ModeFor(invalid, "1-2"), /Expected jumper pins/);
+    assert.throws(() => pcie2ModeFor("1-2", invalid), /Expected jumper pins/);
+  }
+});
 
 test("board connectors are unique and a blank annotation document has no assigned connections", () => {
   assert.equal(connectorById.size, connectors.length);
@@ -164,6 +186,21 @@ test("a connection edit preserves other connectors and retains evidence on expor
   assert.equal(first.connections.FAN2, undefined);
 });
 
+test("HBA data-group annotations round-trip without replacing saved cage-routing notes", () => {
+  const saved = updateConnection(emptyDocument(), "SATA_0_3", {
+    ...annotation, target: "My cable inspection", note: "Keep my existing annotation",
+  }, now);
+  const defaults = withInspectionDefaults(saved);
+  const exported = parseDocument(serializeDocument(defaults));
+  assert.deepEqual(exported.connections.HBA_DATA, inspectionConnections.HBA_DATA);
+  assert.deepEqual(exported.connections.SATA_0_3, saved.connections.SATA_0_3);
+  const edited = updateConnection(exported, "HBA_DATA", {
+    ...annotation, target: "Cage 1, cable socket still untraced",
+  }, now);
+  assert.deepEqual(parseDocument(serializeDocument(edited)), edited);
+  assert.deepEqual(edited.connections.SATA_4_7, defaults.connections.SATA_4_7);
+});
+
 test("occupancy counts distinguish empty, connected, blocked and unverified independently of confidence", () => {
   assert.deepEqual(occupancyCounts(emptyDocument()), { occupied: 0, free: 0, blocked: 0, unverified: connectors.length });
   let document = updateConnection(emptyDocument(), "FAN1", annotation, now);
@@ -176,12 +213,12 @@ test("occupancy counts distinguish empty, connected, blocked and unverified inde
 
 test("inspection defaults distinguish confirmed occupied and confirmed free fan headers", () => {
   const document = withInspectionDefaults(emptyDocument());
-  for (const id of ["CPU1", "M2_1", "M2_2", "SATA_0_3", "SATA_4_7", "FAN1", "FAN2", "ATXPWR1", "ATX12V1", "PANEL1"]) {
+  for (const id of ["CPU1", "M2_1", "M2_2", "FAN1", "FAN2", "ATXPWR1", "ATX12V1", "PANEL1"]) {
     assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].provenance, "photo-confirmed");
     assert.equal(document.connections[id].occupancy, "occupied");
   }
-  for (const id of ["DDR4_A1", "DDR4_B1", "DDR4_G1", "DDR4_H1", "USB3_3_4", "LAN1", "LAN2", "IPMI_LAN1"]) {
+  for (const id of ["SATA_0_3", "SATA_4_7", "HBA_DATA", "DDR4_A1", "DDR4_B1", "DDR4_G1", "DDR4_H1", "USB3_3_4", "LAN1", "LAN2", "IPMI_LAN1"]) {
     assert.equal(document.connections[id].provenance, "user-confirmed");
     assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].occupancy, "occupied");
@@ -189,13 +226,15 @@ test("inspection defaults distinguish confirmed occupied and confirmed free fan 
   assert.equal(document.connections.FAN3.confidence, "confirmed");
   assert.equal(document.connections.FAN3.occupancy, "occupied");
   assert.equal(document.connections.FAN3.provenance, "user-confirmed");
-  for (const id of ["FAN4", "FAN5", "FAN6", "FAN7", "DDR4_C1", "DDR4_D1", "DDR4_E1", "DDR4_F1", "GFX_12V1", "TR1", "TR2", "REAR_OTHER"]) {
+  for (const id of ["FAN4", "FAN5", "FAN6", "FAN7", "DDR4_C1", "DDR4_D1", "DDR4_E1", "DDR4_F1", "GFX_12V1", "TR1", "TR2", "OCU1", "OCU2", "PSU_SMB1", "REAR_OTHER"]) {
     assert.equal(document.connections[id].confidence, "confirmed");
     assert.equal(document.connections[id].occupancy, "free");
     assert.equal(document.connections[id].provenance, "user-confirmed");
   }
   assert.equal(document.connections.ATX12V2.provenance, "photo-confirmed");
   assert.equal(document.connections.ATX12V2.occupancy, "free");
+  assert.equal(document.connections.AUX_PANEL1.provenance, "photo-confirmed");
+  assert.equal(document.connections.AUX_PANEL1.occupancy, "free");
   assert.deepEqual(fanAvailability(document), { free: 4, occupied: 3, unverified: 0 });
   assert.deepEqual(parseDocument(serializeDocument(document)), document);
 });

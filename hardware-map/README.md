@@ -46,6 +46,19 @@ metric names and private state directories retain `server-atlas` for continuity.
 Browser preferences are origin-local and do not automatically move to the new
 hostname.
 
+On phones, the header controls use a compact grid, with extra breathing room
+above the top safe-area inset. The original logo accompanies the title on wider
+screens; at 420 px and below only the logo is visible, while the heading still
+names ChasEx for screen readers. Metric-family buttons wrap into centered grid
+cells rather than shrinking their labels.
+
+Inspection and performance sheets drag using frame-batched transforms with a
+fixed content layout, then snap to half/full height. Content-size measurements
+wait until the gesture and snap finish; live collection continues throughout.
+Only opening a sheet plays its entrance animation. The grabber supports keyboard
+controls, native content scrolling is preserved, and reduced motion disables
+the entrance, snap and dismissal animations.
+
 ## Live service
 
 The deployed Python server marks the page **LIVE**; a static HTTP server marks
@@ -357,7 +370,9 @@ FAN3 tach is a relayed BMC observation, not an independent cable trace.
 | Installed PSU label photo, November 13 | Corsair HX1000i **CP-9020259 / RPS0131 / 75-005684**, **1000 W rated**. The label confirms the previously identified purchase family; the retail `-NA` suffix is not printed on this label. The current retail title does not establish a newer ATX certification for this unit. The original photo and serial remain private. |
 | User-confirmed, November 13 | **Three separate SATA power harnesses, four HDDs each**; a **fourth SATA harness dedicated to the hub**; **one separate Molex harness for both rear fans**. This supersedes the old one-harness-for-12-HDDs suspicion and stale port counts. Individual PSU port IDs, cable part numbers, load limits and spare-port counts remain unverified. **PSU USB/iCUE is not connected**. Do not infer modular-cable compatibility from connector shape or package quantities. |
 | Photo-confirmed / inferred | IMG_4570 shows **PANEL1** with readable **POWER SW** and other switch/LED plugs. The red/white/green/black lower-edge flat cable is likely part of that loom; exact continuity and individual pin assignments remain untraced. The earlier USB 2.0 suggestion was not established. |
-| User-confirmed, November 13 | **12 installed HDDs**, three five-bay cages, **bottom bay empty in each front-view left/center/right cage**. Each cage contains four drives; no drives being added. All 12 serial-to-bay observations were recorded privately in the user's photo order (cage 3, then 2, then 1; four occupied bays top-down) and uniquely matched to live inventory. Individual data-cable routing remains untraced. |
+| User-confirmed, November 13 | **12 installed HDDs**, three five-bay cages, **bottom bay empty in each front-view left/center/right cage**. Each cage contains four drives; no drives being added. All 12 serial-to-bay observations were recorded privately in the user's photo order (cage 3, then 2, then 1; four occupied bays top-down) and uniquely matched to live inventory. **SATA 0–3 → cage 3; SATA 4–7 → cage 2; SAS 9300-8i → cage 1.** Both motherboard breakouts use printed cable labels **0, 1, 2, 3 top-to-bottom**; cage 1 uses **P1, P2, P3, P4 top-to-bottom**. These are cable labels, not Linux device names or HBA socket numbers. |
+| User-confirmed, November 13 | The HBA's second breakout has **four spare SATA data ends**, with **no accompanying drives or SATA power**. `HBA_DATA` groups the two off-board SFF-8643 sockets, because socket-to-breakout assignment is untraced; it is not a motherboard header. Each HDD popup links to its cage's data connector/group; cage labels show the source. |
+| User-confirmed, November 13 | **Ample open modular PSU ports**; exact count and port IDs unverified. Open ports do not establish spare electrical capacity or modular-cable compatibility. |
 | User-confirmed, November 13 | **No separate temperature probes** on TR1/TR2. Component-temperature snapshots are not air measurements. |
 
 User-reported occupied headers remain inferred rather than independently
@@ -373,7 +388,9 @@ The six front/middle fans use reported SATA hub power plus FAN3 control/tach;
 the unchanged rear pair remains unmonitored on Molex chain B.
 The rear-fan model and nameplate ratings are now label-confirmed; frame thickness
 has not been measured and the photo adds no live telemetry. HDD harness grouping is confirmed, but individual
-power connector/cable part-number and logical-drive-to-bay bindings are not.
+power connector/cable part numbers remain unverified. Physical drive-to-bay
+identity is recorded privately; live confirmation depends on installing those
+bindings in the collector, not on guessing from Linux device order.
 Existing saved/imported annotations still take precedence over defaults;
 the latest supplied FAN3 record is visible separately without overwriting notes.
 
@@ -507,11 +524,97 @@ With the system powered off and unplugged, photograph rather than rewire:
    fan model, power source, connector/keying, and airflow arrows. Six-pin
    headers can have two tach inputs; no reading does not prove an empty header.
 3. GPU/HBA PCIe slot labels; HBA model; M2_1/M2_2 drive labels and heatsinks.
-   Record the PCIE2 selection jumpers without moving them.
-4. SATA_0_3 / SATA_4_7 breakouts and HBA-to-drive-bay routing; actual drive
-   count, DIMM population, front-panel cables and any thermal probes.
+   PCIE2 selection caps are now photo-recorded; do not move them.
+4. If finer wiring detail is needed: which HBA socket serves cage 1 versus
+   the spare cable, individual hub ports,
+   PSU cable branches and front-panel lead polarity.
+   Cage-level data routes, drive count, DIMM population and TR1/TR2 absence are
+   already confirmed; no repeat disassembly is required for those observations.
 
 Serial numbers are unnecessary. Leave untraced connections unknown.
+All connector occupancies currently modeled are recorded. **AUX_PANEL1 is
+photo-confirmed unused** in IMG_4562; OCU1, OCU2 and PSU_SMB1 are user-confirmed
+empty (November 13). The blue caps are beside AUX_PANEL1 in the separate
+CHASSIS_ID0 / PE8_SEL / PE16_SEL configuration-jumper area. The user identifies
+PE16_SEL as layout item 26 and PE8_SEL as item 27. Comparing IMG_4562 with the
+rotated IMG_4563 and the official layout gives **PE8_SEL 1–2, PE16_SEL 2–3**;
+this current-setting record retains photo-inferred provenance. The third
+CHASSIS_ID0 cap's pin pair is not modeled. No setting is changed. The official manual
+distinguishes these jumpers from AUX_PANEL1's auxiliary front-panel header
+(printed pp. 7–8, 26, 29; PDF pp. 14–15, 33, 36). The photos remain private.
+Other fine-grained gaps include LAN1/LAN2-to-Linux-interface pairing, the
+GPU's cable branching at the card (PSU C1 is user-reported),
+and full continuity of the lower-edge front-panel loom.
+Known-empty headers, unused bays and the spare data ends are not missing devices.
+
+### PCIE2 lane-selection jumpers
+
+The motherboard's blue **PE8 / PE16** cap pair is selectable as hardware, and
+each jumper is separately selectable under Connectors → Jumpers. Both open the
+same read-only, colored configuration reference. Blue joins the selected pin
+pair; resource status uses green/red **plus Enabled/Disabled text**. The current
+configuration has a labeled highlight. The diagrams use the manual's logical
+1–2–3 order; the chassis map mirrors pin placement with its board rotation.
+
+| PE8_SEL | PE16_SEL | PCIE2 allocation | M2_1 / SATA_4_7 | OCU1 / OCU2 |
+|---|---|---|---|---|
+| 1–2 | 1–2 | x16 (default) | Disabled | Disabled |
+| **1–2** | **2–3** | **x8 (current)** | **Enabled** | **Disabled** |
+| 2–3 | 1–2 | Disabled | Disabled | Enabled |
+| 2–3 | 2–3 | Disabled | Enabled | Enabled |
+
+Source: official ROMED8-2T manual revision 1.30, printed page 26 / PDF page 33.
+This is configured lane allocation, not measured link negotiation. Empty
+OCuLink sockets do not establish their enabled/disabled state; the jumper
+configuration does. The visualization never changes hardware. The current
+record comes from private inspection photos and the user's header identification,
+not from a new server query. Missing pair inputs do not fall back to the default.
+
+### PSU modular-panel reference
+
+The user-supplied empty-panel reference photo shows **14 modular cable sockets**.
+These are local reference labels, **not Corsair's official socket numbers**, and
+positions refer to looking straight at the panel exactly as pictured:
+
+| Reference | Printed group / socket | Image position |
+|---|---|---|
+| MB18 | MOTHERBOARD, 18-pin | Top left, wide socket |
+| MB10 | MOTHERBOARD, 10-pin | Immediately right of MB18 |
+| C1, C2 | PCIe / CPU, 8-pin | Top-right pair, left to right |
+| C3, C4 | PCIe / CPU, 8-pin | Middle-right pair, left to right |
+| C5, C6 | PCIe / CPU, 8-pin | Bottom-right pair, left to right |
+| S1, S2, S3 | SATA / PATA, 6-pin | Middle row's three peripheral sockets, left to right |
+| S4, S5, S6 | SATA / PATA, 6-pin | Bottom row's three peripheral sockets, left to right |
+
+The separate USB-C-shaped iCUE connection and round button are not modular
+power sockets. This is an empty reference unit, not evidence of installed
+occupancy or orientation. The PSU popup lists the 14 reference sockets and their
+user-reported assignments:
+
+| Socket | Reported destination |
+|---|---|
+| MB18 + MB10 | Both ends of the same motherboard ATX cable → ATXPWR1 (24-pin) |
+| C1 | GPU auxiliary power |
+| C2 | Separate CPU EPS cable → ATX12V1 (8-pin) |
+| C3–C6 | Empty |
+| S1 | Fan hub, dedicated SATA power harness; user-confirmed |
+| S2 | Cage 3, SATA power; tentative |
+| S3 | Empty |
+| S4 | Cage 1, SATA power; tentative |
+| S5 | Cage 2, SATA power; tentative |
+| S6 | Rear fans, separate Molex harness; user-confirmed |
+
+The latest November 13 correction **confirms S1 for the hub and S6 for Molex**.
+HDD assignments **S2 → cage 3, S4 → cage 1, S5 → cage 2 remain tentative**
+recollections, not newly traced. Earlier S-port assignments are superseded.
+At the user's request, dashboard connection labels omit confidence qualifiers;
+provenance and the tentative HDD PSU routing remain in the data records and
+these notes. This presentation does not upgrade the underlying evidence.
+MB18 and MB10 are both on the
+PSU end of the same 24-pin ATX cable; they do **not** feed the EPS 8-pin connector.
+No electrical pinout, modular-cable interchangeability or additional power
+headroom is established by this diagram; the photo specifies genuine Corsair
+Type 4 cable sets.
 
 ## Synthetic performance study
 

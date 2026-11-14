@@ -72,25 +72,35 @@ export const connectors = [
   connector("M2_1", "M2_1", "Storage", 520, 480, 90, 26,
     "M.2 socket right of PCIE7's end. The bare Samsung 2280 drive runs across the PCIE6→PCIE2 rows, beneath the GPU shroud overhang. Shares configurable resources with PCIE2 / SATA_4_7 / OCuLink; do not change jumpers."),
   connector("SATA_0_3", "SATA 0–3", "Storage", 615, 500, 96, 36,
-    "Mini-SAS HD connector for four SATA data links via breakout cable. Eight disks are reported on onboard SATA, but cable-to-drive identities are unknown.",
+    "Mini-SAS HD connector for four SATA data links via breakout cable. User confirms cage 3 uses leads 0, 1, 2, 3 from top to bottom. These are cable labels, not Linux device names.",
     { source: "Official manual rev. 1.30, printed p. 29 (PDF p. 36)." }),
   connector("SATA_4_7", "SATA 4–7", "Storage", 615, 590, 96, 36,
-    "Mini-SAS HD connector for four SATA links. Lane availability depends on the PCIE2 selection jumpers; their installed positions are unverified.",
+    "Mini-SAS HD connector for four SATA links to cage 2. Its leads are labeled 0, 1, 2, 3 from top to bottom. The photographed PE8_SEL 1–2 / PE16_SEL 2–3 arrangement enables SATA_4_7 and M2_1.",
     { source: "Official manual rev. 1.30, printed pp. 26, 29 (PDF pp. 33, 36)." }),
+  connector("HBA_DATA", "HBA SAS", "Storage", 322, 765, 96, 42,
+    "Logical group of the SAS 9300-8i's two internal SFF-8643 connectors, NOT a motherboard header. Cage 1 uses breakout leads P1, P2, P3, P4 from top to bottom; the other breakout has four spare SATA data ends with no drives or accompanying SATA power. Which socket serves which breakout is untraced. P1–P4 are lead labels, not HBA socket numbers.",
+    { source: "User-confirmed cage routing, 2026-11-13; installed-card video informs schematic position, not socket numbering." }),
   ...Array.from({ length: 7 }, (_, i) => {
     const number = 7 - i;
     return connector(`PCIE${number}`, `PCIE${number}`, "Expansion", 145, 475 + i * 49, 245, 29,
-      `CPU-connected PCIe 4.0 x16 expansion slot; actual negotiated speed/width is not measured here. PCIE7 is nearest the CPU/DIMMs; PCIE1 is at the bottom board edge.${number === 2 ? " Lane sharing with storage is controlled by PE8_SEL/PE16_SEL; their installed positions are unverified." : ""}`);
+      `CPU-connected PCIe 4.0 x16 expansion slot; actual negotiated speed/width is not measured here. PCIE7 is nearest the CPU/DIMMs; PCIE1 is at the bottom board edge.${number === 2 ? " The photographed PE8_SEL 1–2 / PE16_SEL 2–3 arrangement allocates x8 to PCIE2 and enables M2_1/SATA_4_7." : ""}`);
   }),
+  connector("PE8_SEL", "PE8", "Jumpers", 380, 845, 30, 48,
+    "Board-layout item 27: PCIE2 x8 selection jumper. Current cap bridges pins 1–2. Its setting works together with PE16_SEL; inspect both before interpreting lane allocation.",
+    { source: "Official manual rev. 1.30, printed pp. 7–8, 26 (PDF pp. 14–15, 33); private IMG_4562/4563, matched to user-identified jumpers." }),
+  connector("PE16_SEL", "PE16", "Jumpers", 415, 845, 30, 48,
+    "Board-layout item 26: PCIE2 x16 selection jumper. Current cap bridges pins 2–3. Its setting works together with PE8_SEL; this is not an AUX_PANEL1 connection.",
+    { source: "Official manual rev. 1.30, printed pp. 7–8, 26 (PDF pp. 14–15, 33); private IMG_4562/4563, matched to user-identified jumpers." }),
   connector("OCU1", "OCU1", "Storage", 515, 370, 90, 28,
-    "OCuLink connector; enabled/disabled by the PCIE2 selection jumpers. Connection unknown."),
+    "OCuLink connector, empty. Disabled by the photographed PE8_SEL 1–2 / PE16_SEL 2–3 arrangement."),
   connector("OCU2", "OCU2", "Storage", 515, 410, 90, 28,
-    "OCuLink connector; enabled/disabled by the PCIE2 selection jumpers. Connection unknown."),
+    "OCuLink connector, empty. Disabled by the photographed PE8_SEL 1–2 / PE16_SEL 2–3 arrangement."),
   connector("PANEL1", "PANEL1", "Front panel", 600, 865, 110, 28,
     "System front-panel header. IMG_4570 shows attached switch/LED leads, including a readable POWER SW plug. Individual lead polarity is not modeled.",
     { source: "Official manual rev. 1.30, printed p. 28 (PDF p. 35)." }),
   connector("AUX_PANEL1", "AUX PANEL", "Front panel", 450, 865, 135, 28,
-    "Auxiliary front-panel header. Connection unknown; verify the exact cable and manual before use."),
+    "18-pin auxiliary front-panel header, empty. The neighboring blue caps are separate configuration jumpers, including PE8_SEL and PE16_SEL, not AUX_PANEL1 connections.",
+    { source: "Official manual rev. 1.30, printed pp. 7–8, 26, 29 (PDF pp. 14–15, 33, 36); private inspection photos IMG_4561–4563." }),
   connector("TR1", "TR1", "Sensors", 330, 865, 45, 28,
     "Thermal sensor header. User confirms no separate temperature probe is connected.",
     { source: "Official manual rev. 1.30, printed p. 32 (PDF p. 39)." }),
@@ -98,7 +108,7 @@ export const connectors = [
     "Thermal sensor header. User confirms no separate temperature probe is connected.",
     { source: "Official manual rev. 1.30, printed p. 32 (PDF p. 39)." }),
   connector("PSU_SMB1", "PSU SMB", "Sensors", 565, 20, 100, 25,
-    "PSU SMBus header. Its presence does not establish that the PSU exposes telemetry or that a cable is connected."),
+    "PSU SMBus header; user-confirmed empty. This is separate from the PSU's USB/iCUE connector."),
   connector("REAR_OTHER", "VGA/COM/USB", "Rear I/O", 35, 186, 86, 44,
     "Logical group of other rear I/O ports, not a motherboard header identifier. The user reports no connections here; rear power refers to the PSU inlet, not these ports."),
   connector("IPMI_LAN1", "BMC LAN", "Rear I/O", 35, 247, 86, 44,
@@ -130,17 +140,24 @@ export const inspectionConnections = {
       "Photos show both sockets populated without heatsinks, drives perpendicular to the PCIe slots across PCIE6→PCIE2. User confirms both exact models/capacities on November 13.",
       "GPU overhang and its few-mm gap are photo observations, NOT measured heatsink-clearance allowances.", "2026-11-13"),
   ])),
-  SATA_0_3: observation("SATA breakout cable; drive routing unknown", "confirmed", "occupied", "photo-confirmed",
-    "Connector appears cabled in the cleaning photos, as relayed by the coordinating session."),
-  SATA_4_7: observation("SATA breakout cable; drive routing unknown", "confirmed", "occupied", "photo-confirmed",
-    "Connector appears cabled in the cleaning photos, as relayed by the coordinating session."),
+  SATA_0_3: observation("Cage 3 · four HDDs", "confirmed", "occupied", "user-confirmed",
+    "User confirms SATA 0–3 serve cage 3; cable leads 0–3 run top-to-bottom.",
+    "Bay 1 → lead 0; bay 2 → lead 1; bay 3 → lead 2; bay 4 → lead 3. Cable labels are not Linux device names.", "2026-11-13"),
+  SATA_4_7: observation("Cage 2 · four HDDs", "confirmed", "occupied", "user-confirmed",
+    "User confirms SATA 4–7 serve cage 2; this cable's leads are also labeled 0–3, top-to-bottom.",
+    "Bay 1 → lead 0; bay 2 → lead 1; bay 3 → lead 2; bay 4 → lead 3. Preserve the printed cable labels, not an invented 4–7 lead numbering.", "2026-11-13"),
+  HBA_DATA: observation("Cage 1 · four HDDs; four spare SATA data ends", "confirmed", "occupied", "user-confirmed",
+    "User confirms cage 1 uses HBA breakout leads P1–P4 in ascending order top-to-bottom, plus a second set of four unconnected SATA data cables with no accompanying drives or SATA power.",
+    "Bay 1 → P1; bay 2 → P2; bay 3 → P3; bay 4 → P4. This groups both HBA sockets; socket-to-breakout assignment remains untraced. Spare cables do not represent installed drives.", "2026-11-13"),
   GFX_12V1: observation("", "confirmed", "free", "user-confirmed",
     "User confirms the motherboard GFX_12V1 six-pin socket is empty.",
     "This is distinct from the power sockets on the GPU card.", "2026-11-13"),
   ...Object.fromEntries(["ATXPWR1", "ATX12V1"].map(id => [
     id, observation(id === "ATXPWR1" ? "PSU 24-pin ATX cable" : "PSU EPS 8-pin cable", "confirmed", "occupied", "photo-confirmed",
       "IMG_4538 shows the motherboard 24-pin and EPS 8-pin sockets occupied, supporting the user's interpretation.",
-      "The PSU-side 18-pin + 10-pin pair is the split end of the main ATX cable, not two additional motherboard connectors.", "2026-11-13"),
+      id === "ATXPWR1"
+        ? "The PSU-side MB18 + MB10 pair is the split end of this main ATX cable; it does not supply the EPS 8-pin connector."
+        : "Separate PSU PCIe/CPU socket C2 supplies this EPS 8-pin cable (user-reported). This is not a branch of the MB18 + MB10 ATX cable.", "2026-11-13"),
   ])),
   ATX12V2: observation("", "confirmed", "free", "photo-confirmed",
     "IMG_4538 shows the separate motherboard four-pin ATX 12 V socket empty.",
@@ -188,9 +205,22 @@ export const inspectionConnections = {
   PANEL1: observation("Case front-panel switch/LED leads", "confirmed", "occupied", "photo-confirmed",
     "IMG_4570 shows plugs at the PANEL1 silkscreen, including a readable POWER SW plug.",
     "Individual LED/switch wire assignments and polarity have not been mapped. This is not a USB header.", "2026-11-13"),
+  AUX_PANEL1: observation("", "confirmed", "free", "photo-confirmed",
+    "IMG_4562 shows the AUX_PANEL1 label and bare header with no attached external cable.",
+    "The neighboring blue caps belong to the separate configuration-jumper area (CHASSIS_ID0, PE8_SEL and PE16_SEL in the official layout). PE8_SEL/PE16_SEL are now modeled separately; the third cap's CHASSIS_ID0 pin pair is not assigned.", "2026-11-13"),
+  PE8_SEL: observation("Jumper cap · pins 1–2", "inferred", "occupied", "photo-inferred",
+    "User identifies board-layout item 27 as PE8_SEL. IMG_4562 and the rotated IMG_4563 show the left pair capped, matched against the manual's pin-1 and neighboring-header layout.",
+    "Together with PE16_SEL 2–3, the documented configuration allocates PCIE2 x8, enables M2_1/SATA_4_7 and disables OCU1/2. This is photo/manual interpretation, not a live link-width measurement.", "2026-11-13"),
+  PE16_SEL: observation("Jumper cap · pins 2–3", "inferred", "occupied", "photo-inferred",
+    "User identifies board-layout item 26 as PE16_SEL. IMG_4562 and the rotated IMG_4563 show the right pair capped, matched against the manual's pin-1 and neighboring-header layout.",
+    "Read-only record of installed caps; no jumper or server configuration was changed.", "2026-11-13"),
   ...Object.fromEntries(["TR1", "TR2"].map(id => [
     id, observation("", "confirmed", "free", "user-confirmed",
       "User confirms neither TR1 nor TR2 has a separate temperature probe.", "", "2026-11-13"),
+  ])),
+  ...Object.fromEntries(["OCU1", "OCU2", "PSU_SMB1"].map(id => [
+    id, observation("", "confirmed", "free", "user-confirmed",
+      "User explicitly confirms this connector is empty.", "", "2026-11-13"),
   ])),
   ...Object.fromEntries(["LAN1", "LAN2", "IPMI_LAN1"].map(id => [
     id, observation("TP-Link TL-SX1008 switch", "confirmed", "occupied", "user-confirmed",
@@ -201,6 +231,42 @@ export const inspectionConnections = {
     "The PSU AC power cord is separate from rear motherboard I/O.", "2026-11-13"),
 };
 
+export const inspectedJumpers = Object.freeze({ PE8_SEL: "1-2", PE16_SEL: "2-3" });
+export const pcie2Modes = [
+  { id: "pcie-x16", label: "PCIE2 x16 · default", PE8_SEL: "1-2", PE16_SEL: "1-2", pcie2Lanes: 16, m2: false, sata: false, oculink: false },
+  { id: "pcie-x8-storage", label: "PCIE2 x8 + M.2 / SATA", PE8_SEL: "1-2", PE16_SEL: "2-3", pcie2Lanes: 8, m2: true, sata: true, oculink: false },
+  { id: "oculink", label: "OCuLink only", PE8_SEL: "2-3", PE16_SEL: "1-2", pcie2Lanes: 0, m2: false, sata: false, oculink: true },
+  { id: "all-storage", label: "M.2 / SATA + OCuLink", PE8_SEL: "2-3", PE16_SEL: "2-3", pcie2Lanes: 0, m2: true, sata: true, oculink: true },
+];
+
+export const psuPorts = [
+  ...[18, 10].map((pins, index) => ({
+    id: `MB${pins}`, group: `Motherboard · ${pins}-pin`, position: index ? "Top, beside MB18" : "Top left",
+    occupancy: "occupied", target: "ATXPWR1 · shared 24-pin ATX cable", targetId: "ATXPWR1",
+    provenance: "user-reported",
+  })),
+  ...Array.from({ length: 6 }, (_, index) => ({
+    id: `C${index + 1}`, group: "PCIe / CPU · 8-pin",
+    position: `${["Top", "Middle", "Bottom"][Math.floor(index / 2)]} right, ${index % 2 ? "right" : "left"} socket`,
+    occupancy: index < 2 ? "occupied" : "free",
+    target: ["GPU auxiliary power", "CPU EPS cable → ATX12V1"][index] ?? "Empty",
+    targetId: ["gpu", "ATX12V1"][index] ?? null, provenance: "user-reported",
+  })),
+  ...["Fan hub", "Cage 3 · SATA power", "Empty", "Cage 1 · SATA power", "Cage 2 · SATA power", "Rear fans · Molex harness"].map((target, index) => ({
+    id: `S${index + 1}`, group: "SATA / PATA · 6-pin",
+    position: `${index < 3 ? "Middle" : "Bottom"} peripheral row, ${["left", "center", "right"][index % 3]} socket`,
+    occupancy: index === 2 ? "free" : "occupied", target,
+    targetId: ["fan-hub", "cage-3", null, "cage-1", "cage-2", "rear-fans"][index],
+    provenance: index === 0 || index === 5 ? "user-confirmed" : "user-reported",
+  })),
+];
+
+export const driveCages = [
+  { number: 1, connectorId: "HBA_DATA", route: "SAS 9300-8i", leads: ["P1", "P2", "P3", "P4"] },
+  { number: 2, connectorId: "SATA_4_7", route: "SATA 4–7", leads: ["0", "1", "2", "3"] },
+  { number: 3, connectorId: "SATA_0_3", route: "SATA 0–3", leads: ["0", "1", "2", "3"] },
+];
+
 export const components = [
   { id: "board", label: "Motherboard", model: "ROMED8-2T REV 1.03", capacity: "Silkscreen revision", status: "Photo-confirmed (relayed)" },
   { id: "cpu", label: "CPU + cooler", model: "EPYC 7313P · NH-U9 TR4-SP3", capacity: "16 cores / 32 threads", status: "CPU reported installed; original cooler fan pair user-confirmed", note: "2026-11-13 walkthrough: both fans are the originals supplied with the cooler. FAN1 is on the PSU side; FAN2 is on the GPU side (user-confirmed). Airflow through the heatsink runs from the PSU side toward the GPU side, NOT front to rear. Direction is user-confirmed, not measured airflow or a thermal simulation." },
@@ -208,12 +274,12 @@ export const components = [
   { id: "gpu", label: "Graphics", model: "GV-N207SGAMING OC-8GD rev 1.0", capacity: "PCIE4 · cooler covers PCIE3/PCIE2", status: "Model photo-confirmed; slot and obstruction user-confirmed 2026-11-13", note: "User accepts the revised PCIE4 mapping as confirmed following the photo/manual review; this is not a new slot-label photo. The earlier PCIE3 assignment is withdrawn. Fan intake faces the HBA in PCIE1. M.2 shroud clearance is unmeasured." },
   { id: "nvme-a", label: "NVMe A", model: "Samsung 990 EVO · MZ-V9E2T0", capacity: "2 TB nominal per drive", status: "Installed labels and socket placements photo-confirmed 2026-11-13", note: "No heatsinks. Drives run perpendicular to the slots across PCIE6→PCIE2, under the GPU overhang. Private label EUIs uniquely match M2_2 to the root NVMe and M2_1 to the cache/data NVMe in live inventory. Historical A/B readings are not retroactively assigned to sockets. Clearance is unmeasured." },
   { id: "nvme-b", label: "NVMe B", model: "Samsung 990 EVO · MZ-V9E2T0", capacity: "2 TB nominal per drive", status: "Installed labels and socket placements photo-confirmed 2026-11-13", note: "No heatsinks. Live socket bindings use privately reconciled label EUIs, not Linux enumeration order or historical A/B readings. The observed GPU gap is not a verified heatsink allowance." },
-  { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "3 cages × 4 HDDs · bottom bay empty in each", status: "All 12 occupied bay placements label-confirmed 2026-11-13", note: "Front-view left/center/right cages each have their bottom bay empty. Each group of four HDDs has its own PSU SATA harness. Private installed-label observations uniquely match all 12 HDDs to their bays in live inventory; individual data-cable routes remain untraced. Current Linux RAID membership is separate from physical placement and may change after a rebuild. No drives being added." },
-  { id: "hba", label: "Storage HBA", model: "LSI Broadcom SAS 9300-8i · two SFF-8643 cables", capacity: "PCIE1 · 4 connected HDDs reported", status: "Slot and model user-confirmed 2026-11-13", note: "User confirms the installed card matches the Amazon purchase and official SAS 9300-8i guide; the supplied installed-card video informs the longer PCB outline, heatsink and connector depiction. The guide specifies a 6.0 × 2.7 inch board (152.4 × 68.6 mm); schematic geometry and clearances are not measured. Visible auxiliary chip markings do not independently establish the HBA model; the SAS controller is covered by its heatsink. Firmware/mode is not inferred. Directly at the GPU fan intake; cable routing and airflow impact are not measured." },
+  { id: "disks", label: "Disk array", model: "12 × WD80EFPX · 8 onboard / 4 HBA", capacity: "3 cages × 4 HDDs · bottom bay empty in each", status: "All 12 occupied bay placements label-confirmed; cage data routing and lead order user-confirmed 2026-11-13", note: "Cage 1 → SAS 9300-8i, P1–P4 top-to-bottom; cage 2 → SATA 4–7, leads 0–3 top-to-bottom; cage 3 → SATA 0–3, leads 0–3 top-to-bottom (user-confirmed). Front-view left/center/right cages each have their bottom bay empty. Each group of four HDDs has its own PSU SATA power harness. Private installed-label observations uniquely match all 12 HDDs to their bays in live inventory. Cable labels are not Linux device names. Current Linux RAID membership is separate from physical placement and may change after a rebuild. No drives being added." },
+  { id: "hba", label: "Storage HBA", model: "LSI Broadcom SAS 9300-8i · two SFF-8643 cables", capacity: "PCIE1 · cage 1 / 4 HDDs + 4 spare SATA data ends", status: "Slot, model, cage routing and lead order user-confirmed 2026-11-13", note: "One breakout serves cage 1 via P1–P4 top-to-bottom; the other has four unconnected SATA data cables with no accompanying drives or SATA power. Socket-to-breakout assignment remains untraced. User confirms the installed card matches the Amazon purchase and official SAS 9300-8i guide; the supplied installed-card video informs the longer PCB outline, heatsink and connector depiction. The guide specifies a 6.0 × 2.7 inch board (152.4 × 68.6 mm); schematic geometry and clearances are not measured. Visible auxiliary chip markings do not independently establish the HBA model; the SAS controller is covered by its heatsink. Firmware/mode is not inferred. Directly at the GPU fan intake; airflow impact is not measured." },
   { id: "case-fans", label: "Front + middle fans / FAN3 hub", model: "6 × Noctua NF-P12 redux-1700 PWM", capacity: "120 × 25 mm · rated maximum 1700 RPM / 0.09 A per fan", tachPartId: "middle-fan-3", status: "User-installed 2026-11-12; airflow and tach-return position user-confirmed 2026-11-13", note: "3 front + 3 middle, all blowing front to rear. The PSU-side middle fan (middle-fan-3) supplies the single hub tach return; other hub-port assignments remain untraced. Replaced the six BoK BDM12025S fans and their Molex chain A. All six use a SATA-powered Thermalright ARGB FAN HUB X8 with its lead on FAN3. Approximately 1100 RPM is one BMC-observed hub return, not six measured speeds. Ratings are specifications, not measured current/RPM. Micro Center SKU 062398." },
   { id: "fan-hub", label: "Case-fan hub", model: "Thermalright ARGB 8 Group Fan HUB/Controller · ARGB FAN HUB X8", capacity: "6 fans · dedicated PSU SATA harness / FAN3 PWM + one tach return", status: "Location, dedicated power, FAN3 lead and tach-return fan user-confirmed", note: "Between motherboard and middle fan wall, near case centerline and FAN1–FAN3; exact coordinates are approximate. Micro Center product 710163, SKU 025247. Tach-return fan: middle-fan-3, PSU side of middle bank. Relayed reading approximately 1100 RPM; capture time unavailable. Reported lower alarm 100 RPM. User requests applying this one tach value to all six animations as a shared-speed assumption. Other five speeds are not individually monitored; other port assignments remain untraced." },
   { id: "rear-fans", label: "Rear fans / chain B", model: "2 × 80 mm BoK BDM8025S", capacity: "Label: 12 V / 0.10 A / 2000 RPM", status: "Model and ratings label-confirmed 2026-11-13; original rear exhaust pair user-confirmed", note: "The supplied rear-fan label photo clearly identifies BDM8025S, superseding the tentative BDM180255 transcription. Rosewill case specification establishes 80 mm width, not a photo measurement; frame thickness has not been measured. Both fans are factory-original and exhaust out the back. One separate PSU Molex harness powers both. Label-rated 2000 RPM is NOT measured; no board tach/control connection." },
-  { id: "psu", label: "PSU + power routing", model: "Corsair HX1000i · CP-9020259 / RPS0131", capacity: "1000 W rated · 3 HDD SATA harnesses + 1 hub SATA + 1 rear-fan Molex", status: "Installed label photo-confirmed 2026-11-13; harness topology and USB absence user-confirmed", note: "The installed label identifies RPS0131, part CP-9020259 / 75-005684 and 1000 W rated output, matching the previously identified purchase family. Three separate SATA harnesses each feed four HDDs; a fourth SATA harness serves only the fan hub; one separate Molex harness serves both rear fans. This supersedes the earlier one-harness-for-12-HDDs suspicion. PSU 18+10-pin ATX pair is connected. Motherboard 24-pin/EPS 8-pin are occupied; its 4-pin and GFX_12V1 are empty. USB/iCUE cable is NOT connected. Individual PSU port IDs, cable part numbers and spare-port counts are unverified. No modular pinout, load limit or cable interchangeability is implied; the current retail title does not establish a newer ATX certification for this unit." },
+  { id: "psu", label: "PSU + power routing", model: "Corsair HX1000i · CP-9020259 / RPS0131", capacity: "1000 W rated · 3 HDD SATA harnesses + 1 hub SATA + 1 rear-fan Molex", status: "Installed label photo-confirmed; S1 hub and S6 Molex user-confirmed; HDD PSU sockets tentative, 2026-11-13", note: "The installed label identifies RPS0131, part CP-9020259 / 75-005684 and 1000 W rated output. Local reference labels follow the empty-panel photo, not official Corsair numbering: MB18 + MB10 together feed ATXPWR1 (24-pin); C1 feeds GPU power; C2 separately feeds ATX12V1 (EPS 8-pin). Latest correction: S1 fan hub and S6 rear-fan Molex are user-confirmed. Tentative recollection: S2 cage 3, S4 cage 1, S5 cage 2. S3 and C3–C6 are reported empty. Earlier S-port assignments are superseded. USB/iCUE is not connected. Motherboard ATX12V2 (4-pin) and GFX_12V1 are empty. Each HDD cage has a separate power harness; four spare HBA SATA data ends have no drives or SATA power. Cable part numbers and power headroom remain unverified. No modular pinout or cable interchangeability is implied; the current retail title does not establish a newer ATX certification for this unit." },
   { id: "case-header", label: "Front-panel connections", model: "PANEL1 · case switch/LED leads", capacity: "9-pin system-panel header", status: "Photo-confirmed in IMG_4570", note: "PANEL1 silkscreen and POWER SW plug are readable. Other switch/LED leads are present, but their individual assignments/polarity have not been mapped. This is not a fan header." },
   { id: "unidentified-cable", label: "Lower-edge flat cable", model: "Red / white / green / black, under GPU", capacity: "Likely part of the front-panel switch/LED loom", status: "Photo-inferred from IMG_4570 terminations; full cable trace unverified", note: "POWER SW and other front-panel plugs are visible at PANEL1. The earlier USB 2.0 suggestion was based only on wire colors and is not established. No individual wire-to-pin assignment is implied." },
   { id: "rear-io", label: "Rear connections", model: "LAN1 / LAN2 / BMC LAN → switch", capacity: "No rear USB, display or serial devices", status: "User-confirmed 2026-11-13", note: "The PSU AC power cord is separate. The PSU USB telemetry cable is not connected internally either." },

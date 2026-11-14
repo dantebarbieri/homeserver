@@ -1,5 +1,5 @@
-import { connectors, connectorById, components, hardwareCategories, partReferences, boardRevision, landscapeBounds, occupancyLabels } from "./board.mjs";
-import { emptyDocument, emptyConnection, loadDocument, withInspectionDefaults, occupancyCounts, matchesHardware, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, storageKey } from "./model.mjs";
+import { connectors, connectorById, components, driveCages, psuPorts, inspectedJumpers, pcie2Modes, hardwareCategories, partReferences, boardRevision, landscapeBounds, occupancyLabels } from "./board.mjs";
+import { emptyDocument, emptyConnection, loadDocument, withInspectionDefaults, occupancyCounts, matchesHardware, fanMotionForSpeed, buildLinuxTopology, linuxNodeSummary, pcie2ModeFor, storageKey } from "./model.mjs";
 import { linuxSnapshot } from "./linux-snapshot.mjs";
 import { createMetricUI } from "./metrics.mjs";
 import { applyLiveSnapshot } from "./metric-model.mjs";
@@ -184,6 +184,61 @@ function hardwarePart(id, componentId, label, placement, connectorIds = [], extr
   });
 }
 
+function drawJumperCap(parent, connector) {
+  const bounds = landscapeBounds(connector);
+  const pair = inspectedJumpers[connector.id].split("-").map(Number);
+  const pinX = number => bounds.x + bounds.width - (number - .5) * bounds.width / 3;
+  const y = bounds.y + bounds.height - 8;
+  parent.append(svgElement("rect", {
+    x: Math.min(...pair.map(pinX)) - 3, y: y - 5,
+    width: bounds.width / 3 + 6, height: 10, rx: 2, class: "jumper-cap",
+    "data-jumper": connector.id, "data-pair": inspectedJumpers[connector.id],
+  }));
+  for (const number of [1, 2, 3]) {
+    parent.append(svgElement("circle", { cx: pinX(number), cy: y, r: 1.8, class: "jumper-pin-dot", "data-pin": number }));
+  }
+}
+
+function renderJumperConfigurations() {
+  const current = pcie2ModeFor(inspectedJumpers.PE8_SEL, inspectedJumpers.PE16_SEL);
+  $("jumper-current").textContent = `Current: PE8_SEL pins ${current.PE8_SEL.replace("-", "–")} · PE16_SEL pins ${current.PE16_SEL.replace("-", "–")} — ${current.label}`;
+  const configurations = $("jumper-configurations");
+  configurations.replaceChildren();
+  for (const mode of pcie2Modes) {
+    const installed = mode.id === current.id;
+    const card = element("article", { class: `jumper-configuration${installed ? " current" : ""}`, "data-mode": mode.id });
+    card.append(element("h5", {}, mode.label));
+    if (installed) card.append(element("p", { class: "jumper-current-label" }, "Current arrangement"));
+    for (const id of ["PE8_SEL", "PE16_SEL"]) {
+      const row = element("div", { class: "jumper-pin-row" });
+      row.append(element("span", {}, id));
+      const pair = mode[id].split("-").map(Number);
+      const pins = element("div", {
+        class: "jumper-pins", role: "img", "aria-label": `${id}: cap bridges pins ${pair.join(" and ")}`,
+        "data-jumper": id, "data-pair": mode[id],
+      });
+      for (const number of [1, 2, 3]) {
+        const joined = pair.includes(number);
+        const edge = number === pair[0] ? " bridge-start" : number === pair[1] ? " bridge-end" : "";
+        pins.append(element("span", { class: `jumper-pin${joined ? ` bridged${edge}` : ""}`, "aria-hidden": "true" }, String(number)));
+      }
+      row.append(pins);
+      card.append(row);
+    }
+    const resources = element("ul", { class: "jumper-resources" });
+    for (const [name, enabled, description] of [
+      ["PCIE2", mode.pcie2Lanes > 0, mode.pcie2Lanes ? `x${mode.pcie2Lanes}` : "Disabled"],
+      ["M2_1", mode.m2, mode.m2 ? "Enabled" : "Disabled"],
+      ["SATA_4_7", mode.sata, mode.sata ? "Enabled" : "Disabled"],
+      ["OCU1 / OCU2", mode.oculink, mode.oculink ? "Enabled" : "Disabled"],
+    ]) {
+      resources.append(element("li", { class: enabled ? "enabled" : "disabled" }, `${name}: ${description}`));
+    }
+    card.append(resources);
+    configurations.append(card);
+  }
+}
+
 function drawFan(parent, x, y, size, redux = false, fraction = null) {
   const fan = svgElement("g", {
     class: `fan-face${redux ? " redux" : ""}`, "data-size": size,
@@ -284,7 +339,7 @@ function renderBoard() {
   const enclosure = hardwarePart("chassis", null, "Rosewill RSV-L4500U", "Original top-view schematic informed by inspection photos. Case-part positions, proportions and component outlines are approximate, not measured.", [], {
     model: "Rosewill RSV-L4500U · 4U rack chassis", capacity: "15 HDD bays · 12 installed / 3 empty",
     status: "Chassis model user-reported; bay capacity and installed count user-confirmed",
-    note: "Fan faces are unfolded for identification, not mounting angle. User confirms four HDDs plus the bottom bay empty in each front-view cage. Logical drive identities, exact cable routes and mounting clearances remain untraced.",
+    note: "Fan faces are unfolded for identification, not mounting angle. User confirms four HDDs plus the bottom bay empty in each front-view cage. Cage 1 uses HBA leads P1–P4 top-to-bottom; cage 2 uses SATA 4–7 leads 0–3; cage 3 uses SATA 0–3 leads 0–3, both top-to-bottom. Mounting clearances remain unmeasured.",
   });
   enclosure.append(svgElement("rect", { x: 35, y: 65, width: 1365, height: 725, rx: 9, class: "chassis-shell part-outline" }));
   for (const y of [81, 774]) enclosure.append(svgElement("path", { d: `M50 ${y} H1383`, class: "chassis-rail" }));
@@ -315,6 +370,10 @@ function renderBoard() {
     });
     group.append(svgElement("rect", { x, y, width, height, rx: 2 }));
     group.append(svgElement("text", { x: x + width / 2, y: y + height / 2 + 3.5 }, connector.label));
+    if (connector.category === "Jumpers") {
+      group.querySelector("text").setAttribute("y", y + 8);
+      drawJumperCap(group, connector);
+    }
     if (connector.category === "Fans") {
       for (let i = 0; i < 6; i += 1) {
         group.append(svgElement("circle", { cx: x + 7 + i * 10, cy: y + height - 2, r: 1, class: "header-pins" }));
@@ -325,6 +384,16 @@ function renderBoard() {
   board.append(connectorLayer);
 
   const hardware = svgElement("g", { id: "installed-hardware" });
+  const jumpers = hardwarePart("pcie2-jumpers", "board", "PCIE2 lane-selection jumpers", "Two three-pin jumpers beside AUX_PANEL1. Blue caps follow the installed photo arrangement; schematic positions are not measurements.", ["PE8_SEL", "PE16_SEL"], {
+    model: "PE8_SEL (#27) + PE16_SEL (#26)", capacity: "PCIE2 x8 · M2_1 / SATA_4_7 enabled · OCuLink disabled",
+  });
+  for (const id of ["PE8_SEL", "PE16_SEL"]) {
+    const connector = connectorById.get(id), bounds = landscapeBounds(connector);
+    jumpers.append(svgElement("rect", { ...bounds, rx: 2, class: "jumper-base part-outline" }));
+    jumpers.append(svgElement("text", { x: bounds.x + bounds.width / 2, y: bounds.y + 8, class: "hardware-label centered" }, connector.label));
+    drawJumperCap(jumpers, connector);
+  }
+  hardware.append(jumpers);
   const network = hardwarePart("network-ports", "rear-io", "Network ports / Linux interfaces", "Rear connector locations follow the manual. Linux interface names are known, but their LAN1/LAN2 physical-port pairing remains unassigned.", ["LAN1", "LAN2", "IPMI_LAN1"]);
   for (const id of ["LAN1", "LAN2", "IPMI_LAN1"]) {
     const bounds = landscapeBounds(connectorById.get(id));
@@ -340,18 +409,25 @@ function renderBoard() {
   lan.append(svgElement("rect", { x: 1260, y: 275, width: 42, height: 43, rx: 2, class: "lan-chip part-outline" }));
   lan.append(svgElement("text", { x: 1281, y: 300, class: "hardware-label centered" }, "X550"));
   hardware.append(lan);
-  const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. User confirms four HDDs with the bottom bay empty in each cage. Individual logical-drive identities remain unassigned.");
+  const disks = hardwarePart("disk-bays", "disks", "12 HDDs / 15 bays", "Three front-view cages are unfolded down the scene for visibility, not depicted in their physical mounting plane. User confirms four HDDs with the bottom bay empty in each cage.", driveCages.map(cage => cage.connectorId), {
+    connectionNote: "Cage 1 → SAS 9300-8i, P1–P4 top-to-bottom; cage 2 → SATA 4–7, leads 0–3 top-to-bottom; cage 3 → SATA 0–3, leads 0–3 top-to-bottom. Separate SATA power harnesses from PSU S4/S5/S2 respectively. Four spare HBA SATA data ends have no drives or SATA power.",
+  });
   const individualDisks = [];
   for (let cage = 0; cage < 3; cage += 1) {
+    const routing = driveCages[cage];
     const y = 124 + cage * 196;
     disks.append(svgElement("rect", { x: 172, y, width: 231, height: 173, rx: 4, class: "drive-cage part-outline" }));
+    disks.append(svgElement("text", { x: 173, y: y - 5, class: "scene-note" }, `CAGE ${routing.number} / ${routing.number === 1 ? "HBA" : routing.route}`));
     for (let bay = 0; bay < 5; bay += 1) {
-      const drive = bay < 4 ? hardwarePart(`drive-cage-${cage + 1}-bay-${bay + 1}`, "disks", `Cage ${cage + 1} / bay ${bay + 1}`, "Physical disk identity is unverified. Live mode may assign a provisional serial-sorted identity; that is not a physical observation.") : disks;
+      const drive = bay < 4 ? hardwarePart(`drive-cage-${cage + 1}-bay-${bay + 1}`, "disks", `Cage ${cage + 1} / bay ${bay + 1}`, "Physical disk identity is unverified unless a confirmed live binding is present; provisional serial-sorted identities are not physical observations.", [routing.connectorId], {
+        connectionNote: `Cage ${routing.number}, bay ${bay + 1} (top-to-bottom) → ${routing.route}, cable lead ${routing.leads[bay]}. SATA power from PSU ${psuPorts.find(port => port.targetId === `cage-${routing.number}`).id}.`,
+      }) : disks;
       drive.append(svgElement("rect", { x: 185, y: y + 15 + bay * 29, width: 205, height: 22, rx: 2, class: bay === 4 ? "drive-bay empty" : "drive-bay part-outline" }));
       if (bay < 4) {
         drive.append(svgElement("rect", { x: 193, y: y + 21 + bay * 29, width: 28, height: 10, class: "drive-label" }));
         drive.append(svgElement("circle", { cx: 379, cy: y + 26 + bay * 29, r: 2, class: "drive-screw" }));
         drive.append(svgElement("text", { x: 229, y: y + 30 + bay * 29, class: "disk-linux-label" }));
+        drive.append(svgElement("text", { x: 351, y: y + 30 + bay * 29, class: "hardware-label" }, routing.leads[bay]));
         individualDisks.push(drive);
       }
     }
@@ -372,19 +448,25 @@ function renderBoard() {
     hardware.append(svgElement("text", { x, y: 716, class: "scene-note" }, "HUB / FAN3"));
   }
 
-  const psu = hardwarePart("psu", "psu", "Corsair HX1000i", "Rear PSU region is photo-informed. Size, mounting offsets and clearance are approximate; modular port counts do not verify cable routing.");
+  const psu = hardwarePart("psu", "psu", "Corsair HX1000i", "Rear PSU region is photo-informed. Size, mounting offsets and clearance are approximate; modular port counts do not verify cable routing.", ["ATXPWR1", "ATX12V1"], {
+    connectionNote: "MB18 + MB10 together feed ATXPWR1 (24-pin); C2 separately feeds ATX12V1 (EPS 8-pin). S1 powers the fan hub; S6 powers the rear-fan Molex harness. S3 and C3–C6 are empty. USB/iCUE is not connected.",
+  });
   psu.append(svgElement("rect", { x: 1035, y: 650, width: 300, height: 115, rx: 5, class: "psu-body part-outline" }));
   for (let y = 665; y < 751; y += 7) psu.append(svgElement("path", { d: `M1250 ${y} H1315`, class: "psu-grille" }));
   psu.append(svgElement("text", { x: 1060, y: 698, class: "psu-label" }, "HX1000i"));
   psu.append(svgElement("text", { x: 1060, y: 723, class: "hardware-subtitle" }, "CORSAIR / PSU"));
   hardware.append(psu);
-  const hub = hardwarePart("fan-hub", "fan-hub", "Thermalright fan hub / FAN3", "User places the hub between the motherboard and middle fan wall, near the case centerline and FAN1–FAN3. Outline and exact position are approximate, not a cable-routing diagram.", ["FAN3"]);
+  const hub = hardwarePart("fan-hub", "fan-hub", "Thermalright fan hub / FAN3", "User places the hub between the motherboard and middle fan wall, near the case centerline and FAN1–FAN3. Outline and exact position are approximate, not a cable-routing diagram.", ["FAN3"], {
+    connectionNote: "Dedicated SATA power harness from PSU S1; motherboard control/tach lead on FAN3. The hub returns one fan's tach.",
+  });
   hub.append(svgElement("rect", { x: 672, y: 409, width: 113, height: 66, rx: 4, class: "psu-body part-outline" }));
   hub.append(svgElement("text", { x: 682, y: 435, class: "hardware-label" }, "PWM HUB"));
   hub.append(svgElement("text", { x: 682, y: 455, class: "hardware-subtitle" }, "6 FANS / 1 TACH"));
   hardware.append(hub);
   for (let i = 0; i < 2; i += 1) {
-    const fan = hardwarePart(`rear-fan-${i + 1}`, "rear-fans", `Rear 80 mm fan ${i + 1} · Molex chain B`, "Rear bank is photo-informed; centers and mounting geometry are approximate. Width is specification-based plus user-confirmed factory-original fans, not photo-measured.");
+    const fan = hardwarePart(`rear-fan-${i + 1}`, "rear-fans", `Rear 80 mm fan ${i + 1} · Molex chain B`, "Rear bank is photo-informed; centers and mounting geometry are approximate. Width is specification-based plus user-confirmed factory-original fans, not photo-measured.", [], {
+      connectionNote: "Shared Molex harness from PSU S6. No motherboard tach/control connection.",
+    });
     drawFan(fan, 1314, 420 + i * 111, 63);
     hardware.append(fan);
   }
@@ -414,7 +496,10 @@ function renderBoard() {
     hardware.append(dimm);
   }
 
-  const cpu = hardwarePart("cpu", "cpu", "EPYC 7313P / NH-U9 TR4-SP3", "CPU is beneath the cooler. Cooler silhouette is photo-inspired: silver fins, beige Noctua frames and brown corners. Outline, fan mounting and clearance are not measured.", ["CPU1", "FAN1", "FAN2"], { readingId: "cpu" });
+  const cpu = hardwarePart("cpu", "cpu", "EPYC 7313P / NH-U9 TR4-SP3", "CPU is beneath the cooler. Cooler silhouette is photo-inspired: silver fins, beige Noctua frames and brown corners. Outline, fan mounting and clearance are not measured.", ["CPU1", "FAN1", "FAN2", "ATX12V1"], {
+    readingId: "cpu",
+    connectionNote: "CPU power: PSU C2 → ATX12V1 (EPS 8-pin). MB18 + MB10 supply the motherboard's 24-pin ATX connector. Cooler fans connect to FAN1/FAN2.",
+  });
   const cpuBounds = landscapeBounds(connectorById.get("CPU1"));
   cpu.append(svgElement("rect", { ...cpuBounds, rx: 5, class: "cooler-body part-outline" }));
   for (let x = cpuBounds.x + 6; x < cpuBounds.x + cpuBounds.width - 4; x += 6) {
@@ -429,7 +514,10 @@ function renderBoard() {
   cpu.append(svgElement("text", { x: cpuBounds.x + cpuBounds.width / 2, y: cpuBounds.y + 61, class: "cooler-sublabel" }, "UNDER NH-U9 TR4-SP3"));
   hardware.append(cpu);
 
-  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / PCIE4", "PCIE4 placement and PCIE3/PCIE2 cooler obstruction are user-confirmed. Outline, exact footprint and M.2 clearance are unmeasured.", ["PCIE4", "PCIE3", "PCIE2"], { readingId: "gpu" });
+  const gpu = hardwarePart("gpu", "gpu", "RTX 2070 SUPER / PCIE4", "PCIE4 placement and PCIE3/PCIE2 cooler obstruction are user-confirmed. Outline, exact footprint and M.2 clearance are unmeasured.", ["PCIE4", "PCIE3", "PCIE2"], {
+    readingId: "gpu",
+    connectionNote: "Auxiliary GPU power comes directly from PSU C1. The motherboard's separate GFX_12V1 connector is empty.",
+  });
   const gpuSlot = landscapeBounds(connectorById.get("PCIE4"));
   const gpuTop = landscapeBounds(connectorById.get("PCIE2")).y - 4;
   gpu.append(svgElement("rect", { x: 872, y: gpuTop, width: 418, height: gpuSlot.y + gpuSlot.height - gpuTop + 5, rx: 4, class: "gpu-body part-outline" }));
@@ -437,7 +525,9 @@ function renderBoard() {
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 26, class: "hardware-label" }, "GIGABYTE / RTX 2070 SUPER"));
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 45, class: "hardware-subtitle" }, "PCIE4 · PCIE3/2 COVERED · M.2 OVERHANG"));
   hardware.append(gpu);
-  const hba = hardwarePart("hba", "hba", "SAS 9300-8i / PCIE1", "Model and PCIE1 placement are user-confirmed. The longer PCB, heatsink and two internal connectors are informed by the installed-card video. HBA sits at the GPU fan intake. Outline and spacing are not measurements; cable routes and airflow impact remain unknown.", ["PCIE1"]);
+  const hba = hardwarePart("hba", "hba", "SAS 9300-8i / PCIE1", "Model, PCIE1 placement and cage 1 routing are user-confirmed. Outline, spacing and airflow impact are not measurements.", ["PCIE1", "HBA_DATA"], {
+    connectionNote: "Cage 1 uses breakout leads P1, P2, P3, P4 top-to-bottom. The second breakout has four spare SATA data ends with no drives or SATA power.",
+  });
   const hbaSlot = landscapeBounds(connectorById.get("PCIE1"));
   hba.append(svgElement("rect", { x: 1042, y: hbaSlot.y - 9, width: 248, height: 34, rx: 2, class: "hba-body part-outline" }));
   for (const y of [hbaSlot.y - 5, hbaSlot.y + 10]) {
@@ -525,6 +615,20 @@ function renderComponentDetails() {
   $("component-name").textContent = part.label;
   $("component-model").textContent = component.model;
   $("component-capacity").textContent = component.capacity;
+  $("component-connection-note").hidden = !part.connectionNote;
+  $("component-connection-note").textContent = part.connectionNote ?? "";
+  const portMap = $("component-port-map");
+  portMap.hidden = selectedPartId !== "psu";
+  $("component-port-rows").replaceChildren();
+  if (!portMap.hidden) {
+    for (const port of psuPorts) {
+      const row = element("tr", { "data-port-id": port.id });
+      row.append(element("th", { scope: "row" }, port.id),
+        element("td", {}, `${port.group} · ${port.position}`),
+        element("td", {}, port.target));
+      $("component-port-rows").append(row);
+    }
+  }
   const binding = dataSource.snapshot?.inventory?.disks?.find(disk => disk.id === part.bindingId);
   $("component-identifiers").hidden = !binding;
   $("component-identifiers").textContent = binding ? `Display slot mapping · Serial: ${binding.serial ?? "unavailable"}` : "";
@@ -649,6 +753,10 @@ function renderSelection() {
   }
   $("component-details").hidden = !selectedPartId;
   $("connector-details").hidden = Boolean(selectedPartId);
+  $("jumper-section").hidden = selectedPartId
+    ? selectedPartId !== "pcie2-jumpers"
+    : !Object.hasOwn(inspectedJumpers, selectedId);
+  if (!$("jumper-section").hidden) renderJumperConfigurations();
   if (selectedPartId) {
     renderComponentDetails();
     return;

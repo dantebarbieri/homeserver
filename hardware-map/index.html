@@ -22,7 +22,7 @@
   <main>
     <section id="board-view" class="board-workspace" aria-label="Server hardware map">
       <header class="map-toolbar">
-        <h1>ChasEx</h1>
+        <h1><img class="brand-logo" src="./favicon.svg" width="32" height="32" alt=""><span class="brand-name">ChasEx</span></h1>
         <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
         <button id="fan-rotation-toggle" type="button" aria-pressed="false">Animate fans</button>
         <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Performance · DEMO</button>
@@ -58,6 +58,12 @@
         <div class="detail-title"><h3 id="component-name"></h3></div>
         <p id="component-model" class="component-model"></p><p id="component-capacity" class="component-capacity"></p>
         <p id="component-identifiers" class="compact muted" hidden></p>
+        <p id="component-connection-note" class="compact" hidden></p>
+        <section id="component-port-map" hidden aria-labelledby="component-port-title">
+          <h4 id="component-port-title">PSU modular sockets</h4>
+          <p class="compact muted">Viewed as in the reference photo. Labels identify socket positions, not Corsair socket numbers or electrical pinouts.</p>
+          <table><thead><tr><th>Socket</th><th>Group / position</th><th>Connection</th></tr></thead><tbody id="component-port-rows"></tbody></table>
+        </section>
         <button id="component-metrics-button" type="button" hidden>Full performance view ↗</button>
         <section id="component-performance" class="metric-detail-grid" aria-label="Selected component performance" hidden></section>
         <section id="linux-details" class="linux-details" hidden aria-labelledby="linux-title">
@@ -76,6 +82,14 @@
           <table><thead><tr><th>Pin</th><th>Signal / function</th></tr></thead><tbody id="pin-table"></tbody></table>
           <p class="compact muted">Reference view; verify header orientation before wiring.</p>
         </section>
+      </section>
+      <section id="jumper-section" hidden aria-labelledby="jumper-title">
+        <h4 id="jumper-title">PCIE2 lane selection</h4>
+        <p id="jumper-current" class="compact"></p>
+        <p class="compact muted">Blue joins the capped pins; green resources are enabled and red resources disabled. Pin diagrams use the manual's 1–2–3 order, not the rotated chassis view.</p>
+        <div id="jumper-configurations" class="jumper-configurations"></div>
+        <p class="compact muted">Read-only reference, not a control. Lane allocation does not measure negotiated PCIe speed. Do not move caps on a powered system.</p>
+        <p class="compact"><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf#page=33" target="_blank" rel="noopener noreferrer">Official manual · revision 1.30, printed page 26</a></p>
       </section>
     </div>
   </dialog>
