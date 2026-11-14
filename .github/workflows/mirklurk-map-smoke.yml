@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Record a capability-free external client probe
         run: curl -4 -fsS "https://map.mirklurk.danteb.com/healthz?map-peer-check=actions-${GITHUB_RUN_ID}"
       - name: Verify one synthetic share and remove its payload

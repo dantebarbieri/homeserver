@@ -37,7 +37,7 @@ jobs:
           - helper: music-lyrics-fallback
             test: test_music_lyrics_fallback.py
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - name: Exercise matching and file-safety safeguards
         run: >-

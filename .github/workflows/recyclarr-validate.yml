@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
 
       - name: Lint YAML syntax
@@ -58,12 +58,12 @@ jobs:
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -v "$config_dir:/config" \
-            ghcr.io/recyclarr/recyclarr:8.8.0 \
+            ghcr.io/recyclarr/recyclarr:8.8.1 \
             config list local
           for service in sonarr radarr; do
             docker run --rm \
               --user "$(id -u):$(id -g)" \
               -v "$config_dir:/config" \
-              ghcr.io/recyclarr/recyclarr:8.8.0 \
+              ghcr.io/recyclarr/recyclarr:8.8.1 \
               list custom-formats "$service" --raw | grep -F homeserver-english-anime-audio
           done
