@@ -52,7 +52,7 @@ test("the installed shell opens offline but private APIs, SSO and other origins 
   await sw.lifecycle("install");
   const entries = [...sw.stores.values()][0];
   assert.ok(entries.size > 10);
-  for (const path of ["/api/snapshot", "/api/history?ids=cpu&seconds=120", "/metrics", "/healthz",
+  for (const path of ["/api/snapshot", "/api/services", "/api/history?ids=cpu&seconds=120", "/metrics", "/healthz",
     "/logout", "https://auth.example/login", "/unlisted.json"]) {
     assert.equal(await sw.request(path), undefined, path);
     assert.equal(entries.has(new URL(path, "https://chasex.example").href), false);

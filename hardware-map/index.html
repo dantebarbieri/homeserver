@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ChasEx">
   <meta name="atlas-data" content="demo">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https://cdn.jsdelivr.net https://*.danteb.com; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>ChasEx · ROMED8-2T</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" sizes="any">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
@@ -26,6 +26,7 @@
         <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
         <button id="fan-rotation-toggle" type="button" aria-pressed="false">Animate fans</button>
         <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Performance · DEMO</button>
+        <button id="services-button" type="button" aria-haspopup="dialog" aria-controls="services-dialog">Services</button>
         <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">About</button>
       </header>
       <section class="connector-nav panel" aria-label="Hardware and connector filters">
@@ -87,6 +88,26 @@
     </div>
     <nav id="metric-panel-nav" class="metric-panel-nav" aria-label="Performance views"></nav>
     <div class="popup-body"><div id="metric-panel"></div></div>
+  </dialog>
+  <dialog id="services-dialog" class="popup services-popup" aria-labelledby="services-title">
+    <header class="popup-heading"><h2 id="services-title">Services</h2><button id="close-services" type="button" autofocus>Close ×</button></header>
+    <div class="popup-body">
+      <div class="services-toolbar">
+        <label class="services-search"><span class="sr-only">Search services or processes</span><input id="services-search" type="search" placeholder="Search services or processes" autocomplete="off"></label>
+        <label class="services-stopped"><input id="services-stopped" type="checkbox">Show stopped</label>
+        <details class="services-column-picker" data-sheet-scroll><summary>Columns</summary><div id="services-columns"></div><button id="services-reset-columns" type="button">Reset columns</button></details>
+      </div>
+      <div class="services-live"><output id="services-status" role="status">Waiting for live accounting</output><span id="services-count"></span></div>
+      <div class="services-table-scroll" data-sheet-scroll tabindex="0" role="region" aria-label="Service resource usage; scroll horizontally for more columns">
+        <table class="services-table"><caption class="sr-only">Docker services and their processes. Values update every five seconds. Select a column heading to sort.</caption><thead id="services-head"></thead><tbody id="services-body"></tbody></table>
+      </div>
+      <details class="services-notes" data-sheet-scroll><summary>Measurements &amp; limitations</summary>
+        <p>CPU is a share of the whole server; memory is container working set or process RSS. Disk is read + write throughput, not drive utilization. Network is receive + send, not a percentage of the primary link. Shared network namespaces are counted once on the owner; individual process network activity is unavailable.</p>
+        <p>Expand a row for its host processes. Container CPU/memory/disk accounting comes from Docker/cgroups, not a sum of process snapshots. Shared memory, buffering, child exits and sampling boundaries can make the numbers differ. NVIDIA compute/encode/decode activity and framebuffer memory are optional and depend on driver support. Missing, stale, first-sample or unsupported values are shown as “—”, never invented zeros.</p>
+        <p>Read-only: there are no stop, restart, kill or server-edit controls. Process arguments and environment variables are never included. Icons load from the same public icon sources used by Homepage.</p>
+        <p id="services-issues"></p>
+      </details>
+    </div>
   </dialog>
   <dialog id="tools-dialog" class="popup tools-popup" aria-labelledby="tools-title">
     <header class="popup-heading"><h2 id="tools-title">ChasEx</h2><button id="close-tools" type="button" autofocus>Close ×</button></header>

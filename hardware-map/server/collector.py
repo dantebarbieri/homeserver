@@ -940,14 +940,26 @@ def main():
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     collector = Collector(args.state_dir, background=not args.once)
+    from services import ServiceCollector
+    service_collector = ServiceCollector()
+    stop_services = threading.Event()
+    service_thread = None
+    write_services = lambda raw: atomic_write(Path(args.state_dir) / "services.json", raw)
+    if not args.once:
+        service_thread = threading.Thread(target=service_collector.run, args=(stop_services, write_services), daemon=True)
+        service_thread.start()
     try:
         while True:
             started = time.monotonic()
             collector.write(collector.collect())
             if args.once:
+                write_services(json.dumps(service_collector.snapshot(), allow_nan=False, separators=(",", ":")))
                 break
             time.sleep(max(0, INTERVAL - (time.monotonic() - started)))
     finally:
+        stop_services.set()
+        if service_thread:
+            service_thread.join(timeout=5)
         collector.close()
 
 
