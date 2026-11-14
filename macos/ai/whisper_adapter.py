@@ -32,8 +32,17 @@ LANGUAGES = frozenset(
 )
 logger = logging.getLogger("studio_whisper")
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-job_lock = asyncio.Lock()
+job_locks = {"mlx": asyncio.Lock(), "telugu-cpu": asyncio.Lock()}
 WORKER = Path(__file__).with_name("whisper_worker.py")
+
+
+def request_engine(request):
+    if request.url.path == "/asr" and uses_faster_whisper(
+        request.query_params.get("task", "transcribe"),
+        request.query_params.get("language"),
+    ):
+        return "telugu-cpu"
+    return "mlx"
 
 
 @app.middleware("http")
@@ -46,6 +55,7 @@ async def bound_request(request, call_next):
         return Response("Content-Length required", status_code=411)
     if length <= 0 or length > MAX_BODY:
         return Response("Request too large", status_code=413)
+    job_lock = job_locks[request_engine(request)]
     if job_lock.locked():
         return Response("Speech worker busy", status_code=503)
     await job_lock.acquire()

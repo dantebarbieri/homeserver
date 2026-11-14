@@ -18,7 +18,10 @@ from whisper_worker import (
 
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        whisper_adapter.job_lock = asyncio.Lock()
+        whisper_adapter.job_locks = {
+            "mlx": asyncio.Lock(),
+            "telugu-cpu": asyncio.Lock(),
+        }
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=whisper_adapter.app),
             base_url="http://127.0.0.1",
@@ -140,6 +143,36 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             finish.set()
             self.assertEqual((await first).status_code, 200)
 
+    async def test_telugu_cpu_and_mlx_jobs_can_run_concurrently(self):
+        started = {"te": asyncio.Event(), "en": asyncio.Event()}
+        finish = asyncio.Event()
+        srt = b"1\n00:00:00,000 --> 00:00:01,000\nSpeech\n"
+
+        async def fake_worker(mode, path, language, timeout):
+            started[language].set()
+            await finish.wait()
+            return srt
+
+        with patch.object(whisper_adapter, "run_worker", fake_worker):
+            telugu = asyncio.create_task(self.client.post(
+                "/asr?task=translate&language=te&output=srt&encode=false",
+                files={"audio_file": ("audio", b"\0\0")},
+            ))
+            await started["te"].wait()
+            english = asyncio.create_task(self.client.post(
+                "/asr?task=transcribe&language=en&output=srt&encode=false",
+                files={"audio_file": ("audio", b"\0\0")},
+            ))
+            await started["en"].wait()
+            duplicate_english = await self.client.post(
+                "/asr?task=transcribe&language=en&output=srt&encode=false",
+                files={"audio_file": ("audio", b"\0\0")},
+            )
+            self.assertEqual(duplicate_english.status_code, 503)
+            finish.set()
+            self.assertEqual((await telugu).status_code, 200)
+            self.assertEqual((await english).status_code, 200)
+
     async def test_worker_failure_is_not_subtitle_success(self):
         async def fail(mode, path, language, timeout):
             raise HTTPException(500, "Speech worker failed")
@@ -149,7 +182,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
                 "/detect-language?encode=false", files={"audio_file": ("audio", b"\0\0")}
             )
             self.assertEqual(response.status_code, 500)
-        self.assertFalse(whisper_adapter.job_lock.locked())
+        self.assertTrue(all(not lock.locked() for lock in whisper_adapter.job_locks.values()))
 
     async def test_invalid_srt_worker_exit_is_explicit(self):
             process = AsyncMock()

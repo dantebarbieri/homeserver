@@ -254,6 +254,9 @@ that Telugu first match the server.
 - Telugu input runs faster-whisper on the CPU with the server's model
   snapshot and decoding (beam size 5); MLX Whisper has no beam search.
   Everything else stays on MLX. Results: [Telugu on the CPU](ai/SPEECH.md#telugu-on-the-cpu).
+- The adapter admits one MLX job and one Telugu CPU job at a time, so a long
+  Telugu film does not hold up English; a second job for the same engine gets
+  HTTP 503.
 - Bazarr uses a patched image ([`docker/dockerfiles/bazarr`](../docker/dockerfiles/bazarr))
   that rejects HTTP errors instead of saving them as subtitles. The build
   fails, keeping the previous container, if the patch stops matching upstream.
@@ -276,7 +279,7 @@ that Telugu first match the server.
   audio language matches; audio-language preferences were not changed.
 - The adapter answers `GET /status` with its engine versions, so Bazarr's
   provider **Test Connection** shows them instead of "Connected but no
-  version found (possibly whisper-asr?)". It never takes the job lock.
+  version found (possibly whisper-asr?)". It never takes a job lock.
 
 Timing overlap and API success are not quality approval, and this is AI
 review against subtitle references, not listening-based verification.

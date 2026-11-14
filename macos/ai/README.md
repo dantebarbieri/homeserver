@@ -163,9 +163,10 @@ Two engines serve requests, each from an offline, pinned snapshot:
 Neither engine promises good translation quality.
 
 The daemon listens on `127.0.0.1:9000`, does not authenticate clients, disables
-HTTP access logs, and runs as `_studio`. One job is accepted at a time; busy
-requests fail with 503. Each job loads a short-lived model process, which exits
-afterward so its memory can be reclaimed. Raw audio is limited to four hours
+HTTP access logs, and runs as `_studio`. It admits one MLX job and one
+faster-whisper CPU job concurrently; a second job for the same engine fails
+with 503. Each job loads a short-lived model process, which exits afterward so
+its memory can be reclaimed. Raw audio is limited to four hours
 (460,800,000 bytes) because long Telugu mythological films run past three
 hours, and upload time to two minutes. Inference is limited to two hours, or
 for Telugu to twice the audio's duration. Temporary audio is private to the service account and removed after
