@@ -102,6 +102,7 @@ test("install metadata supplies real correctly sized Apple, standard and maskabl
   const manifest = JSON.parse(await readFile(new URL("./manifest.webmanifest", import.meta.url), "utf8"));
   const html = await readFile(new URL("./index.html", import.meta.url), "utf8");
   assert.equal(manifest.name, "ChasEx");
+  assert.match(html, /<h2 id="tools-title">ChasEx \(Chassis Explorer\)<\/h2>/);
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.scope, manifest.start_url);
   assert.match(html, /rel="manifest"[^>]+crossorigin="use-credentials"/);
