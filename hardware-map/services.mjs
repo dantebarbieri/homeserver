@@ -110,6 +110,12 @@ export function createServicesUI({ enabled, openPopup, onError }) {
       [service.name, service.container, service.group, ...service.processes.map(process => process.name)]
         .some(value => value.toLowerCase().includes(needle)));
     const maxima = Object.fromEntries(visible.map(id => [id, Math.max(0, ...services.map(service => metricValue(service, id) ?? 0))]));
+    const networkDescription = service => service.networkOwner === null
+      ? "Host/disabled/unknown network namespace: no per-container attribution."
+      : service.networkOwner !== service.id
+        ? `Shared network: traffic counted once on ${names.get(service.networkOwner) ?? "namespace owner"}.`
+        : all.some(other => other.id !== service.id && other.networkOwner === service.id)
+          ? `Shared network with ${all.filter(other => other.id !== service.id && other.networkOwner === service.id).map(other => other.container).join(", ")}. Traffic is not separable by service.` : "";
 
     function appendRow(item, parent = null) {
       const row = node("tr", "", parent ? "service-process" : "service-row");
@@ -129,8 +135,10 @@ export function createServicesUI({ enabled, openPopup, onError }) {
           body.querySelector(`[data-service-toggle="${item.id}"]`)?.focus();
         });
         title.append(toggle);
+        const iconBox = node("span", "", "service-icon-box");
         const fallback = node("span", item.name.slice(0, 1).toUpperCase(), "service-icon-fallback");
-        title.append(fallback);
+        iconBox.append(fallback);
+        title.append(iconBox);
         if (item.icon) {
           const image = node("img", "", "service-icon");
           image.src = item.icon;
@@ -140,7 +148,7 @@ export function createServicesUI({ enabled, openPopup, onError }) {
           if (item.icon.includes("/@mdi/") || item.icon.includes("/simple-icons@")) image.classList.add("service-monochrome");
           image.addEventListener("load", () => { fallback.hidden = true; });
           image.addEventListener("error", () => { image.hidden = true; });
-          title.append(image);
+          iconBox.append(image);
         }
       }
       const label = node("span", "", "service-label");
@@ -151,10 +159,7 @@ export function createServicesUI({ enabled, openPopup, onError }) {
       title.append(label);
       name.append(title);
       const network = parent ? "Process network attribution is unavailable without additional instrumentation." :
-        item.networkOwner === null ? "Host/disabled/unknown network namespace: no per-container attribution." :
-        item.networkOwner !== item.id ? `Shared network: traffic counted once on ${names.get(item.networkOwner) ?? "namespace owner"}.` :
-        all.some(other => other.id !== item.id && other.networkOwner === item.id)
-          ? `Shared network with ${all.filter(other => other.id !== item.id && other.networkOwner === item.id).map(other => other.container).join(", ")}. Traffic is not separable by service.` : "";
+        networkDescription(item);
       name.title = parent ? "Process resident memory includes shared pages; it is not additive container working set." :
         [item.group, network, ...(item.issues ?? [])].filter(Boolean).join("\n");
       row.append(name);
@@ -177,6 +182,7 @@ export function createServicesUI({ enabled, openPopup, onError }) {
         cell.colSpan = visible.length + 1;
         cell.textContent = service.processStatus === "unavailable" ? "Process enumeration unavailable." :
           `${service.processes.length} processes${service.processStatus === "partial" ? " \u00b7 partial snapshot; some processes exited or could not be read" : ""}. Process RSS and I/O need not sum to container accounting; process network rates are unavailable.`;
+        cell.textContent += ` ${[networkDescription(service), ...(service.issues ?? [])].filter(Boolean).join(" ")}`;
         note.append(cell);
         fragment.append(note);
       }

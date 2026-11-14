@@ -238,6 +238,8 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
 .service-label strong { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .service-label small { display: block; color: var(--muted); font-size: 10px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; }
 .service-icon { object-fit: contain; flex-shrink: 0; }
+.service-icon-box { position: relative; width: 24px; height: 24px; flex-shrink: 0; }
+.service-icon-box .service-icon { position: absolute; inset: 0; }
 .service-monochrome { filter: invert(.9); }
 .service-icon-fallback { display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; color: var(--accent); background: #253849; border-radius: 5px; font-size: 12px; }
 .service-icon:not([hidden]) + .service-label { margin-left: 0; }
@@ -255,7 +257,7 @@ td:last-child { font-family: Consolas, monospace; font-size: 9px; }
   .services-live { padding: 0 10px 8px; font-size: 10px; }
   .services-table tbody th { min-width: 160px; max-width: 180px; }
   .service-label strong { font-size: 11px; }
-  .service-icon, .service-icon-fallback { width: 20px; height: 20px; }
+  .service-icon, .service-icon-fallback, .service-icon-box { width: 20px; height: 20px; }
   .service-name { gap: 4px; }
   .services-table tbody td { min-width: 96px; padding: 8px; }
   .services-column-picker[open] { top: 60px; right: 10px; max-height: calc(100% - 72px); }
