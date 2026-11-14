@@ -508,7 +508,9 @@ clean/canonical map model equivalence after normalizing only clone-root paths.
 It validates project `compose`, referenced network/volume/secret identities,
 both accepted immutable images, wiki runtime, maintenance guards and the
 existing canonical read-only nginx bind with `create_host_path: false`.
-It fetches already-reviewed objects from the clean clone; no reset/remote
+It fetches already-reviewed objects from the clean clone and explicitly uses
+`merge --no-autostash --ff-only`, overriding any merge.autoStash setting;
+there is no stash/reset/remote
 change or direct file overwrite. No service operation occurs in the helper.
 If legitimate upstream main has advanced beyond the canonical base, pin that
 already-reviewed upstream SHA separately with `--review-base` (otherwise it

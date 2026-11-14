@@ -219,6 +219,7 @@ class IsolatedPeerTests(unittest.TestCase):
         self.assertFalse((docker / ".env").exists())
 
     def test_prepare_and_verify_mode_keep_edits_and_verify_mode_never_mutates_git(self):
+        self.git(self.canonical, "config", "merge.autoStash", "true")
         expected = isolated.state(self.canonical)
         fingerprints = self.root / "fingerprints.json"
         fingerprints.write_text(json.dumps(expected))
@@ -233,6 +234,9 @@ class IsolatedPeerTests(unittest.TestCase):
                 patch.object(isolated, "model", side_effect=lambda root, _: clean if root == self.source else live):
             isolated.prepare(args)
             isolated.same_edits(self.canonical, expected)
+            stash = subprocess.run(["git", "-C", str(self.canonical), "rev-parse",
+                                    "--verify", "refs/stash"], capture_output=True)
+            self.assertNotEqual(stash.returncode, 0)
             args.verify_only = True
             original = isolated.git
             calls = []

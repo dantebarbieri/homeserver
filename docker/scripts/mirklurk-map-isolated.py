@@ -264,7 +264,7 @@ def prepare(args):
     require(git(canonical, "rev-parse", "HEAD").decode().strip() == args.base,
             "Canonical base changed before fast-forward")
     proxy_guard(args.proxy_id, args.ipv4, args.ipv6)
-    git(canonical, "merge", "--ff-only", args.revision)
+    git(canonical, "merge", "--no-autostash", "--ff-only", args.revision)
     require(git(canonical, "rev-parse", "HEAD").decode().strip() == args.revision,
             "Canonical fast-forward did not reach exact reviewed source")
     same_edits(canonical, expected)
