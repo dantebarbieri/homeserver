@@ -79,6 +79,19 @@ class APITests(unittest.TestCase):
         with patch.object(Path, "is_symlink", return_value=True):
             self.assertEqual(self.request("/index.html")[0], 404)
 
+    def test_pwa_assets_are_served_with_installable_types_and_revalidation(self):
+        types = {"pwa.mjs": "text/javascript", "sw.js": "text/javascript",
+                 "manifest.webmanifest": "application/manifest+json",
+                 "icon-192.png": "image/png", "icon-512.png": "image/png",
+                 "icon-maskable-512.png": "image/png", "apple-touch-icon.png": "image/png"}
+        for name, content_type in types.items():
+            with self.subTest(asset=name):
+                (self.web / name).write_bytes(b"fixture")
+                status, headers, raw = self.request("/" + name)
+                self.assertEqual((status, raw), (200, b"fixture"))
+                self.assertEqual(headers["Content-Type"], content_type)
+                self.assertEqual(headers["Cache-Control"], "no-cache")
+
     def test_stale_missing_and_nonfinite_snapshot_fail_closed(self):
         self.now += 31
         for path in ("/healthz", "/metrics", "/api/snapshot", "/api/history?ids=cpu&seconds=60"):

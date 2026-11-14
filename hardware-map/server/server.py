@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unprivileged read-only Server Atlas static/API server."""
+"""Unprivileged read-only ChasEx static/API server."""
 
 import argparse
 from datetime import datetime, timezone
@@ -20,7 +20,8 @@ from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler, Requ
 
 STATIC = frozenset(("index.html", "styles.css", "favicon.svg", "app.mjs", "board.mjs",
                     "model.mjs", "metric-model.mjs", "metrics.mjs", "live-data.mjs", "linux-snapshot.mjs",
-                    "mobile-ui.mjs"))
+                    "mobile-ui.mjs", "pwa.mjs", "sw.js", "manifest.webmanifest",
+                    "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"))
 MAX_FILE = 8 * 1024 * 1024
 KEY = re.compile(r"[A-Za-z0-9_.:-]{1,160}\Z")
 
@@ -129,7 +130,7 @@ class State:
                 if key not in keys:
                     continue
                 if key in values:
-                    raise APIError(502, "Ambiguous Prometheus series; configure a single Atlas scrape target")
+                    raise APIError(502, "Ambiguous Prometheus series; configure a single ChasEx scrape target")
                 values[key] = self.points(entry)
             series = {}
             for frontend in ids:
@@ -185,7 +186,7 @@ class State:
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "ServerAtlas"
+    server_version = "ChasEx"
     sys_version = ""
 
     def setup(self):
@@ -258,7 +259,8 @@ class Handler(BaseHTTPRequestHandler):
                 if name == "/index.html":
                     raw = raw.replace(b'<meta name="atlas-data" content="demo">',
                                       b'<meta name="atlas-data" content="live">')
-                mime = "text/javascript" if path.suffix == ".mjs" else mimetypes.guess_type(name)[0] or "application/octet-stream"
+                mime = {".mjs": "text/javascript", ".js": "text/javascript", ".webmanifest": "application/manifest+json"}.get(
+                    path.suffix, mimetypes.guess_type(name)[0] or "application/octet-stream")
                 self.respond(200, raw, mime, api=False)
         except APIError as error:
             self.respond(error.status, {"error": error.message, "ready": False} if urlsplit(self.path).path == "/healthz"

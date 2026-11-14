@@ -1,4 +1,4 @@
-# Server Atlas
+# ChasEx
 
 A hardware map and read-only live monitor for the ROMED8-2T server. The
 dependency-free browser UI also works as an explicitly synthetic local demo.
@@ -20,7 +20,27 @@ Tests require Node.js and no packages:
 node --test hardware-map\model.test.mjs hardware-map\metric-model.test.mjs
 node --test hardware-map\live-data.test.mjs
 node --test hardware-map\mobile-ui.test.mjs
+node --test hardware-map\pwa.test.mjs
 ```
+
+## Phone installation
+
+The HTTPS deployment is an installable PWA named **ChasEx**, with standalone
+display, 192/512 px app icons, a separate maskable icon and a 180 px Apple touch
+icon derived from the original chassis schematic. In Safari, use **Share → Add
+to Home Screen**. Supported Chromium browsers also expose **Install ChasEx** in
+About when their native installation prompt is available.
+
+The service worker caches only an explicit allowlist of public application
+files. It never caches snapshots, history, Prometheus output, health responses,
+credentials or authentication redirects. Offline launch opens the application
+shell, not saved private telemetry; missing/stale readings remain unavailable.
+Online requests still go to the server, so SSO and live updates remain in force.
+Authentication may be required again when first opening the installed app.
+Keep the worker's asset list and cache version current when changing the shell.
+
+The existing URL, `server-atlas` container/unit identifiers, Prometheus metric
+names, private state directories and browser preferences remain unchanged.
 
 ## Live service
 
@@ -65,7 +85,7 @@ existing `compose_proxy` and `compose_monitoring` networks. A separate Compose
 project deliberately keeps this pinned feature deployment independent of the
 main project's nightly updates and network ownership.
 
-**History reuses the existing Prometheus 90-day TSDB**, with a 15-second Atlas
+**History reuses the existing Prometheus 90-day TSDB**, with a 15-second ChasEx
 scrape. Bounded API queries accept registered channel IDs only, never raw
 PromQL. Long windows return at most 301 points; missing/stale scrapes stay gaps,
 not zeroes or invented backfill. CPU/disk/NIC rates handle counter resets.
@@ -114,7 +134,7 @@ the authenticated route. `/metrics` returns 404 at the public proxy.
 The existing `docker/monitoring/prometheus.yml` includes the internal scrape;
 validate with `promtool check config` and reload Prometheus with SIGHUP.
 Until this feature branch is integrated, production has only the additive
-Atlas scrape/dashboard blocks in its existing checkout; the running Atlas
+ChasEx scrape/dashboard blocks in its existing checkout; the running ChasEx
 release is pinned separately. Preserve those blocks during monitoring or
 dashboard configuration changes. Private pre-change backups live outside Git
 under `/srv/server-atlas/backups`.

@@ -5,6 +5,7 @@ import { createMetricUI } from "./metrics.mjs";
 import { applyLiveSnapshot } from "./metric-model.mjs";
 import { LiveData } from "./live-data.mjs";
 import { createBottomSheet } from "./mobile-ui.mjs";
+import { setupPwa } from "./pwa.mjs";
 
 const $ = id => document.getElementById(id);
 let inventory = withInspectionDefaults(emptyDocument());
@@ -33,6 +34,7 @@ function notify(message, error = false) {
   notice.setAttribute("role", error ? "alert" : "status");
   notice.hidden = false;
 }
+setupPwa(message => notify(message, true));
 
 try {
   inventory = withInspectionDefaults(loadDocument(window.localStorage));

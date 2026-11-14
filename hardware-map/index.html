@@ -4,10 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0c1118">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ChasEx">
   <meta name="atlas-data" content="demo">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Server Atlas · ROMED8-2T</title>
+  <title>ChasEx · ROMED8-2T</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" sizes="any">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+  <link rel="manifest" href="./manifest.webmanifest" crossorigin="use-credentials">
   <link rel="stylesheet" href="./styles.css">
   <script type="module" src="./app.mjs"></script>
 </head>
@@ -15,7 +22,7 @@
   <main>
     <section id="board-view" class="board-workspace" aria-label="Server hardware map">
       <header class="map-toolbar">
-        <h1>Server Atlas</h1>
+        <h1>ChasEx</h1>
         <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-label">100%</output><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
         <button id="fan-rotation-toggle" type="button" aria-pressed="false">Animate fans</button>
         <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Performance · DEMO</button>
@@ -82,8 +89,13 @@
     <div class="popup-body"><div id="metric-panel"></div></div>
   </dialog>
   <dialog id="tools-dialog" class="popup tools-popup" aria-labelledby="tools-title">
-    <header class="popup-heading"><h2 id="tools-title">Server Atlas</h2><button id="close-tools" type="button" autofocus>Close ×</button></header>
+    <header class="popup-heading"><h2 id="tools-title">ChasEx</h2><button id="close-tools" type="button" autofocus>Close ×</button></header>
     <div class="popup-body">
+      <section id="app-install" class="reference">
+        <h4>Install on your phone</h4>
+        <button id="install-app" type="button" hidden>Install ChasEx</button>
+        <p class="compact muted">On iPhone or iPad, open in Safari and choose Share → Add to Home Screen. On Android, choose Install app or Add to Home screen from the browser menu.</p>
+      </section>
       <h3 id="board-revision">ROMED8-2T</h3>
       <p class="muted compact">Select hardware for performance and Linux devices, or switch to Connectors for pin details. Viewing controls do not change the server.</p>
       <section class="summary" aria-label="Connector occupancy">

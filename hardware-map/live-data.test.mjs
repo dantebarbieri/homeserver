@@ -12,8 +12,8 @@ test("telemetry notices omit legacy context but preserve diagnostics, unknown me
   source.snapshot = { issues: [...notes] };
   assert.deepEqual(source.issues, []);
   source.snapshot.issues.push("cache: kernel reports needs_check", "cpu-power: package energy source unavailable", "New source diagnostic");
-  source.error = "Atlas API returned HTTP 503";
-  source.historyError = "120s: Atlas API returned HTTP 502";
+  source.error = "ChasEx API returned HTTP 503";
+  source.historyError = "120s: ChasEx API returned HTTP 502";
   assert.deepEqual(source.issues, ["cache: kernel reports needs_check", "cpu-power: package energy source unavailable",
     "New source diagnostic", source.error, source.historyError]);
   assert.deepEqual(source.snapshot.issues.slice(0, 2), notes);

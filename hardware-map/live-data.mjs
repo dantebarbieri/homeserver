@@ -58,7 +58,7 @@ export class LiveData {
   emit() { for (const listener of this.listeners) listener(this.snapshot); }
   async json(path) {
     const response = await this.fetcher(path, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10000) });
-    if (!response.ok) throw new Error(`Atlas API returned HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`ChasEx API returned HTTP ${response.status}`);
     return response.json();
   }
   async poll() {
