@@ -117,8 +117,9 @@ Version 2 adds `confirmedAssignments`, a dictionary repeating only the exact
 stable-identity/slot pairs verified by physical inspection. Legacy state without
 that field remains provisional. Confirmation of an absent or different reservation
 is rejected at startup; unknown/duplicate identities are not assigned or confirmed.
-Labels, topology notes and card anchors distinguish confirmed and provisional
-placements per device. Confirmations survive refreshes and Linux renumbering;
+Labels, topology notes, temperature-chart titles and card anchors distinguish
+confirmed and provisional placements per device (a provisional placement is
+labelled as such; an absent binding reads "slot unavailable"). Confirmations survive refreshes and Linux renumbering;
 new identities never inherit a previous disk's confirmation.
 
 The November 13 installed-label inspection established all 12 occupied HDD

@@ -130,7 +130,7 @@ test("device identity changes discard cached and in-flight histories for reused 
 
 test("live inventory replaces provisional NVMe card bindings without depending on controller numbering", async () => {
   const { linuxSnapshot } = await import("./linux-snapshot.mjs");
-  const { applyLiveSnapshot, metricCards, metricBadges, metrics } = await import("./metric-model.mjs?live-inventory-test");
+  const { applyLiveSnapshot, metricCards, metricBadges, metrics, demoSensors } = await import("./metric-model.mjs?live-inventory-test");
   const snapshot = JSON.parse(JSON.stringify(linuxSnapshot).replaceAll("nvme0n1", "nvme9n1"));
   const data = {
     inventory: { snapshot, disks: [
@@ -151,8 +151,15 @@ test("live inventory replaces provisional NVMe card bindings without depending o
   assert.ok(metrics.has("temp-nvme9"));
   assert.equal(metrics.get("memory-used").maximum, 123.5);
   assert.deepEqual(metricBadges.find(item => item.id === "temp-hdd-range").ids, ["temp-sda"]);
+  assert.equal(metrics.get("temp-sda").label, "/dev/sda · cage-1-bay-1 · provisional");
+  assert.equal(metrics.get("temp-sdb").label, "/dev/sdb · slot unavailable");
+  assert.equal(metrics.get("temp-nvme9").label, "nvme9 · M2_2 · provisional · SMART composite");
   data.inventory.disks[0].mapping = "confirmed";
+  data.inventory.disks[2].mapping = "confirmed";
   applyLiveSnapshot(data);
+  assert.equal(metrics.get("temp-sda").label, "/dev/sda · cage-1-bay-1");
+  assert.equal(demoSensors.find(item => item.id === "temp-sda").anchor, "drive-cage-1-bay-1");
+  assert.doesNotMatch(demoSensors.find(item => item.id === "temp-sda").location, /PROVISIONAL|unknown/);
   assert.match(card.label, /M2_2/);
   assert.doesNotMatch(card.label, /provisional/);
   assert.equal(card.anchor, "drive-M2_2");

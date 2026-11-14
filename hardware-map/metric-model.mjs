@@ -466,4 +466,23 @@ export function applyLiveSnapshot(data) {
       demoSensors.push({ id, label: id, anchor: id.startsWith("temp-sd") ? "disk-bays" : "nvme-group", location: id.startsWith("temp-sd") ? sensorLocations["disk-bays"] : sensorLocations["nvme-group"] });
     }
   }
+  for (const sensor of demoSensors) {
+    const match = sensor.id.match(/^temp-(?:(sd[a-z]+)|nvme(\d+))(-secondary)?$/);
+    if (!match) continue;
+    const [, hddId, nvmeIndex, secondary] = match;
+    const binding = hddId ? bindings.find(item => item.kind === "hdd" && item.id === hddId)
+      : bindings.find(item => item.kind === "nvme" && item.id.match(/^nvme(\d+)n\d+$/)?.[1] === nvmeIndex);
+    const placement = binding?.slot ? `${binding.slot}${binding.mapping === "confirmed" ? "" : " · provisional"}` : "slot unavailable";
+    if (hddId) {
+      sensor.label = `/dev/${hddId} · ${placement}`;
+      sensor.anchor = binding?.slot ? `drive-${binding.slot}` : "disk-bays";
+      sensor.location = !binding?.slot ? sensorLocations["disk-bays"]
+        : binding.mapping === "confirmed" ? "HDD: SMART temperature reported by the drive, bound to its physical slot by serial/WWN identity and confirmed by installed-label inspection. The probe position inside the drive is unverified."
+          : "HDD: SMART temperature reported by the drive. Its slot is a PROVISIONAL serial-sorted placeholder, not physically confirmed. The probe position inside the drive is unverified.";
+    } else {
+      sensor.label = `nvme${nvmeIndex} · ${placement} · SMART ${secondary ? "sensor 1 (vendor meaning unverified)" : "composite"}`;
+      sensor.anchor = binding?.slot ? `drive-${binding.slot}` : "nvme-group";
+    }
+    if (metrics.has(sensor.id)) metrics.get(sensor.id).label = sensor.label;
+  }
 }
