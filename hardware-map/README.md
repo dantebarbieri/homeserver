@@ -133,8 +133,11 @@ an already NixOS-managed unit. The Docker service has `restart: unless-stopped`.
 Before exposing it, add `chasex.danteb.com` to Authelia's **admins /
 two_factor** rule, validate the configuration and restart only Authelia.
 `hardware-map/setup-proxy.sh` uses NPM's supported API and existing private
-monitor credentials, requires the existing wildcard certificate, and creates
-the authenticated route. `/metrics` returns 404 at the public proxy.
+monitor credentials, requires the existing wildcard certificate, and checks
+that admins require two factors while non-admins are denied. It creates the
+authenticated route or migrates the exact expected legacy route, refusing
+unexpected configurations. The former hostname redirects with HTTP 308;
+`/metrics` returns 404 at the public proxy.
 The existing `docker/monitoring/prometheus.yml` includes the internal scrape;
 validate with `promtool check config` and reload Prometheus with SIGHUP.
 Until this feature branch is integrated, production has only the additive
