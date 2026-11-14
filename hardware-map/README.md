@@ -290,7 +290,7 @@ FAN3 tach is a relayed BMC observation, not an independent cable trace.
 | --- | --- |
 | Photo-confirmed | Board silkscreen `ROMED8-2T REV 1.03`; GPU label `GV-N207SGAMING OC-8GD rev 1.0` in IMG_4548. The earlier extra zero in the GPU SKU was a transcription error. |
 | User-confirmed, November 13 | User explicitly accepts the reviewed PCIe mapping as confirmed: **GPU in PCIE4**, **PCIE5/6/7 empty**, cooler covering **PCIE3/PCIE2**. This follows the three exposed rows in IMG_4537 and the manual; it is user confirmation, not a new readable-label photo. Earlier PCIE3 electrical assignment and PCIE4-free report are superseded. |
-| User-confirmed | HBA in PCIE1, directly at the GPU fan intake. Candidate model is **SAS 9300-8i**, still user-suspected rather than label-confirmed. Firmware/mode is not established by this candidate identification. |
+| User-confirmed, November 13; installed-card video | **LSI/Broadcom SAS 9300-8i** in PCIE1, directly at the GPU fan intake. User confirms it is the same card as the Amazon listing and official guide. The video informs the longer green PCB, dark heatsink and two internal connector shapes; auxiliary chip markings are not treated as an independent board-model identification. Firmware/mode remains unverified. |
 | Photo-confirmed | Both M.2 sockets right of PCIE7's end contain bare Samsung 2280 drives without heatsinks. Drives run perpendicular to the slots across the PCIE6→PCIE2 rows. Both onboard SATA connectors appear cabled; logical A/B identities and cable-to-drive routing remain unknown. |
 | Photo observation, unmeasured | GPU shroud overhangs both M.2 drives with a visible gap estimated as a few mm. This is not a measured clearance or a verified heatsink allowance. Drive outlines in the schematic show orientation, not dimensions or exact shroud extent. |
 | User-confirmed, November 13 | Both SSDs are **Samsung 990 EVO 2 TB, MZ-V9E2T0B**. Logical A/B telemetry-to-socket bindings remain unknown. |
@@ -361,8 +361,13 @@ datasheet, Samsung 990 EVO revision 1.1 datasheet, WD Red Plus product brief,
 Rosewill chassis manual and Corsair HXi manual for the CP-9020259 family.
 
 The Gigabyte PDF is a **generic graphics installation guide**, accompanied by
-the model-specific support page. The Broadcom 9300-8i guide is explicitly
-**candidate-model documentation**, not proof of the installed controller.
+the model-specific support page. The Broadcom SAS 9300-8i guide is **version 1.3,
+March 2015**; the user confirms the installed card matches it and the Amazon
+purchase. Its specified PCB size is **6.0 × 2.7 inches (152.4 × 68.6 mm)**,
+not a measurement of installed clearance. The original HBA schematic is longer
+and includes a dark heatsink plus two SFF-8643 connector blocks; its projected
+height is schematic, not the board's physical height or a scale drawing.
+The video and vendor PDF remain private; neither artwork is bundled.
 Thermalright publishes an x8 hub PDF link, but it returned **HTTP 404** during
 verification and the user independently confirmed the 404; its working official
 product page is linked with that limitation instead.

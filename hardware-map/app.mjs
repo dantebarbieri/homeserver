@@ -430,11 +430,15 @@ function renderBoard() {
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 26, class: "hardware-label" }, "GIGABYTE / RTX 2070 SUPER"));
   gpu.append(svgElement("text", { x: 913, y: gpuTop + 45, class: "hardware-subtitle" }, "PCIE4 · PCIE3/2 COVERED · M.2 OVERHANG"));
   hardware.append(gpu);
-  const hba = hardwarePart("hba", "hba", "Low-profile HBA / PCIE1", "PCIE1 is user-confirmed/photo-consistent. HBA sits at the GPU fan intake. Outline and spacing are not measurements; cable routes and airflow impact remain unknown.", ["PCIE1"]);
+  const hba = hardwarePart("hba", "hba", "SAS 9300-8i / PCIE1", "Model and PCIE1 placement are user-confirmed. The longer PCB, heatsink and two internal connectors are informed by the installed-card video. HBA sits at the GPU fan intake. Outline and spacing are not measurements; cable routes and airflow impact remain unknown.", ["PCIE1"]);
   const hbaSlot = landscapeBounds(connectorById.get("PCIE1"));
-  hba.append(svgElement("rect", { x: 1123, y: hbaSlot.y - 9, width: 167, height: 34, rx: 2, class: "hba-body part-outline" }));
-  for (let x = 1133; x < 1185; x += 5) hba.append(svgElement("path", { d: `M${x} ${hbaSlot.y - 5} v25`, class: "hba-fin" }));
-  hba.append(svgElement("text", { x: 1193, y: hbaSlot.y + 12, class: "hardware-label" }, "HBA / PCIE1"));
+  hba.append(svgElement("rect", { x: 1042, y: hbaSlot.y - 9, width: 248, height: 34, rx: 2, class: "hba-body part-outline" }));
+  for (const y of [hbaSlot.y - 5, hbaSlot.y + 10]) {
+    hba.append(svgElement("rect", { x: 1044, y, width: 21, height: 10, rx: 1, class: "hba-connector" }));
+  }
+  hba.append(svgElement("rect", { x: 1076, y: hbaSlot.y - 5, width: 65, height: 26, rx: 1, class: "hba-heatsink" }));
+  for (let x = 1082; x < 1138; x += 5) hba.append(svgElement("path", { d: `M${x} ${hbaSlot.y - 3} v22`, class: "hba-fin" }));
+  hba.append(svgElement("text", { x: 1152, y: hbaSlot.y + 12, class: "hardware-label" }, "9300-8i / PCIE1"));
   hardware.append(hba);
   board.append(hardware);
 }

@@ -139,7 +139,9 @@ main { width: 100%; }
 .gpu-body { fill: #30373a; stroke: #181f22; stroke-width: 2; }
 .gpu-trim { fill: none; stroke: #687275; stroke-width: 3; }
 .hba-body { fill: #315a3c; stroke: #193924; stroke-width: 2; }
-.hba-fin { fill: none; stroke: #b2bdb2; stroke-width: 3; }
+.hba-connector { fill: #202b2a; stroke: #adb8ac; stroke-width: .8; }
+.hba-heatsink { fill: #252e30; stroke: #151d1e; stroke-width: 1; }
+.hba-fin { fill: none; stroke: #758780; stroke-width: 2; }
 .connector { cursor: pointer; }
 .connector rect { fill: #252e2a; stroke: #6b7970; stroke-width: 1.2; transition: fill .1s, stroke .1s; }
 .connector text { fill: #e0e5d7; font-size: 10px; text-anchor: middle; pointer-events: none; }
