@@ -7,13 +7,13 @@ replacement of the file. The Studio runs a *mapped* Tdarr node that only
 encodes, then hands the result back for Linux to validate and publish.
 
 **Status (2026-11-14): built, unit-tested and deployed, not activated.** The
-flow definition, installers and node tooling are on the server, and the Studio
-node is installed and starts paused, but the offload flow is not installed in
-Tdarr yet. The three TV libraries still use the Linux-only
-`homeserver-hevc-cpu-v1` flow. The Studio's installer and start script were last
-changed while the Studio was offline and are tested on Linux only (see the
-[checks to make there](#studio-scripts-verified-only-on-linux)). Production moves
-only after the [open checks](#open-checks-before-cutover) pass; update this
+flow definition, installers and node tooling are on the server, the offload flow
+is installed with a **disabled** canary library pointing at it, and the Studio
+node is installed and starts paused. The three TV libraries still use the
+Linux-only `homeserver-hevc-cpu-v1` flow. The Studio's installer and start script
+were last changed while the Studio was offline and are tested on Linux only (see
+the [checks to make there](#studio-scripts-verified-only-on-linux)). Production
+moves only after the [open checks](#open-checks-before-cutover) pass; update this
 paragraph then.
 
 ## Goal
