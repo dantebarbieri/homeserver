@@ -6,7 +6,9 @@ const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { connect, ROOT } = require('./install-flow.cjs');
 const { CACHE_ROOT } = require('./hevc-offload-v1.cjs');
-const { activeWorkers, quiescent, FLOW_ID, TV_LIBRARIES, DEFAULT_MAC_NODE } = require('./install-offload-flow.cjs');
+const {
+  activeWorkers, quiescent, publisher, encoder, quiet, FLOW_ID, TV_LIBRARIES, DEFAULT_MAC_NODE,
+} = require('./install-offload-flow.cjs');
 
 const WORKER_TYPES = ['healthcheckcpu', 'healthcheckgpu', 'transcodecpu', 'transcodegpu'];
 // Settings this tool never changes; they must read back exactly as they were.
@@ -50,7 +52,17 @@ function checkMacActivation(libraries) {
   }
 }
 
-function plan({ node, libraries, sets, pause, isMac }) {
+// The flow's Mac steps throw on Linux, so a Linux CPU worker that picked up one of its files would fail it.
+// Starting or enlarging Linux CPU encoding is refused while any library on the flow can still start jobs.
+function checkLinuxEncodes(libraries) {
+  for (const library of libraries.filter(l => l.flowId === FLOW_ID)) {
+    assert(quiescent(library),
+      `${library.name} runs the Mac offload flow and can still start jobs, which a Linux CPU worker would fail; `
+      + 'run install-offload-flow.cjs --hold first, or keep the node paused or at transcodecpu 0');
+  }
+}
+
+function plan({ node, libraries, sets, pause, isMac, macName, nodes }) {
   const limits = node.workerLimits;
   assert(limits && WORKER_TYPES.every(type => Number.isInteger(limits[type])),
     `${node.nodeName} reports incomplete worker limits`);
@@ -64,13 +76,29 @@ function plan({ node, libraries, sets, pause, isMac }) {
   }
   const nextPaused = pause ?? node.nodePaused;
   assert.equal(typeof nextPaused, 'boolean', `${node.nodeName} reports an unknown pause state`);
+  const next = { ...node, workerLimits: nextLimits, nodePaused: nextPaused };
+  const peers = nodes.filter(other => other.nodeName !== node.nodeName);
+  const publishers = peers.filter(other => other.nodeName !== macName && publisher(other));
   if (isMac) {
     const others = WORKER_TYPES.filter(type => type !== 'transcodecpu');
     const cpuOnly = `${node.nodeName} must run CPU encodes only: transcodegpu and both health check limits must be 0`;
     assert(others.every(type => !sets[type]), cpuOnly);
     if (!nextPaused) {
       assert(others.every(type => nextLimits[type] === 0), cpuOnly);
-      if (nextLimits.transcodecpu >= 1) checkMacActivation(libraries);
+      if (nextLimits.transcodecpu >= 1) {
+        checkMacActivation(libraries);
+        // The Linux leg publishes what the Mac encodes; without it every finished encode waits in limbo.
+        assert(publishers.length > 0,
+          `${node.nodeName} cannot take encodes until an unpaused Linux node has a GPU worker to publish them`);
+      }
+    }
+  } else {
+    if (encoder(next) && (!encoder(node) || nextLimits.transcodecpu > limits.transcodecpu)) checkLinuxEncodes(libraries);
+    if (publisher(node) && !publisher(next)) {
+      const macs = peers.filter(other => other.nodeName === macName);
+      assert(publishers.length > 0 || macs.every(mac => quiet(mac) && activeWorkers(mac, 'transcodecpu').length === 0),
+        `${node.nodeName} is the only unpaused Linux node with a GPU worker to publish ${macName}'s encodes; `
+        + `pause ${macName} and wait for its running jobs to finish first`);
     }
   }
   const updates = {};
@@ -87,13 +115,15 @@ async function configure({ crud, request, options, io = fs, log = console.log })
     assert.equal(matches.length, 1, 'Expected exactly one connected node with that name');
     return matches[0];
   };
-  const decide = (node, libraries) => plan({ node, libraries, sets, pause, isMac: nodeName === macNode });
+  const decide = (node, libraries, connected) => plan({
+    node, libraries, sets, pause, isMac: nodeName === macNode, macName: macNode, nodes: Object.values(connected || {}),
+  });
 
   const [libraries, nodes] = await Promise.all([
     crud('LibrarySettingsJSONDB', 'getAll'), request('get-nodes', undefined, 'GET'),
   ]);
   const [nodeID, node] = find(nodes);
-  const updates = decide(node, libraries);
+  const updates = decide(node, libraries, nodes);
   log(JSON.stringify({ nodeName, nodeID, apply, updates }));
   if (!Object.keys(updates).length) {
     log('Already as requested; nothing to change.');
@@ -112,7 +142,8 @@ async function configure({ crud, request, options, io = fs, log = console.log })
   ]);
   const [latestID, latest] = find(latestNodes);
   assert.equal(latestID, nodeID, 'Node reconnected before the update; retry');
-  assert.deepEqual(decide(latest, latestLibraries), updates, 'Node or library state changed before the update; retry');
+  assert.deepEqual(decide(latest, latestLibraries, latestNodes), updates,
+    'Node or library state changed before the update; retry');
 
   await request('update-node', { data: { nodeID, nodeUpdates: updates } });
   const [liveNodes, stored] = await Promise.all([

@@ -146,7 +146,7 @@ test('a dry run writes nothing in any mode', async () => {
     const plan = await w.run(options);
     assert(plan.length > 0, options.mode);
     untouched(w);
-    assert.equal(w.calls.length, 0);
+    assert.deepEqual(w.calls.filter(call => call[0] !== 'access'), [], `${options.mode} only checks that the modules and cache exist`);
   }
   const w = world({ libraries: TV_LIBRARIES.map(id => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT })),
     nodes: { a: linux({}, { transcodecpu: 4 }), b: mac({ nodePaused: true }) } });
@@ -188,14 +188,16 @@ test('canary install creates the flow, a runnable disabled canary and CRF 20 wit
   ]);
 });
 
-test('a missing module or cache aborts before any backup or write', async () => {
+test('a missing module or cache aborts a dry run or an apply before any backup or write', async () => {
   for (const mode of ['canary', 'adopt']) {
-    for (const missing of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs', 'cache']) {
-      const present = ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs'].filter(file => file !== missing)
-        .map(file => `${ROOT}/${file}`).concat(missing === 'cache' ? [] : [CACHE_ROOT]);
-      const w = world({ present });
-      await assert.rejects(w.run({ mode, apply: true }), /ENOENT/, `${mode} without ${missing}`);
-      assert.deepEqual([w.writes, w.backups()], [[], []], `${mode} without ${missing}`);
+    for (const apply of [false, true]) {
+      for (const missing of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs', 'cache']) {
+        const present = ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs'].filter(file => file !== missing)
+          .map(file => `${ROOT}/${file}`).concat(missing === 'cache' ? [] : [CACHE_ROOT]);
+        const w = world({ present });
+        await assert.rejects(w.run({ mode, apply }), /ENOENT/, `${mode} (apply ${apply}) without ${missing}`);
+        assert.deepEqual([w.writes, w.backups()], [[], []], `${mode} (apply ${apply}) without ${missing}`);
+      }
     }
   }
 });
@@ -287,6 +289,7 @@ test('adopting moves only the TV flow and cache, installs the flow and leaves sc
   assert.equal(w.backups().length, 1);
   w.writes.length = 0;
   w.nodes.a.workerLimits.transcodecpu = 4; // an idempotent re-run needs no node preconditions
+  w.io.access = async () => { throw new Error('an idempotent re-run needs no module or cache'); };
   await w.run({ mode: 'adopt', apply: true });
   assert.deepEqual(w.writes, []);
 });
@@ -295,6 +298,27 @@ test('adopting accepts a library whose transcoding is off instead of its schedul
   const w = world({ libraries: TV_LIBRARIES.map(id => tv(id, { processTranscodes: false, schedule: slots(true) })) });
   await w.run({ mode: 'adopt', apply: true });
   assert.equal(w.writes.filter(write => write.collection === 'LibrarySettingsJSONDB').length, 3);
+});
+
+test('adopting validates the CRF the Mac will encode with, while a rollback is never blocked by it', async () => {
+  const variables = value => TV_LIBRARIES.map((id, i) => (i === 1 ? { ...crf(id), value } : crf(id)));
+  for (const value of ['', ' 20', '20 -preset ultrafast', '-1', '51.5', '99', 'abc', '20.', 20, null, undefined]) {
+    const w = world({ variables: variables(value) });
+    await assert.rejects(w.run({ mode: 'adopt', apply: true }), /TV UU_64_3Ax has an invalid CRF library variable/,
+      `CRF ${JSON.stringify(value) ?? 'undefined'}`);
+    untouched(w);
+  }
+  for (const value of ['0', '18', '20.5', '51']) {
+    const w = world({ variables: variables(value) });
+    await w.run({ mode: 'adopt', apply: true });
+    assert.equal(w.writes.length, 4, `CRF ${value}`);
+  }
+  const w = world({
+    libraries: TV_LIBRARIES.map(id => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT })), variables: variables('bad'),
+    nodes: { a: linux({}, { transcodecpu: 4 }), b: mac({ nodePaused: true }) },
+  });
+  await w.run({ mode: 'rollback', apply: true });
+  assert.equal(w.writes.length, 3, 'an emergency rollback does not depend on the CRF value');
 });
 
 test('adopting is refused until nothing can run the old flow or lose the Mac', async () => {
@@ -316,6 +340,8 @@ test('adopting is refused until nothing can run the old flow or lose the Mac', a
     'Linux GPU workers allowed to do CPU jobs': [{ nodes: { a: linux({ allowGpuDoCpu: true }), b: mac() } }, /Set HomeServer transcodecpu to 0/],
     'a running Linux CPU encode': [{ nodes: { a: linux({ workers: { 'busy-bee': { workerType: 'transcodecpu', idle: false } } }), b: mac() } }, /running CPU encode/],
     'no Linux GPU worker to publish': [{ nodes: { a: linux({}, { transcodegpu: 0 }), b: mac() } }, /GPU worker is required/],
+    'a paused Linux GPU worker cannot publish': [{ nodes: { a: linux({ nodePaused: true }), b: mac() } }, /GPU worker is required/],
+    'a Linux node of unknown pause state cannot publish': [{ nodes: { a: linux({ nodePaused: undefined }), b: mac() } }, /GPU worker is required/],
   };
   for (const [name, [setup, message]] of Object.entries(cases)) {
     const w = world(setup);
@@ -338,6 +364,7 @@ test('rolling back restores the Linux flow and cache once Linux can encode and t
   const restored = { a: linux({}, { transcodecpu: 4 }), b: mac({ nodePaused: true }) };
   const refused = {
     'no Linux CPU worker': { a: linux(), b: mac({ nodePaused: true }) },
+    'a paused Linux CPU worker': { a: linux({ nodePaused: true }, { transcodecpu: 4 }), b: mac({ nodePaused: true }) },
     'an active Mac': { a: linux({}, { transcodecpu: 4 }), b: mac() },
     'a busy Mac': { a: linux({}, { transcodecpu: 4 }), b: mac({ nodePaused: true, workers: { w: { workerType: 'transcodecpu', idle: false } } }) },
   };
@@ -410,8 +437,10 @@ test('releasing is refused until the nodes and the libraries agree', async () =>
     'offload flow with Linux CPU workers still allowed': [offload(), { a: linux({}, { transcodecpu: 4 }), b: mac() }, /Set HomeServer transcodecpu to 0/],
     'offload flow with the Mac missing': [offload(), { a: linux() }, /not connected/],
     'offload flow with no Linux GPU worker': [offload(), { a: linux({}, { transcodegpu: 0 }), b: mac() }, /GPU worker is required/],
+    'offload flow with the only Linux GPU worker paused': [offload(), { a: linux({ nodePaused: true }), b: mac() }, /GPU worker is required/],
     'offload flow with a running Linux CPU encode': [offload(), { a: linux({ workers: { w: { workerType: 'transcodecpu', idle: false } } }), b: mac() }, /running CPU encode/],
     'Linux flow with no Linux CPU worker': [onLinux(), { a: linux(), b: quietMac }, /Restore a Linux node CPU worker/],
+    'Linux flow with the only Linux CPU worker paused': [onLinux(), { a: linux({ nodePaused: true }, { transcodecpu: 4 }), b: quietMac }, /Restore a Linux node CPU worker/],
     'Linux flow with an active Mac': [onLinux(), { a: linux({}, { transcodecpu: 4 }), b: mac() }, /Pause Studio-Native/],
     'one library still on the Linux flow': [offload().map((library, i) => (i === 0 ? tv(library._id) : library)), { a: linux(), b: mac() }, /finish the cutover or rollback/],
     'a library on another flow': [offload().map((library, i) => (i === 0 ? { ...library, flowId: 'zRnXMGq83' } : library)), { a: linux(), b: mac() }, /finish the cutover or rollback/],
@@ -423,6 +452,20 @@ test('releasing is refused until the nodes and the libraries agree', async () =>
     await assert.rejects(w.run({ mode: 'release', apply: true }), message, name);
     untouched(w);
   }
+});
+
+test('release reopens all three TV libraries, including one that was already closed before the hold', async () => {
+  const w = world({
+    libraries: TV_LIBRARIES.map((id, i) => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT, schedule: slots(i !== 1) })),
+  });
+  await w.run({ mode: 'hold', apply: true });
+  assert.deepEqual(w.writes.map(write => write.docID), [TV_LIBRARIES[0], TV_LIBRARIES[2]],
+    'a hold leaves the library that was already closed alone');
+  w.writes.length = 0;
+  await w.run({ mode: 'release', apply: true });
+  assert.deepEqual(w.writes.map(write => write.docID), TV_LIBRARIES,
+    'a release cannot tell that library from the held ones, so it reopens all three');
+  for (const id of TV_LIBRARIES) assert.deepEqual(w.library(id).schedule, slots(true));
 });
 
 test('hold and release refuse a schedule they could not restore exactly', async () => {

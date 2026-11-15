@@ -29,9 +29,14 @@ function fixture(...names) {
     if (endpoint === 'update-node') Object.assign(nodes[data.data.nodeID], data.data.nodeUpdates);
     else throw new Error(endpoint);
   };
+  const staged = [];
+  const crud = async (collection, mode) => {
+    if (collection === 'StagedJSONDB' && mode === 'getAll') return structuredClone(staged);
+    throw new Error(`${collection} ${mode}`);
+  };
   const byName = name => Object.values(nodes).find(node => node.nodeName === name);
   return {
-    io, request, nodes, calls, byName, add,
+    io, request, crud, staged, nodes, calls, byName, add,
     get node() { return Object.values(nodes)[0]; },
     idOf: name => Object.keys(nodes).find(id => nodes[id].nodeName === name),
     // A node that reconnects gets a new ID but keeps its persisted settings.
@@ -121,6 +126,45 @@ test('a job that starts on another node while pausing causes deferral and restor
   assert.equal(await prepare(f), 75);
   assert.deepEqual(f.pausedStates(), { HomeServer: false, 'Studio-Native': true });
   assert.equal(f.leased(), false);
+});
+test('a job waiting in staging defers without changing any pause state', async () => {
+  // Between a Mac encode and the Linux publish no worker looks busy, but the job is staged.
+  for (const row of [{ _id: 'job', status: 'staged', nodeID: '' }, { _id: 'job', status: 'processing', nodeID: 'gone' }]) {
+    const f = pair();
+    f.byName('Studio-Native').nodePaused = true;
+    f.staged.push(row);
+    assert.equal(await prepare(f), 75, row.status);
+    assert.deepEqual(f.pausedStates(), { HomeServer: false, 'Studio-Native': true });
+    assert.equal(f.leased(), false);
+    assert(!f.calls.includes('update-node'));
+  }
+});
+test('a job staged while the nodes are being paused causes deferral and restores every node', async () => {
+  const f = pair(), request = f.request;
+  f.byName('HomeServer').nodePaused = true;
+  f.request = async (...args) => {
+    const result = await request(...args);
+    if (args[0] === 'update-node' && !f.staged.length) f.staged.push({ _id: 'job', status: 'staged' });
+    return result;
+  };
+  assert.equal(await prepare(f), 75);
+  assert.deepEqual(f.pausedStates(), { HomeServer: true, 'Studio-Native': false });
+  assert.equal(f.leased(), false);
+});
+test('staged jobs that cannot be read fail closed before anything is paused', async () => {
+  for (const crud of [async () => { throw new Error('cruddb down'); }, async () => null, async () => ({ rows: [] })]) {
+    const f = pair();
+    f.crud = crud;
+    await assert.rejects(prepare(f), /cruddb down|unreadable/);
+    assert.equal(f.leased(), false);
+    assert(!f.calls.includes('update-node'));
+  }
+  const late = pair();
+  const rows = [[], undefined];
+  late.crud = async () => rows.shift();
+  await assert.rejects(prepare(late), /unreadable/);
+  assert.deepEqual(late.pausedStates(), { HomeServer: false, 'Studio-Native': false }, 'a failed re-check restores the nodes');
+  assert.equal(late.leased(), false);
 });
 test('a node that connects during the pause is not trusted and nothing stays paused', async () => {
   const f = pair(), request = f.request;

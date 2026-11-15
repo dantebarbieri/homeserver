@@ -14,6 +14,7 @@ const tv = (id, overrides = {}) => ({
   schedule: slots(true), ...overrides,
 });
 const adopted = () => TV_LIBRARIES.map(id => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT }));
+const held = () => TV_LIBRARIES.map(id => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT, schedule: slots(false) }));
 const node = (nodeName, limits, overrides = {}) => ({
   nodeName, nodePaused: false, allowGpuDoCpu: false, gpuSelect: '-', nodeTags: 'mapped', librariesToNotProcess: {},
   workers: {}, workerLimits: { healthcheckcpu: 0, healthcheckgpu: 0, transcodecpu: 0, transcodegpu: 0, ...limits },
@@ -121,7 +122,7 @@ test('a limit is never lowered under a running worker of that type', async () =>
     await assert.rejects(w.run({ nodeName: 'HomeServer', sets: { [type]: 0 }, apply: true }), new RegExp(`running ${type} worker`), type);
     untouched(w);
   }
-  const w = world({ nodes: { a: linux({ workers: busy('transcodecpu') }), b: mac() } });
+  const w = world({ libraries: held(), nodes: { a: linux({ workers: busy('transcodecpu') }), b: mac() } });
   await w.run({ nodeName: 'HomeServer', sets: { transcodecpu: 6, transcodegpu: 0, healthcheckcpu: 2 }, apply: true });
   assert.equal(w.nodes.a.workerLimits.transcodecpu, 6, 'raising a limit or lowering another type is allowed');
   const unchanged = world({ nodes: { a: linux({ workers: busy('transcodecpu') }), b: mac() } });
@@ -196,6 +197,111 @@ test('the Mac does not become active while a TV library could hand it the Linux-
   await assert.rejects(world({ libraries: adopted().slice(1) }).run({ nodeName: MAC, pause: false, apply: true }), /three existing TV libraries/);
 });
 
+test('a Linux node does not start or enlarge CPU encoding while a library on the offload flow can start jobs', async () => {
+  const refused = {
+    'raising the CPU limit': [linux({}, { transcodecpu: 0 }), { sets: { transcodecpu: 2 } }],
+    'resuming a node that has CPU workers': [linux({ nodePaused: true }), { pause: false }],
+    'resuming and raising together': [linux({ nodePaused: true }, { transcodecpu: 0 }), { pause: false, sets: { transcodecpu: 2 } }],
+    'enlarging a node that already has them': [linux(), { sets: { transcodecpu: 6 } }],
+  };
+  for (const [name, [home, request]] of Object.entries(refused)) {
+    const w = world({ nodes: { a: home, b: mac() } });
+    await assert.rejects(w.run({ nodeName: 'HomeServer', apply: true, ...request }), /runs the Mac offload flow/, name);
+    untouched(w);
+  }
+  const canary = tv('homeserver-hevc-studio-canary-v1', { flowId: FLOW_ID, cache: CACHE_ROOT });
+  const open = world({ libraries: [...held(), canary], nodes: { a: linux({}, { transcodecpu: 0 }), b: mac() } });
+  await assert.rejects(open.run({ nodeName: 'HomeServer', sets: { transcodecpu: 2 }, apply: true }), /TV homeserver-hevc-studio-canary-v1 runs the Mac offload flow/,
+    'one enabled library is enough, whatever it is');
+  untouched(open);
+
+  const quietLibraries = {
+    'every schedule held': held(),
+    'transcoding off': TV_LIBRARIES.map(id => tv(id, { flowId: FLOW_ID, cache: CACHE_ROOT, processTranscodes: false })),
+    'still on the Linux flow': TV_LIBRARIES.map(id => tv(id)),
+  };
+  for (const [name, libraries] of Object.entries(quietLibraries)) {
+    const w = world({ libraries, nodes: { a: linux({ nodePaused: true }, { transcodecpu: 0 }), b: mac() } });
+    await w.run({ nodeName: 'HomeServer', pause: false, sets: { transcodecpu: 2 }, apply: true });
+    assert.equal(w.nodes.a.workerLimits.transcodecpu, 2, name);
+    assert.equal(w.nodes.a.nodePaused, false, name);
+  }
+
+  // Fixing a node that is already in that state is never blocked, and neither is a request that changes nothing.
+  const hazard = world();
+  await hazard.run({ nodeName: 'HomeServer', sets: { transcodecpu: 4 }, apply: true });
+  await hazard.run({ nodeName: 'HomeServer', sets: { transcodegpu: 2 }, apply: true });
+  await hazard.run({ nodeName: 'HomeServer', sets: { transcodecpu: 2 }, apply: true });
+  await hazard.run({ nodeName: 'HomeServer', sets: { transcodecpu: 0 }, apply: true });
+  await hazard.run({ nodeName: 'HomeServer', pause: true, apply: true });
+  assert.deepEqual([hazard.nodes.a.workerLimits.transcodecpu, hazard.nodes.a.workerLimits.transcodegpu, hazard.nodes.a.nodePaused], [0, 2, true]);
+});
+
+test('the only Linux GPU worker is not paused or removed while the Mac may still be encoding', async () => {
+  const removals = { pausing: { pause: true }, 'removing its GPU worker': { sets: { transcodegpu: 0 } } };
+  const backup = (overrides, limits) => node('Backup', { transcodegpu: 1, ...limits }, overrides);
+  const refused = {
+    'an active Mac': { a: linux(), b: mac({ nodePaused: false }) },
+    'a paused Mac with a running encode': { a: linux(), b: mac({ workers: busy('transcodecpu') }) },
+    'a Mac whose pause state is unknown': { a: linux(), b: mac({ nodePaused: undefined }) },
+    'a second Linux node that is paused': { a: linux(), b: mac({ nodePaused: false }), c: backup({ nodePaused: true }) },
+    'a second Linux node without a GPU worker': { a: linux(), b: mac({ nodePaused: false }), c: backup({}, { transcodegpu: 0 }) },
+    'a Mac with a GPU worker of its own, which is no publisher': {
+      a: linux(), b: mac({ nodePaused: false }, { transcodegpu: 1, transcodecpu: 2 }),
+    },
+  };
+  for (const [name, nodes] of Object.entries(refused)) {
+    for (const [change, request] of Object.entries(removals)) {
+      const w = world({ nodes });
+      await assert.rejects(w.run({ nodeName: 'HomeServer', apply: true, ...request }), /only unpaused Linux node with a GPU worker/, `${change} with ${name}`);
+      untouched(w);
+    }
+  }
+  const allowed = {
+    'a paused idle Mac': { a: linux(), b: mac() },
+    'a Mac with no CPU workers': { a: linux(), b: mac({ nodePaused: false }, { transcodecpu: 0 }) },
+    'no Mac connected': { a: linux() },
+    'another Linux node that can publish': { a: linux(), b: mac({ nodePaused: false }), c: backup() },
+  };
+  for (const [name, nodes] of Object.entries(allowed)) {
+    for (const [change, request] of Object.entries(removals)) {
+      const w = world({ nodes });
+      await w.run({ nodeName: 'HomeServer', apply: true, ...request });
+      assert.equal(w.updates.length, 1, `${change} with ${name}`);
+    }
+  }
+  const active = world({ nodes: { a: linux(), b: mac({ nodePaused: false }) } });
+  await active.run({ nodeName: 'HomeServer', sets: { transcodegpu: 2, healthcheckcpu: 2 }, apply: true });
+  assert.equal(active.nodes.a.workerLimits.transcodegpu, 2, 'only removing the publisher is refused');
+  const notPublishing = world({ nodes: { a: linux({ nodePaused: true }), b: mac({ nodePaused: false }) } });
+  await notPublishing.run({ nodeName: 'HomeServer', sets: { healthcheckcpu: 2 }, apply: true });
+  assert.equal(notPublishing.nodes.a.workerLimits.healthcheckcpu, 2, 'a node that publishes nothing is not what the rule protects');
+});
+
+test('the Mac does not become active without an unpaused Linux GPU worker to publish its encodes', async () => {
+  const refused = {
+    'no Linux node at all': { b: mac() },
+    'a Linux node without a GPU worker': { a: linux({}, { transcodegpu: 0 }), b: mac() },
+    'a paused Linux node': { a: linux({ nodePaused: true }), b: mac() },
+  };
+  for (const [name, nodes] of Object.entries(refused)) {
+    for (const request of [{ pause: false }, { pause: false, sets: { transcodecpu: 2 } }]) {
+      const w = world({ nodes });
+      await assert.rejects(w.run({ nodeName: MAC, apply: true, ...request }), /GPU worker to publish/, name);
+      untouched(w);
+    }
+    const prepared = world({ nodes });
+    await prepared.run({ nodeName: MAC, sets: { transcodecpu: 2 }, apply: true });
+    assert.equal(prepared.nodes.b.workerLimits.transcodecpu, 2, `${name}: a paused Mac can be prepared`);
+    const stopped = world({ nodes: { ...nodes, b: mac({ nodePaused: false }, { transcodecpu: 2 }) } });
+    await stopped.run({ nodeName: MAC, pause: true, apply: true });
+    assert.equal(stopped.nodes.b.nodePaused, true, `${name}: a pause is always allowed`);
+  }
+  const second = world({ nodes: { a: linux({ nodePaused: true }), b: mac(), c: node('Backup', { transcodegpu: 1 }) } });
+  await second.run({ nodeName: MAC, pause: false, apply: true });
+  assert.equal(second.nodes.b.nodePaused, false, 'any Linux node can publish');
+});
+
 test('state that changes between planning and applying is not overwritten', async () => {
   const races = {
     'a job starts': [() => ({ a: linux({ workers: busy('transcodecpu') }), b: mac() }), /running transcodecpu worker/],
@@ -211,6 +317,29 @@ test('state that changes between planning and applying is not overwritten', asyn
       return request(endpoint, data);
     };
     await assert.rejects(w.run({ nodeName: 'HomeServer', sets: { transcodecpu: 0 }, apply: true }), message, name);
+    assert.deepEqual(w.updates, [], name);
+  }
+});
+
+test('the other nodes and the libraries are checked again right before the update', async () => {
+  const races = {
+    'the Mac resumes before the only Linux GPU worker is paused': [
+      () => world(), { nodeName: 'HomeServer', pause: true }, w => { w.nodes.b.nodePaused = false; },
+      /only unpaused Linux node with a GPU worker/],
+    'the Linux GPU worker is paused before the Mac resumes': [
+      () => world(), { nodeName: MAC, pause: false }, w => { w.nodes.a.nodePaused = true; }, /GPU worker to publish/],
+    'a library reopens before Linux starts encoding': [
+      () => world({ libraries: held(), nodes: { a: linux({}, { transcodecpu: 0 }), b: mac() } }),
+      { nodeName: 'HomeServer', sets: { transcodecpu: 2 } }, w => { w.libraries = adopted(); }, /runs the Mac offload flow/],
+  };
+  for (const [name, [build, request, change, message]] of Object.entries(races)) {
+    const w = build();
+    const original = w.request;
+    w.request = async (endpoint, data) => {
+      if (endpoint === 'get-nodes' && w.gets === 1) change(w);
+      return original(endpoint, data);
+    };
+    await assert.rejects(w.run({ apply: true, ...request }), message, name);
     assert.deepEqual(w.updates, [], name);
   }
 });

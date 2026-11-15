@@ -353,6 +353,6 @@ async function commit(args, injected = {}) {
 }
 
 module.exports = {
-  prepare, finish, commit, privateCopy, sweep, jobId, relative,
+  prepare, finish, commit, privateCopy, sweep, jobId, relative, crf,
   MEDIA_ROOT, CACHE_ROOT, PRIVATE_ROOT, JOBS, MAC_MEDIA, MAC_CACHE, MAC_FFMPEG, MAC_FFPROBE,
 };

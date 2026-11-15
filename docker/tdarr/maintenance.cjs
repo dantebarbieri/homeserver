@@ -6,14 +6,22 @@ const assert = require('node:assert/strict');
 const { connect, ROOT } = require('./install-flow.cjs');
 const LEASE = `${ROOT}/update-lease.json`;
 const busy = nodes => Object.values(nodes).some(node => Object.values(node.workers || {}).some(worker => !worker.idle));
+// A job that finished one leg (the Mac's encode, say) waits in staging for the next worker, and
+// for those seconds no worker looks busy. Pausing the nodes then would leave it unclaimed until
+// Tdarr discards it, wasting the finished leg. Staging empties by itself within minutes.
+const staged = async crud => {
+  const rows = await crud('StagedJSONDB', 'getAll');
+  assert(Array.isArray(rows), 'Staged Tdarr jobs are unreadable; refusing an unverified update');
+  return rows.length > 0;
+};
 const setPause = (request, nodeID, nodePaused) => request('update-node', { data: { nodeID, nodeUpdates: { nodePaused } } });
 
 // Every connected node is paused, including mapped nodes on other machines: a worker that is
 // idle now could otherwise start a job while the server is being recreated. A disconnected node
 // has no server-side worker to wait for; its pause state is restored when it comes back.
-async function prepare({ request, io = fs }) {
+async function prepare({ request, crud, io = fs }) {
   const nodes = await request('get-nodes', undefined, 'GET');
-  if (busy(nodes)) return 75;
+  if (busy(nodes) || await staged(crud)) return 75;
   const connected = Object.entries(nodes);
   assert(connected.length > 0, 'No connected Tdarr node; refusing an unverified update');
   const names = connected.map(([, node]) => node.nodeName);
@@ -26,7 +34,7 @@ async function prepare({ request, io = fs }) {
     for (const [id] of connected) await setPause(request, id, true);
     const paused = await request('get-nodes', undefined, 'GET');
     for (const [id] of connected) assert.equal(paused[id]?.nodePaused, true, 'Node pause was not acknowledged');
-    if (busy(paused) || Object.keys(paused).some(id => !(id in nodes))) {
+    if (busy(paused) || Object.keys(paused).some(id => !(id in nodes)) || await staged(crud)) {
       await release({ request, io });
       return 75;
     }
@@ -73,7 +81,7 @@ async function main() {
   const api = await connect();
   if (mode === 'prepare') {
     const code = await prepare(api);
-    if (code === 75) console.error('Tdarr has active workers; deferring its recreation without interrupting jobs.');
+    if (code === 75) console.error('Tdarr has active or staged jobs; deferring its recreation without interrupting them.');
     process.exitCode = code;
   } else await release(api);
 }

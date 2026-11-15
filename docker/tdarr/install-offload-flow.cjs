@@ -4,7 +4,7 @@
 const fs = require('node:fs/promises');
 const assert = require('node:assert/strict');
 const { connect, ROOT, libraryDefinition: baseLibrary } = require('./install-flow.cjs');
-const { PRIVATE_ROOT, CACHE_ROOT } = require('./hevc-offload-v1.cjs');
+const { PRIVATE_ROOT, CACHE_ROOT, crf: parseCrf } = require('./hevc-offload-v1.cjs');
 
 const FLOW_ID = 'homeserver-hevc-offload-v1';
 const LEGACY_FLOW = 'homeserver-hevc-studio-v1';
@@ -104,6 +104,17 @@ const activeWorkers = (node, type) => Object.values(node.workers || {})
 const quiescent = library => library.processTranscodes === false
   || (Array.isArray(library.schedule) && !library.schedule.some(slot => slot.checked));
 
+// The Linux leg publishes what the Mac encoded, so a finished encode needs an unpaused node with a GPU worker, and a
+// rollback to the Linux flow needs an unpaused node with a CPU worker. Both tests are strict: a node whose state
+// is unknown does not count. quiet() is the opposite way round: anything but a clearly idle node counts as active.
+const publisher = node => node.nodePaused === false && node.workerLimits?.transcodegpu >= 1;
+const encoder = node => node.nodePaused === false && node.workerLimits?.transcodecpu >= 1;
+const quiet = node => node.nodePaused === true || node.workerLimits?.transcodecpu === 0;
+
+const validCrf = value => {
+  try { parseCrf(value); return true; } catch { return false; }
+};
+
 function checkNodes(direction, nodes, macName) {
   const all = Object.values(nodes || {});
   const macs = all.filter(node => node.nodeName === macName);
@@ -120,15 +131,14 @@ function checkNodes(direction, nodes, macName) {
       assert.equal(activeWorkers(node, 'transcodecpu').length, 0,
         `${node.nodeName} still has a running CPU encode; wait for it to finish`);
     }
-    assert(others.some(node => node.workerLimits?.transcodegpu >= 1),
-      'A Linux node with a GPU worker is required to publish results');
+    assert(others.some(publisher),
+      'A GPU worker is required to publish results: an unpaused Linux node with transcodegpu 1 or more');
     return;
   }
-  assert(others.some(node => node.workerLimits?.transcodecpu >= 1),
-    'Restore a Linux node CPU worker limit (transcodecpu) before rolling back');
+  assert(others.some(encoder),
+    'Restore a Linux node CPU worker (an unpaused node with transcodecpu 1 or more) before rolling back');
   if (mac) {
-    assert(mac.nodePaused === true || mac.workerLimits?.transcodecpu === 0,
-      `Pause ${macName} (or set its transcodecpu to 0) before rolling back`);
+    assert(quiet(mac), `Pause ${macName} (or set its transcodecpu to 0) before rolling back`);
     assert.equal(activeWorkers(mac, 'transcodecpu').length, 0,
       `${macName} still has a running CPU encode; wait for it to finish`);
   }
@@ -152,6 +162,11 @@ function cutoverPlan({ direction, libraries, variables, staged }) {
     assert(quiet, `${library.name} is still processing: turn off transcoding or uncheck its whole schedule first`);
     const crf = variables.filter(v => v.type === `library:${library._id}` && v.key === 'crf');
     assert.equal(crf.length, 1, `${library.name} needs exactly one CRF library variable`);
+    // Only an adoption feeds the value to x265; a rollback must never be blocked by it.
+    if (direction === 'adopt') {
+      assert(validCrf(crf[0].value),
+        `${library.name} has an invalid CRF library variable (${JSON.stringify(crf[0].value)}); expected a number from 0 to 51`);
+    }
     pending.push(library);
   }
   if (pending.length) {
@@ -162,8 +177,9 @@ function cutoverPlan({ direction, libraries, variables, staged }) {
 }
 
 // Hold unchecks every schedule slot of the TV libraries so nothing new starts (running jobs finish); release
-// checks them again. Only all-or-nothing schedules are toggled, so release restores exactly what hold changed,
-// and a release is only allowed once the nodes match the flow the libraries use.
+// checks every slot again. The three libraries are one group and only all-or-nothing schedules are toggled, so a
+// release reopens every held library, including one that was already closed before the hold. A release is only
+// allowed once the nodes match the flow the libraries use.
 function schedulePlan({ mode, libraries, nodes, macName }) {
   const hold = mode === 'hold';
   const targets = TV_LIBRARIES.map(id => libraries.find(l => l._id === id));
@@ -280,12 +296,12 @@ async function install({ crud, request, options = {}, defaults, log = console.lo
 
   log(`${apply ? 'Applying' : 'Previewing'} ${mode}: ${plan.length ? `${plan.length} change(s)` : 'nothing to change'}`);
   for (const item of plan) log(`  ${item.action} ${item.note}`);
-  if (!apply || !plan.length) return plan;
-
-  if (needsModules) {
+  if (needsModules && plan.length) {
     for (const file of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs']) await io.access(`${ROOT}/${file}`);
     await io.access(CACHE_ROOT); // Provisioned separately: never create or export a broader cache here.
   }
+  if (!apply || !plan.length) return plan;
+
   await io.mkdir(`${ROOT}/backups`, { recursive: true, mode: 0o700 });
   await io.writeFile(`${ROOT}/backups/offload-flow-${Date.now()}.json`,
     JSON.stringify({ flows, libraries, variables }, null, 2), { flag: 'wx', mode: 0o600 });
@@ -309,7 +325,7 @@ async function main() {
 
 module.exports = {
   flowDefinition, libraryDefinition, libraryTemplate, poolsOf, cutoverPlan, checkNodes, parseArgs, install,
-  activeWorkers, quiescent,
+  activeWorkers, quiescent, publisher, encoder, quiet,
   FLOW_ID, LEGACY_FLOW, SAFE_FLOW, SAFE_CACHE, LIBRARY_ID, CANARY_FOLDER, MAC_ROOT, TV_LIBRARIES, DEFAULT_POOLS,
   DEFAULT_MAC_NODE,
 };
