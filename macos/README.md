@@ -161,9 +161,10 @@ running node, so new scripts take effect at the next `--start`.
 
 `--start` unloads the daemon, enables it and boots it in, retrying the bootstrap
 up to three times because launchd can still be tearing the old job down. `--stop`
-unloads and disables it, then checks that no `_studio` node, start script or
-process working on the mounts is left; it exits 3 and lists any that are. Either
-one aborts any encode running on the node.
+unloads and disables it, then waits up to a minute for the `_studio` node, start
+script and any share probe still running on the mounts to finish (a probe can
+outlive the node by up to about 25 s); it exits 3 and lists whatever is left.
+Either one aborts any encode running on the node.
 
 `start-tdarr.sh` treats a hung SMB share like a failed one. Every probe runs
 under a time limit and, at the deadline, is killed together with anything it
@@ -174,8 +175,11 @@ answers is force-unmounted before the helper runs, because the helper accepts an
 earlier mount. The script mounts each share (three attempts, with a
 force-unmount and a `NetAuthSysAgent` reset between them), proves it can list and
 read the media share and write the cache before it starts the node, and then runs
-a watchdog that stops the node when a share dies (three failed 60-second
-checks), so launchd restarts and remounts it. The node runs at
+a watchdog that stops the node when a share dies (three failed checks a minute
+apart: SIGTERM first, and SIGKILL only if that same node is still there 20 s
+later), so launchd restarts and remounts it. The watchdog ends within a second of
+the node exiting, and a check that finishes after the node has gone is not
+counted as a failure. The node runs at
 `nice -n 10`, starts **paused** (`startPaused=true`) and registers as
 `Studio-Native` with one CPU transcode worker and no GPU or health-check workers.
 Pause state and worker limits are changed from the server with the node

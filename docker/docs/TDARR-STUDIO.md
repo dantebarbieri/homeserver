@@ -309,10 +309,17 @@ all-checked or all-unchecked schedule (a partial one is refused), and `--release
 reopens every closed library, including one you had closed on purpose: close that
 one again afterwards.
 
-The installer saves the previous flows, libraries and CRF variables to a
-sensitive `Custom/backups/offload-flow-*.json` (mode 0600), reads back each write
-and never deletes the old flows, so running jobs keep their snapshot. It does not
-change worker limits or the Studio node. A library moves only while quiescent
+The installer saves the previous flows, libraries and CRF variables (plus the
+saved node settings for `--adopt`, `--rollback` and `--release`) to a sensitive
+`Custom/backups/offload-flow-*.json` (mode 0600, in a 0700 directory; its path is
+the `Backup (sensitive):` line), reads back each write and never deletes the old
+flows, so running jobs keep their snapshot. It does not change worker limits, and
+it touches the Studio node only in the one case described below (a rollback while
+the Studio is offline). Just before writing it reads everything again and plans
+again, and writes nothing if the plan differs. If a write then fails part-way, the
+error says how many changes were applied and which were not, and running the same
+command again finishes the rest. Its errors never print flow contents, because
+flows embed the Sonarr API key. A library moves only while quiescent
 (processing off, or no schedule slot checked), with exactly one `crf` variable
 (`--adopt` also needs it to be a number from 0 to 51) and no staged rows:
 `--adopt` and `--rollback` refuse while any TV file is staged (a running job
@@ -325,14 +332,23 @@ cache root exist.
 
 The nodes must also match, or `--adopt` and the matching `--release` refuse:
 the Studio connected with at least one CPU transcode worker and none of the GPU
-type (it may be paused); every other node at zero CPU transcode workers, with
-`allowGpuDoCpu` off and no CPU encode running; and at least one **unpaused** other
+type or health-check types (it may be paused); every other node at zero CPU
+transcode workers, with `allowGpuDoCpu` off and no CPU encode running (a node
+that is offline is judged by its saved settings, because it comes back with them,
+so one that still allows CPU encodes blocks the move until it is reconnected and
+set to zero or removed in Tdarr); and at least one **unpaused** other
 node with a GPU transcode worker, because the Linux leg publishes what the Mac
 encodes. `--rollback` and its `--release` need an unpaused non-Studio node with
 CPU transcode workers, and a connected Studio must be paused or at zero CPU
-workers with no CPU encode running. The rollback sequence legitimately raises
-Linux CPU workers while the libraries are still on the offload flow; only the
-schedule gate protects that window, so run `--hold` first.
+workers with no CPU encode running. If the Studio is offline, `--rollback` cannot
+pause it through the API, so its first change is to set `nodePaused` in the
+Studio's saved settings, and `--release` refuses ("run --rollback --apply first")
+until that is done. Whether Tdarr applies that saved state or the start script's
+`startPaused` after a re-registration is unverified, so once the Studio
+reconnects, confirm with `get-nodes` that it is still paused. The rollback
+sequence legitimately raises Linux CPU workers while the libraries are still on
+the offload flow; only the schedule gate protects that window, so run `--hold`
+first.
 
 ### Node settings
 
@@ -359,7 +375,10 @@ from a library without Tdarr Pro, it also enforces the design's invariants:
   Run `--hold` first, or keep that node paused or at zero.
 - A Linux node cannot be paused, or have its GPU limit zeroed, while it is the
   only unpaused node with a GPU worker, unless the Studio is paused (or at zero)
-  with no encode running.
+  with no encode running and, once any library uses the offload flow, no job of
+  that flow is staged. A finished Mac leg waiting for the Linux GPU worker is
+  invisible to `get-nodes` (it lists busy workers only), so the configurator also
+  reads the staging table; a staged row that names no library counts.
 
 Applying writes a sensitive `Custom/backups/offload-node-*.json` (mode 0600),
 re-checks for races, then reads back the live and persisted settings.
@@ -456,14 +475,19 @@ the server's stored pause state does after a reboot.
 3. `--rollback --apply`, then revert the compose `transcodecpuWorkers` value.
 4. `--release --apply` (refused unless Linux can encode and the Studio is paused
    or at zero), and stop the Studio node with `install-tdarr-node.sh --stop` if
-   it is not needed (it unloads and disables the daemon, then verifies that no
-   node or encoder process is left; it exits 3 and lists any that are). Check the
-   schedules afterwards.
+   it is not needed (it unloads and disables the daemon, then waits up to a
+   minute for the node, its encoders and any share probe to exit; it exits 3 and
+   lists whatever is left). Check the schedules afterwards.
 
-If a step fails or is interrupted part-way, do not release. Restore the previous
-worker limits and pause states with the configurator (its backups hold them) and
-run `--release` only when the nodes match the flow the libraries use; it refuses
-otherwise.
+If the Studio is offline when you roll back, `--rollback` pauses its saved
+settings, and `--release` refuses until that has happened. When it comes back,
+confirm with `get-nodes` that it is still paused before anything else.
+
+If a step fails or is interrupted part-way, do not release. The installer's error
+lists what was applied and what was not; run the same command again to finish.
+Otherwise restore the previous worker limits and pause states with the
+configurator (its backups hold them) and run `--release` only when the nodes
+match the flow the libraries use; it refuses otherwise.
 
 ## Open checks before cutover
 
@@ -535,7 +559,10 @@ tests run the real scripts on Linux against stubs
 - `bounded` under macOS perl (fork, `setpgrp`, killing the process group,
   `Time::HiRes`), and `is_mount` (an `smbfs` mount root has a different device
   number from its parent).
+- The watchdog: it ends within seconds of the node exiting, including after
+  `--stop` and a TERM from launchd (`pgrep -u _studio` comes back empty), and
+  `launchctl bootout` does not leave it or a probe behind.
 - A dead mount (stop the SSH tunnel): the probes return within their limits,
-  `umount -f` as `_studio` works, and the watchdog restarts the node and
-  remounts. Also whether the `smbfs` mounts are hard or soft, since that decides
-  what a dead tunnel does to an encode in flight.
+  `umount -f` as `_studio` works, and the watchdog stops the node so that launchd
+  restarts it and it remounts. Also whether the `smbfs` mounts are hard or soft,
+  since that decides what a dead tunnel does to an encode in flight.

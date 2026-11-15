@@ -261,6 +261,15 @@ class StudioInstallTdarrNodeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Stopped and disabled", result.stdout)
 
+    def test_stop_waits_long_enough_for_the_watchdog_to_finish_a_running_probe(self):
+        # sleep is stubbed, so each poll stands for a second; a probe of the node's
+        # watchdog can run for about 25 s after the node itself is gone.
+        self.flag("workers", "4242\n")
+        self.flag("workers-gone-after", "40")
+        result = self.run_installer("--stop")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Stopped and disabled", result.stdout)
+
     def test_refuses_to_run_unless_root(self):
         self.flag("not-root")
         for args in ((), ("--stop",)):

@@ -115,26 +115,48 @@ smoke_test() {
     }
 }
 
+alive() {
+    /bin/kill -0 "$1" 2>/dev/null
+}
+
+# Sleeps up to $2 seconds in one-second steps. Fails as soon as process $1 is
+# gone, so a caller waiting on the node sees it exit within a second (the
+# installer's --stop waits for the watchdog too); succeeds only when the
+# process is still there after the whole time.
+nap() {
+    local pid="$1" seconds="$2"
+    while (( seconds-- > 0 )); do
+        alive "$pid" || return 1
+        /bin/sleep 1
+    done
+    alive "$pid"
+}
+
 # Three failed checks in a row (several minutes) mean a share died while the
-# node was running; stop the node so launchd restarts it and remounts.
+# node was running; stop the node so launchd restarts it and remounts. A check
+# that ends after the node exited is not a failure, and SIGKILL goes only to a
+# node that is still there after the 20 s grace: a pid that exited meanwhile
+# may belong to another process by now.
 watchdog() {
     local node_pid="$1" failures=0
-    while /bin/kill -0 "$node_pid" 2>/dev/null; do
-        /bin/sleep 60
-        if share_healthy media && share_healthy cache; then
+    while nap "$node_pid" 60; do
+        if share_healthy media && alive "$node_pid" && share_healthy cache; then
             failures=0
             continue
         fi
+        alive "$node_pid" || return 0
         failures=$((failures + 1))
         echo "Share health check failed ($failures of 3)." >&2
         if (( failures >= 3 )); then
             echo "Stopping the node to remount the shares." >&2
             /bin/kill -TERM "$node_pid" 2>/dev/null || true
-            /bin/sleep 20
-            /bin/kill -KILL "$node_pid" 2>/dev/null || true
+            if nap "$node_pid" 20; then
+                /bin/kill -KILL "$node_pid" 2>/dev/null || true
+            fi
             return 0
         fi
     done
+    return 0
 }
 
 mount_share media

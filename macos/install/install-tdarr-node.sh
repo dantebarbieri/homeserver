@@ -71,8 +71,10 @@ workers() {
 if [[ "$action" == stop ]]; then
     unload
     /bin/launchctl disable "system/$label"
+    # The node's watchdog ends within a second of the node, unless a share
+    # probe is running; start-tdarr.sh caps each probe at about 25 s.
     waited=0
-    while workers >/dev/null && (( ++waited <= 30 )); do sleep 1; done
+    while workers >/dev/null && (( ++waited <= 60 )); do sleep 1; done
     if workers >/dev/null; then
         echo "$label is unloaded and disabled, but these _studio processes are still running:" >&2
         workers >&2
