@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { connect, ROOT } = require('./install-flow.cjs');
 const { CACHE_ROOT } = require('./hevc-offload-v1.cjs');
 const {
-  activeWorkers, quiescent, publisher, encoder, quiet, FLOW_ID, TV_LIBRARIES, DEFAULT_MAC_NODE,
+  activeWorkers, quiescent, publisher, encoder, quiet, assertSame, FLOW_ID, TV_LIBRARIES, DEFAULT_MAC_NODE,
 } = require('./install-offload-flow.cjs');
 
 const WORKER_TYPES = ['healthcheckcpu', 'healthcheckgpu', 'transcodecpu', 'transcodegpu'];
@@ -24,7 +24,7 @@ function parseArgs(argv) {
     else if (arg === '--node-name') options.nodeName = argv[++i];
     else if (arg === '--mac-node') options.macNode = argv[++i];
     else if (arg === '--pause' || arg === '--resume') {
-      assert.equal(options.pause, undefined, 'Use only one of --pause and --resume');
+      assertSame(options.pause, undefined, 'Use only one of --pause and --resume');
       options.pause = arg === '--pause';
     } else if (arg === '--set') {
       const [type, value, ...extra] = String(argv[++i]).split('=');
@@ -62,7 +62,24 @@ function checkLinuxEncodes(libraries) {
   }
 }
 
-function plan({ node, libraries, sets, pause, isMac, macName, nodes }) {
+// The only Linux GPU worker publishes what the Mac encodes. It must not go away while a Mac encode is running or
+// while a finished one is waiting for it: get-nodes lists busy workers only, so waiting jobs are read from staging.
+function checkLastPublisher({ node, macName, peers, libraries, staged }) {
+  const only = `${node.nodeName} is the only unpaused Linux node with a GPU worker to publish ${macName}'s encodes; `;
+  const macs = peers.filter(other => other.nodeName === macName);
+  assert(macs.every(mac => quiet(mac) && activeWorkers(mac, 'transcodecpu').length === 0),
+    `${only}pause ${macName} and wait for its running jobs to finish first`);
+  const offload = new Set(libraries.filter(library => library.flowId === FLOW_ID).map(library => library._id));
+  if (!offload.size) return;
+  assert(Array.isArray(staged), 'The staged jobs could not be read');
+  // A row that names no library cannot be told apart from an offload job, so it counts.
+  const waiting = staged.filter(row => !row?.originalLibraryFile?.DB || offload.has(row.originalLibraryFile.DB));
+  assertSame(waiting.length, 0,
+    `${only}${waiting.length} staged job(s) of the offload flow are waiting for a worker to continue them; `
+    + 'wait until none are left');
+}
+
+function plan({ node, libraries, staged, sets, pause, isMac, macName, nodes }) {
   const limits = node.workerLimits;
   assert(limits && WORKER_TYPES.every(type => Number.isInteger(limits[type])),
     `${node.nodeName} reports incomplete worker limits`);
@@ -70,12 +87,12 @@ function plan({ node, libraries, sets, pause, isMac, macName, nodes }) {
   for (const type of WORKER_TYPES) {
     // What Tdarr does to a running job when its worker is removed is unverified, so never find out.
     if (nextLimits[type] < limits[type]) {
-      assert.equal(activeWorkers(node, type).length, 0,
+      assertSame(activeWorkers(node, type).length, 0,
         `${node.nodeName} has a running ${type} worker; wait for it to finish before lowering that limit`);
     }
   }
   const nextPaused = pause ?? node.nodePaused;
-  assert.equal(typeof nextPaused, 'boolean', `${node.nodeName} reports an unknown pause state`);
+  assertSame(typeof nextPaused, 'boolean', `${node.nodeName} reports an unknown pause state`);
   const next = { ...node, workerLimits: nextLimits, nodePaused: nextPaused };
   const peers = nodes.filter(other => other.nodeName !== node.nodeName);
   const publishers = peers.filter(other => other.nodeName !== macName && publisher(other));
@@ -94,11 +111,8 @@ function plan({ node, libraries, sets, pause, isMac, macName, nodes }) {
     }
   } else {
     if (encoder(next) && (!encoder(node) || nextLimits.transcodecpu > limits.transcodecpu)) checkLinuxEncodes(libraries);
-    if (publisher(node) && !publisher(next)) {
-      const macs = peers.filter(other => other.nodeName === macName);
-      assert(publishers.length > 0 || macs.every(mac => quiet(mac) && activeWorkers(mac, 'transcodecpu').length === 0),
-        `${node.nodeName} is the only unpaused Linux node with a GPU worker to publish ${macName}'s encodes; `
-        + `pause ${macName} and wait for its running jobs to finish first`);
+    if (publisher(node) && !publisher(next) && publishers.length === 0) {
+      checkLastPublisher({ node, macName, peers, libraries, staged });
     }
   }
   const updates = {};
@@ -112,18 +126,19 @@ async function configure({ crud, request, options, io = fs, log = console.log })
   assert(typeof nodeName === 'string' && nodeName.length > 0, 'Specify the exact node name');
   const find = nodes => {
     const matches = Object.entries(nodes || {}).filter(([, n]) => n.nodeName === nodeName);
-    assert.equal(matches.length, 1, 'Expected exactly one connected node with that name');
+    assertSame(matches.length, 1, 'Expected exactly one connected node with that name');
     return matches[0];
   };
-  const decide = (node, libraries, connected) => plan({
-    node, libraries, sets, pause, isMac: nodeName === macNode, macName: macNode, nodes: Object.values(connected || {}),
+  const decide = (node, libraries, connected, staged) => plan({
+    node, libraries, staged, sets, pause, isMac: nodeName === macNode, macName: macNode,
+    nodes: Object.values(connected || {}),
   });
 
-  const [libraries, nodes] = await Promise.all([
-    crud('LibrarySettingsJSONDB', 'getAll'), request('get-nodes', undefined, 'GET'),
+  const [libraries, nodes, staged] = await Promise.all([
+    crud('LibrarySettingsJSONDB', 'getAll'), request('get-nodes', undefined, 'GET'), crud('StagedJSONDB', 'getAll'),
   ]);
   const [nodeID, node] = find(nodes);
-  const updates = decide(node, libraries, nodes);
+  const updates = decide(node, libraries, nodes, staged);
   log(JSON.stringify({ nodeName, nodeID, apply, updates }));
   if (!Object.keys(updates).length) {
     log('Already as requested; nothing to change.');
@@ -137,12 +152,12 @@ async function configure({ crud, request, options, io = fs, log = console.log })
   const backup = `${ROOT}/backups/offload-node-${crypto.randomUUID()}.json`;
   await io.writeFile(backup, JSON.stringify({ nodeID, nodeName, node: persisted }, null, 2),
     { flag: 'wx', mode: 0o600 });
-  const [latestNodes, latestLibraries] = await Promise.all([
-    request('get-nodes', undefined, 'GET'), crud('LibrarySettingsJSONDB', 'getAll'),
+  const [latestNodes, latestLibraries, latestStaged] = await Promise.all([
+    request('get-nodes', undefined, 'GET'), crud('LibrarySettingsJSONDB', 'getAll'), crud('StagedJSONDB', 'getAll'),
   ]);
   const [latestID, latest] = find(latestNodes);
-  assert.equal(latestID, nodeID, 'Node reconnected before the update; retry');
-  assert.deepEqual(decide(latest, latestLibraries, latestNodes), updates,
+  assertSame(latestID, nodeID, 'Node reconnected before the update; retry');
+  assertSame(decide(latest, latestLibraries, latestNodes, latestStaged), updates,
     'Node or library state changed before the update; retry');
 
   await request('update-node', { data: { nodeID, nodeUpdates: updates } });
@@ -152,12 +167,12 @@ async function configure({ crud, request, options, io = fs, log = console.log })
   const live = liveNodes?.[nodeID];
   assert(live && stored, 'Node disconnected after the update; verify its settings before relying on it');
   for (const [key, value] of Object.entries(updates)) {
-    assert.deepEqual(live[key], value, `Live ${key} was not applied`);
-    assert.deepEqual(stored[key], value, `Persisted ${key} was not applied`);
+    assertSame(live[key], value, `Live ${key} was not applied`);
+    assertSame(stored[key], value, `Persisted ${key} was not applied`);
   }
   for (const key of [...KEPT, ...['nodePaused', 'workerLimits'].filter(k => !(k in updates))]) {
-    assert.deepEqual(live[key], latest[key], `Live ${key} changed unexpectedly`);
-    assert.deepEqual(stored[key], persisted[key], `Persisted ${key} changed unexpectedly`);
+    assertSame(live[key], latest[key], `Live ${key} changed unexpectedly`);
+    assertSame(stored[key], persisted[key], `Persisted ${key} changed unexpectedly`);
   }
   log(`Verified live and persisted node settings. Sensitive backup: ${backup}`);
   return updates;

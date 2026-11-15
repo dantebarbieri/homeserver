@@ -24,14 +24,22 @@ const linux = (overrides, limits) => node('HomeServer', { healthcheckcpu: 4, tra
 const mac = (overrides, limits) => node(MAC, { transcodecpu: 1 }, { nodeTags: 'mapped,studio-native', nodePaused: true, ...overrides, ...(limits && { workerLimits: { healthcheckcpu: 0, healthcheckgpu: 0, transcodecpu: 1, transcodegpu: 0, ...limits } }) });
 const busy = type => ({ job: { workerType: type, idle: false } });
 const idle = type => ({ job: { workerType: type, idle: true } });
+// A job that finished on one node and waits in staging for a worker of the other node to continue it.
+const waiting = (library = TV_LIBRARIES[0], id = 'file') => ({
+  _id: `staged-${id}`, status: 'processing', originalLibraryFile: { _id: `/data/media/${id}.mkv`, DB: library },
+});
+// Tdarr keeps a node's saved settings under _id = the node's name, and the document has no nodeName field.
+const persistedDoc = ({ workers, nodeName, ...rest }) => ({ _id: nodeName, ...structuredClone(rest) });
 
-function world({ nodes, libraries } = {}) {
+function world({ nodes, libraries, staged } = {}) {
   const w = { updates: [], files: new Map(), calls: [], logs: [], gets: 0 };
   w.nodes = nodes ?? { a: linux(), b: mac() };
   w.libraries = libraries ?? adopted();
-  w.stored = Object.fromEntries(Object.values(w.nodes).map(({ workers, ...persisted }) => [persisted.nodeName, structuredClone(persisted)]));
+  w.staged = staged ?? [];
+  w.stored = Object.fromEntries(Object.values(w.nodes).map(connected => [connected.nodeName, persistedDoc(connected)]));
   w.crud = async (collection, mode, { docID } = {}) => {
     if (collection === 'LibrarySettingsJSONDB' && mode === 'getAll') return structuredClone(w.libraries);
+    if (collection === 'StagedJSONDB' && mode === 'getAll') return structuredClone(w.staged);
     if (collection === 'NodeJSONDB' && mode === 'getById') return structuredClone(w.stored[docID]);
     throw new Error(`${collection} ${mode}`);
   };
@@ -86,7 +94,8 @@ test('a dry run reports the change and writes nothing', async () => {
 test('applying changes only what was asked, with a private backup and verified readback', async () => {
   const w = world({ nodes: { a: linux({ workers: idle('transcodecpu') }), b: mac() } });
   const before = structuredClone(w.nodes.a);
-  const { workers, ...storedBefore } = before;
+  const storedBefore = persistedDoc(before);
+  assert(!('nodeName' in storedBefore) && storedBefore._id === 'HomeServer', 'the saved document is keyed by _id');
   await w.run({ nodeName: 'HomeServer', sets: { transcodecpu: 0, transcodegpu: 2 }, apply: true });
   assert.deepEqual(w.updates, [{ nodeID: 'a', nodeUpdates: {
     workerLimits: { healthcheckcpu: 4, healthcheckgpu: 0, transcodecpu: 0, transcodegpu: 2 },
@@ -265,7 +274,7 @@ test('the only Linux GPU worker is not paused or removed while the Mac may still
   };
   for (const [name, nodes] of Object.entries(allowed)) {
     for (const [change, request] of Object.entries(removals)) {
-      const w = world({ nodes });
+      const w = world({ nodes: structuredClone(nodes) });
       await w.run({ nodeName: 'HomeServer', apply: true, ...request });
       assert.equal(w.updates.length, 1, `${change} with ${name}`);
     }
@@ -276,6 +285,72 @@ test('the only Linux GPU worker is not paused or removed while the Mac may still
   const notPublishing = world({ nodes: { a: linux({ nodePaused: true }), b: mac({ nodePaused: false }) } });
   await notPublishing.run({ nodeName: 'HomeServer', sets: { healthcheckcpu: 2 }, apply: true });
   assert.equal(notPublishing.nodes.a.workerLimits.healthcheckcpu, 2, 'a node that publishes nothing is not what the rule protects');
+});
+
+test('the only Linux GPU worker stays while a job that the Mac finished is waiting in staging for it', async () => {
+  // get-nodes lists busy workers only, so a job waiting between the two nodes can be seen in staging alone.
+  const removals = { pausing: { pause: true }, 'removing its GPU worker': { sets: { transcodegpu: 0 } } };
+  const backup = overrides => node('Backup', { transcodegpu: 1 }, overrides);
+  const message = /only unpaused Linux node with a GPU worker to publish Studio-Native's encodes; 2 staged job\(s\) of the offload flow are waiting/;
+  const quietMacs = {
+    'a paused idle Mac': { a: linux(), b: mac() },
+    'a Mac with no CPU workers': { a: linux(), b: mac({ nodePaused: false }, { transcodecpu: 0 }) },
+    'no Mac connected': { a: linux() },
+  };
+  const rows = [waiting(TV_LIBRARIES[1], 'one'), waiting(TV_LIBRARIES[2], 'two')];
+  for (const [name, nodes] of Object.entries(quietMacs)) {
+    for (const [change, request] of Object.entries(removals)) {
+      const w = world({ nodes: structuredClone(nodes), staged: rows });
+      await assert.rejects(w.run({ nodeName: 'HomeServer', apply: true, ...request }), message, `${change} with ${name}`);
+      untouched(w);
+      const empty = world({ nodes: structuredClone(nodes) });
+      await empty.run({ nodeName: 'HomeServer', apply: true, ...request });
+      assert.equal(empty.updates.length, 1, `${change} with ${name}: nothing is waiting`);
+    }
+  }
+
+  const unrelated = {
+    'another Linux node can publish': world({ nodes: { a: linux(), b: mac(), c: backup() }, staged: rows }),
+    'the rows belong to libraries of other flows': world({
+      libraries: [tv(TV_LIBRARIES[0]), ...adopted().slice(1)],
+      staged: [waiting('homeserver-dv5-movies', 'dv5'), waiting(TV_LIBRARIES[0], 'old-flow')],
+    }),
+    'no library uses the offload flow': world({ libraries: TV_LIBRARIES.map(id => tv(id)), staged: rows }),
+  };
+  for (const [name, w] of Object.entries(unrelated)) {
+    await w.run({ nodeName: 'HomeServer', pause: true, apply: true });
+    assert.equal(w.updates.length, 1, name);
+  }
+
+  // A row that names no library cannot be told apart from an offload job.
+  const nameless = world({ staged: [{ ...waiting(), originalLibraryFile: {} }, { _id: 'bare' }] });
+  await assert.rejects(nameless.run({ nodeName: 'HomeServer', pause: true, apply: true }), /2 staged job\(s\) of the offload flow/);
+  untouched(nameless);
+
+  // Everything else is unaffected, including changes that keep the node a publisher.
+  const others = world({ staged: rows });
+  await others.run({ nodeName: 'HomeServer', sets: { transcodecpu: 0, healthcheckcpu: 2, transcodegpu: 2 }, apply: true });
+  await others.run({ nodeName: MAC, sets: { transcodecpu: 2 }, pause: false, apply: true });
+  await others.run({ nodeName: MAC, pause: true, apply: true });
+  assert.deepEqual(others.updates.map(({ nodeID }) => nodeID), ['a', 'b', 'b']);
+  assert.equal(others.nodes.b.nodePaused, true);
+});
+
+test('staging that cannot be read stops only the change that depends on it', async () => {
+  for (const unreadable of [null, {}, 'oops']) {
+    const stuck = world();
+    stuck.staged = unreadable;
+    await assert.rejects(stuck.run({ nodeName: 'HomeServer', pause: true, apply: true }), /The staged jobs could not be read/);
+    untouched(stuck);
+    const unrelated = world();
+    unrelated.staged = unreadable;
+    await unrelated.run({ nodeName: 'HomeServer', sets: { healthcheckcpu: 2 }, apply: true });
+    assert.equal(unrelated.updates.length, 1);
+    const noOffload = world({ libraries: TV_LIBRARIES.map(id => tv(id)) });
+    noOffload.staged = unreadable;
+    await noOffload.run({ nodeName: 'HomeServer', pause: true, apply: true });
+    assert.equal(noOffload.updates.length, 1, 'nothing can be waiting for a flow that no library uses');
+  }
 });
 
 test('the Mac does not become active without an unpaused Linux GPU worker to publish its encodes', async () => {
@@ -331,6 +406,9 @@ test('the other nodes and the libraries are checked again right before the updat
     'a library reopens before Linux starts encoding': [
       () => world({ libraries: held(), nodes: { a: linux({}, { transcodecpu: 0 }), b: mac() } }),
       { nodeName: 'HomeServer', sets: { transcodecpu: 2 } }, w => { w.libraries = adopted(); }, /runs the Mac offload flow/],
+    'a finished encode starts waiting before the only Linux GPU worker is paused': [
+      () => world(), { nodeName: 'HomeServer', pause: true }, w => { w.staged = [waiting()]; },
+      /1 staged job\(s\) of the offload flow are waiting/],
   };
   for (const [name, [build, request, change, message]] of Object.entries(races)) {
     const w = build();

@@ -3,8 +3,15 @@
 
 const fs = require('node:fs/promises');
 const assert = require('node:assert/strict');
+const { isDeepStrictEqual } = require('node:util');
 const { connect, ROOT, libraryDefinition: baseLibrary } = require('./install-flow.cjs');
 const { PRIVATE_ROOT, CACHE_ROOT, crf: parseCrf } = require('./hevc-offload-v1.cjs');
+
+// assert.equal and assert.deepEqual append the compared values (a diff of whole objects) to a custom message, and a
+// flow holds the Sonarr API key: failures must report the message and nothing else.
+function assertSame(actual, expected, message) {
+  assert(isDeepStrictEqual(actual, expected), message);
+}
 
 const FLOW_ID = 'homeserver-hevc-offload-v1';
 const LEGACY_FLOW = 'homeserver-hevc-studio-v1';
@@ -115,7 +122,25 @@ const validCrf = value => {
   try { parseCrf(value); return true; } catch { return false; }
 };
 
-function checkNodes(direction, nodes, macName) {
+// Saved node documents are identified by _id (the node name) and carry no nodeName field. A node that is not
+// connected cannot be inspected or paused through the API, but it returns with its saved settings.
+const savedName = doc => doc.nodeName ?? doc._id;
+
+function offlineNodes(saved, connected) {
+  assert(Array.isArray(saved), 'The saved node settings could not be read');
+  const names = new Set(Object.values(connected || {}).map(node => node.nodeName));
+  return saved.filter(doc => !names.has(savedName(doc)));
+}
+
+// Rolling back while the Mac is offline cannot pause it, so its saved settings are paused and it returns quiet.
+// Whether Tdarr restores the saved or the launch-time pause state is unverified: this is a second guard next to
+// startPaused in the Mac's start script, not the only one.
+function offlineMacPause(nodes, saved, macName) {
+  const doc = offlineNodes(saved, nodes).find(candidate => savedName(candidate) === macName);
+  return doc && !quiet(doc) ? doc : undefined;
+}
+
+function checkNodes(direction, nodes, macName, saved) {
   const all = Object.values(nodes || {});
   const macs = all.filter(node => node.nodeName === macName);
   assert(macs.length <= 1, `${macName} is connected more than once`);
@@ -123,13 +148,21 @@ function checkNodes(direction, nodes, macName) {
   const others = all.filter(node => node !== mac);
   if (direction === 'adopt') {
     assert(mac, `${macName} is not connected`);
-    assert(mac.workerLimits?.transcodecpu >= 1 && mac.workerLimits?.transcodegpu === 0,
-      `${macName} must run CPU encodes only (transcodecpu 1 or more, transcodegpu 0)`);
+    const limits = mac.workerLimits;
+    assert(limits?.transcodecpu >= 1 && limits.transcodegpu === 0 && limits.healthcheckcpu === 0
+      && limits.healthcheckgpu === 0,
+      `${macName} must run CPU encodes only (transcodecpu 1 or more; transcodegpu and both health check limits 0)`);
     for (const node of others) {
       assert(node.workerLimits?.transcodecpu === 0 && !node.allowGpuDoCpu,
         `Set ${node.nodeName} transcodecpu to 0 and disable GPU workers doing CPU jobs first`);
-      assert.equal(activeWorkers(node, 'transcodecpu').length, 0,
+      assertSame(activeWorkers(node, 'transcodecpu').length, 0,
         `${node.nodeName} still has a running CPU encode; wait for it to finish`);
+    }
+    // A node that is down returns with its saved settings and would fail every file the Mac flow offers it.
+    for (const doc of offlineNodes(saved, nodes)) {
+      assert(doc.workerLimits?.transcodecpu === 0 && !doc.allowGpuDoCpu,
+        `${savedName(doc)} is not connected, but its saved settings still allow CPU encodes; connect it and set `
+        + 'transcodecpu to 0 with GPU workers doing CPU jobs disabled, or remove it in Tdarr, first');
     }
     assert(others.some(publisher),
       'A GPU worker is required to publish results: an unpaused Linux node with transcodegpu 1 or more');
@@ -139,7 +172,7 @@ function checkNodes(direction, nodes, macName) {
     'Restore a Linux node CPU worker (an unpaused node with transcodecpu 1 or more) before rolling back');
   if (mac) {
     assert(quiet(mac), `Pause ${macName} (or set its transcodecpu to 0) before rolling back`);
-    assert.equal(activeWorkers(mac, 'transcodecpu').length, 0,
+    assertSame(activeWorkers(mac, 'transcodecpu').length, 0,
       `${macName} still has a running CPU encode; wait for it to finish`);
   }
 }
@@ -161,7 +194,7 @@ function cutoverPlan({ direction, libraries, variables, staged }) {
     const quiet = quiescent(library);
     assert(quiet, `${library.name} is still processing: turn off transcoding or uncheck its whole schedule first`);
     const crf = variables.filter(v => v.type === `library:${library._id}` && v.key === 'crf');
-    assert.equal(crf.length, 1, `${library.name} needs exactly one CRF library variable`);
+    assertSame(crf.length, 1, `${library.name} needs exactly one CRF library variable`);
     // Only an adoption feeds the value to x265; a rollback must never be blocked by it.
     if (direction === 'adopt') {
       assert(validCrf(crf[0].value),
@@ -171,7 +204,7 @@ function cutoverPlan({ direction, libraries, variables, staged }) {
   }
   if (pending.length) {
     const rows = staged.filter(row => TV_LIBRARIES.includes(row.originalLibraryFile?.DB));
-    assert.equal(rows.length, 0, `${rows.length} staged TV file(s) carry the old flow; let them finish or reset them first`);
+    assertSame(rows.length, 0, `${rows.length} staged TV file(s) carry the old flow; let them finish or reset them first`);
   }
   return { pending, to };
 }
@@ -180,7 +213,7 @@ function cutoverPlan({ direction, libraries, variables, staged }) {
 // checks every slot again. The three libraries are one group and only all-or-nothing schedules are toggled, so a
 // release reopens every held library, including one that was already closed before the hold. A release is only
 // allowed once the nodes match the flow the libraries use.
-function schedulePlan({ mode, libraries, nodes, macName }) {
+function schedulePlan({ mode, libraries, nodes, saved, macName }) {
   const hold = mode === 'hold';
   const targets = TV_LIBRARIES.map(id => libraries.find(l => l._id === id));
   assert(targets.every(Boolean), 'Expected exactly the three existing TV libraries');
@@ -199,7 +232,10 @@ function schedulePlan({ mode, libraries, nodes, macName }) {
       : targets.every(library => uses(library, SAFE_FLOW, SAFE_CACHE)) ? 'rollback' : undefined;
     assert(direction, 'The TV libraries are not all on the offload flow or all on the Linux flow; '
       + 'finish the cutover or rollback before releasing them');
-    checkNodes(direction, nodes, macName);
+    checkNodes(direction, nodes, macName, saved);
+    // --rollback pauses an offline Mac's saved settings; the libraries must not reopen before that has happened.
+    assert(direction === 'adopt' || !offlineMacPause(nodes, saved, macName),
+      `${macName} is not connected and its saved settings are not paused; run --rollback --apply first`);
   }
   return pending.map(library => [library, library.schedule.map(slot => ({ ...slot, checked: !hold }))]);
 }
@@ -210,7 +246,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--apply') options.apply = true;
     else if (['--adopt', '--rollback', '--hold', '--release'].includes(arg)) {
-      assert.equal(options.mode, 'canary', 'Use only one of --adopt, --rollback, --hold and --release');
+      assertSame(options.mode, 'canary', 'Use only one of --adopt, --rollback, --hold and --release');
       options.mode = arg.slice(2);
     } else if (arg === '--pools') options.pools = Number(argv[++i]);
     else if (arg === '--mac-node') options.macNode = argv[++i];
@@ -223,20 +259,28 @@ function parseArgs(argv) {
   return options;
 }
 
-async function install({ crud, request, options = {}, defaults, log = console.log, io = fs }) {
-  const { mode = 'canary', apply = false, macNode = DEFAULT_MAC_NODE } = options;
-  assert(['canary', 'adopt', 'rollback', 'hold', 'release'].includes(mode), `Unknown mode ${mode}`);
-  const [flows, libraries, variables] = await Promise.all([
+// Everything a plan depends on is read in one place, so it can be read a second time just before anything is written.
+async function gather({ crud, request, mode }) {
+  const cutover = mode === 'adopt' || mode === 'rollback';
+  const nodeState = cutover || mode === 'release';
+  const [flows, libraries, variables, staged, nodes, saved] = await Promise.all([
     crud('FlowsJSONDB', 'getAll'), crud('LibrarySettingsJSONDB', 'getAll'), crud('VariablesJSONDB', 'getAll'),
+    cutover ? crud('StagedJSONDB', 'getAll') : undefined,
+    nodeState ? request('get-nodes', undefined, 'GET') : undefined,
+    nodeState ? crud('NodeJSONDB', 'getAll') : undefined,
   ]);
+  return { flows, libraries, variables, staged, nodes, saved };
+}
+
+// A pure function of the state that was read, so a second reading can be compared with the first.
+function buildPlan({ mode, state, macNode, pools: requestedPools, defaults, now }) {
+  const { flows, libraries, variables, staged, nodes, saved } = state;
   const plan = [];
   const put = (collection, action, docID, obj, note) => plan.push({ collection, action, docID, obj, note });
   const schedules = mode === 'hold' || mode === 'release';
-  const needsModules = mode === 'canary' || mode === 'adopt';
 
   if (schedules) {
-    const nodes = mode === 'release' ? await request('get-nodes', undefined, 'GET') : undefined;
-    for (const [library, schedule] of schedulePlan({ mode, libraries, nodes, macName: macNode })) {
+    for (const [library, schedule] of schedulePlan({ mode, libraries, nodes, saved, macName: macNode })) {
       put('LibrarySettingsJSONDB', 'update', library._id, { schedule },
         `${library.name}: ${mode === 'hold' ? 'uncheck' : 'check'} every schedule slot`);
     }
@@ -250,10 +294,10 @@ async function install({ crud, request, options = {}, defaults, log = console.lo
     if (existing) {
       const current = flowDefinition(notify, currentPools);
       for (const key of Object.keys(current)) {
-        assert.deepEqual(existing[key], current[key], 'Existing versioned flow differs; deploy a new version');
+        assertSame(existing[key], current[key], 'Existing versioned flow differs; deploy a new version');
       }
     }
-    const pools = options.pools ?? currentPools ?? DEFAULT_POOLS;
+    const pools = requestedPools ?? currentPools ?? DEFAULT_POOLS;
     if (!existing || pools !== currentPools) {
       put('FlowsJSONDB', existing ? 'update' : 'insert', FLOW_ID, flowDefinition(notify, pools),
         `flow ${FLOW_ID} (x265 pools=${pools})`);
@@ -263,36 +307,48 @@ async function install({ crud, request, options = {}, defaults, log = console.lo
   if (mode === 'canary') {
     const existing = libraries.find(l => l._id === LIBRARY_ID);
     if (!existing) {
-      put('LibrarySettingsJSONDB', 'insert', LIBRARY_ID, libraryDefinition(defaults || libraryTemplate(libraries)),
-        'new disabled canary library');
+      put('LibrarySettingsJSONDB', 'insert', LIBRARY_ID,
+        { ...libraryDefinition(defaults || libraryTemplate(libraries)), createdAt: now }, 'new disabled canary library');
     } else {
       assert(existing.folder === CANARY_FOLDER && existing.cache === CACHE_ROOT
         && [LEGACY_FLOW, FLOW_ID].includes(existing.flowId), 'Canary library ID collision');
       if (existing.flowId !== FLOW_ID) {
         for (const key of DISABLED) {
-          assert.equal(existing[key], false, 'Canary already enabled; installer will not repoint an active rollout');
+          assertSame(existing[key], false, 'Canary already enabled; installer will not repoint an active rollout');
         }
         put('LibrarySettingsJSONDB', 'update', LIBRARY_ID, { flowId: FLOW_ID }, `canary flow -> ${FLOW_ID}`);
       }
     }
     const crf = variables.filter(v => v.type === `library:${LIBRARY_ID}` && v.key === 'crf');
     assert(crf.length <= 1, 'Duplicate canary CRF variables');
-    if (crf.length) assert.equal(crf[0].value, '20', 'Canary CRF is not 20');
+    if (crf.length) assertSame(crf[0].value, '20', 'Canary CRF is not 20');
     else {
       put('VariablesJSONDB', 'insert', `${LIBRARY_ID}-crf`, {
-        _id: `${LIBRARY_ID}-crf`, key: 'crf', value: '20', type: `library:${LIBRARY_ID}`, date: Date.now(),
+        _id: `${LIBRARY_ID}-crf`, key: 'crf', value: '20', type: `library:${LIBRARY_ID}`, date: now,
       }, 'canary CRF 20');
     }
   } else if (!schedules) {
-    const [staged, nodes] = await Promise.all([
-      crud('StagedJSONDB', 'getAll'), request('get-nodes', undefined, 'GET'),
-    ]);
     const { pending, to } = cutoverPlan({ direction: mode, libraries, variables, staged });
-    if (pending.length) checkNodes(mode, nodes, macNode);
+    if (pending.length) checkNodes(mode, nodes, macNode, saved);
+    // A Mac that is down cannot be paused through the API; its saved settings are what it comes back with.
+    const offlineMac = mode === 'rollback' ? offlineMacPause(nodes, saved, macNode) : undefined;
+    if (offlineMac) {
+      put('NodeJSONDB', 'update', offlineMac._id, { nodePaused: true },
+        `${macNode} is not connected: pause its saved settings so that it returns paused`);
+    }
     for (const library of pending) {
       put('LibrarySettingsJSONDB', 'update', library._id, to, `${library.name}: flow ${to.flowId}, cache ${to.cache}`);
     }
   }
+  return plan;
+}
+
+async function install({ crud, request, options = {}, defaults, log = console.log, io = fs }) {
+  const { mode = 'canary', apply = false, macNode = DEFAULT_MAC_NODE, pools } = options;
+  assert(['canary', 'adopt', 'rollback', 'hold', 'release'].includes(mode), `Unknown mode ${mode}`);
+  const needsModules = mode === 'canary' || mode === 'adopt';
+  const now = Date.now();
+  const plan = buildPlan({ mode, state: await gather({ crud, request, mode }), macNode, pools, defaults, now });
 
   log(`${apply ? 'Applying' : 'Previewing'} ${mode}: ${plan.length ? `${plan.length} change(s)` : 'nothing to change'}`);
   for (const item of plan) log(`  ${item.action} ${item.note}`);
@@ -302,18 +358,47 @@ async function install({ crud, request, options = {}, defaults, log = console.lo
   }
   if (!apply || !plan.length) return plan;
 
-  await io.mkdir(`${ROOT}/backups`, { recursive: true, mode: 0o700 });
-  await io.writeFile(`${ROOT}/backups/offload-flow-${Date.now()}.json`,
-    JSON.stringify({ flows, libraries, variables }, null, 2), { flag: 'wx', mode: 0o600 });
-  if (needsModules) await io.mkdir(PRIVATE_ROOT, { recursive: true, mode: 0o700 });
-  for (const { collection, action, docID, obj } of plan) {
-    await crud(collection, action, { docID, obj });
-    const stored = await crud(collection, 'getById', { docID });
-    for (const key of Object.keys(obj)) assert.deepEqual(stored[key], obj[key], `${collection} ${docID}: ${key} was not stored`);
+  // Nothing is written on the strength of an old reading: read again, plan again and require the same plan.
+  const latest = await gather({ crud, request, mode });
+  let again;
+  try {
+    again = buildPlan({ mode, state: latest, macNode, pools, defaults, now });
+  } catch (error) {
+    throw new Error(`State changed while the plan was being prepared (${error.message}); nothing was written; retry`,
+      { cause: error });
   }
-  log(schedules
-    ? 'Verified via API. Flows, caches, worker limits and the Mac node are unchanged.'
-    : 'Verified via API. Library schedules, worker limits and the Mac node are unchanged.');
+  assertSame(again, plan, 'State changed while the plan was being prepared; nothing was written; retry');
+
+  const backup = `${ROOT}/backups/offload-flow-${Date.now()}.json`;
+  await io.mkdir(`${ROOT}/backups`, { recursive: true, mode: 0o700 });
+  await io.writeFile(backup, JSON.stringify({
+    flows: latest.flows, libraries: latest.libraries, variables: latest.variables,
+    ...(latest.saved ? { nodes: latest.saved } : {}),
+  }, null, 2), { flag: 'wx', mode: 0o600 });
+  log(`Backup (sensitive): ${backup}`);
+  if (needsModules) await io.mkdir(PRIVATE_ROOT, { recursive: true, mode: 0o700 });
+  const done = [];
+  for (const item of plan) {
+    try {
+      await crud(item.collection, item.action, { docID: item.docID, obj: item.obj });
+      const stored = await crud(item.collection, 'getById', { docID: item.docID });
+      for (const key of Object.keys(item.obj)) {
+        assertSame(stored[key], item.obj[key], `${item.collection} ${item.docID}: ${key} was not stored`);
+      }
+      done.push(item);
+    } catch (error) {
+      // Every command only plans what is still missing, so running it again finishes the rest.
+      const notes = items => (items.length ? items.map(item => item.note).join('; ') : 'none');
+      throw new Error(`${error.message}. ${done.length} of ${plan.length} change(s) were applied before this failure. `
+        + `Applied: ${notes(done)}. Failed or not applied: ${notes(plan.filter(item => !done.includes(item)))}. `
+        + `Run the same command again to finish what is left; the backup is ${backup}`, { cause: error });
+    }
+  }
+  if (mode === 'hold' || mode === 'release') log('Verified via API. Flows, caches, worker limits and the Mac node are unchanged.');
+  else if (plan.some(item => item.collection === 'NodeJSONDB')) {
+    log(`Verified via API. Library schedules and worker limits are unchanged; ${macNode}'s saved pause state was `
+      + 'changed. Check that it is still paused once it reconnects.');
+  } else log('Verified via API. Library schedules, worker limits and the Mac node are unchanged.');
   return plan;
 }
 
@@ -325,7 +410,7 @@ async function main() {
 
 module.exports = {
   flowDefinition, libraryDefinition, libraryTemplate, poolsOf, cutoverPlan, checkNodes, parseArgs, install,
-  activeWorkers, quiescent, publisher, encoder, quiet,
+  activeWorkers, quiescent, publisher, encoder, quiet, assertSame,
   FLOW_ID, LEGACY_FLOW, SAFE_FLOW, SAFE_CACHE, LIBRARY_ID, CANARY_FOLDER, MAC_ROOT, TV_LIBRARIES, DEFAULT_POOLS,
   DEFAULT_MAC_NODE,
 };
