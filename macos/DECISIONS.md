@@ -343,7 +343,12 @@ CRF/CQ numbers are not interchangeable across encoders.
   the TV libraries on its own CPUs. The cutover waits for a canary-library run
   and the other
   [open checks](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover). An
-  isolated lab passed a complete Mac encode and the Linux handoff.
+  isolated lab passed a complete Mac encode and the Linux handoff. The
+  installer and `start-tdarr.sh` were rewritten afterwards (a review found a
+  symlink race in the root-run installer and a stall on dead mounts) while the
+  Studio was unreachable after a power loss, so they are tested on Linux only;
+  [check them on the Studio](../docker/docs/TDARR-STUDIO.md#studio-scripts-verified-only-on-linux)
+  before relying on them.
 - **Per-node library exclusions and node tags are Tdarr Pro features, as are
   unmapped nodes.** The free tier stores and reads back the settings but ignores
   them. On 2026-11-13 the Mac took 23 already-staged production TV jobs despite
@@ -440,7 +445,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 |---|---|
 | `macos/admin/` | sshd hardening and dotfiles |
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, the Tdarr launcher (C source), session and start scripts, and plists |
-| `macos/install/` | `install-tdarr-node.sh` installs or updates the Studio's Tdarr node and is safe to rerun (it builds the launcher only when missing). The other installers are historical one-time scripts from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
+| `macos/install/` | `install-tdarr-node.sh` installs or updates the Studio's Tdarr node and is safe to rerun: it checks and builds everything before replacing anything, builds the launcher only when missing, and has the worker write its own files, so root never writes inside the worker's tree (Linux-tested only so far). The other installers are historical one-time scripts from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
 | `macos/ai/` | Whisper adapter, Ollama and Whisper plists, `_bazarr` sshd drop-in and provisioning script, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
@@ -457,7 +462,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Whisper, Ollama | `com.danteb.studio-whisper`, `com.danteb.studio-ollama`; models in the worker home | `sudo launchctl bootout system/<label>`, delete the plist and worker data |
 | Bazarr forwarding account | `_bazarr`, `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf`, `/etc/ssh/bazarr-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#bazarr-transport-and-cutover) |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
-| Native Tdarr node (installed, paused until the cutover) | `com.danteb.studio-tdarr` (plist in `/Library/LaunchDaemons`), the launcher and session script `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-{launcher,session}`, `/var/log/studio-tdarr`, worker `tdarr/` (node and `Custom/` modules), the launcher's Full Disk Access entry in System Settings | `sudo bash macos/install/install-tdarr-node.sh --stop` boots it out and disables it. To remove it, delete those files and the launcher's Full Disk Access entry; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the disabled flag |
+| Native Tdarr node (installed, paused until the cutover) | `com.danteb.studio-tdarr` (plist in `/Library/LaunchDaemons`), the launcher and session script `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-{launcher,session}`, `/var/log/studio-tdarr`, worker `tdarr/` (node, `Custom/` modules and any `Custom.superseded.*` the installer moved aside), the launcher's Full Disk Access entry in System Settings | `sudo bash macos/install/install-tdarr-node.sh --stop` boots it out, disables it and verifies that no node or encoder process remains (exit 3 if some do). To remove it, delete those files (`Custom.superseded.*` is root-owned and needs `sudo`) and the launcher's Full Disk Access entry; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the disabled flag |
 | Isolated Tdarr lab (removed 2026-11-13) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-media.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Removed after explicit authorization. Preflight found regular files/directories only, no symlinks or special files; post-check confirmed all five targets absent |
 | Worker account | `_studio`, `/var/lib/studio-worker`, `001-studio-worker.conf`, ACLs from `allow-worker-tools.sh` | Last: remove the ACLs (`ls -le`), `sudo dscl . -delete /Users/_studio`, delete the home and conf |
 | Initial benchmark subtitles (keep) | `~/Services/ai-staging/benchmark-20261113/`, `baseline/`, `qwen/`, and `/var/lib/studio-worker/ai-tests/`; only `.srt`/`.ass` files remain in these initial test directories | Keep until a speech default is chosen |

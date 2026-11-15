@@ -77,12 +77,14 @@ above on the server's CPU workers.
 
 The NixOS updater, `dcu`, `dcupdate`, `dcr tdarr`, and the deployment script use
 `scripts/tdarr-update-guard.sh`. Busy Tdarr is deferred, not killed: while any
-connected node, including the Mac Studio's, has a working worker, the guard exits
-75 and recreation waits. When every connected node is idle, the guard pauses all
-of them under one lease, checks again for busy or newly joined nodes, and
-restores each node's own previous pause setting after it reconnects. API/guard
-failures hold Tdarr back and report failure rather than assuming it is safe to
-restart.
+connected node, including the Mac Studio's, has a working worker, or any job is
+staged (a finished leg waiting for its next worker, which clears by itself within
+minutes), the guard exits 75 and recreation waits. When every connected node is
+idle and nothing is staged, the guard pauses all of them under one lease, checks
+again for busy or newly joined nodes and staged jobs, and restores each node's own
+previous pause setting after it reconnects. API/guard failures, including an
+unreadable staging database, hold Tdarr back and report failure rather than
+assuming it is safe to restart.
 
 For a continuously busy backlog, deliberately pause every node in Tdarr (with the
 offload active, the Studio's node too), let its current workers finish, run

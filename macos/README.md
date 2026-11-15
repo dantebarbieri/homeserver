@@ -110,9 +110,9 @@ Required installation ownership:
 | `/Library/LaunchDaemons/com.danteb.studio-tdarr.plist` | root:wheel 0644 |
 | `/var/log/studio-tdarr` | root:wheel 0700; only regular root-owned log files |
 | Worker home | `_studio`, 0700 |
-| `start-tdarr.sh` and `mount-studio-share` in the worker home | `_studio`:staff 0755 (inside the 0700 home) |
+| `start-tdarr.sh` and `mount-studio-share` in the worker home | `_studio` 0755, written by the worker itself (inside the 0700 home) |
 | Worker `tdarr-api-key` and SMB credential file | `_studio`, 0600 |
-| Worker `tdarr/Custom` modules (`hevc-offload-v1.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`) | root:wheel 0644, so the worker cannot rewrite them |
+| Worker `tdarr/Custom` modules (`hevc-offload-v1.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`) | `_studio` 0644, written by the worker itself. Root ownership would not protect them (the worker owns their directory); the server re-validates everything the Mac produces |
 
 Never put root-executed launcher code or root-opened log paths in the
 worker-writable home. Copy/extract the native ARM64 bundle **as the worker**,
@@ -142,17 +142,40 @@ sudo bash macos/install/install-tdarr-node.sh --modules docker/tdarr --start  # 
 sudo bash macos/install/install-tdarr-node.sh --stop                          # stop and disable it
 ```
 
-Every run rebuilds the mount helper and installs the session script,
-`start-tdarr.sh`, the plist and, with `--modules`, the three worker modules. It
-builds and ad-hoc signs the launcher **only when it is missing**
-(`--replace-launcher` overrides that), prints its CDHash and warns when the Full
-Disk Access grant below is absent. `--start` and `--stop` boot the daemon in or
-out, and either one aborts any encode running on the node.
+Every run first checks all its inputs and builds the mount helper in a
+root-owned staging directory; nothing is replaced until those checks and builds
+pass, so a failure changes nothing. Root then writes only root-owned paths: the
+session script, the plist, the log directory and, only when it is missing, the
+launcher. The worker's own files (`mount-studio-share`, `start-tdarr.sh` and,
+with `--modules`, the three worker modules) are written **by the worker** from
+that staging directory. The worker owns its home, and Apple's `install` (per its
+open-source implementation) re-opens its target by name after the rename, so a
+root-run `install` there could be redirected by a symlink the worker plants while
+it runs. An earlier installer left `tdarr/Custom` root-owned; the first run with
+`--modules` moves it aside as `Custom.superseded.<date>`, and the worker cannot
+delete root-owned files, so remove that with `sudo` when convenient. The
+launcher is built and ad-hoc signed **only when it is missing**
+(`--replace-launcher` overrides that); every run prints its CDHash and warns when
+the Full Disk Access grant below is absent. A plain install does not restart a
+running node, so new scripts take effect at the next `--start`.
 
-`start-tdarr.sh` mounts both shares (three attempts each), proves it can list
-and read the media share and write the cache before it starts the node, and
-then runs a watchdog that stops the node when the mounts die (three failed
-60-second checks), so launchd restarts and remounts it. The node runs at
+`--start` unloads the daemon, enables it and boots it in, retrying the bootstrap
+up to three times because launchd can still be tearing the old job down. `--stop`
+unloads and disables it, then checks that no `_studio` node, start script or
+process working on the mounts is left; it exits 3 and lists any that are. Either
+one aborts any encode running on the node.
+
+`start-tdarr.sh` treats a hung SMB share like a failed one. Every probe runs
+under a time limit and, at the deadline, is killed together with anything it
+started. A share counts as healthy only if its path is a real mount (a mount
+point sits on a different device than its parent, so the empty directory left by
+a vanished mount cannot pass) and it answers a listing. A mount that no longer
+answers is force-unmounted before the helper runs, because the helper accepts any
+earlier mount. The script mounts each share (three attempts, with a
+force-unmount and a `NetAuthSysAgent` reset between them), proves it can list and
+read the media share and write the cache before it starts the node, and then runs
+a watchdog that stops the node when a share dies (three failed 60-second
+checks), so launchd restarts and remounts it. The node runs at
 `nice -n 10`, starts **paused** (`startPaused=true`) and registers as
 `Studio-Native` with one CPU transcode worker and no GPU or health-check workers.
 Pause state and worker limits are changed from the server with the node
@@ -164,6 +187,12 @@ confirm the real and effective UID and the live settings after every start. The
 headless system-daemon remount has been exercised; a cold boot with FileVault
 is covered only by the note in
 [DECISIONS.md](DECISIONS.md#headless-and-back-on-its-own-after-power-loss).
+
+The installer and the dead-mount handling above were written while the Studio was
+unreachable. Their tests run the real scripts on Linux against stubs; they have
+not run on macOS yet, and the
+[checks to make on the Studio](../docker/docs/TDARR-STUDIO.md#studio-scripts-verified-only-on-linux)
+come first.
 
 ### A wedged mount agent
 
