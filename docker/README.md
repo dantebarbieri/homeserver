@@ -130,7 +130,7 @@ See [NEXTCLOUD.md](docs/NEXTCLOUD.md) for the full Nextcloud cloud storage setup
 
 ## Tdarr Setup
 
-See [TDARR.md](docs/TDARR.md) for the full Tdarr configuration guide (HEVC compression, library setup, transcode flows, Sonarr/Radarr integration).
+See [TDARR.md](docs/TDARR.md) for the full Tdarr configuration guide (HEVC compression, library setup, transcode flows, Sonarr/Radarr integration). [TDARR-STUDIO.md](docs/TDARR-STUDIO.md) covers moving the TV encoding to the Mac Studio, including the software-versus-hardware encoder benchmark.
 
 ## Audiobooks Setup
 
