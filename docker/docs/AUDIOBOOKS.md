@@ -7,7 +7,7 @@ Services in `compose.media.yml`:
 | `audiobookshelf` | `https://audiobookshelf.danteb.com` | Audiobook server + mobile apps (progress sync) |
 | `storyteller` | `https://storyteller.danteb.com` | Aligns an EPUB with its audiobook into a "readaloud" EPUB (text highlights while narration plays) |
 | `bookbridge` | `https://bookbridge.danteb.com` (dashboard), `https://kosync.danteb.com` (KOReader sync) | Progress-sync hub between KOReader, Audiobookshelf, and Storyteller (see [BookBridge](#bookbridge--koreader-progress-sync)) |
-| `librofm-downloader` | — (no web exposure) | Pulls new DRM-free libro.fm purchases into the Audiobookshelf library daily |
+| `librofm-downloader` | — (no web exposure) | Pulls new DRM-free libro.fm purchases into the Audiobookshelf library (checks hourly) |
 
 ## Ownership model
 
@@ -111,7 +111,10 @@ Redirection hosts (301): `audiobooks`, `abs` → `audiobookshelf`;
 
 On first start it downloads your whole libro.fm library into
 `audiobooks/<First Author>/<Title>/` (M4B, converting MP3-only titles with
-ffmpeg), then re-checks daily. To pull a new purchase immediately:
+ffmpeg), then re-checks hourly. Each scheduled check downloads from the
+library list saved by the *previous* check (upstream writes the new list
+asynchronously), so a new purchase lands on the second check — within about
+two hours. To pull a new purchase immediately:
 
 ```bash
 dce librofm-downloader curl -s http://localhost:8080/update
