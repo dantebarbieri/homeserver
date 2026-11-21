@@ -280,6 +280,22 @@ class HttpTests(unittest.TestCase):
             self.assertEqual(web.lyrics(TRACK), {"id": 123})
         self.assertIn(unittest.mock.call(121), sleep.call_args_list)
 
+    def test_plex_wait_outlasts_boot_then_gives_up(self):
+        plex = object.__new__(app.Plex)
+        plex.url, plex.web = "http://plex:32400", SimpleNamespace(opener=Mock())
+        clock = [0.0]
+        sleep = Mock(side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+        with patch.object(app.time, "sleep", sleep), patch.object(app.time, "monotonic", lambda: clock[0]):
+            plex.web.opener.open.side_effect = [
+                urllib.error.URLError("refused"), ConnectionResetError(), io.BytesIO(b"")]
+            plex.wait()
+            self.assertEqual(sleep.call_count, 2)
+            # Plex never answers: stop inside the limit so the run fails and alerts.
+            plex.web.opener.open.side_effect = urllib.error.URLError("refused")
+            plex.wait(limit=40)
+            self.assertEqual(sleep.call_count, 4)
+            self.assertLessEqual(clock[0], 30 + 40)
+
     def test_compose_keeps_navidrome_read_only_and_helper_internal(self):
         config = yaml.safe_load((ROOT / "compose.media.yml").read_text())
         nav = config["services"]["navidrome"]

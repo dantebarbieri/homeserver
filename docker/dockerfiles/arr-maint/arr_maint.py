@@ -12,6 +12,7 @@ Every INTERVAL seconds, for downloads (queue rows grouped by download) stuck for
   - the app's check_library rules for files already in the library (see radarr.py)
   - the app's missing search at most every MISSING_SEARCH_HOURS (0 disables)
   - the app's cutoff-unmet (upgrade) search, if it has one, at most every UPGRADE_SEARCH_HOURS (0 disables)
+An opt-in local advisor can try bounded native repairs after these rules; see ai_advisor.py.
 Anything it can't fix is sent to ntfy once (deduplicated across runs). A run that fails (typically
 because the app or this container was restarted by the 04:00 auto-update) is only alerted after
 FAIL_ALERT_CYCLES failed runs in a row.
@@ -65,11 +66,15 @@ def is_torrent(row):
     return "torrent" in (row.get("protocol") or "").lower()
 
 
-def load_state(name, default):
+def load_state(name, default, strict=False):
     try:
         with open(os.path.join(STATE, name)) as f:
             return json.load(f)
+    except FileNotFoundError:
+        return default
     except (OSError, ValueError):
+        if strict:
+            raise
         return default
 
 
@@ -123,6 +128,13 @@ class Qbit:
 
     def torrents(self, category):
         return json.loads(self.op.open(f"{QBIT_URL}/api/v2/torrents/info?" + urllib.parse.urlencode({"category": category}), timeout=60).read())
+
+    def torrent(self, did):
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", did or ""):
+            return None
+        rows = json.loads(self.op.open(f"{QBIT_URL}/api/v2/torrents/info?" +
+                                      urllib.parse.urlencode({"hashes": did.lower()}), timeout=60).read())
+        return next((t for t in rows if t.get("hash", "").lower() == did.lower()), None)
 
 
 def dead(t, now):
@@ -178,6 +190,33 @@ class Arr:
                     raise
                 log(f"qBittorrent unreachable ({e.reason}), retrying in {delay}s")
                 time.sleep(delay)
+
+    def paged(self, path):
+        """Never infer absence from a truncated queue/history, including during heavy intake."""
+        records, seen, total = [], set(), None
+        for page in range(1, 201):
+            result = self.api(path + ("&" if "?" in path else "?") + f"page={page}&pageSize=500")
+            expected = result["totalRecords"]
+            if type(expected) is not int or expected < 0 or (total is not None and expected != total):
+                raise RuntimeError("paginated result changed; retry next cycle")
+            total = expected
+            batch = result["records"]
+            for row in batch:
+                if row["id"] in seen:
+                    raise RuntimeError("duplicate paginated record; retry next cycle")
+                seen.add(row["id"])
+                records.append(row)
+            if len(records) == total:
+                return records
+            if not batch or len(records) > total:
+                break
+        raise RuntimeError("incomplete paginated result")
+
+    def queue(self):
+        return self.paged("/queue?" + self.queue_params)
+
+    def is_dead(self, torrent):
+        return dead(torrent, time.time())
 
     def wait(self, cid, tries=120):
         for _ in range(tries):
@@ -238,7 +277,12 @@ class Arr:
         actions, needs_user = [], {}
         now = time.time()
         seen = load_state("seen.json", {})
-        q = self.api(f"/queue?pageSize=2000&{self.queue_params}")["records"]
+        q = self.queue()
+        advisor = None
+        if os.environ.get("ARR_AI_MODE", "off") != "off":
+            from ai_advisor import Advisor
+            advisor = Advisor(self, lambda name, default: load_state(name, default, strict=True),
+                              save_state, log, DRY)
         groups = {}
         for r in q:
             groups.setdefault(r.get("downloadId") or str(r["id"]), []).append(r)
@@ -273,9 +317,16 @@ class Arr:
                         self.forget(rows)
                         actions.append(f"unmatched, {linked}/{len(files)} files already in library -> forgotten: {title[:60]}")
                     else:
-                        needs_user[f"unmatched:{did}"] = f"no {self.media} match, {state}/{status} ({msgs[:100]}): {title[:80]}"
+                        why = f"no {self.media} match, {state}/{status} ({msgs[:100]}): {title[:80]}"
+                        done, why = advisor.handle(did, rows, reason=why) if advisor else (None, why)
+                        if done:
+                            actions.append(f"{name}: {done}")
+                        else:
+                            needs_user[f"unmatched:{did}"] = why
                 elif state in IMPORT_STATES:
                     done, why = self.fix_import(rows, torrent)
+                    if not done and advisor:
+                        done, why = advisor.handle(did, rows, reason=why)
                     if done:
                         actions.append(f"{name}: {done}")
                     else:
@@ -299,7 +350,13 @@ class Arr:
                         self.remove(rows)
                         actions.append(f"dead torrent ({t['state']}, {t['progress']:.0%}) -> blocklisted: {clean(t['name'])[:60]}")
                     else:
-                        needs_user[f"stalled:{t['hash']}"] = f"dead torrent not matched in {self.name}: {clean(t['name'])[:80]}"
+                        stuck.add(t["hash"])
+                        why = f"dead torrent not matched in {self.name}: {clean(t['name'])[:80]}"
+                        done, why = advisor.handle(t["hash"], orphan=True, reason=why) if advisor else (None, why)
+                        if done:
+                            actions.append(done + ": " + clean(t["name"])[:80])
+                        else:
+                            needs_user[f"stalled:{t['hash']}"] = why
 
         done, ask = self.check_library()
         actions += done
@@ -320,6 +377,8 @@ class Arr:
         if s:
             log(s)
         save_state("seen.json", {k: v for k, v in seen.items() if k in stuck})
+        if advisor:
+            advisor.finish(stuck)
 
         notified = load_state("notified.json", {})
         new = [v for k, v in needs_user.items() if k not in notified]

@@ -249,6 +249,9 @@ in
       docker compose up -d --force-recreate homepage
       docker image prune -f
       docker network prune -f
+      # Anonymous volumes only (image-declared VOLUMEs orphaned by recreates);
+      # named volumes are never touched without --all.
+      docker volume prune -f
 
       if [ "''${#failed_pulls[@]}" -ne 0 ]; then
         echo "Update finished, but these services kept their previous image because it failed to pull: ''${failed_pulls[*]}" >&2

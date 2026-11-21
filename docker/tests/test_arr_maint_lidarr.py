@@ -85,7 +85,7 @@ class SingleFileImportTests(unittest.TestCase):
         if path == "/queue/details?albumIds=14060":
             return copy.deepcopy(self.queue)
         if path.startswith("/queue?"):
-            return {"records": copy.deepcopy(self.queue)}
+            return {"records": copy.deepcopy(self.queue), "totalRecords": len(self.queue)}
         if path == "/downloadclient":
             return []
         if path.startswith("/queue/bulk"):
@@ -558,7 +558,8 @@ class QueueRunTests(unittest.TestCase):
                 "album": {"title": "These Are the Times"}}
 
     def run_queue(self, *rows):
-        self.app.api = Mock(side_effect=lambda path, *a: {"records": list(rows)} if path.startswith("/queue?") else [])
+        self.app.api = Mock(side_effect=lambda path, *a: {"records": list(rows), "totalRecords": len(rows)}
+                            if path.startswith("/queue?") else [])
         with patch.object(engine, "DRY", False), patch.object(lidarr, "DRY", False), \
                 patch.object(engine, "QBIT_USER", ""), patch.object(engine, "ntfy"), patch.object(engine, "save_state"), \
                 patch.object(engine, "log") as log, \

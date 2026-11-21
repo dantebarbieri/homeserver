@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0c1118">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ChasEx">
+  <meta name="atlas-data" content="demo">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https://cdn.jsdelivr.net https://*.danteb.com; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>ChasEx · ROMED8-2T</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" sizes="any">
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+  <link rel="manifest" href="./manifest.webmanifest" crossorigin="use-credentials">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <main>
+    <section id="board-view" class="board-workspace" aria-label="Server hardware map">
+      <header class="app-bar">
+        <h1><img class="brand-logo" src="./favicon.svg" width="28" height="28" alt=""><span class="brand-name">ChasEx</span></h1>
+        <button id="status-chip" class="status-chip" type="button" data-level="connecting" aria-haspopup="dialog"><i class="status-dot" aria-hidden="true"></i><span class="status-label">Connecting…</span><span class="status-badge" hidden></span></button>
+        <nav class="app-nav" aria-label="Views">
+          <button id="metrics-button" type="button" aria-haspopup="dialog" aria-controls="metrics-dialog">Performance</button>
+          <button id="services-button" type="button" aria-haspopup="dialog" aria-controls="services-dialog">Services</button>
+          <button id="tools-button" type="button" aria-haspopup="dialog" aria-controls="tools-dialog">About</button>
+        </nav>
+      </header>
+      <section class="filter-bar panel" aria-label="Map filters">
+        <div id="focus-modes" class="segmented" role="group" aria-label="Inspect">
+          <button type="button" data-mode="hardware" aria-pressed="true">Hardware</button>
+          <button type="button" data-mode="connectors" aria-pressed="false">Connectors</button>
+        </div>
+        <nav id="categories" aria-label="Hardware categories"></nav>
+        <p id="focus-status" class="sr-only" role="status"></p>
+        <button id="connector-button" class="menu-button" type="button" hidden>List</button>
+        <button id="layers-button" class="menu-button" type="button">Layers <span id="layers-count" class="menu-count"></span></button>
+      </section>
+      <div class="map-panel panel">
+        <div class="map-stage">
+          <div class="map-scroll"><svg id="board" viewBox="0 0 1440 840" role="group" aria-label="Server chassis and installed hardware"></svg></div>
+          <div class="map-controls" role="group" aria-label="Map view">
+            <div class="zoom-controls"><button id="zoom-out" type="button" aria-label="Zoom out">−</button><button id="zoom-label" type="button" title="Reset zoom to fit">100%</button><button id="zoom-in" type="button" aria-label="Zoom in">+</button></div>
+            <button id="fan-rotation-toggle" type="button" aria-pressed="false">Fan motion</button>
+          </div>
+        </div>
+        <div id="metric-layer" class="metric-layer" aria-label="Hardware metric overlays"><svg id="metric-leaders" aria-hidden="true"></svg></div>
+      </div>
+    </section>
+  </main>
+  <div id="connector-list" class="connector-list" role="group" aria-label="Connectors"></div>
+  <div id="metric-controls" class="layers-menu" role="group" aria-label="Metric map layers">
+    <p class="menu-title">Charts shown on the map <strong class="metric-provenance">DEMO</strong></p>
+    <div id="metric-group-controls" role="group" aria-label="Show or hide metric families"></div>
+    <div class="menu-actions"><button id="metric-show-all" type="button">Show all</button><button id="metric-hide-all" type="button">Hide all</button></div>
+  </div>
+  <div id="status-panel" class="status-panel" role="group" aria-label="Status details"></div>
+  <div id="toasts" class="toasts" role="region" aria-label="Notifications"></div>
+  <dialog id="inspector-dialog" class="popup" aria-labelledby="inspector-title">
+    <header class="popup-heading"><h2 id="inspector-title" tabindex="-1">Hardware</h2><button id="close-inspector" type="button" autofocus>Close ×</button></header>
+    <div class="popup-body details">
+      <nav id="inspector-trail" class="link-trail" hidden aria-label="Navigation trail"><button id="inspector-back" type="button"></button></nav>
+      <section id="component-details" hidden>
+        <div class="detail-title"><h3 id="component-name"></h3></div>
+        <p id="component-model" class="component-model"></p><p id="component-capacity" class="component-capacity"></p>
+        <p id="component-identifiers" class="compact muted" hidden></p>
+        <p id="component-connection-note" class="compact" hidden></p>
+        <section id="component-port-map" hidden aria-labelledby="component-port-title">
+          <h4 id="component-port-title">PSU modular sockets</h4>
+          <p class="compact muted">Viewed as in the reference photo. Labels identify socket positions, not Corsair socket numbers or electrical pinouts.</p>
+          <table><thead><tr><th>Socket</th><th>Group / position</th><th>Connection</th></tr></thead><tbody id="component-port-rows"></tbody></table>
+        </section>
+        <section id="links-section" class="links-section" hidden aria-labelledby="links-title">
+          <h4 id="links-title">Connected to</h4>
+          <div id="links-list"></div>
+        </section>
+        <button id="component-metrics-button" type="button" hidden>Full performance view ↗</button>
+        <section id="component-performance" class="metric-detail-grid" aria-label="Selected component performance" hidden></section>
+        <section id="linux-details" class="linux-details" hidden aria-labelledby="linux-title">
+          <h4 id="linux-title">Linux devices & layers</h4>
+          <div id="linux-list"></div><div id="linux-node" hidden></div>
+        </section>
+        <div class="reference"><h4>Specifications</h4><div id="component-reference-links"></div></div>
+        <h4>Connectors</h4><div id="component-connectors" class="related-connectors"></div>
+      </section>
+      <section id="connector-details">
+        <div class="detail-title"><p id="detail-category" class="eyebrow"></p><h3 id="detail-name"></h3><span id="detail-occupancy" class="badge unverified">Unknown</span></div>
+        <p id="detail-description" class="muted"></p><p id="connection-target" class="reading-note"></p>
+        <section id="pin-section" hidden>
+          <h4>Pin functions</h4><p id="fan-location" class="compact muted"></p>
+          <div id="pin-strip" class="pin-strip"></div>
+          <table><thead><tr><th>Pin</th><th>Signal / function</th></tr></thead><tbody id="pin-table"></tbody></table>
+          <p class="compact muted">Reference view; verify header orientation before wiring.</p>
+        </section>
+      </section>
+      <section id="jumper-section" hidden aria-labelledby="jumper-title">
+        <h4 id="jumper-title">PCIE2 lane selection</h4>
+        <p id="jumper-current" class="compact"></p>
+        <p class="compact muted">Blue joins the capped pins; green resources are enabled and red resources disabled. Pin diagrams use the manual's 1–2–3 order, not the rotated chassis view.</p>
+        <div id="jumper-configurations" class="jumper-configurations"></div>
+        <p class="compact muted">Read-only reference, not a control. Lane allocation does not measure negotiated PCIe speed. Do not move caps on a powered system.</p>
+        <p class="compact"><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf#page=33" target="_blank" rel="noopener noreferrer">Official manual · revision 1.30, printed page 26</a></p>
+      </section>
+    </div>
+  </dialog>
+  <dialog id="metrics-dialog" class="popup metrics-popup" aria-labelledby="metrics-title">
+    <header class="popup-heading"><h2 id="metrics-title">Performance <span class="metric-provenance">DEMO</span></h2><button id="close-metrics" type="button" autofocus>Close ×</button></header>
+    <div class="metric-lab-controls">
+      <label>History<select id="metric-window"></select></label>
+      <button id="metric-reset-layout" type="button">Reset layout</button><output id="metric-clock"></output>
+    </div>
+    <nav id="metric-panel-nav" class="metric-panel-nav" aria-label="Performance views"></nav>
+    <div class="popup-body"><div id="metric-panel"></div></div>
+  </dialog>
+  <dialog id="services-dialog" class="popup services-popup" aria-labelledby="services-title">
+    <header class="popup-heading"><h2 id="services-title">Services</h2><button id="close-services" type="button" autofocus>Close ×</button></header>
+    <div class="popup-body">
+      <div class="services-toolbar">
+        <label class="services-search"><span class="sr-only">Search services or processes</span><input id="services-search" type="search" placeholder="Search services or processes" autocomplete="off"></label>
+        <label class="services-stopped"><input id="services-stopped" type="checkbox">Show stopped</label>
+        <button id="services-columns-button" class="menu-button" type="button">Columns</button><div id="services-column-menu" class="services-column-menu" data-sheet-scroll><p class="services-column-hint">Drag a grip to reorder. With a keyboard, focus a grip and use the arrow keys. Table headings can also be dragged; on touch, press and hold first.</p><div id="services-columns"></div><button id="services-reset-columns" type="button">Reset columns</button></div>
+      </div>
+      <p id="services-announce" class="sr-only" role="status" aria-live="polite"></p>
+      <div class="services-live"><output id="services-status" role="status">Waiting for live accounting</output><span id="services-count"></span></div>
+      <div class="services-table-scroll" data-sheet-scroll tabindex="0" role="region" aria-label="Service resource usage; scroll horizontally for more columns">
+        <table class="services-table"><caption class="sr-only">Docker services and their processes. Values update every five seconds. Select a column heading to sort.</caption><thead id="services-head"></thead><tbody id="services-body"></tbody></table>
+      </div>
+      <details class="services-notes" data-sheet-scroll><summary>Measurements &amp; limitations</summary>
+        <p>CPU is a share of the whole server; memory is container working set or process RSS. Disk is read + write throughput, not drive utilization. Network is receive + send, not a percentage of the primary link. Shared network namespaces are counted once on the owner; individual process network activity is unavailable.</p>
+        <p>Expand a row for its host processes. Container CPU/memory/disk accounting comes from Docker/cgroups, not a sum of process snapshots. Shared memory, buffering, child exits and sampling boundaries can make the numbers differ. NVIDIA compute/encode/decode activity and framebuffer memory are optional and depend on driver support. Missing, stale, first-sample or unsupported values are shown as “—”, never invented zeros.</p>
+        <p>Read-only: there are no stop, restart, kill or server-edit controls. Process arguments and environment variables are never included. Icons load from the same public icon sources used by Homepage.</p>
+        <p id="services-issues"></p>
+      </details>
+    </div>
+  </dialog>
+  <dialog id="tools-dialog" class="popup tools-popup" aria-labelledby="tools-title">
+    <header class="popup-heading"><h2 id="tools-title">ChasEx (Chassis Explorer)</h2><button id="close-tools" type="button" autofocus>Close ×</button></header>
+    <div class="popup-body">
+      <section id="app-install" class="reference">
+        <h4>Install on your phone</h4>
+        <button id="install-app" type="button" hidden>Install ChasEx</button>
+        <p class="compact muted">On iPhone or iPad, open in Safari and choose Share → Add to Home Screen. On Android, choose Install app or Add to Home screen from the browser menu.</p>
+      </section>
+      <h3 id="board-revision">ROMED8-2T</h3>
+      <p class="muted compact">Select hardware for performance and Linux devices, or switch to Connectors for pin details. Viewing controls do not change the server.</p>
+      <section class="summary" aria-label="Connector occupancy">
+        <div><span class="summary-label"><i class="legend-dot occupied"></i>CONNECTED</span><strong id="occupied-count">0</strong></div>
+        <div><span class="summary-label"><i class="legend-dot free"></i>EMPTY</span><strong id="free-count">0</strong></div>
+        <div><span class="summary-label"><i class="legend-dot blocked"></i>BLOCKED</span><strong id="blocked-count">0</strong></div>
+        <div><span class="summary-label"><i class="legend-dot unverified"></i>UNKNOWN</span><strong id="unverified-count">0</strong></div>
+      </section>
+      <div id="inventory-grid" class="inventory-grid"></div>
+      <p class="compact muted">Disk bay/socket assignments are display mappings, not verified physical locations. Rear fans use an assumed 2000 RPM; other missing readings stay unavailable.</p>
+      <div class="reference"><a href="https://download.asrock.com/Manual/ROMED8-2T.pdf" target="_blank" rel="noopener noreferrer">Motherboard manual ↗</a></div>
+    </div>
+  </dialog>
+</body>
+</html>

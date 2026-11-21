@@ -54,7 +54,7 @@ class App(Arr):
 
     def search_missing(self):
         # API commands are always manual in Radarr, bypassing availability checks.
-        queued = {r.get("movieId") for r in self.api(f"/queue?pageSize=2000&{self.queue_params}")["records"]}
+        queued = {r.get("movieId") for r in self.queue()}
         movies = self.api("/movie")
         ids = [m["id"] for m in movies
                if m["monitored"] and not m["hasFile"] and m["isAvailable"] and m["id"] not in queued]

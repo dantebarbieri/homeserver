@@ -418,6 +418,10 @@ again. Plexamp downloads keep the old titles until they are downloaded again.
 checks Lidarr's queue every 30 minutes. It only acts on items that have been
 stuck for at least 20 minutes (`GRACE_MINUTES`), so Lidarr gets the first try:
 
+An optional [local AI recovery layer](ARR-MAINT-AI.md) runs after these rules,
+with bounded native retries and exact-history/physical-file checks for orphan
+cleanup. It does not override edition or track mappings.
+
 | Stuck pattern | Fix |
 |---------------|-----|
 | Import failed because Lidarr expected another edition (common for soundtracks) | If the file count matches another release and the titles match, manual-import into it (copy for torrents so they keep seeding, move for usenet). A low filename-order score can be rescued only by a complete, unique exact-title mapping that Lidarr's own folder identification also confirms: every file must be mapped to this artist/album in at least one of up to three identification passes (Lidarr leaves a couple of files unidentified at random on each call), and no pass may map any file elsewhere. This handles alphabetically named files and reordered editions; only the exact album artist prefix and trailing bracketed `feat.` credits are ignored, not remix/live/version qualifiers. Never switches the edition of an album that already has files, since that unlinks them. Lidarr reports a torrent's `protocol` as `TorrentDownloadProtocol` (Radarr and Sonarr use `torrent`), and the helper matches both |

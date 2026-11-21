@@ -15,6 +15,10 @@ so the script groups rows by download. It only acts on downloads that have been
 stuck for at least 20 minutes (`GRACE_MINUTES`), so Sonarr's own import and
 failure handling gets the first try.
 
+An optional [local AI recovery layer](ARR-MAINT-AI.md) runs after these rules.
+It requests only guarded native repairs, never model-guessed episode numbering,
+language/profile changes or replacement of library files.
+
 | Stuck pattern | Fix |
 |---------------|-----|
 | Import blocked although Sonarr reports no rejections, such as "release was matched to series by ID. Automatic import is not possible". Applies only when every file maps to the queued series and the files together cover exactly the queued episodes, each once | Manual import as Sonarr mapped the files, using each file's detected quality and languages (copy for torrents to keep hardlinks, move for usenet) |

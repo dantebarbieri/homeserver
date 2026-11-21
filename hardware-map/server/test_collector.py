@@ -1,0 +1,467 @@
+import json
+from pathlib import Path
+import shutil
+import threading
+import unittest
+import uuid
+
+import collector
+
+
+class WorkspaceTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(__file__).parent / (".test-state-" + uuid.uuid4().hex)
+        self.root.mkdir()
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+
+    def write(self, name, text):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+
+class CounterTests(unittest.TestCase):
+    def test_block_rates_reset_missing_and_gauge_decrease(self):
+        before = [10, 0, 100, 20, 10, 0, 200, 30, 8, 100, 200]
+        after = [12, 0, 300, 30, 13, 0, 400, 40, 0, 600, 1200]
+        result = collector.block_rates(after, before, 5)
+        self.assertAlmostEqual(result["read"], 200 * 512 / 5 / 1e6)
+        self.assertEqual(result["active"], 10)
+        self.assertEqual(result["latency"], 4)
+        self.assertEqual(result["queue"], .2)
+        self.assertTrue(all(v is None for v in collector.block_rates(before, after, 5).values()))
+        self.assertTrue(all(v is None for v in collector.block_rates(after, None, 5).values()))
+        self.assertIsNone(collector.counter_delta([100, 4], [99, 5]))
+
+    def test_memory_is_non_overlapping_and_used_is_independent(self):
+        fields = {"MemTotal": 1000, "MemFree": 100, "MemAvailable": 450,
+                  "Buffers": 30, "Cached": 200, "SReclaimable": 50, "Shmem": 20,
+                  "SUnreclaim": 40, "KernelStack": 10, "PageTables": 10,
+                  "SwapTotal": 100, "SwapFree": 80}
+        values, capacities = collector.memory_values("\n".join(f"{key}: {value} kB" for key, value in fields.items()))
+        self.assertAlmostEqual(sum(values["memory-" + key] for key in ("apps", "cache", "kernel", "free")),
+                               capacities["memory-used"])
+        self.assertAlmostEqual(values["memory-used"], 550 * 1024 / collector.GIB)
+        self.assertNotEqual(values["memory-used"], values["memory-apps"] + values["memory-kernel"])
+        with self.assertRaises(ValueError):
+            collector.memory_values("MemTotal: 10 kB")
+
+    def test_smart_standby_warnings_and_unsupported_channels(self):
+        standby = {"smartctl": {"exit_status": 2, "messages": [{"string": "Device in STANDBY"}]},
+                   "temperature": {"current": 42}}
+        values, issue = collector.smart_values(standby)
+        self.assertIsNone(values["composite"])
+        self.assertIn("standby", issue)
+        values, issue = collector.smart_values({"smartctl": {"exit_status": 8},
+                                               "temperature": {"current": 37}})
+        self.assertEqual(values["composite"], 37)
+        self.assertIsNone(issue)
+        values, _ = collector.smart_values({"nvme_smart_health_information_log":
+                                           {"temperature": 44, "temperature_sensors": [0]}})
+        self.assertEqual(values["composite"], 44)
+        self.assertIsNone(values["secondary"])
+        self.assertIsNone(collector.smart_values({})[0]["composite"])
+
+    def test_command_rejects_non_device_arguments(self):
+        for name in ("../../etc/passwd", "sda;reboot", "/dev/sda", "md0"):
+            with self.assertRaises(ValueError):
+                collector.command("smart", name)
+
+
+class PowerAndCacheTests(WorkspaceTest):
+    status = "vg-data: 0 1000 cache 8 10/128 1024 1200/2000 10 20 30 40 2 3 400 1 writeback 2 migration_threshold 2048 smq 0 rw -"
+
+    def test_cache_occupancy_uses_cache_blocks_not_metadata_or_filesystem_blocks(self):
+        state = collector.cache_status(self.status)["vg-data"]
+        self.assertEqual(state["usedBytes"], 600 * 2 ** 20)
+        self.assertEqual(state["totalBytes"], 1000 * 2 ** 20)
+        self.assertEqual(state["dirtyBytes"], 200 * 2 ** 20)
+        self.assertEqual(state["mode"], "writeback")
+        self.assertFalse(state["needsCheck"])
+        self.assertTrue(collector.cache_status(self.status.replace("rw -", "rw needs_check"))["vg-data"]["needsCheck"])
+        for invalid in ("vg-data: 0 100 cache Fail", self.status.replace("1200/2000", "2001/2000"),
+                        self.status.replace(" 400 1 ", " 1400 1 "), self.status + "\n" + self.status,
+                        self.status.split(" smq")[0], self.status.replace("smq 0 rw", "smq 20 rw")):
+            with self.assertRaises(ValueError):
+                collector.cache_status(invalid)
+
+    def test_cache_is_selected_by_data_dependencies_not_first_target(self):
+        caches = collector.cache_status(self.status + "\n" + self.status.replace("vg-data:", "other-cache:"))
+        snapshot = {"nodes": [
+            {"id": "data-filesystem", "parents": [{"id": "dm-7"}]},
+            {"id": "dm-7", "parents": [{"id": "dm-5"}]},
+            {"id": "dm-5", "aliases": ["/dev/mapper/vg-data"], "parents": []},
+        ]}
+        self.assertEqual(collector.data_cache(caches, snapshot)["device"], "vg-data")
+        with self.assertRaises(ValueError):
+            collector.data_cache(caches, {"nodes": []})
+
+    def test_energy_average_zero_wrap_reset_and_long_gap(self):
+        self.assertEqual(collector.package_watts(350000000, 100000000, 5, 1000000000), 50)
+        self.assertEqual(collector.package_watts(100000000, 900000000, 5, 1000000000), 40)
+        self.assertEqual(collector.package_watts(100, 100, 5, 1000), 0)
+        for previous, elapsed in ((None, 5), (500, 5), (100, 0), (100, 60)):
+            self.assertIsNone(collector.package_watts(100, previous, elapsed, 1000))
+        with self.assertRaises(ValueError):
+            collector.package_watts(1100, 100, 5, 1000)
+
+    def test_package_power_excludes_nested_core_energy_and_primes_after_errors(self):
+        now = [1000]
+        self.write("sys/class/powercap/zone-package/name", "package-0")
+        energy = self.write("sys/class/powercap/zone-package/energy_uj", "100000000")
+        self.write("sys/class/powercap/zone-package/max_energy_range_uj", "1000000000")
+        self.write("sys/class/powercap/zone-core/name", "core")
+        self.write("sys/class/powercap/zone-core/energy_uj", "999999999")
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", monotonic=lambda: now[0])
+        self.assertIsNone(instance.package_power())
+        now[0] += 5
+        energy.write_text("350000000")
+        self.assertEqual(instance.package_power(), 50)
+        now[0] += 5
+        energy.write_text("100000000")
+        self.assertIsNone(instance.package_power())
+        now[0] += 5
+        energy.write_text("350000000")
+        self.assertEqual(instance.package_power(), 50)
+        self.write("sys/class/powercap/duplicate/name", "package-0")
+        self.write("sys/class/powercap/duplicate/energy_uj", "350000000")
+        self.write("sys/class/powercap/duplicate/max_energy_range_uj", "1000000000")
+        with self.assertRaises(ValueError):
+            instance.package_power()
+
+    def test_all_packages_need_valid_samples_and_changed_ranges_reprime(self):
+        now = [1000]
+        energies = []
+        for index in range(2):
+            base = f"sys/class/powercap/package-{index}"
+            self.write(base + "/name", f"package-{index}")
+            self.write(base + "/max_energy_range_uj", "1000000000")
+            energies.append(self.write(base + "/energy_uj", "100000000"))
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", monotonic=lambda: now[0])
+        self.assertIsNone(instance.package_power())
+        now[0] += 5
+        for energy in energies:
+            energy.write_text("300000000")
+        self.assertEqual(instance.package_power(), 80)
+        self.write("sys/class/powercap/package-1/max_energy_range_uj", "2000000000")
+        now[0] += 5
+        self.assertIsNone(instance.package_power())
+        energies[1].unlink()
+        with self.assertRaises(OSError):
+            instance.package_power()
+
+    def test_cache_metrics_and_capacity_reach_the_snapshot(self):
+        self.write("sys/class/block/dm-5/dm/name", "vg-data")
+        devices = [{"name": "nvme1n1", "type": "disk", "serial": "SYNTH-CACHE", "children": [
+            {"name": "data", "kname": "dm-5", "type": "lvm", "mountpoints": ["/data"]}]}]
+
+        def runner(source, device=None):
+            if source == "lsblk":
+                return json.dumps({"blockdevices": devices})
+            if source == "lvs":
+                return '{"report":[]}'
+            if source == "cache-status":
+                return self.status
+            raise OSError("Synthetic unavailable source")
+
+        instance = collector.Collector(self.root / "state", self.root / "proc", self.root / "sys", runner=runner)
+        snapshot = instance.collect()
+        self.assertEqual(snapshot["metrics"]["cache-used"], 600 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["metrics"]["cache-dirty"], 200 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["capacities"]["cache-used"], 1000 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["available"]["cache-used"], 400 * 2 ** 20 / collector.TIB)
+        self.assertEqual(snapshot["inventory"]["cache"]["mode"], "writeback")
+
+
+class AssignmentTests(WorkspaceTest):
+    def disk(self, name, serial, **extra):
+        return {"id": name, "serial": serial, "kind": "hdd", **extra}
+
+    def test_persistence_renumbering_and_absent_reservations(self):
+        disks = [self.disk("sda", "SYNTH-Z"), self.disk("sdb", "SYNTH-A"),
+                 self.disk("nvme0n1", "SYNTH-N", kind="nvme")]
+        assignments, issues = collector.assign_slots(disks, {})
+        self.assertFalse(issues)
+        self.assertEqual(disks[1]["slot"], "cage-1-bay-1")
+        self.assertEqual(disks[0]["slot"], "cage-1-bay-2")
+        self.assertEqual(disks[2]["slot"], "M2_1")
+        path = self.root / "assignments.json"
+        collector.atomic_write(path, json.dumps({"assignments": assignments}))
+        saved = collector.Collector(self.root).assignments
+        new = [self.disk("sdq", "SYNTH-Z"), self.disk("sda", "SYNTH-0")]
+        updated, _ = collector.assign_slots(new, saved)
+        self.assertEqual(new[0]["slot"], "cage-1-bay-2")
+        self.assertEqual(new[1]["slot"], "cage-1-bay-3")
+        self.assertEqual(updated["serial:SYNTH-A"], "cage-1-bay-1")
+        self.assertEqual(collector.metric_key("serial:SYNTH-Z", "read"),
+                         collector.metric_key(new[0]["stableId"], "read"))
+
+    def test_no_identity_no_fallback_and_duplicates(self):
+        disks = [self.disk("sda", ""), self.disk("sdb", "SYNTH-DUP"),
+                 self.disk("sdc", "SYNTH-DUP")]
+        assignments, issues = collector.assign_slots(disks, {})
+        self.assertEqual(assignments, {})
+        self.assertEqual(len(issues), 3)
+        self.assertTrue(all(d["slot"] is None and d["stableId"] is None for d in disks))
+        with self.assertRaises(ValueError):
+            collector.assign_slots([], {"serial:SYNTH-A": "M2_1", "serial:SYNTH-B": "M2_1"})
+        self.assertEqual(collector.stable_id({"wwn": "SYNTH-W", "serial": "SYNTH-S"}), "wwn:SYNTH-W")
+
+    def test_confirmed_placements_survive_renumbering_and_inventory_refresh(self):
+        state = self.root / "state"
+        assignments = {"wwn:SYNTH-HDD": "cage-3-bay-4", "wwn:SYNTH-NVME": "M2_2"}
+        confirmed = {"wwn:SYNTH-HDD": "cage-3-bay-4"}
+        collector.atomic_write(state / "assignments.json", json.dumps({
+            "version": 2, "assignments": assignments, "confirmedAssignments": confirmed}))
+        devices = [
+            {"name": "sdq", "type": "disk", "serial": "SYNTH-SERIAL", "wwn": "SYNTH-HDD"},
+            {"name": "nvme9n1", "type": "disk", "serial": "SYNTH-N", "wwn": "SYNTH-NVME"},
+        ]
+
+        def runner(source):
+            return json.dumps({"blockdevices": devices}) if source == "lsblk" else '{"report":[]}'
+
+        instance = collector.Collector(state, sys=self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        disks = {disk["id"]: disk for disk in inventory["disks"]}
+        self.assertEqual((disks["sdq"]["slot"], disks["sdq"]["mapping"]), ("cage-3-bay-4", "confirmed"))
+        self.assertEqual(disks["nvme9n1"]["mapping"], "provisional")
+        self.assertEqual(collector.mapping_status(inventory["disks"]), "mixed")
+        association = next(a for a in inventory["snapshot"]["associations"] if
+                           "drive-cage-3-bay-4" in a["targets"])
+        self.assertEqual(association["nodes"], ["sdq"])
+        self.assertIn("Physically confirmed", association["note"])
+        self.assertNotIn("Provisional", association["note"])
+        restored = collector.Collector(state)
+        self.assertEqual(restored.confirmed_assignments, confirmed)
+        self.assertEqual(restored.assignments, assignments)
+        new = [self.disk("sda", "SYNTH-NEW")]
+        collector.assign_slots(new, restored.assignments, restored.confirmed_assignments)
+        self.assertEqual(new[0]["mapping"], "provisional")
+        self.assertEqual(restored.assignments["wwn:SYNTH-HDD"], "cage-3-bay-4")
+
+    def test_confirmation_must_match_exact_reservation_and_never_resolves_duplicate_identity(self):
+        assignments = {"serial:SYNTH-A": "cage-1-bay-1"}
+        for invalid in (None, [], {"serial:SYNTH-B": "cage-1-bay-1"},
+                        {"serial:SYNTH-A": "cage-2-bay-1"}):
+            collector.atomic_write(self.root / "assignments.json", json.dumps({
+                "assignments": assignments, "confirmedAssignments": invalid}))
+            with self.assertRaises(ValueError):
+                collector.Collector(self.root)
+        disks = [self.disk("sda", "SYNTH-A"), self.disk("sdb", "SYNTH-A")]
+        _, issues = collector.assign_slots(disks, assignments, assignments)
+        self.assertEqual(len(issues), 2)
+        self.assertTrue(all(disk["slot"] is None and disk["mapping"] == "unknown" for disk in disks))
+
+    def test_missing_source_invalidates_cached_value(self):
+        now = [1000]
+        instance = collector.Collector(self.root, clock=lambda: now[0])
+        self.assertEqual(instance.refresh("test", 60, lambda: 10), 10)
+        now[0] += 59
+        self.assertEqual(instance.refresh("test", 60, lambda: 20), 10)
+        now[0] += 1
+
+        def failure():
+            raise OSError("synthetic missing source")
+
+        self.assertIsNone(instance.refresh("test", 60, failure))
+        self.assertEqual(instance.sources["test"]["status"], "unavailable")
+        self.assertIsNone(instance.sources["test"]["capturedAt"])
+
+    def test_actual_core_grouping_and_per_thread_usage(self):
+        self.write("proc/stat", "cpu 20 0 0 180 0 0 0 0\ncpu0 10 0 0 90 0 0 0 0\ncpu4 10 0 0 90 0 0 0 0\n")
+        for index in (0, 4):
+            self.write(f"sys/devices/system/cpu/cpu{index}/topology/physical_package_id", "0")
+            self.write(f"sys/devices/system/cpu/cpu{index}/topology/core_id", "7")
+            self.write(f"sys/devices/system/cpu/cpu{index}/cpufreq/scaling_cur_freq", "3200000")
+        instance = collector.Collector(self.root / "state", self.root / "proc", self.root / "sys")
+        metrics = {}
+        self.assertEqual(instance.cpu(metrics)["cores"], [[0, 4]])
+        self.assertIsNone(metrics["cpu"])
+        self.write("proc/stat", "cpu 30 0 0 190 0 0 0 0\ncpu0 15 0 0 95 0 0 0 0\ncpu4 15 0 0 95 0 0 0 0\n")
+        instance.cpu(metrics)
+        self.assertEqual(metrics["core-0"], 50)
+        self.assertEqual(metrics["thread-4"], 50)
+        self.assertEqual(metrics["cpu-clock"], 3.2)
+
+    def test_inventory_and_export_have_no_serial_labels(self):
+        def runner(source, device=None):
+            if source == "lsblk":
+                return json.dumps({"blockdevices": [
+                    {"name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                     "serial": "SYNTH-PRIVATE-SERIAL", "model": "Synthetic disk", "mountpoints": [],
+                     "children": [{"name": "sda1", "type": "part", "size": 900, "mountpoints": []}]}
+                ]})
+            raise OSError("synthetic missing utility")
+
+        instance = collector.Collector(self.root / "state", self.root / "proc", self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        disk = inventory["disks"][0]
+        self.assertEqual(disk["slot"], "cage-1-bay-1")
+        self.assertEqual(inventory["snapshot"]["nodes"][1]["parents"][0]["id"], "sda")
+        association = next(a for a in inventory["snapshot"]["associations"] if
+                           "drive-cage-1-bay-1" in a["targets"])
+        self.assertEqual(association["nodes"], ["sda"])
+        self.assertIn("NOT physically confirmed", association["note"])
+        key = collector.metric_key(disk["stableId"], "read")
+        snapshot = {"channelKeys": {"disk-sda-read": key, "cpu": "cpu"},
+                    "metrics": {"disk-sda-read": 1.5, "cpu": None}}
+        instance.write(snapshot)
+        output = (self.root / "state" / "metrics.prom").read_text()
+        self.assertIn(key, output)
+        self.assertNotIn("SYNTH-PRIVATE-SERIAL", output)
+        self.assertNotIn('metric="cpu"', output)
+
+    def test_nvme_role_follows_mount_dependencies_not_number(self):
+        devices = [
+            {"name": "nvme1n1", "type": "disk", "serial": "SYNTH-A",
+             "children": [{"name": "nvme1n1p1", "type": "part", "children": [
+                 {"name": "mapper-root", "kname": "dm-1", "type": "lvm",
+                  "fstype": "ext4", "mountpoints": ["/"]}]}]},
+            {"name": "nvme0n1", "type": "disk", "serial": "SYNTH-B"},
+        ]
+
+        def runner(source):
+            return json.dumps({"blockdevices": devices}) if source == "lsblk" else '{"report":[]}'
+
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        disks = {disk["id"]: disk for disk in inventory["disks"]}
+        self.assertEqual(disks["nvme1n1"]["role"], "root")
+        self.assertNotIn("role", disks["nvme0n1"])  # /data use alone would not prove cache.
+        self.assertEqual(disks["nvme1n1"]["slot"], "M2_1")
+        association = next(a for a in inventory["snapshot"]["associations"] if "M2_1" in a["targets"])
+        self.assertEqual(association["nodes"], ["nvme1n1"])
+        self.assertIn("drive-M2_1", association["targets"])
+
+    def test_background_refresh_does_not_block_sampling_and_expires(self):
+        now = [1000]
+        instance = collector.Collector(self.root / "state", clock=lambda: now[0], background=True)
+        entered, release = threading.Event(), threading.Event()
+
+        def slow():
+            entered.set()
+            release.wait(timeout=3)
+            return 42
+
+        try:
+            self.assertIsNone(instance.refresh("slow", 60, slow))
+            self.assertTrue(entered.wait(timeout=1))
+            self.assertIsNone(instance.refresh("slow", 60, slow))
+            self.assertEqual(instance.sources["slow"]["status"], "pending")
+            release.set()
+            instance.pending["slow"].result(timeout=1)
+            self.assertEqual(instance.refresh("slow", 60, slow), 42)
+            now[0] += 121
+            entered.clear()
+            release.clear()
+            self.assertIsNone(instance.refresh("slow", 60, slow))
+            self.assertEqual(instance.sources["slow"]["status"], "stale")
+        finally:
+            release.set()
+            instance.close()
+
+    def test_readonly_lvm_cache_segments_work_without_kernel_device_numbers(self):
+        devices = [{"name": "nvme7n1", "type": "disk", "serial": "SYNTH-CACHE",
+                    "children": [{"name": "nvme7n1p1", "type": "part", "children": [
+                        {"name": "cache-data", "kname": "dm-2", "type": "lvm"}]}]}]
+        rows = [
+            {"vg_name": "vg-test", "lv_name": "[cache-pool]", "segtype": "cache-pool",
+             "lv_kernel_major": "-1", "lv_kernel_minor": "-1", "devices": "cache-data(0)"},
+            {"vg_name": "vg-test", "lv_name": "[cache-data]", "segtype": "linear",
+             "lv_kernel_major": "-1", "lv_kernel_minor": "-1", "devices": "/dev/nvme7n1p1(11)"},
+        ]
+        self.write("sys/class/block/dm-2/dm/name", "vg--test-cache--data")
+
+        def runner(source):
+            return json.dumps({"blockdevices": devices} if source == "lsblk" else {"report": [{"lv": rows}]})
+
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        self.assertEqual(inventory["disks"][0]["role"], "cache")
+        node = next(n for n in inventory["snapshot"]["nodes"] if n["id"] == "dm-2")
+        self.assertIn("/dev/vg-test/cache-data", node["aliases"])
+        self.assertIn("linear", node["summary"])
+
+    def test_live_network_group_keeps_port_pairing_unverified(self):
+        self.write("sys/class/net/bond0/bonding/mode", "active-backup 1")
+        self.write("sys/class/net/bond0/bonding/active_slave", "enp1")
+        self.write("sys/class/net/bond0/bonding/slaves", "enp1 enp2")
+        self.write("sys/class/net/enp1/device/vendor", "0x8086")
+        self.write("sys/class/net/enp2/device/vendor", "0x8086")
+
+        def runner(source):
+            return '{"blockdevices":[]}' if source == "lsblk" else '{"report":[]}'
+
+        instance = collector.Collector(self.root / "state", sys=self.root / "sys", runner=runner)
+        inventory = instance.inventory()
+        group = next(a for a in inventory["snapshot"]["associations"] if a["targets"] == ["LAN1", "LAN2"])
+        self.assertEqual(group["nodes"], ["bond0", "enp1", "enp2"])
+        self.assertIn("unverified", group["note"])
+
+    def test_smart_rejects_identity_change_and_has_no_wakeup_retry(self):
+        calls = []
+
+        def runner(source, device):
+            calls.append((source, device))
+            return json.dumps({"serial_number": "SYNTH-OTHER",
+                               "temperature": {"current": 50}})
+
+        instance = collector.Collector(self.root / "state", runner=runner)
+        with self.assertRaises(ValueError):
+            instance.smart("sda", "SYNTH-EXPECTED")
+        self.assertEqual(calls, [("smart", "sda")])
+
+    def test_complete_snapshot_handles_missing_sources_without_old_numbers(self):
+        fields = {"MemTotal": 1000, "MemFree": 100, "MemAvailable": 450,
+                  "Buffers": 30, "Cached": 200, "SReclaimable": 50, "Shmem": 20,
+                  "SUnreclaim": 40, "KernelStack": 10, "PageTables": 10,
+                  "SwapTotal": 100, "SwapFree": 80}
+        self.write("proc/meminfo", "\n".join(f"{key}: {value} kB" for key, value in fields.items()))
+        self.write("proc/stat", "cpu 10 0 0 90 0 0 0 0\ncpu0 10 0 0 90 0 0 0 0\n")
+        self.write("sys/class/hwmon/hwmon0/name", "k10temp")
+        self.write("sys/class/hwmon/hwmon0/temp1_label", "Tctl")
+        self.write("sys/class/hwmon/hwmon0/temp1_input", "48000")
+        now = [1000]
+        missing = [False]
+
+        def runner(source, device=None):
+            if source == "lsblk":
+                return '{"blockdevices":[]}'
+            if source == "lvs":
+                return '{"report":[]}'
+            if source == "gpu" and not missing[0]:
+                return "45, 1024, 8192, 55, 80, 35"
+            if source == "gpu-engines" and not missing[0]:
+                return "N/A, 20"
+            if source == "bmc" and not missing[0]:
+                return "FAN1 | 900 | RPM | ok\nFAN2 | 850 | RPM | ok\nFAN3 | 800 | RPM | ok\nMB Temp | 40 | degrees C | ok\nOnboard LAN Temp | 60 | degrees C | ok"
+            raise OSError("synthetic missing device")
+
+        instance = collector.Collector(self.root / "state", self.root / "proc", self.root / "sys",
+                                       runner=runner, clock=lambda: now[0])
+        first = instance.collect()
+        self.assertEqual(first["metrics"]["temp-cpu"], 48)
+        self.assertEqual(first["metrics"]["gpu-dedicated"], 1)
+        self.assertEqual(first["capacities"]["gpu-dedicated"], 8)
+        self.assertEqual(first["metrics"]["fan-hub"], 800)
+        self.assertIsNone(first["metrics"]["gpu-encode"])
+        self.assertEqual(first["sources"]["gpu"]["capturedAt"], collector.utc(1000))
+        missing[0] = True
+        now[0] += 60
+        second = instance.collect()
+        self.assertIsNone(second["metrics"]["gpu-util"])
+        self.assertIsNone(second["metrics"]["fan-hub"])
+        self.assertEqual(second["sources"]["gpu"]["status"], "unavailable")
+        self.assertIsNone(second["capacities"]["gpu-dedicated"])
+        instance.write(second)
+        text = (self.root / "state" / "snapshot.json").read_text(encoding="utf-8")
+        self.assertNotIn("NaN", text)
+        self.assertNotIn("Infinity", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

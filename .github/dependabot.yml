@@ -54,7 +54,11 @@ updates:
       # Immich's postgres image is version-coupled to Immich itself (vector
       # extension compatibility window). Bump only alongside Immich upgrades.
       # Same applies to pgvecto.rs — a past auto-bump to 0.4 took Immich down.
+      # Dependabot reports the ghcr.io image as "immich-app/postgres", so the
+      # registry-less name is what actually matches (PR #25 slipped through
+      # with only the prefixed name listed).
       - dependency-name: "ghcr.io/immich-app/postgres"
+      - dependency-name: "immich-app/postgres"
       - dependency-name: "tensorchord/pgvecto-rs"
 
   # GitHub Actions workflow pins
