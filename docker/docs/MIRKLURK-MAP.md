@@ -399,7 +399,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.36** and **fd2b:92df:1a5b:1::24**, not
+`compose_proxy` addresses **192.168.128.18** and **fd2b:92df:1a5b:1::12**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -452,6 +452,23 @@ On 2026-11-14 the same NPM container restarted at 02:22 UTC and acquired
 .36 / ::24; Prowlarr owns the stale .23 / ::17 pair. Replace only those
 two entries after fresh exclusive ownership checks. Keep the accepted
 21abd3a images and recreate only web; no NPM API apply is indicated.
+On 2026-11-21 read-only verification found NPM recreated on November 19
+at 10:07 UTC, now exclusively owning .18 / ::12; Stirling-PDF owns the
+stale .36 / ::24 pair. Replace only those exact trusted entries after fresh
+ownership checks and reviewed checks/merge. The current map images were
+rebuilt on November 15 with unchanged 21abd3a content: retain actual web
+`sha256:b023b2e6b225025279e42054c88f89b165dacd83ccb99e7217de6dee8a6b1954`
+and uploads
+`sha256:2a4dc07b9b304ea37d22fe0823adb2cf5b1ad254339709f6efbcad0b908901e7`,
+not the historical November 14 image IDs. Use ordinary clean canonical
+guards and the existing exclusive shared lock, a same-current-image WEB-ONLY
+override, unchanged mounts/hardening/timers and normal full-byte,
+independent public and sole sharing/identity acceptance. Preserve the
+November 21 whole-Compose updater failure (homepage-inventory build
+self-tests failed); do not retry/reset it or redeploy that service as part
+of exact-peer maintenance. Review all intervening upstream changes before
+canonical fast-forward; stop if they affect the narrow deployment contract.
+Do not use historical frozen-edit fingerprints to authorize new edits.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
