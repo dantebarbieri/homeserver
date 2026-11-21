@@ -17,7 +17,7 @@
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINH0/WsgjiI/Q3tlBsWudx9L3cApJOFxYl1lQP7Dd6/f Dante@DESKTOP-DD5K2PO" # Dante's Windows PC (DESKTOP-DD5K2PO)
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICj+eUZOCGI1eoaazJ7tXLFT9f8ElTlponq8NBBahl01 dante@DESKTOP-DD5K2PO-wsl" # Dante's WSL Ubuntu on DESKTOP-DD5K2PO
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+RoHi5LOQGjERpsKhtgCkKzbm60ccYf1OzJKmin5B3 Dante@DESKTOP-13QOG4J homeserver 2026-07" # Dante's Windows PC (DESKTOP-13QOG4J)
-        "from=\"192.168.50.0/24\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHZnzZVHJ+gDk4wPC4K/rgJYRMaUBNfscgYLBFDGftJy dante@AI-Mac-Studio" # Mac Studio (LAN only)
+        "from=\"192.168.50.0/24\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICyal4lyCBCbL5DzWd85KyppesDEXfQZWO8sLeOjc2Dc dantebarbieri@no-face" # Mac Studio "No-Face" (LAN only)
       ];
       packages = with pkgs; [
         tree

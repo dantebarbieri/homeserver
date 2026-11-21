@@ -33,20 +33,30 @@ install), [`ai/README.md`](ai/README.md) and [`ai/SPEECH.md`](ai/SPEECH.md)
 
 Dante bought this Mac Studio as a compute companion for the homeserver.
 
+> **Reinstalled 2026-11-21 as `No-Face`** (*Dante*: new hardware, fresh
+> macOS install, new admin account). So far only the hostname, SSH access and
+> DNS name below have been redone. Everything else in this file describes the
+> previous install and is **not yet provisioned** on this one (worker
+> accounts, transfer tunnel, Tdarr node, speech/Ollama services, shell
+> dotfiles); re-verify each piece as it is restored. Docker services that
+> still target `ai-studio.home.arpa` now reach this Mac but will fail its new
+> SSH host keys until re-provisioned.
+
 | | |
 |---|---|
 | Hardware | Mac Studio (`Mac17,14`, MHL64LL/A): Apple M5 Max, 18-core CPU, 36 GB unified memory, 512 GB SSD |
 | OS | macOS 27.2.1, FileVault on |
-| Network | Ethernet; router DHCP reservation `192.168.50.140` (*Dante*); DNS name `ai-studio.home.arpa` |
-| Admin account | `dante`. Membership in macOS's `admin` group is what grants sudo; macOS does not use `wheel` for that |
+| Names | `ComputerName` and `LocalHostName` `No-Face` (Apple's mixed-case style, *Dante*); `HostName` left unset as on a fresh install. Part of Dante's Ghibli naming theme |
+| Network | Ethernet `BC:89:C1:E2:01:2B`; router DHCP reservation `192.168.50.80` (*Dante*); DNS name `no-face.home.arpa`, with `ai-studio.home.arpa` kept as a transitional CNAME to it |
+| Admin account | `dantebarbieri`. Membership in macOS's `admin` group is what grants sudo; macOS does not use `wheel` for that |
 | Remote access | SSH (port 22) and Screen Sharing (VNC, port 5900), both enabled by *Dante* |
 
 | From | How | Key |
 |---|---|---|
-| Windows PC | `ssh ai-studio` -> `ai-studio.home.arpa` (*Dante* updated the profile) | `~/.ssh/id_ed25519` |
-| MacBook Pro | Existing `ai-studio` SSH profile; Screen Sharing app. Left unchanged at *Dante's* request | The MacBook's own key |
-| Homeserver (`danteb`) | `ssh studio` -> `ai-studio.home.arpa` | `~/.ssh/id_ed25519_studio` |
-| Studio | `ssh homeserver` -> `homeserver.home.arpa` (port 28) | `~/.ssh/id_ed25519` |
+| Windows PC | `ssh no-face` (or `ssh ai-studio`) -> `no-face.home.arpa`, `HostKeyAlias no-face` | `~/.ssh/id_ed25519` |
+| MacBook Pro | Not yet updated for the reinstall | The MacBook's own key |
+| Homeserver (`danteb`) | `ssh studio` (or `ssh no-face`) -> `no-face.home.arpa`, `HostKeyAlias no-face` | `~/.ssh/id_ed25519_studio` |
+| Studio | `ssh homeserver` -> `homeserver.home.arpa` (port 28) | `~/.ssh/id_ed25519` (`dantebarbieri@no-face`) |
 
 ## Facts any replacement must handle
 
@@ -146,18 +156,20 @@ don't need to save random IPs in the server or the Mac".
 
 **Current**
 
-- AdGuard (on the server) rewrites `ai-studio.home.arpa` to `.140` and
-  `homeserver.home.arpa` to `.100`. `home.arpa` is the suffix reserved for home
-  networks (RFC 8375).
+- AdGuard (on the server) rewrites `no-face.home.arpa` to `.80`,
+  `ai-studio.home.arpa` to `no-face.home.arpa` (transitional CNAME), and both
+  `calcifer.home.arpa` and `homeserver.home.arpa` to `.100`. `home.arpa` is the
+  suffix reserved for home networks (RFC 8375).
 - On the Mac, [`home.arpa`](home.arpa) installed as `/etc/resolver/home.arpa`
   sends only that suffix to AdGuard.
 - Verified resolving on Windows, the server host, Docker containers (Bazarr,
   NPM) and the Mac.
-- Admin SSH profiles now use the names on Windows, the Studio and the
-  homeserver. The MacBook profile was deliberately left unchanged. This
-  migration does not change the worker tunnel or any service endpoint.
-  The Studio and server each retain their previous admin profile at
-  `~/.ssh/config.before-home-arpa-20261113`.
+- Admin SSH profiles use the names on Windows, the Studio and the
+  homeserver; the MacBook profile has not been updated for No-Face. The
+  server's profile is managed by Home Manager (`nixos/home/danteb.nix`) and
+  the Studio's host key is pinned in `nixos/modules/ssh.nix`. Windows and the
+  server keep their pre-No-Face profiles at
+  `~/.ssh/config.before-no-face-20261121`.
 
 **Guidance:** use these names in new configuration (web services, Bazarr's
 Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
@@ -165,16 +177,17 @@ Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
 - AdGuard runs on the server, so anything needed to repair the server should
   keep an IP fallback. From the Studio:
   `ssh -o HostName=192.168.50.100 homeserver`. From the server:
-  `ssh -o HostName=192.168.50.140 studio`. From Windows:
-  `ssh -o HostName=192.168.50.140 ai-studio`.
+  `ssh -o HostName=192.168.50.80 studio`. From Windows:
+  `ssh -o HostName=192.168.50.80 no-face`.
 - Windows also lists 1.1.1.1 as a DNS server, which cannot answer `home.arpa`,
-  so lookups can fail intermittently. Its old short-name `hosts` entry does
-  not cover the new FQDN; the explicit IP override above bypasses DNS.
-- Keep host-key verification when changing names. Windows retains
-  `HostKeyAlias ai-studio`, the server retains `HostKeyAlias studio`, and the
-  Studio uses `HostKeyAlias [192.168.50.100]:28` to match its existing
-  port-qualified known-host entry. That last value is the pinned identity,
-  not the network destination; `HostName` controls DNS resolution.
+  so lookups can fail intermittently. Its stale `hosts` entry
+  (`192.168.50.140 ai-studio`) should be removed; the explicit IP override
+  above bypasses DNS.
+- Keep host-key verification when changing names. Windows and the server use
+  `HostKeyAlias no-face`, and the Studio uses
+  `HostKeyAlias [homeserver.home.arpa]:28` for the server. That value is the
+  pinned identity, not the network destination; `HostName` controls DNS
+  resolution.
 
 ## Exposing Studio services
 

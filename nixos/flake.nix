@@ -20,10 +20,16 @@
 
   outputs =
     { nixpkgs, ... }@inputs:
-    {
-      nixosConfigurations.homeserver = nixpkgs.lib.nixosSystem {
+    let
+      system = nixpkgs.lib.nixosSystem {
         specialArgs = { inherit inputs; };
         modules = [ ./configuration.nix ];
       };
+    in
+    {
+      # `homeserver` is the name scripts and CI use. Plain `nixos-rebuild`
+      # picks the attribute matching the hostname, so also export `calcifer`.
+      nixosConfigurations.homeserver = system;
+      nixosConfigurations.calcifer = system;
     };
 }
