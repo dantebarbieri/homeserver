@@ -29,18 +29,17 @@
   programs.ssh = {
     enable = true;
     enableDefaultConfig = false;
-    matchBlocks = {
-      studio = {
-        host = "studio no-face";
-        hostname = "no-face.home.arpa";
-        user = "dantebarbieri";
-        identityFile = "~/.ssh/id_ed25519_studio";
-        identitiesOnly = true;
-        extraOptions.HostKeyAlias = "no-face";
+    settings = {
+      "Host studio no-face" = {
+        HostName = "no-face.home.arpa";
+        User = "dantebarbieri";
+        IdentityFile = "~/.ssh/id_ed25519_studio";
+        IdentitiesOnly = true;
+        HostKeyAlias = "no-face";
       };
       "*" = {
-        identityFile = "~/.ssh/id_ed25519";
-        addKeysToAgent = "yes";
+        IdentityFile = "~/.ssh/id_ed25519";
+        AddKeysToAgent = "yes";
       };
     };
   };
