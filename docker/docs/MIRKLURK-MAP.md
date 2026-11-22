@@ -258,7 +258,7 @@ cached immutable like `app.*.js` / `style.*.css`.
 | Health | Each container's `/healthz`; web depends on healthy uploads |
 
 The 0.9.6.5 core pin adds version-gated Spider Silk, Grilled Spider Meat,
-the spider scroll, Mirk Lurker and Deathlob definitions, revised Geomancer
+Spider Meat, Mirk Lurker and Deathlob definitions, revised Geomancer
 stats, and rendering of saved spider caves and webbed treasure. It does not
 rewrite authoritative saved positions, terrain or health grids. There are
 74 environment PNGs (including the special cave and updated web/treasure art)
