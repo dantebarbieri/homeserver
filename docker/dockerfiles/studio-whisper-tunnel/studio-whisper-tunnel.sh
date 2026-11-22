@@ -33,4 +33,4 @@ exec ssh -F /dev/null -N -T \
     -o ForwardAgent=no \
     -o ForwardX11=no \
     -L "0.0.0.0:$port:127.0.0.1:$port" \
-    "${STUDIO_USER:-_bazarr}@${STUDIO_HOST:-ai-studio.home.arpa}"
+    "${STUDIO_USER:-_bazarr}@${STUDIO_HOST:-no-face.home.arpa}"
