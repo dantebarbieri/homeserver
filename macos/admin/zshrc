@@ -30,5 +30,10 @@ if [[ -r ~/.zshrc.local ]]; then
 fi
 
 if [[ -o login && -t 1 ]]; then
-  /opt/homebrew/bin/fastfetch
+  # Apple logo + padding plus the longest info lines measured 103 columns.
+  if (( COLUMNS > 0 && COLUMNS < 104 )); then
+    /opt/homebrew/bin/fastfetch --logo-position top
+  else
+    /opt/homebrew/bin/fastfetch
+  fi
 fi

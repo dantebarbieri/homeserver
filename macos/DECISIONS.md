@@ -153,7 +153,8 @@ devices.
   [`shell/prompt.zsh`](../shell/prompt.zsh) (reads `user on host in dir`, the
   host coloured per Ghibli character) which `zshrc` sources after Zim.
   `zshrc` runs fastfetch only for interactive login terminals, so scripted SSH
-  and `scp` stay clean. Zim downloads its modules on the first shell.
+  and `scp` stay clean. Like calcifer, it puts the logo above the info on
+  terminals narrower than the side-by-side layout (104 columns here). Zim downloads its modules on the first shell.
   Machine-specific or secret settings belong in untracked
   `~/.zprofile.local` / `~/.zshrc.local`.
 - fastfetch keeps its default Apple logo for now; Dante will supply artwork for
