@@ -78,7 +78,8 @@ effective() {
         grep -E '^(allowtcpforwarding|permitopen|permitlisten|permittty|forcecommand|authorizedkeysfile|maxsessions) ' |
         sort
 }
-admin_policy="$(effective /etc/ssh/sshd_config dante)"
+admin=dantebarbieri  # the Mac admin account, whose SSH policy must not change
+admin_policy="$(effective /etc/ssh/sshd_config "$admin")"
 check() {
     /usr/sbin/sshd -t -f "$1" &&
     [[ "$(effective "$1" "$account")" == "allowtcpforwarding local
@@ -88,7 +89,7 @@ maxsessions 0
 permitlisten none
 permitopen 127.0.0.1:$port
 permittty no" ]] &&
-    [[ "$(effective "$1" dante)" == "$admin_policy" ]]
+    [[ "$(effective "$1" "$admin")" == "$admin_policy" ]]
 }
 check "$work/sshd_config" || {
     echo "Candidate sshd policy is invalid or affects other accounts:" >&2

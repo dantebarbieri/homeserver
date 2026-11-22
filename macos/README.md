@@ -18,7 +18,7 @@ pieces an agent chose, and how to remove each piece.
 | Component | Identity / boundary |
 |---|---|
 | Native speech, Ollama, Tdarr, SSH transport | `_studio`, private `/var/lib/studio-worker` home, no admin/wheel/SSH-login access |
-| Mac administrative SSH | `dante`; never lend this account's private key to `_studio` |
+| Mac administrative SSH | `dantebarbieri`; never lend this account's private key to `_studio` |
 | Linux SSH transport | `studio-tunnel`, nologin, dedicated key, no shell/PTY/SFTP, reverse/agent/Unix-socket forwarding |
 | Linux SMB account | `studio`; original media read-only, only the dedicated native job cache writable |
 | Linux fixed TCP relays | UID/GID 65534, read-only root, no capabilities, no-new-privileges, no mounts or credentials |

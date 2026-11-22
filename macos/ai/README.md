@@ -219,8 +219,11 @@ pinned Studio host key. Only Bazarr shares its Docker network; no port is
 published and NPM does not proxy it. Anything on that network can use the
 unauthenticated adapter, so attach nothing else to it. Never expose port 9000
 on the LAN or WAN; a private DNS name does not authenticate anyone.
-The tunnel resolves `ai-studio.home.arpa` through AdGuard at `192.168.50.100`;
-the server's public fallback resolvers cannot answer that private name.
+The tunnel resolves `no-face.home.arpa` through AdGuard at `192.168.50.100`;
+the server's public fallback resolvers cannot answer that private name. It
+avoids the transitional `ai-studio` CNAME: AdGuard answers its AAAA query with
+NXDOMAIN, which fails the whole lookup in Alpine's musl resolver. `ai-studio`
+remains only the `HostKeyAlias` naming the pinned key in `known_hosts`.
 The main Compose file reserves `10.253.240.8/29` for this network because the
 default Docker pools are exhausted; it does not overlap the transfer network's
 `10.253.240.0/29` or the host's other routes.
@@ -255,7 +258,7 @@ Set it up in this order, keeping an admin SSH session to the Studio open:
    checkout of this directory, run
    `sudo ./provision-bazarr-forwarding.sh id_ed25519.pub`. The script creates
    or reuses `_bazarr`, then checks a candidate sshd configuration (syntax,
-   `_bazarr`'s effective forwarding policy, and that `dante`'s policy is
+   `_bazarr`'s effective forwarding policy, and that `dantebarbieri`'s policy is
    unchanged) before installing anything. It re-checks the live
    configuration afterwards and removes the drop-in if that fails. macOS
    starts sshd per connection, so a bad drop-in would block new SSH logins.
