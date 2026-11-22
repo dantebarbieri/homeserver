@@ -78,8 +78,9 @@ Keep wg-easy running as a fallback until the off-LAN checks below pass.
 
 - **calcifer:** native NixOS daemon, managed by
   [`nixos/modules/tailscale.nix`](nixos/modules/tailscale.nix); after deployment,
-  run `sudo tailscale up` and complete browser login. Its existing DNS and
-  key-only SSH on port 28 are unchanged.
+  run `sudo tailscale up --accept-dns=false --accept-routes=false --ssh=false`
+  and complete browser login. Explicit flags preserve existing DNS and
+  key-only SSH on port 28 during first enrollment.
 - **no-face:** boot-time `tailscaled` plus `wake-pc`; see
   [`macos/DECISIONS.md`](macos/DECISIONS.md) for the installed paths and
   startup details. Its BMC-only subnet route is `192.168.50.50/32`.

@@ -53,10 +53,16 @@ new module must be `git add`ed before it takes effect.
 
 `modules/tailscale.nix` runs `tailscaled` natively at boot, independently of
 Docker. It preserves the server's DNS and OpenSSH on port 28, does not accept
-subnet routes, and does not advertise the LAN or an exit node. Authentication
-is a one-time `sudo tailscale up` browser login to the same hosted tailnet as
-No-Face and Windows; no auth key belongs in Nix or Git. State persists under
-`/var/lib/tailscale`. The module uses `extraSetFlags`, not `extraUpFlags`
+subnet routes, and does not advertise the LAN or an exit node. Authenticate
+once to the same hosted tailnet as No-Face and Windows:
+
+```sh
+sudo tailscale up --accept-dns=false --accept-routes=false --ssh=false
+```
+
+The initial `up` must repeat these flags: its defaults can overwrite
+preferences set before enrollment. No auth key belongs in Nix or Git.
+State persists under `/var/lib/tailscale`. The module uses `extraSetFlags`, not `extraUpFlags`
 (the latter only applies when an `authKeyFile` is configured).
 
 No additional router forwarding, globally trusted interface, or UDP firewall
