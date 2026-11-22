@@ -246,17 +246,15 @@ wake the Windows PC like the server's `wake-pc`. The tailnet-wide migration
   everything else only after FileVault is unlocked. It copies the binary to
   `/usr/local/bin/tailscaled`, which `brew upgrade` does not update: rerun
   `sudo tailscaled install-system-daemon` after upgrading.
-- Logged in as machine `no-face`, advertising only `192.168.50.50/32` (the
-  BMC), with `--accept-routes=false --accept-dns=false` so local routing and
-  DNS stay on the LAN and AdGuard. The route needs approval in the admin
-  console.
-- macOS `tailscaled` does not SNAT subnet-route traffic, so the BMC would reply
-  via the router. `com.danteb.tailscale-bmc-route`
-  ([script](tailscale/tailscale-bmc-route.sh)) turns on IPv4 forwarding and
-  keeps the pf anchor `com.apple/250.danteb-tailscale-bmc` loaded: NAT only
-  for `100.64.0.0/10` to `192.168.50.50` out `en0`. It re-checks every minute
-  because a reload of `/etc/pf.conf` can flush `com.apple` sub-anchors. pf was
-  disabled before; enabling it adds no filter rules.
+- Logged in as machine `no-face` (`100.94.21.37`), advertising only
+  `192.168.50.50/32` (the BMC; route approved 2026-11-21), with
+  `--accept-routes=false --accept-dns=false` so local routing and DNS stay on
+  the LAN and AdGuard.
+- No NAT, IP forwarding or pf rules are needed: on macOS `tailscaled` serves
+  subnet routes through its userspace network stack, so the BMC sees ordinary
+  connections from `192.168.50.80`. Verified from DANTE-PC: its route to
+  `192.168.50.50` is via the Tailscale interface and HTTPS returns 200. (A pf
+  NAT helper tried first matched no packets and was removed.)
 - `/usr/local/bin/wake-pc` is [`scripts/wake-pc.py`](../scripts/wake-pc.py)
   with the CLT's `/usr/bin/python3`, the same packaging as `wake-pc.nix`:
   identical defaults, `--wait` and exit codes. No-Face is on the same LAN, so
@@ -517,7 +515,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, Tdarr launcher and plists |
 | `macos/install/` | Historical one-time installers from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
-| `macos/tailscale/`, `macos/install/install-tailscale.sh` | BMC subnet-route NAT helper and its plist; Tailscale and `wake-pc` installer |
+| `macos/install/install-tailscale.sh` | Tailscale and `wake-pc` installer |
 | `macos/ai/` | Whisper adapter, Ollama and Whisper plists, `_bazarr` sshd drop-in and provisioning script, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
 | `docker/compose.ai.yml`, `docker/dockerfiles/studio-whisper-tunnel/` | Bazarr's SSH forward to the Studio's Whisper adapter |
@@ -534,7 +532,6 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Bazarr forwarding account | `_bazarr`, `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf`, `/etc/ssh/bazarr-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#bazarr-transport-and-cutover) |
 | Maintenance forwarding account | `_arrmaint`, `/etc/ssh/sshd_config.d/003-arr-maint-forwarding.conf`, `/etc/ssh/arr-maint-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#ollama-transport) |
 | Tailscale | `com.tailscale.tailscaled`, `/usr/local/bin/tailscaled`, state in `/Library/Tailscale/`; Homebrew `tailscale` | `sudo tailscale logout`, `sudo tailscaled uninstall-system-daemon`, `brew uninstall tailscale`, delete the machine in the admin console |
-| BMC route NAT | `com.danteb.tailscale-bmc-route`, `/usr/local/libexec/tailscale-bmc-route.sh`, `/var/log/tailscale-bmc-route.log` | `bootout`, delete the plist and script, `sudo pfctl -a com.apple/250.danteb-tailscale-bmc -F all`, `sudo sysctl -w net.inet.ip.forwarding=0` |
 | wake-pc | `/usr/local/bin/wake-pc` | Delete it |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
@@ -575,7 +572,7 @@ is not a leftover model download.
 ## Open items
 
 1. Cold-boot test, including the FileVault pre-boot SSH unlock, then check
-   Ollama, Whisper, `tailscaled` and the BMC route come back on their own.
+   Ollama, Whisper and `tailscaled` come back on their own.
 2. Prune retired SSH keys on the Studio (and the server if retired there too).
    Remove the temporary `copilot` account (command at the top).
 3. Use `home.arpa` for future service integrations. Admin SSH migration is
