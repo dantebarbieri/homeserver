@@ -261,6 +261,11 @@ wake the Windows PC like the server's `wake-pc`. The tailnet-wide migration
   with the CLT's `/usr/bin/python3`, the same packaging as `wake-pc.nix`:
   identical defaults, `--wait` and exit codes. No-Face is on the same LAN, so
   the broadcast default works. Tested only with a dummy MAC to loopback.
+  The default MAC is DANTE-PC's wired NIC, which must be plugged in: on
+  2026-11-21 it was disconnected and the PC was on Wi-Fi (`.190`), so a magic
+  packet could not wake it and `--wait`'s `.180` default would time out. Keep
+  the defaults; to check reachability over the tailnet instead, use
+  `--wait --wait-host 100.113.62.81` (DANTE-PC's Tailscale address).
 
 ## Offload speech-to-text (Whisper)
 
