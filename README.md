@@ -96,8 +96,12 @@ In the hosted admin console, disable key expiry for trusted infrastructure
 nodes that must remain reachable unattended (revoke lost devices promptly).
 Restrict tailnet access to your administrator identity/devices. Do not make
 calcifer's AdGuard the tailnet's sole global DNS server: recovery should
-work without it. MagicDNS names require client DNS acceptance; the numeric
-Tailscale addresses shown by `tailscale ip -4` avoid that dependency.
+work without it. MagicDNS is on, so clients that accept Tailscale DNS (the
+Windows/macOS/phone default) reach `no-face`, `calcifer` and `dante-pc` by
+name, or as `<name>.<tailnet>.ts.net`. The same name works at home: peers on
+the LAN connect directly, not through a relay. calcifer and No-Face do not
+accept Tailscale DNS, so use the numeric addresses from `tailscale ip -4`
+there.
 
 From a remote client on cellular or another network, **with wg-easy off on
 that client**, verify:

@@ -62,7 +62,7 @@ Dante bought this Mac Studio as a compute companion for the homeserver.
 
 | From | How | Key |
 |---|---|---|
-| Windows PC | `ssh no-face` (or `ssh ai-studio`) -> `no-face.home.arpa`, `HostKeyAlias no-face` | `~/.ssh/id_ed25519` |
+| Windows PC | `ssh no-face` (or `ssh ai-studio`) -> MagicDNS `no-face.<tailnet>.ts.net`, or `no-face.local` while the PC's Tailscale is stopped; `HostKeyAlias no-face` | `~/.ssh/id_ed25519` |
 | MacBook Pro | Not yet updated for the reinstall | The MacBook's own key |
 | Homeserver (`danteb`) | `ssh studio` (or `ssh no-face`) -> `no-face.home.arpa`, `HostKeyAlias no-face` | `~/.ssh/id_ed25519_studio` |
 | Studio | `ssh homeserver` -> `homeserver.home.arpa` (port 28) | `~/.ssh/id_ed25519` (`dantebarbieri@no-face`) |
@@ -185,6 +185,14 @@ don't need to save random IPs in the server or the Mac".
   the Studio's host key is pinned in `nixos/modules/ssh.nix`. Windows and the
   server keep their pre-No-Face profiles at
   `~/.ssh/config.before-no-face-20261121`.
+- Windows's `ssh no-face` no longer uses AdGuard (*Dante*, 2026-11-21:
+  "preferably the same one so that it works on lan or tailscale with one
+  hostname"). It uses the MagicDNS name, which works at home too because
+  Tailscale connects LAN peers directly (7 ms over Wi-Fi). A `Match` block
+  falls back to Bonjour's `no-face.local` when
+  `~/.ssh/tailscale-running.cmd` (`tailscale status --peers=false`) fails.
+  Both paths were verified, including with Tailscale stopped. The previous
+  profile is at `~/.ssh/config.before-magicdns-20261121`.
 
 **Guidance:** use these names in new configuration (web services, Bazarr's
 Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
@@ -192,8 +200,8 @@ Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
 - AdGuard runs on the server, so anything needed to repair the server should
   keep an IP fallback. From the Studio:
   `ssh -o HostName=192.168.50.100 homeserver`. From the server:
-  `ssh -o HostName=192.168.50.80 studio`. From Windows:
-  `ssh -o HostName=192.168.50.80 no-face`.
+  `ssh -o HostName=192.168.50.80 studio`. Windows's `ssh no-face` needs no
+  override (above).
 - Windows also lists 1.1.1.1 as a DNS server, which cannot answer `home.arpa`,
   so lookups can fail intermittently. Its stale `hosts` entry
   (`192.168.50.140 ai-studio`) should be removed; the explicit IP override
