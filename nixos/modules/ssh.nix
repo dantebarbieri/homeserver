@@ -28,6 +28,12 @@
     '';
   };
 
+  # Mac Studio "No-Face"; the Home Manager `studio` alias uses HostKeyAlias no-face.
+  programs.ssh.knownHosts.no-face = {
+    hostNames = [ "no-face" "no-face.home.arpa" "192.168.50.80" ];
+    publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPSDYpi6LjeJ4Mc5diZQ8W6w6oZHdBtAcxUxtkI1C614";
+  };
+
   # fail2ban — rate-limits brute-force SSH attempts on port 28
   # Complements endlessh (honeypot on port 22) and key-only auth as defense-in-depth
   services.fail2ban = {

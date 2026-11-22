@@ -2,8 +2,9 @@
 { ... }:
 
 {
-  # Hostname
-  networking.hostName = "homeserver";
+  # Hostname (Ghibli theme: drives the house and runs hot). The flake also
+  # exports this system as `homeserver`, the repository's name for it.
+  networking.hostName = "calcifer";
 
   # We will define addresses in systemd-networkd (no global DHCP)
   networking.useDHCP = false;

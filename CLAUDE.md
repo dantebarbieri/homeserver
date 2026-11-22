@@ -176,11 +176,11 @@ Defined in `nixos/docker-functions.zsh` and available system-wide on the server 
 
 ## NixOS (`nixos/`)
 
-`nixos/flake.nix` builds the homeserver (hostname: `homeserver`, IP: `192.168.50.100/24`) from `configuration.nix`, which imports one module per concern from `nixos/modules/`. `flake.lock` pins nixpkgs and Home Manager; a daily GitHub Actions job (`nixos-flake-update.yml`) bumps it after evaluation and tests pass. See `nixos/CLAUDE.md` for where things go.
+`nixos/flake.nix` builds the homeserver (hostname: `calcifer`, IP: `192.168.50.100/24`; flake attribute `homeserver`, also exported as `calcifer`) from `configuration.nix`, which imports one module per concern from `nixos/modules/`. `flake.lock` pins nixpkgs and Home Manager; a daily GitHub Actions job (`nixos-flake-update.yml`) bumps it after evaluation and tests pass. See `nixos/CLAUDE.md` for where things go.
 
 Key system services managed by NixOS:
 - **ZSH + zimfw** — default shell with plugin manager, Docker convenience functions in `nixos/docker-functions.zsh`, and nix helper functions — all sourced via `interactiveShellInit`
-- **Home Manager** — integrated NixOS module; `nixos/home/danteb.nix` owns `danteb`'s `.zshrc`, `.zimrc` and git identity. It is public and lands in the Nix store: secrets go in untracked `~/.zprofile.local` / `~/.zshrc.local`, never in Nix files
+- **Home Manager** — integrated NixOS module; `nixos/home/danteb.nix` owns `danteb`'s `.zshrc`, `.zimrc`, git identity and `~/.ssh/config`. It is public and lands in the Nix store: secrets go in untracked `~/.zprofile.local` / `~/.zshrc.local`, never in Nix files
 - **Docker daemon** — IPv6 (ip6tables NAT), CDI, live-restore disabled for graceful shutdown; use `sudo safe-reboot` to wait for backups/maintenance (supports `--check`, `--status`, `--cancel`)
 - **Firewall** — explicitly opened ports for HTTP/HTTPS, Plex, Coturn, LiveKit, game servers
 - **Auto-update timer** — daily at 04:00, pulls monorepo from GitHub (`/srv/homeserver`), then `cd docker && docker compose pull && build && up -d`

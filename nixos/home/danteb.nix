@@ -1,4 +1,5 @@
-# Home Manager configuration for danteb: zsh (with Zim) and git identity.
+# Home Manager configuration for danteb: zsh (with Zim), git identity and SSH
+# client aliases.
 #
 # Everything here is copied into the world-readable Nix store, so never put
 # secrets in this file. Keep them in ~/.zprofile.local (login shells) or
@@ -21,6 +22,25 @@
     signing = {
       key = "~/.ssh/id_ed25519.pub";
       format = "ssh";
+    };
+  };
+
+  # The Studio's host key is pinned system-wide in modules/ssh.nix.
+  programs.ssh = {
+    enable = true;
+    enableDefaultConfig = false;
+    settings = {
+      "Host studio no-face" = {
+        HostName = "no-face.home.arpa";
+        User = "dantebarbieri";
+        IdentityFile = "~/.ssh/id_ed25519_studio";
+        IdentitiesOnly = true;
+        HostKeyAlias = "no-face";
+      };
+      "*" = {
+        IdentityFile = "~/.ssh/id_ed25519";
+        AddKeysToAgent = "yes";
+      };
     };
   };
 
