@@ -581,7 +581,7 @@ class HealthCleanupTests(unittest.TestCase):
                 self.assertIn(text, output)
                 self.assertEqual("NTFY:" in result.stdout, sent, output)
                 if sent:
-                    self.assertIn("Reboot needed on homeserver", result.stdout)
+                    self.assertIn("Reboot needed on calcifer", result.stdout)
                     self.assertIn("arrows_counterclockwise,computer", result.stdout)
 
     def test_plex_album_check_unit_and_timer(self):
@@ -696,7 +696,7 @@ class HealthCleanupTests(unittest.TestCase):
                  absent=["Hans Zimmer"], known_after=["Daft Punk - Alive"], alerted_after="fresh"),
             dict(label="new merge",
                  rows=clean + ajr, sent=True,
-                 text=[header, ajr_line, repair, "Merged Plex albums on homeserver",
+                 text=[header, ajr_line, repair, "Merged Plex albums on calcifer",
                        "warning,musical_note"],
                  known_after=["AJR - Neotheater"], alerted_after="fresh"),
             dict(label="already reported",
