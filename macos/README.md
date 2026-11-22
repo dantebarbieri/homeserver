@@ -112,13 +112,14 @@ Required installation ownership:
 | Worker home | `_studio`, 0700 |
 | `start-tdarr.sh` and `mount-studio-share` in the worker home | `_studio` 0755, written by the worker itself (inside the 0700 home) |
 | Worker `tdarr-api-key` and SMB credential file | `_studio`, 0600 |
+| Worker `tdarr-start-paused` | `_studio`, 0600; `false` enables automatic resume, `true` starts paused |
 | Worker `tdarr/Custom` modules (`hevc-offload-v2.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`) | `_studio` 0644, written by the worker itself. Root ownership would not protect them (the worker owns their directory); the server re-validates everything the Mac produces |
 
 Never put root-executed launcher code or root-opened log paths in the
 worker-writable home. Copy/extract the native ARM64 bundle **as the worker**,
 not with a recursive root chown of a worker-writable tree. Its executable is
 `/var/lib/studio-worker/tdarr/Tdarr_Node` and its version must match the
-server's Tdarr (3.07.00 at the time of writing); the installer puts the three
+server's Tdarr (both are 3.08.00, with the controller image pinned); the installer puts the three
 Mac helper modules beside it under `Custom`.
 
 Create a dedicated key in Tdarr **Tools -> API Keys**. Run
@@ -200,11 +201,11 @@ headless system-daemon remount has been exercised; a cold boot with FileVault
 is covered only by the note in
 [DECISIONS.md](DECISIONS.md#headless-and-back-on-its-own-after-power-loss).
 
-The installer and the dead-mount handling above were written while the Studio
-was unreachable. Their 37 regression tests now pass on No-Face against stubs and
-temporary directories; no live install or launchd change was made. Complete the
-[live Studio checks](../docker/docs/TDARR-STUDIO.md#studio-script-mocked-tests-live-checks)
-before relying on those operations.
+The installer and watchdog have 41 regression tests passing on No-Face against
+stubs and temporary directories. Real install, clean stop/start, preserved FDA,
+SMB mounts and opt-in automatic resume were also exercised during cutover.
+Dead-tunnel recovery and cold boot remain
+[operational follow-ups](../docker/docs/TDARR-STUDIO.md#studio-script-mocked-tests-live-checks).
 
 ### A wedged mount agent
 
@@ -271,20 +272,23 @@ docker compose --profile studio-transfer up -d --no-deps \
   studio-media-share studio-transfer-relay studio-tdarr-relay
 ```
 
-The initial deployment uses the production main file plus a private overlay
-at `/srv/docker/data/studio-transfer/compose.studio.yml`; reconcile that overlay
-and profile activation when the repository change lands. Likewise, the live
-SSH Match block is currently a guarded root-owned shadow of the original Nix
-symlink. Merge and activate its declarative Nix changes before relying on a
-future Nix activation to preserve transport. Setup does not perform that
+The initial deployment used the production main file plus a private overlay
+at `/srv/docker/data/studio-transfer/compose.studio.yml`. The 2026-11-22
+restoration activated the declarative restricted SSH transport. Its public key
+is installed as a root-owned regular file: OpenSSH `StrictModes` rejected the
+former symlink through `/nix/store`. Setup itself does not perform Nix
 activation, restart Docker/Tdarr, or reboot either host.
 
-**Tdarr cutover status.** The node is installed and paused, and the offload flow
-is built and deployed but not yet in use. Tdarr's free tier ignores node
+**Tdarr cutover status (2026-11-22).** No-Face is actively encoding the three TV
+libraries with `homeserver-hevc-offload-v2`, one CPU worker, `pools=9` and CRF 20.
+Automatic resume is enabled; Calcifer retains validation/publication, one CPU
+health-check worker and one GPU-type publisher/DV5 worker, with no CPU encoders
+and a four-CPU quota. Tdarr's free tier ignores node
 exclusions and tags, so work is kept apart by worker types, flows, worker limits
-and library schedules instead, and the cutover waits for a canary-library run.
+and library schedules instead. The actual production pair passed copied-media
+acceptance before its TV schedules reopened.
 See [the free-tier limits and the 2026-11-13 incident](../docker/docs/TDARR-STUDIO.md#free-tier-limits-and-the-2026-11-13-incident),
-[the open checks](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover) and
+[the acceptance record and follow-ups](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover) and
 [the runbook](../docker/docs/TDARR-STUDIO.md#cutover-and-rollback). Trusted
 Tdarr controllers and plugins remain part of the boundary; this is not a
 malicious-node sandbox.

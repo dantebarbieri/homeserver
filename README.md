@@ -38,7 +38,7 @@ production-configs/  Gitignored production config copies for debugging
 
 **Mac Studio** is an isolated compute companion for native speech, advisory models,
 and a native Tdarr node that takes the CPU x265 encoding of TV episodes over from
-the server (installed, activation pending: [the offload](docker/docs/TDARR-STUDIO.md)).
+the server (active since 2026-11-22: [the offload](docker/docs/TDARR-STUDIO.md)).
 See [setup and rollout boundaries](macos/README.md);
 working transport is not production media or subtitle cutover approval. Its
 [intents and decisions](macos/DECISIONS.md) record what Dante wants, what an

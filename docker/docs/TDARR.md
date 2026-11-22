@@ -1,24 +1,26 @@
 # Tdarr Configuration Guide — HEVC Library Compression
 
 Compress existing x264 TV show libraries to HEVC (x265) using CPU-only
-encoding (`libx265`) for maximum perceptual quality. The encode runs on this
-AMD EPYC server, or on the Mac Studio's Tdarr node once the offload described
-in [TDARR-STUDIO.md](TDARR-STUDIO.md) is active. Movie libraries follow the same
+encoding (`libx265`) for maximum perceptual quality. The encode runs on
+No-Face's native Mac Studio node; Calcifer controls the queue and validates and
+publishes results ([TDARR-STUDIO.md](TDARR-STUDIO.md)). Movie libraries follow the same
 pattern and are documented for future use.
 
 **Hardware:** AMD EPYC CPU, RTX 2070 SUPER, and a Mac Studio (Apple M5 Max) for
-the optional offload. Library compression uses software decode and encoding; the
+the active offload. Library compression uses software decode and encoding; the
 separate DV5 compatibility flow uses CUDA/NVENC.
 **Goal:** Best quality-per-bit, not speed.
 
-## Active safe compression flow
+<a id="active-safe-compression-flow"></a>
 
-The versioned `homeserver-hevc-cpu-v1` flow supersedes the older UI-built flow
-described below. Deploy it without restarting Tdarr:
+## Active offload and shared safety rules
 
-```bash
-bash /srv/homeserver/docker/scripts/install-tdarr-safe-flows.sh --apply
-```
+The three TV libraries use `homeserver-hevc-offload-v2`: one No-Face CPU
+encoder at x265 `slow`, CRF 20 and `pools=9`; Calcifer has no CPU encoders.
+The shared `hevc-safe-v1.cjs` validation/publication rules below are unchanged.
+The old `homeserver-hevc-cpu-v1` flow is retained for guarded rollback, not
+normal deployment. Do not run the old safe-flow installer against active
+offload libraries; use the [cutover/rollback runbook](TDARR-STUDIO.md#cutover-and-rollback).
 
 The installer snapshots live settings under `Custom/backups` (sensitive files,
 mode 0600), retains the old flow for running jobs, and switches only the three
@@ -26,10 +28,11 @@ existing TV libraries. It preserves CRF 20, `slow`, and source pixel formats.
 Do not overwrite a versioned worker module with different behavior while jobs
 using it are active; deploy a new version instead.
 
-The new flow requires CPU workers explicitly, skips HEVC/AV1/VP9 and preserves
+The offload flow requires a Mac CPU worker followed by a Linux GPU-type
+publisher, skips HEVC/AV1/VP9 and preserves
 HDR sources rather than assuming every HDR format is HDR10. Unsupported
 multi-video sources and streams that cannot be copied into Matroska skip
-normally. Eligible legacy SDR video is encoded to HEVC with `pools=4`; other
+normally. Eligible legacy SDR video is encoded to HEVC with `pools=9`; other
 streams are copied. New files settle for three minutes before processing.
 Library alternation prevents a long TV backlog from monopolizing processing.
 
@@ -62,34 +65,41 @@ encoder/decoder errors are preserved.
 
 ### Native Mac Studio offload
 
-The TV libraries can encode on the Mac Studio instead of this server. The
+The TV libraries encode on the Mac Studio instead of this server. The
 versioned `homeserver-hevc-offload-v2` flow runs the same x265 `slow` recipe on
-a mapped Tdarr node there (with `pools` sized for the Studio's cores instead of
-this flow's `pools=4`), and the server still probes, fully decodes, validates
+a mapped Tdarr node there (with `pools=9` instead of the legacy Linux flow's
+`pools=4`), and the server still probes, fully decodes, validates
 and publishes every result with the unchanged `hevc-safe-v1.cjs` logic. [TDARR-STUDIO.md](TDARR-STUDIO.md) covers the measured encoder
 comparison, the design, the free-tier limits that shaped it (per-node library
 exclusions and custom node tags are Tdarr Pro features), the deployment
-contract, operations, and the cutover and rollback runbook. **Status: isolated
-copied-media canary passed end to end; production is not active.** Until the
-remaining checks pass and the planned cutover is performed, the TV libraries use
-the flow above on the server's CPU workers.
+contract, operations, and the cutover and rollback runbook. **Active since
+2026-11-22:** the production node pair passed copied-media acceptance before
+all three TV schedules reopened. No-Face automatically resumes after a node
+restart. Calcifer retains one health-check worker and one GPU-type
+publisher/DV5 worker inside a four-CPU quota. Both nodes are held at 3.08.00 for
+coordinated upgrades.
 
 ### Updates and active jobs
 
 The NixOS updater, `dcu`, `dcupdate`, `dcr tdarr`, and the deployment script use
 `scripts/tdarr-update-guard.sh`. Busy Tdarr is deferred, not killed: while any
 connected node, including the Mac Studio's, has a working worker, or any job is
-staged (a finished leg waiting for its next worker, which clears by itself within
-minutes), the guard exits 75 and recreation waits. When every connected node is
+staged (a leg waiting for its next worker), the guard exits 75 and recreation
+waits. Held library schedules also hold staged legs, so they do not necessarily
+clear by themselves. When every connected node is
 idle and nothing is staged, the guard pauses all of them under one lease, checks
 again for busy or newly joined nodes and staged jobs, and restores each node's own
 previous pause setting after it reconnects. API/guard failures, including an
 unreadable staging database, hold Tdarr back and report failure rather than
 assuming it is safe to restart.
 
-For a continuously busy backlog, deliberately pause every node in Tdarr (with the
-offload active, the Studio's node too), let its current workers finish, run
-`dcr tdarr`, then resume the nodes. Deferral does not silently pause processing
+For a continuously busy backlog, deliberately hold the TV schedules and let
+active workers finish. This does not drain staged legs: finish them under the
+existing flow with schedules open, or explicitly reset only idle staged TV rows
+to Queued (discarding those attempts' encodes). Never clear staging globally.
+Once every node is idle and **all** staging is empty, run `dcr tdarr` and then
+release the TV schedules. The guard refuses until these conditions hold.
+Deferral does not silently pause processing
 for the rest of the day. `dcupdate` uses an in-place update instead of a full
 teardown while Tdarr is running. Raw Docker commands, host shutdowns and OS
 maintenance are not intercepted by this guard.
@@ -104,8 +114,8 @@ guard reports an error; once that node is back, run
 A node that is offline when the guard starts is not listed by Tdarr and is left
 alone.
 
-The Studio's node should run the same Tdarr version as the server, which follows
-`:latest`; the guard does not check this
+The Studio's node and server are both 3.08.00; the server is pinned to its
+tested image digest. Upgrade both together; the guard does not check versions
 ([TDARR-STUDIO.md](TDARR-STUDIO.md#updates)).
 
 ### NVIDIA utility packaging regression
@@ -120,6 +130,9 @@ use the booted-generation utility for diagnosis until the package is corrected.
 ---
 
 ## 1. Codec Choice: HEVC (x265) via libx265
+
+The codec rationale remains relevant. The UI-built flow recipe later in this
+guide is historical reference, not the active offload deployment procedure.
 
 ### Why HEVC and not AV1?
 

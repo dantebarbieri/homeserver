@@ -400,39 +400,42 @@ safety or accuracy guarantee. See [scope, evaluation and rollout](../docker/docs
 
 ## Offload video encoding (Tdarr)
 
-**No-Face restore and isolated test, 2026-11-22:** Dante chose to move TV
+**Production cutover, 2026-11-22:** Dante chose to move TV
 encoding to No-Face while Calcifer keeps the Tdarr controller, Linux validation
 and publication, and NVIDIA DV5 processing. The production controller is 3.08.00
-with only `HomeServer` connected. The three TV libraries still use
-`homeserver-hevc-cpu-v1`; the installed No-Face production node remains
-persistently disabled and disconnected. Do not cut over until the remaining
-canary and operational gates in
-[`TDARR-STUDIO.md`](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover)
-pass.
+with both `HomeServer` and `Studio-Native` connected and unpaused. TV Shows,
+Anime TV and Indian TV now use `homeserver-hevc-offload-v2`, CRF 20 and
+`/temp/studio-native`, with all schedule slots open. A real TV episode was
+observed encoding on No-Face after the copied-media acceptance run. Remaining
+operational checks are recorded in
+[`TDARR-STUDIO.md`](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover).
 
-**Cutover preparation, 2026-11-22:** Dante requested committing and activating
+**Deployment:** Dante requested committing and activating
 the offload to reduce Calcifer's heat and fan activity. The corrected handoff is
 packaged as `hevc-offload-v2.cjs` / `homeserver-hevc-offload-v2`, leaving the
 older deployed v1 module and flow untouched. The deployment configuration now
 seeds zero Linux CPU encoders, one GPU-type publisher, one CPU health-check
-worker, and a four-CPU container quota. Activation is still pending.
+worker, and a four-CPU container quota. These settings were verified after
+controller recreation. No-Face uses one CPU encoder with an x265 pool of nine
+threads; it reported no thermal/performance warning during the observed run.
 
 **Restart behavior (Dante):** automatically resume encoding after a node
 restart. The installer now supports `--auto-resume` (opt-in; new installations
 still start paused) and `--start-paused` to reverse it. The choice is stored in
 `/var/lib/studio-worker/tdarr-start-paused`, written as `_studio` with mode 0600
-and preserved by ordinary updates. Enable it after the acceptance run; stop
-and disable the Mac daemon before rolling back to Linux-only encoding.
+and preserved by ordinary updates. It is now enabled and was verified after a
+real node stop/start. Stop and disable the Mac daemon before rolling back to
+Linux-only encoding.
 The controller image is pinned to the deployed 3.08.00 digest so unattended
 updates cannot advance it beyond the matching native node.
 
-The matching 3.08.00 Apple Silicon node is installed under `_studio` and
-persistently disabled in launchd. The installer is staged under the No-Face
-admin's `~/Services/tdarr-no-face-restore`. The isolated `_tdarrtest` module was updated to the checked-in handoff fix and
-used by the successful canary. The disabled production `_studio` copy has not
-been synchronized with this worktree; the live server's
-`hevc-offload-v1.cjs` also differs from the checked-in file. Synchronize and
-verify module hashes before any production activation. The root-owned helper
+The matching 3.08.00 Apple Silicon node runs under `_studio`, with its
+LaunchDaemon persistently enabled. The current installer and modules are staged
+under the No-Face admin's `~/Services/tdarr-cutover-v2`; the earlier restore
+package remains at `~/Services/tdarr-no-face-restore`. Both production copies
+of `hevc-offload-v2.cjs` were verified by SHA-256
+`ac44184bf5d3a9db03a4c14b2db1d9229a1280e6053d4ae6901324c7277a4bee`.
+The older v1 module and flow were not overwritten. The root-owned helper
 `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-launcher` is the only
 component granted Full Disk Access for Tdarr. The dedicated API key was
 provisioned. The transfer daemon authenticates as `studio-tunnel` from `.80`;
@@ -441,7 +444,19 @@ Nix generation installs the public key as a root-owned regular file because
 OpenSSH `StrictModes` rejected the former symlink through `/nix/store`. The
 restricted destinations are unchanged.
 
-**Isolated end-to-end canary:** the separate `tdarr-noface-test` controller,
+**Production-pair acceptance:** an accented-name disposable copy completed
+the Mac encode, Linux private-copy validation/publication and independent full
+decode (125 MiB H.264 to 96,755,901-byte HEVC; AAC/SubRip and 332.559 s
+preserved). Its test-only CRF was 24; production remains 20. The Mac manifest
+was 0600 with one link and its handover was cleaned. Three original staged
+jobs survived more than six minutes while the single Mac CPU worker was paused.
+An unchecked schedule also blocked staged pickup; reopening the canary schedule
+resumed it. Two controller prepare/recreate/release cycles restored both nodes.
+The clean Mac stop/start retained the FDA grant and automatically resumed.
+The encode had already finished before that stop: mid-encode node loss,
+dead-tunnel recovery and cold boot were **not** tested.
+
+**Earlier isolated end-to-end canary:** the separate `tdarr-noface-test` controller,
 `LabPublisher`, and `_tdarrtest` No-Face CPU node used only copied media and a
 test-only no-op notification; no production queue, library, media, or
 notification was involved. The first CRF 20 encode was larger than its source
@@ -462,18 +477,21 @@ The canary exposed a stale Tdarr work-file path after the Mac moved its result
 to the shared handoff directory. The finish step now returns the original
 library file object for the Linux leg; the report confirms Tdarr no longer
 attempts its disabled unmapped-file download. The lab-only no-op notification
-also had to return `args.inputFileObj`. The isolated controller/SMB containers
-and `_tdarrtest` worker remain available and idle (zero busy workers and zero
-staged jobs) for the remaining checks. The four `sample-crf24*` copies, two
+also had to return `args.inputFileObj`. After production activation, the isolated
+controller/SMB containers and private network were removed. Dante stopped and
+disabled `com.danteb.tdarr-noface-test` and unmounted its two shares; its
+admin-owned SSH forward was closed. The hidden, non-login `_tdarrtest` account,
+offline lab files and older source samples remain for inspection, with no
+lab Tdarr worker or lab network running. The four `sample-crf24*` copies, two
 temporary skip fixtures and stale failed-retry handover were removed. The older
 `sample.mkv`, `sample-final.mkv` and `sample-retry.mkv` were left untouched.
-Remove the lab account and containers once no further canary tests are needed.
+The later three production-pair acceptance fixtures were also removed after
+disabling their test library; its metadata and job reports remain.
 
 **Intent:** fully migrate TV encoding from Calcifer to No-Face, keeping Calcifer
 as Tdarr control plane and Linux validator/publisher. Preserve quality-first
 software `libx265`; the flow and settings may change if a better implementation
-meets that intent. Once the remaining safety gates pass, a planned and announced
-production pause or drain is acceptable.
+meets that intent. Planned and announced production pauses/drains are acceptable.
 
 **Encoder fact-check (2026-11-14): software beats hardware per byte.** Measured
 on this Studio (M5 Max, FFmpeg 9.0.2, x265 4.3) over eight library clips, scored
@@ -551,7 +569,7 @@ restore above).**
   staged production TV jobs; each failed safely because it could not create
   Tdarr's `/temp/tdarr-workDir2-*` work folder. Nothing was encoded or
   replaced, and *Dante* chose to requeue the 23 jobs.
-  [Incident details](../docker/docs/TDARR.md#prevent-the-mac-from-taking-existing-linux-only-jobs).
+  [Incident details](../docker/docs/TDARR-STUDIO.md#free-tier-limits-and-the-2026-11-13-incident).
 - An isolated follow-up lab required manually pausing nodes at each handoff;
   a tagged staged item resumed on Linux storage instead of the Studio. A
   full-episode encode took 39m18s and produced 582,779 KiB from a
@@ -571,10 +589,10 @@ restore above).**
   remained, production SMB mounts remained mounted, and production Tdarr
   services remained running.
 
-**Next:** complete the remaining canary checks and use the
+**Next:** monitor the production offload and work through the remaining
+operational checks. For changes, use the
 [cutover and rollback runbook](../docker/docs/TDARR-STUDIO.md#cutover-and-rollback).
-Do not enable the production node or adopt the TV libraries before those gates
-pass. The worker-type design replaces the unsupported custom-tag attempt;
+The worker-type design replaces the unsupported custom-tag attempt;
 agents may replace its mechanisms with a simpler implementation that meets
 Dante's intent.
 
@@ -699,7 +717,7 @@ is not a leftover model download.
 | Studio admin key | `~/.ssh/authorized_keys`, `users.nix` | Delete the line |
 | Bazarr's Whisper link | `studio-whisper` container; key and pinned Studio host key in `/srv/docker/data/studio-whisper-tunnel`; Bazarr's `whisperai` endpoint and timeout | Restore the `whisperasr` service to `compose.ai.yml` from git (last present in `66fa2ee`), point Bazarr back at it, then [remove the transport](ai/README.md#bazarr-transport-and-cutover) |
 | Bazarr migration rollback/evidence | `/srv/docker/data/bazarr/config/studio-migration-20261113/`: pre-cutover config and SQLite backup, aggregate `smoke-result.json`; original image tagged `bazarr-before-studio:20261113` | Backups contain secrets; keep private. Endpoint rollback normally needs only the settings change, not database restoration |
-| Tdarr | `Studio-Native` node, the disabled canary library `homeserver-hevc-studio-canary-v1` with its test media in `/data/media/tdarr-studio-canary`, the `homeserver-hevc-offload-v1` flow and worker modules in `Custom/`, dedicated API key, snapshots in `/srv/docker/data/tdarr/server/Tdarr/Custom/backups/` (mode 0600; may hold credentials) | `install-tdarr-offload.sh --rollback`, then delete the node, canary library and flows in the UI and revoke the key |
+| Tdarr | Active `Studio-Native` node and `homeserver-hevc-offload-v2` on the three TV libraries; disabled canary libraries; versioned worker modules in `Custom/`, dedicated API key, snapshots in `/srv/docker/data/tdarr/server/Tdarr/Custom/backups/` (mode 0600; may hold credentials) | Follow the guarded rollback runbook, stop the auto-resuming Mac daemon, then delete the node, canary libraries and flows in the UI and revoke the key |
 | AdGuard | Two `home.arpa` rewrites | AdGuard UI, DNS rewrites |
 
 ## Open items

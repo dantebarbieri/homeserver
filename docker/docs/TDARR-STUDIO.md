@@ -1,21 +1,24 @@
 # Tdarr: HEVC encoding on the Mac Studio
 
-The TV-library compression in [TDARR.md](TDARR.md) can run its CPU-heavy x265
+The TV-library compression in [TDARR.md](TDARR.md) runs its CPU-heavy x265
 encode on the Mac Studio (No-Face) instead of the homeserver. Tdarr itself
 stays on the server: scanning, the queue, the UI, every integrity check and the
 replacement of the file. The Studio runs a *mapped* Tdarr node that only
 encodes, then hands the result back for Linux to validate and publish.
 
-**Status (2026-11-22): the isolated copied-media canary passed end to end;
-production is not activated.** The flow definition, installers and node tooling
-are on the server, the offload flow is installed with a **disabled** canary
-library, and the No-Face production node remains disabled and disconnected. The
-three TV libraries still use the Linux-only `homeserver-hevc-cpu-v1` flow. The
-Studio installer and start script were last changed while the Studio was
-offline. Their mocked regression tests now pass on No-Face, but the live
-launchd, mount and privacy checks remain (see
-[Studio script checks](#studio-script-mocked-tests-live-checks)). Production
-moves only after the remaining [open checks](#open-checks-before-cutover) pass.
+**Status (2026-11-22): production offload is active.** TV Shows, Anime TV and
+Indian TV use `homeserver-hevc-offload-v2`, CRF 20 and `/temp/studio-native`,
+with their schedules open. `Studio-Native` runs one CPU encoder with `pools=9`
+and automatic resume enabled. Calcifer has **zero CPU encoders**, one GPU-type
+publisher/DV5 worker, one CPU health-check worker and a four-CPU container quota.
+Both nodes run 3.08.00; the controller image is pinned for coordinated upgrades.
+
+A copied-file acceptance run on this actual node pair passed encoding,
+publication, full decode, accented paths, module-hash verification and cache
+cleanup before release. The first production episode was then observed encoding
+on No-Face. Clean node restart and guarded controller recreation passed; a
+mid-encode node loss, dead-tunnel recovery and cold boot were **not** exercised.
+See the [acceptance record and operational follow-ups](#open-checks-before-cutover).
 
 ## Goal
 
@@ -242,11 +245,13 @@ The design rules that follow:
    checks). A library whose flow cannot run on the Mac must stop a CPU worker at
    its first step, as the DV5 flow's leading GPU gate does. Before each cutover,
    confirm no other library has `processTranscodes` enabled with a Mac-unsafe flow.
-4. A library schedule with every slot unchecked stops fresh selection of that
-   library's Queued files without aborting running jobs (observed), and new
-   files are still scanned and queued. `--hold` and `--release` use it. Whether
-   it also stops the pickup of already-staged jobs is unverified, which is why
-   `--adopt` refuses to move a library that has staged rows.
+4. A library schedule with every slot unchecked stops fresh selection and,
+   on the tested 3.08.00 pair, **also stops pickup of already-staged legs**.
+   The three waiting canary jobs stayed idle with the Mac unpaused until the
+   schedule reopened. `--hold` therefore does not guarantee a complete drain:
+   an active encode can finish into a held second leg. `--adopt` and `--rollback`
+   refuse staged TV rows; finish them under the existing flow with its schedule
+   open, or explicitly reset only those idle rows to Queued before moving.
 
 **Isolated end-to-end result (2026-11-22):** a copied 125 MiB H.264 sample
 encoded on No-Face with the test-only CRF 24 setting, then passed the Linux
@@ -365,8 +370,9 @@ workers with no CPU encode running. If the Studio is offline, `--rollback` canno
 pause it through the API, so its first change is to set `nodePaused` in the
 Studio's saved settings, and `--release` refuses ("run --rollback --apply first")
 until that is done. Whether Tdarr applies that saved state or the start script's
-`startPaused` after a re-registration is unverified, so once the Studio
-reconnects, confirm with `get-nodes` that it is still paused. The rollback
+`startPaused` after a re-registration is not a safe rollback boundary, especially
+with opt-in auto-resume. Stop and disable the Mac daemon before releasing
+Linux-only schedules. The rollback
 sequence legitimately raises Linux CPU workers while the libraries are still on
 the offload flow; only the schedule gate protects that window, so run `--hold`
 first.
@@ -375,9 +381,9 @@ first.
 
 ```bash
 docker exec --user abc tdarr node /app/server/Tdarr/Custom/configure-offload-nodes.cjs \
-  --node-name Studio-Native --set transcodecpu=2 --resume            # preview
+  --node-name Studio-Native --set transcodecpu=1 --resume            # preview
 docker exec --user abc tdarr node /app/server/Tdarr/Custom/configure-offload-nodes.cjs \
-  --node-name Studio-Native --set transcodecpu=2 --resume --apply
+  --node-name Studio-Native --set transcodecpu=1 --resume --apply
 ```
 
 Types are `healthcheckcpu`, `healthcheckgpu`, `transcodecpu` and `transcodegpu`
@@ -414,11 +420,14 @@ hash, so the installer builds it only when it is missing.
 
 The update guard pauses every connected node under one lease and restores each to
 its own prior state; see [Updates and active jobs](TDARR.md#updates-and-active-jobs).
-It defers while any worker is busy and also while any job is staged (a finished
-leg waiting for its next worker), which clears by itself within minutes; an
-unreadable staging database fails closed, so the container is kept running.
-The Studio node must match the server's Tdarr version (3.07.00 at the time of
-writing), and the server image is `:latest`.
+It defers while any worker is busy and also while any job is staged (a leg
+waiting for its next worker); an unreadable staging database fails closed, so
+the container is kept running. Held schedules also block staged pickup: a
+hold or node pause alone does not empty staging.
+Both nodes run 3.08.00. The server image is pinned to
+`ghcr.io/haveagitgat/tdarr@sha256:84743e5ae433a5b49cb463b2dff2679eb02f0cac24fb88c830f49bf8aa9f1c04`.
+Upgrade the native node and controller together, with no busy or staged jobs;
+the maintenance guard does not itself verify version compatibility.
 
 ### Failed or abandoned jobs
 
@@ -452,9 +461,11 @@ Studio does not restart services until its disk is unlocked
 
 ## Cutover and rollback
 
-Preconditions: the Studio is connected and paused with a CPU limit of at least 1;
-the [open checks](#open-checks-before-cutover) have passed; every library has been
-re-listed (rule 3 above); each TV library has exactly one valid `crf` variable.
+Preconditions: matching worker modules and a successful copied-file acceptance
+run; the Studio connected with a CPU limit of at least 1; every enabled library
+re-listed for Mac-safe entry gates (rule 3 above); each TV library has exactly
+one valid `crf` variable. Keep the Studio paused or the TV schedules held while
+changing routing. Review the [acceptance record](#open-checks-before-cutover).
 Snapshot the libraries, flows, variables and node settings first (the installer
 and configurator write backups under `Custom/backups`). Run each command without
 `--apply` first. Preview `--adopt` (or `--rollback`) right after `--hold` and
@@ -467,14 +478,14 @@ are ready.
 
 ```bash
 bash scripts/install-tdarr-offload.sh --hold --apply
-bash scripts/install-tdarr-offload.sh --adopt --pools N    # preview, until only the nodes are in the way
+bash scripts/install-tdarr-offload.sh --adopt --pools 9    # preview, until only the nodes are in the way
 # wait until no Linux transcodecpu worker is busy
 docker exec --user abc tdarr node /app/server/Tdarr/Custom/configure-offload-nodes.cjs \
   --node-name HomeServer --set transcodecpu=0 --apply
-bash scripts/install-tdarr-offload.sh --adopt --pools N --apply
+bash scripts/install-tdarr-offload.sh --adopt --pools 9 --apply
 # set transcodecpuWorkers: "0" for tdarr in compose.starr.yml; deploy via the guarded update
 docker exec --user abc tdarr node /app/server/Tdarr/Custom/configure-offload-nodes.cjs \
-  --node-name Studio-Native --set transcodecpu=N --resume --apply
+  --node-name Studio-Native --set transcodecpu=1 --resume --apply
 bash scripts/install-tdarr-offload.sh --release --apply
 ```
 
@@ -491,8 +502,11 @@ preserve it. FileVault still requires unlocking after a full power loss.
 
 **Rollback:**
 
-1. `--hold --apply`, then wait until no TV job is running or staged on either node
-   (the `--rollback` preview stops listing staged rows).
+1. `--hold --apply`, then wait until no TV worker is running. Held schedules
+   also block staged handoffs: if any TV rows remain staged, do not assume they
+   will drain. Finish them under the existing topology with schedules open, or
+   reset only the idle staged TV rows to Queued in Tdarr (discarding that
+   attempt's encode). The `--rollback` preview must report no staged TV rows.
 2. Pause the Studio node (`--pause`). If auto-resume was enabled, stop and
    disable its daemon with `install-tdarr-node.sh --stop` before restoring
    HomeServer CPU workers; a Mac node restart must not resume into Linux-only
@@ -505,8 +519,9 @@ preserve it. FileVault still requires unlocking after a full power loss.
    lists whatever is left). Check the schedules afterwards.
 
 If the Studio is offline when you roll back, `--rollback` pauses its saved
-settings, and `--release` refuses until that has happened. When it comes back,
-confirm with `get-nodes` that it is still paused before anything else.
+settings, and `--release` refuses until that has happened. This does not disable
+its auto-resuming daemon. If auto-resume is enabled, keep schedules held, bring
+the Mac back, and stop/disable its daemon before releasing Linux-only work.
 
 If a step fails or is interrupted part-way, do not release. The installer's error
 lists what was applied and what was not; run the same command again to finish.
@@ -514,84 +529,65 @@ Otherwise restore the previous worker limits and pause states with the
 configurator (its backups hold them) and run `--release` only when the nodes
 match the flow the libraries use; it refuses otherwise.
 
-## Open checks before cutover
+<a id="open-checks-before-cutover"></a>
 
-Items marked **Verified** have passed only in the isolated copied-media canary;
-the other checks remain unverified and must pass before production moves.
+## Acceptance record and operational follow-ups
 
-1. **Verified 2026-11-22:** the larger CRF 20 result was marked `Not required`;
-   a valid two-second file also took the `prepare` skip and was marked
-   `Not required`. No `tdarr-workDir2-*` directories remained in the shared
-   cache after these jobs.
-2. **Verified 2026-11-22:** `args.userVariables.library.crf` reached the Mac
-   worker; the successful test-only CRF 24 encode exercised it.
-3. **Partially verified 2026-11-22:** an accented filename traversed the real
-   SMB mapping and reached the Mac's safe `prepare` skip. Still test a successful
-   encoded accented file and the one-second modification-time tolerance on real
-   files; macOS `smbfs` can present decomposed (NFD) names.
-4. More staged jobs than the Studio has workers: do they wait, or does Tdarr drop
-   unresumed staged rows after about 300 seconds and churn? Does the Linux slot
-   flood staging when schedules are restored?
-5. A job whose node vanishes mid-encode (stop the node, cut the connection): what
-   state do the file, the staged row and the cache end in?
-6. Worker-limit seeding: Tdarr logs `Set seeded worker limit` at each registration.
-   After a restart, do stored limits or the compose environment win? This decides
-   whether the compose change is required or only a safeguard.
-7. Tdarr's behavior when lowering a node's CPU limit while one of its workers is
-   busy. The configurator refuses to lower a limit under a running worker.
-8. DV5 classification on the Linux GPU worker behind the leading gate (canary
-   library `homeserver-dv5-canary`), and whether a second GPU-type worker is
-   safe given the DV5 conversion lock.
-9. Worker count times `pools` on the Studio (candidates 1x18, 2x9, 3x6, 4x4 at
-   `nice -n 10`), and sustained heat and fan noise.
-10. A Tdarr server update that outpaces the Studio node's version.
-11. An idle-path `maintenance.cjs prepare` and `release` round trip with both nodes,
-    including whether the Studio node reconnects by itself within the guard's
-    retry window (30 tries, 2 seconds apart) after the server container is recreated.
-12. Whether `startPaused` or the server's stored pause state wins when the Studio
-    re-registers after a reboot, and the Studio's cold boot with FileVault.
-13. Whether an all-unchecked library schedule also stops the pickup of staged rows
-    (a second leg waiting for its worker). The runbook assumes it does not; if it
-    does, a staged leg waits until `--release` and must be reset before
-    `--adopt` or `--rollback`.
-14. **Partially verified 2026-11-22:** a copied file completed the Mac encode,
-    Linux handoff, validation, publication and Tdarr success path. Still verify
-    Samba edge conditions: the resumed Linux leg's `originalLibraryFile._id`,
-    link count 1, manifest mode 0600, Tdarr access to Mac-created directories,
-    renames within the share, and modification times within the one-second
-    tolerance.
-15. Tdarr's own cache cleaner against `offload-v1` handover directories and
-    orphaned `tdarr-workDir2-*` directories after a job vanishes.
-16. **Partially verified 2026-11-22:** the isolated `_tdarrtest` copy was
-    updated and used by the successful canary. The live server's
-    `hevc-offload-v1.cjs` predates the mapped-path fix. Deploy the new
-    `hevc-offload-v2.cjs` to both sides without overwriting v1, verify matching hashes, and confirm
-    Tdarr's hourly plugin sync leaves the Studio's `Custom/` alone.
+Verified during the 2026-11-22 cutover; copied-media acceptance passed before
+opening the production TV schedules:
 
-### Studio script mocked tests; live checks remain
+| Check | Result |
+|---|---|
+| Production node pair, copied media | A 125 MiB H.264 copy with an accented filename became 96,755,901 bytes of HEVC, with AAC/SubRip and duration 332.559 s preserved. Linux publication and an independent full decode passed. CRF 24 was test-only; all production TV variables remain 20. |
+| Stream eligibility and saving skips | Tiny valid copies became `Not required`; the earlier isolated CRF 20 oversized result also skipped safely. |
+| More staged files than CPU workers | Three original staging instances, checked by their unchanged start times, survived 372-376 seconds with only one Mac CPU worker. They resumed without being discarded. |
+| Production staging | The queue reached the configured `stagedFileLimit=100`: one Mac encode and 99 waiting CPU legs. Repeated snapshots stayed at 100; sampled original waiting starts survived over ten minutes without re-staging. |
+| Schedule hold | The unpaused Mac did not resume held staged rows; reopening only the canary schedule started encoding. A hold is not a complete drain. |
+| Modules and SMB handoff | Mac UID 499 and the server both used v2 SHA-256 `ac44184bf5d3a9db03a4c14b2db1d9229a1280e6053d4ae6901324c7277a4bee`. The manifest was 0600 with one link; canonical translated paths, shared renames and Linux-private copy/publication passed. |
+| Cleanup | The successful shared handover disappeared. The three disposable acceptance files were removed after disabling their test library. |
+| Real Mac installer | Install, stop with no remaining node/encoder, restart, unchanged launcher CDHash/FDA and automatic unpaused registration passed. The encode had finished before the stop, so this was **not** a mid-encode interruption test. |
+| Persistent limits | The Mac launch seed changed its saved CPU limit from two to one. Calcifer re-registered at zero CPU encoders and one health worker after recreation, with its four-CPU quota applied. |
+| Controller maintenance | Two idle prepare/recreate/release round trips restored both connected nodes within the guard's retry window, including the Mac's unpaused state. |
+| Version compatibility | Both are 3.08.00. The controller is pinned to the tested image digest; upgrade the native node and controller together. |
+
+Remaining operational checks, not claimed as tested by this rollout:
+
+- Mid-encode node loss, dead SSH/SMB transport and recovery of orphaned cache
+  directories. The Mac remains read-only on originals and Linux still refuses
+  invalid or incomplete handovers; do not bypass those checks to recover a job.
+- Cold boot and FileVault unlocking. Automatic resume was verified for a node
+  restart, not a power loss.
+- Sustained thermal/noise tuning beyond the conservative one-worker,
+  nine-thread-pool setting. No-Face reported no thermal/performance warning
+  during the observed run; this is not a long-duration thermal benchmark.
+- A new DV5 canary on this two-node deployment. Its existing leading GPU gate
+  and exactly one Linux GPU worker are retained; a second GPU worker remains
+  unsupported by this runbook.
+- Deliberately offsetting SMB modification time by one second, the long-term
+  cache cleaner after a lost job, and an observed hourly plugin-sync cycle.
+  Normal SMB timestamps, publication and cleanup passed.
+
+Never lower a busy worker's limit: the configurator deliberately refuses it.
+No destructive test of that upstream behavior is needed for routine operation.
+
+<a id="studio-script-mocked-tests-live-checks"></a>
+
+### Studio script mocked tests and live checks
 
 The installer (`macos/install/install-tdarr-node.sh`) and the dead-mount handling
 in `macos/start-tdarr.sh` were rewritten while the Studio was unreachable. Their
 41 regression tests ran on No-Face on 2026-11-22, exercising the real scripts
 against stubs and temporary directories. The tests do not invoke system
 `launchd`, install files in production locations, or change Full Disk Access.
-The real installer subsequently started the paused production node, retained
-the launcher's CDHash and Full Disk Access grant, and mounted the read-only
-media and writable cache as `_studio`. Further checks:
+The real installer subsequently installed and started the production node,
+retained the launcher's CDHash and Full Disk Access grant, and mounted read-only
+media and writable cache as `_studio`. A clean `--stop` reported no remaining
+node, encoder or probe, and `--auto-resume --start` re-registered unpaused.
 
-- The installer's first real run: the one-time move-aside of the old root-owned
-  plugin directory to `Custom.superseded.<date>`; `--stop` leaving no `_studio`
-  node, encoder or watchdog process (it exits 3 and lists leftovers otherwise);
-  `--start` after a `bootout` (an immediate `bootstrap` can fail, so it retries
-  three times); and `codesign -dvvv` printing `Identifier=` and `CDHash=`.
-- The installer's read-only privacy-database query works from an SSH session and
-  the `client` column holds the launcher's path.
-- `bounded` under macOS perl (fork, `setpgrp`, killing the process group,
-  `Time::HiRes`), and `is_mount` (an `smbfs` mount root has a different device
-  number from its parent).
-- The watchdog: it ends within seconds of the node exiting, including after
-  `--stop` and a TERM from launchd (`pgrep -u _studio` comes back empty), and
-  `launchctl bootout` does not leave it or a probe behind.
+Still untested against a deliberately broken live transport:
+
+- `bounded` reaching its timeout under macOS perl and terminating its process
+  group rather than leaving a stuck SMB probe.
 - A dead mount (stop the SSH tunnel): the probes return within their limits,
   `umount -f` as `_studio` works, and the watchdog stops the node so that launchd
   restarts it and it remounts. Also whether the `smbfs` mounts are hard or soft,
