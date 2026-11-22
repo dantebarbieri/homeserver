@@ -295,7 +295,13 @@ validation kept the original, which is exactly what the 5% rule is for.
   application authorization. `https://tdarr.danteb.com` serves the web UI on
   8265, not the node socket; pointing the node there returns `Invalid namespace`.
 - The node runs under `nice -n 10`, with one CPU transcode worker, no GPU or
-  health-check workers, and starts paused (`macos/start-tdarr.sh`).
+  health-check workers, and starts paused by default (`macos/start-tdarr.sh`).
+  After cutover, `install-tdarr-node.sh --auto-resume --start` persists automatic
+  resume across node restarts and installer updates. `--start-paused` reverses
+  that choice; it does not change the controller's current pause state.
+- The controller image is pinned to the deployed 3.08.00 digest, matching the
+  native node. Upgrade both together; the daily image pull must not silently
+  advance the controller beyond the Mac's installed version.
 
 ## Operations
 
@@ -399,7 +405,7 @@ Applying writes a sensitive `Custom/backups/offload-node-*.json` (mode 0600),
 re-checks for races, then reads back the live and persisted settings.
 
 The Studio side (launcher, privacy grant, mounts, tunnel and the installer
-`macos/install/install-tdarr-node.sh [--modules DIR] [--start|--stop] [--replace-launcher]`)
+`macos/install/install-tdarr-node.sh [--modules DIR] [--start|--stop] [--auto-resume|--start-paused] [--replace-launcher]`)
 is in [macos/README.md](../../macos/README.md). Never rebuild or replace the
 launcher: macOS ties its one-time Full Disk Access grant to its path and code
 hash, so the installer builds it only when it is missing.
@@ -477,16 +483,20 @@ gate stops its fresh selection as well; `--release` then lets work flow. Afterwa
 check the schedules: `--release` reopens all three TV libraries, including one you
 had closed on purpose. Watch the first jobs end to end: the job report,
 publication in the library folder, the Sonarr notification, the cache directory
-emptying, and the server's CPU load. `macos/start-tdarr.sh` still starts the node
-paused (`startPaused=true`). Whether to change that once the first jobs succeed is
-a separate decision, and [open check 12](#open-checks-before-cutover) covers what
-the server's stored pause state does after a reboot.
+emptying, and the server's CPU load. New installations start paused. Dante
+selected automatic resume after the production cutover: install with
+`--auto-resume --start` once the acceptance jobs succeed. The worker-owned
+`tdarr-start-paused` file then contains `false`; ordinary installer updates
+preserve it. FileVault still requires unlocking after a full power loss.
 
 **Rollback:**
 
 1. `--hold --apply`, then wait until no TV job is running or staged on either node
    (the `--rollback` preview stops listing staged rows).
-2. Pause the Studio node (`--pause`) and raise HomeServer `transcodecpu` back to 4.
+2. Pause the Studio node (`--pause`). If auto-resume was enabled, stop and
+   disable its daemon with `install-tdarr-node.sh --stop` before restoring
+   HomeServer CPU workers; a Mac node restart must not resume into Linux-only
+   flows. Raise HomeServer `transcodecpu` back to 4.
 3. `--rollback --apply`, then revert the compose `transcodecpuWorkers` value.
 4. `--release --apply` (refused unless Linux can encode and the Studio is paused
    or at zero), and stop the Studio node with `install-tdarr-node.sh --stop` if
@@ -562,10 +572,12 @@ the other checks remain unverified and must pass before production moves.
 
 The installer (`macos/install/install-tdarr-node.sh`) and the dead-mount handling
 in `macos/start-tdarr.sh` were rewritten while the Studio was unreachable. Their
-37 regression tests ran on No-Face on 2026-11-22, exercising the real scripts
+41 regression tests ran on No-Face on 2026-11-22, exercising the real scripts
 against stubs and temporary directories. The tests do not invoke system
 `launchd`, install files in production locations, or change Full Disk Access.
-On No-Face, check:
+The real installer subsequently started the paused production node, retained
+the launcher's CDHash and Full Disk Access grant, and mounted the read-only
+media and writable cache as `_studio`. Further checks:
 
 - The installer's first real run: the one-time move-aside of the old root-owned
   plugin directory to `Custom.superseded.<date>`; `--stop` leaving no `_studio`

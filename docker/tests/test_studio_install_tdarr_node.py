@@ -409,6 +409,25 @@ class StudioInstallTdarrNodeTests(unittest.TestCase):
         self.assertEqual(len(signed), 1)
         self.assertIn("--identifier com.danteb.studio-tdarr-launcher", signed[0])
 
+    def test_startup_policy_is_opt_in_persisted_across_updates_and_reversible(self):
+        policy = self.home / "tdarr-start-paused"
+        self.assertEqual(self.run_installer().returncode, 0)
+        self.assertFalse(policy.exists())
+        result = self.run_installer("--auto-resume")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((policy.read_text(), mode_of(policy)), ("false\n", 0o600))
+        self.assertEqual(self.run_installer().returncode, 0)
+        self.assertEqual(policy.read_text(), "false\n")
+        self.assertEqual(self.run_installer("--start-paused").returncode, 0)
+        self.assertEqual(policy.read_text(), "true\n")
+        self.assertFalse(any(str(policy) in line for line in self.log() if line.startswith("install ")))
+
+    def test_ambiguous_or_ignored_startup_policy_is_rejected_before_changes(self):
+        for args in (("--auto-resume", "--start-paused"), ("--auto-resume", "--stop")):
+            result = self.run_installer(*args)
+            self.assertEqual(result.returncode, 2)
+            self.assert_nothing_replaced()
+
     def test_warns_when_full_disk_access_is_missing(self):
         self.flag("no-fda")
         result = self.run_installer()

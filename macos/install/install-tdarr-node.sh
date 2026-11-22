@@ -4,7 +4,8 @@
 # LaunchDaemon. Run as root from a copy of macos/ (and, for the plugin modules,
 # of docker/tdarr/):
 #
-#   sudo bash macos/install/install-tdarr-node.sh [--modules DIR] [--start|--stop] [--replace-launcher]
+#   sudo bash macos/install/install-tdarr-node.sh [--modules DIR] [--start|--stop]
+#       [--auto-resume|--start-paused] [--replace-launcher]
 #
 # The launcher is built and ad-hoc signed only when it is missing, because
 # macOS privacy (TCC) ties its one-time Full Disk Access grant to the path and
@@ -34,15 +35,23 @@ module_files=(hevc-offload-v2.cjs hevc-safe-v1.cjs dv5-sidecar.cjs)
 modules=
 action=
 replace_launcher=0
+start_paused=
 while (( $# )); do
     case "$1" in
         --modules) modules="${2:?--modules needs a directory}"; shift ;;
         --start | --stop) action="${1#--}" ;;
         --replace-launcher) replace_launcher=1 ;;
+        --auto-resume | --start-paused)
+            [[ -z "$start_paused" ]] || { echo "Choose only one startup policy." >&2; exit 2; }
+            [[ "$1" == --auto-resume ]] && start_paused=false || start_paused=true ;;
         *) echo "Unknown option: $1" >&2; exit 2 ;;
     esac
     shift
 done
+[[ "$action" != stop || -z "$start_paused" ]] || {
+    echo "A startup policy cannot be installed with --stop." >&2
+    exit 2
+}
 
 # True while launchd still knows the job.
 loaded() { /bin/launchctl print "system/$label" >/dev/null 2>&1; }
@@ -116,6 +125,9 @@ put() {
 }
 put 755 "$stage/mount-studio-share" "$HOME/mount-studio-share"
 put 755 "$stage/start-tdarr.sh" "$HOME/start-tdarr.sh"
+if [ -f "$stage/tdarr-start-paused" ]; then
+    put 600 "$stage/tdarr-start-paused" "$HOME/tdarr-start-paused"
+fi
 if [ -d "$stage/modules" ]; then
     custom=$HOME/tdarr/Custom
     # An earlier installer left this directory root-owned. The worker cannot
@@ -167,6 +179,9 @@ mkdir -m 755 "$stage"
 install -m 755 "$src/start-tdarr-session.sh" "$stage/start-tdarr-session.sh"
 install -m 755 "$src/start-tdarr.sh" "$stage/start-tdarr.sh"
 install -m 644 "$src/$label.plist" "$stage/$label.plist"
+if [[ -n "$start_paused" ]]; then
+    printf '%s\n' "$start_paused" >"$stage/tdarr-start-paused"
+fi
 /bin/bash -n "$stage/start-tdarr-session.sh"
 /bin/bash -n "$stage/start-tdarr.sh"
 /usr/bin/clang -O2 -Wall -framework CoreFoundation -framework NetFS \
@@ -227,7 +242,7 @@ if [[ "$action" == start ]]; then
         echo "$label is not loaded after bootstrap." >&2
         exit 1
     }
-    echo "Started $label; the node starts paused. Logs: /var/log/studio-tdarr/"
+    echo "Started $label using its saved startup policy (paused by default). Logs: /var/log/studio-tdarr/"
 else
     echo "Installed. Start it with: sudo bash $0 --start"
 fi

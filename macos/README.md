@@ -142,6 +142,14 @@ sudo bash macos/install/install-tdarr-node.sh --modules docker/tdarr --start  # 
 sudo bash macos/install/install-tdarr-node.sh --stop                          # stop and disable it
 ```
 
+New installations start paused. After the offload cutover, install with
+`--auto-resume --start` to resume encoding automatically after a node restart.
+`--start-paused` restores manual startup. The choice lives in the worker's
+`tdarr-start-paused` file (0600), is written as the worker, and survives ordinary
+installer updates; an absent file means paused, and invalid values or links
+prevent startup. Stop and disable the Mac node before rolling back to Linux
+encoding when auto-resume is enabled.
+
 Every run first checks all its inputs and builds the mount helper in a
 root-owned staging directory; nothing is replaced until those checks and builds
 pass, so a failure changes nothing. Root then writes only root-owned paths: the
@@ -180,7 +188,7 @@ apart: SIGTERM first, and SIGKILL only if that same node is still there 20 s
 later), so launchd restarts and remounts it. The watchdog ends within a second of
 the node exiting, and a check that finishes after the node has gone is not
 counted as a failure. The node runs at
-`nice -n 10`, starts **paused** (`startPaused=true`) and registers as
+`nice -n 10`, starts **paused by default** (or resumes with `--auto-resume`) and registers as
 `Studio-Native` with one CPU transcode worker and no GPU or health-check workers.
 Pause state and worker limits are changed from the server with the node
 configurator ([Node settings](../docker/docs/TDARR-STUDIO.md#node-settings)).

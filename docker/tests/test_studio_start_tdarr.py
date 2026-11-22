@@ -166,6 +166,32 @@ class StudioStartTdarrProbeTests(unittest.TestCase):
         result, _ = self.run_shell("share_healthy dev || echo unhealthy-dev", listing=str(failing))
         self.assertEqual(result.stdout, "unhealthy-dev\n")
 
+    def test_startup_policy_defaults_paused_and_honours_an_explicit_choice(self):
+        policy = self.workspace / "tdarr-start-paused"
+        for value, expected in ((None, "true"), ("false\n", "false"), ("true\n", "true")):
+            with self.subTest(value=value):
+                if value is not None:
+                    policy.write_text(value)
+                result, _ = self.run_shell(
+                    "set -e\n" + function_text("startup_policy") + '\nstartup_policy\necho "$startPaused"'
+                )
+                self.assertEqual((result.returncode, result.stdout), (0, expected + "\n"), result.stderr)
+
+    def test_invalid_or_redirected_startup_policy_prevents_startup(self):
+        policy = self.workspace / "tdarr-start-paused"
+        script = "set -e\n" + function_text("startup_policy") + "\nstartup_policy\necho started"
+        for value in ("", "yes", "false\nextra"):
+            policy.write_text(value)
+            result, _ = self.run_shell(script)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("started", result.stdout)
+            self.assertIn("must contain true or false", result.stderr)
+        policy.unlink()
+        policy.symlink_to(self.workspace / "absent")
+        result, _ = self.run_shell(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not a link", result.stderr)
+
 
 @unittest.skipUnless(BASH and os.name == "posix", "needs bash on a POSIX system")
 class StudioStartTdarrWatchdogTests(unittest.TestCase):

@@ -10,6 +10,21 @@ export PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
 media="$HOME/mounts/media"
 cache="$HOME/mounts/cache"
 
+startup_policy() {
+    local policy="$HOME/tdarr-start-paused"
+    export startPaused=true
+    [[ -e "$policy" || -L "$policy" ]] || return 0
+    [[ -f "$policy" && ! -L "$policy" ]] || {
+        echo "Tdarr startup policy must be a regular file, not a link." >&2
+        return 1
+    }
+    startPaused="$(cat "$policy")"
+    [[ "$startPaused" == true || "$startPaused" == false ]] || {
+        echo "Tdarr startup policy must contain true or false." >&2
+        return 1
+    }
+}
+
 # SMB can hang instead of failing, and a hung mount can ignore SIGALRM, so a
 # watcher process waits for each probe and kills it (and anything it started)
 # with SIGKILL at the deadline. Exit status: the probe's own, 124 when it was
@@ -171,7 +186,7 @@ export ffmpegPath=/opt/homebrew/bin/ffmpeg
 # Environment-supplied path mappings must be base64-encoded JSON.
 export pathTranslators
 pathTranslators="$(printf %s '[{"server":"/data/media","node":"/private/var/lib/studio-worker/mounts/media"},{"server":"/temp/studio-native","node":"/private/var/lib/studio-worker/mounts/cache"}]' | base64 | tr -d '\r\n')"
-export startPaused=true
+startup_policy
 export transcodecpuWorkers=1
 export transcodegpuWorkers=0
 export healthcheckcpuWorkers=0
