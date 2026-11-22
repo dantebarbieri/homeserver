@@ -47,8 +47,8 @@ in
 
       # ── fastfetch: system info on initial shell only (not nix shell subshells) ──
       if [[ $SHLVL -eq 1 ]]; then
-        # Logo/padding (~47 columns) + info (~47) need ~94 columns; leave a margin.
-        if (( COLUMNS > 0 && COLUMNS < 96 )); then
+        # Logo (~31 columns) + padding + info (~47) need ~82 columns; leave a margin.
+        if (( COLUMNS > 0 && COLUMNS < 86 )); then
           fastfetch --logo-position top
         else
           fastfetch

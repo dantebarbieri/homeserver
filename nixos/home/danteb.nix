@@ -1,5 +1,5 @@
-# Home Manager configuration for danteb: zsh (with Zim), git identity and SSH
-# client aliases.
+# Home Manager configuration for danteb: zsh (with Zim), the shared prompt and
+# fastfetch logo (../../shell), git identity and SSH client aliases.
 #
 # Everything here is copied into the world-readable Nix store, so never put
 # secrets in this file. Keep them in ~/.zprofile.local (login shells) or
@@ -83,6 +83,10 @@
       fi
       source ''${ZIM_HOME}/init.zsh
 
+      # Prompt: shared with the Studio (shell/prompt.zsh). It replaces Zim's
+      # asciiship module, which is why .zimrc does not load it.
+      source ${../../shell/prompt.zsh}
+
       # zsh-history-substring-search: bind keys after Zim so up/down work both
       # before and after zle-line-init.
       zmodload -F zsh/terminfo +p:terminfo
@@ -104,6 +108,10 @@
     '';
   };
 
+  # fastfetch wears this machine's Ghibli character (shell/logos).
+  xdg.configFile."fastfetch/config.jsonc".source = ../../shell/fastfetch.jsonc;
+  xdg.configFile."fastfetch/logo.ansi".source = ../../shell/logos/calcifer.ansi;
+
   home.file.".zimrc" = {
     # Rebuild ~/.zim/init.zsh on the next shell. The symlinked ~/.zimrc has a
     # store mtime, so zimfw's own freshness check never fires.
@@ -118,10 +126,10 @@
       zmodule termtitle
       zmodule utility
 
-      # Prompt
+      # Prompt: duration-info and git-info feed shell/prompt.zsh, which
+      # replaces the asciiship module.
       zmodule duration-info
       zmodule git-info
-      zmodule asciiship
 
       # Completion: completion must come after modules that add definitions.
       zmodule zsh-users/zsh-completions --fpath src
