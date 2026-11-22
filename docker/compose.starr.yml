@@ -265,14 +265,15 @@ services:
       file: compose.common.yml
       service: gpu-service
     container_name: tdarr
-    image: ghcr.io/haveagitgat/tdarr:latest
+    # Tdarr 3.08.00; upgrade together with No-Face's native node.
+    image: ghcr.io/haveagitgat/tdarr@sha256:84743e5ae433a5b49cb463b2dff2679eb02f0cac24fb88c830f49bf8aa9f1c04
     restart: unless-stopped
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-    cpus: 12
+    cpus: 4
     environment:
       PUID: ${HOST_UID}
       PGID: ${HOST_GID}
@@ -291,9 +292,10 @@ services:
       auth: true
       apiKey: ${TDARR_API_KEY}
       maxLogSizeMB: 10
-      transcodecpuWorkers: 4
+      # No-Face encodes; this node only validates/publishes and handles the DV5 GPU flow.
+      transcodecpuWorkers: 0
       transcodegpuWorkers: 1
-      healthcheckcpuWorkers: 4
+      healthcheckcpuWorkers: 1
       healthcheckgpuWorkers: 0
     networks:
       - proxy

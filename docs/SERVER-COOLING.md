@@ -40,7 +40,7 @@ configuration was changed.
 | First response | Clean out dust, give the closet clearance, add controllable fans | Evidence pointed to airflow plus sustained CPU encoding, not a failing part | Agent advice; Dante cleaned and moved the server |
 | Fans | The Noctua fans and hub above | Molex fans cannot be controlled or monitored | Dante bought and installed them (an agent had suggested a SilverStone CPF04 hub) |
 | HDDs | No new drives | Only three free bays; 12 drives is the intended count | Dante |
-| Encoding | Keep quality-first CPU `libx265` | [Compression-efficiency tradeoff; local hardware comparison still unmeasured](../macos/DECISIONS.md#offload-video-encoding-tdarr) | Dante |
+| Encoding | Keep quality-first CPU `libx265`, running on No-Face since 2026-11-22; Calcifer has zero CPU encoders and a four-CPU Tdarr quota | Measured on the Studio, hardware encoding (VideoToolbox) needs roughly 40–100 % more bytes than x265 `slow` at equal VMAF; NVENC was not benchmarked ([results](../docker/docs/TDARR-STUDIO.md#encoder-choice-software-x265)). The Studio sits in a cooler area, so the sustained CPU load leaves the server ([offload](../docker/docs/TDARR-STUDIO.md), [decisions](../macos/DECISIONS.md#offload-video-encoding-tdarr)) | Dante |
 
 ## Incident: drives lost power after the fan install
 

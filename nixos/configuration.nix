@@ -10,6 +10,7 @@
     ./hardware-configuration.nix
     ./modules/base.nix
     ./modules/networking.nix
+    ./modules/tailscale.nix
     ./modules/storage.nix
     ./modules/users.nix
     ./modules/shell.nix

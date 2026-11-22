@@ -42,6 +42,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Run as _studio: mount-studio-share media|cache\n");
         return 1;
     }
+    // A wedged per-user NetAuthSysAgent never answers the mount call. Die with
+    // SIGALRM so start-tdarr.sh can reset the agent and retry instead of hanging.
+    alarm(60);
     int readonly = strcmp(argv[1], "media") == 0;
     char requested[PATH_MAX], target[PATH_MAX], source[128], url_text[128];
     snprintf(requested, sizeof(requested), HOME "/mounts/%s", argv[1]);

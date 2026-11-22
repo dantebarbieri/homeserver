@@ -10,7 +10,7 @@ brew=/opt/homebrew/bin/brew
 packages="$(
     for package in ffmpeg uv ollama; do
         printf '%s\n' "$package"
-        sudo -u "$SUDO_USER" "$brew" deps --installed --formula "$package"
+        sudo -H -u "$SUDO_USER" "$brew" deps --installed --formula "$package"
     done | sort -u
 )"
 
@@ -24,7 +24,7 @@ for directory in bin opt Cellar lib share etc; do
     grant_search "/opt/homebrew/$directory"
 done
 while IFS= read -r package; do
-    prefix="$(sudo -u "$SUDO_USER" "$brew" --prefix "$package")"
+    prefix="$(sudo -H -u "$SUDO_USER" "$brew" --prefix "$package")"
     actual="$(cd "$prefix" && pwd -P)"
     [[ "$actual" == /opt/homebrew/Cellar/*/* ]] || {
         echo "Refusing a non-Cellar package path: $actual" >&2

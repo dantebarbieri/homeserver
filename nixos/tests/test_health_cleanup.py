@@ -48,6 +48,11 @@ class HealthCleanupTests(unittest.TestCase):
                   mailSyncTimer = builtins.hasAttr "vdirsyncer-sync" c.systemd.timers;
                   packages = map system.pkgs.lib.getName c.environment.systemPackages;
                   shellInit = c.programs.zsh.interactiveShellInit;
+                  tailscale = {
+                    inherit (c.services.tailscale) enable extraSetFlags authKeyFile;
+                    inherit (c.systemd.services.tailscaled) wantedBy after requires;
+                    setScript = c.systemd.services.tailscaled-set.script;
+                  };
                   socketConsumerUnit = {
                     inherit (c.systemd.services.docker-socket-consumers)
                       wantedBy after requires partOf serviceConfig unitConfig;
@@ -169,6 +174,16 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertNotIn("--upgrade", args)
         # root evaluates the danteb-owned checkout; libgit2 refuses it otherwise.
         self.assertEqual(self.systemGit["safe"]["directory"], "/srv/homeserver")
+
+    def test_tailscale_boots_without_docker_or_embedded_credentials(self):
+        tailscale = self.config["tailscale"]
+        self.assertTrue(tailscale["enable"])
+        self.assertIn("multi-user.target", tailscale["wantedBy"])
+        self.assertNotIn("docker.service", tailscale["after"] + tailscale["requires"])
+        self.assertIsNone(tailscale["authKeyFile"])
+        # These must reach the generated service even with interactive login.
+        for flag in ("--accept-dns=false", "--accept-routes=false", "--ssh=false"):
+            self.assertIn(flag, shlex.split(tailscale["setScript"]))
 
     def test_home_manager_owns_personal_shell_and_git(self):
         home = self.config["home"]

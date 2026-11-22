@@ -37,7 +37,9 @@ production-configs/  Gitignored production config copies for debugging
 **Docker Compose** is the service orchestration layer. `docker-compose.yml` uses the `include:` directive to pull in self-contained category files (`compose.*.yml`). Each category can run independently. Services extend from shared base templates in `compose.common.yml`.
 
 **Mac Studio** is an isolated compute companion for native speech, advisory models,
-and a native CPU/x265 Tdarr node that is currently disabled. See [setup and rollout boundaries](macos/README.md);
+and a native Tdarr node that takes the CPU x265 encoding of TV episodes over from
+the server (active since 2026-11-22: [the offload](docker/docs/TDARR-STUDIO.md)).
+See [setup and rollout boundaries](macos/README.md);
 working transport is not production media or subtitle cutover approval. Its
 [intents and decisions](macos/DECISIONS.md) record what Dante wants, what an
 agent chose and may be replaced, and where every piece lives.
@@ -68,10 +70,67 @@ docker compose config
 
 See [`CLAUDE.md`](CLAUDE.md) for detailed architecture documentation.
 
+## Tailscale remote access
+
+Hosted Tailscale replaces the server-as-VPN-gateway dependency: install and
+authenticate a client on **calcifer**, **no-face**, **Windows**, and each
+remote phone/laptop, all in the same tailnet. It is split-tunnel access,
+not an exit node: ordinary internet traffic stays on the client's network.
+Keep wg-easy running as a fallback until the off-LAN checks below pass.
+
+- **calcifer:** native NixOS daemon, managed by
+  [`nixos/modules/tailscale.nix`](nixos/modules/tailscale.nix); after deployment,
+  run `sudo tailscale up --accept-dns=false --accept-routes=false --ssh=false`
+  and complete browser login. Explicit flags preserve existing DNS and
+  key-only SSH on port 28 during first enrollment.
+- **no-face:** boot-time `tailscaled` plus `wake-pc`; see
+  [`macos/DECISIONS.md`](macos/DECISIONS.md) for the installed paths and
+  startup details. Its BMC-only subnet route is `192.168.50.50/32`.
+  Approve that route on the Tailscale Machines page. FileVault must be
+  unlocked after a cold boot before any macOS daemon can run.
+- **Windows:** install the official `Tailscale.Tailscale` WinGet package,
+  sign in, then run `tailscale set --unattended=true`. The automatic
+  Tailscale service must stay running when the Windows user signs out so
+  RDP is available at the login screen. Keep Windows authentication and its
+  RDP firewall rules; do not expose port 3389 on the internet.
+
+In the hosted admin console, disable key expiry for trusted infrastructure
+nodes that must remain reachable unattended (revoke lost devices promptly).
+Restrict tailnet access to your administrator identity/devices. Do not make
+calcifer's AdGuard the tailnet's sole global DNS server: recovery should
+work without it. MagicDNS is on, so clients that accept Tailscale DNS (the
+Windows/macOS/phone default) reach `no-face`, `calcifer` and `dante-pc` by
+name, or as `<name>.<tailnet>.ts.net`. The same name works at home: peers on
+the LAN connect directly, not through a relay. calcifer and No-Face do not
+accept Tailscale DNS, so use the numeric addresses from `tailscale ip -4`
+there.
+
+From a remote client on cellular or another network, **with wg-easy off on
+that client**, verify:
+
+1. SSH to calcifer's Tailscale IP on port 28 and no-face's on port 22,
+   using their normal accounts and keys.
+2. RDP to Windows's Tailscale IP. Windows must be awake; Tailscale is not
+   a Wake-on-LAN broadcast tunnel.
+3. Open `https://192.168.50.50` through No-Face's approved route. Use the
+   BMC's own credentials and expect its existing self-signed certificate.
+   `ipmi.danteb.com` still depends on calcifer's NPM/Authelia and is **not**
+   the recovery path.
+4. SSH to no-face and use `wake-pc --wait` when the PC is intentionally
+   asleep. This sends the magic packet locally on the LAN.
+
+On Linux remote clients, enable route acceptance with
+`sudo tailscale set --accept-routes=true`; Windows/macOS normally accept
+routes by default. Checking the BMC from a machine already on the home LAN
+does not by itself prove subnet routing works. Do not shut down calcifer
+just to test it without a planned maintenance window.
+
 ## Wake the Windows PC
 
-The homeserver's `wake-pc` command sends a Wake-on-LAN packet for DANTE-PC.
-After connecting to the home VPN, SSH to the homeserver in Termius and run:
+The `wake-pc` command sends a Wake-on-LAN packet for DANTE-PC. It is available
+on the homeserver and on No-Face. After connecting to Tailscale, SSH to
+No-Face's Tailscale IP in Termius to wake the PC even when calcifer is down.
+The existing homeserver command also works while that server is available:
 
 ```bash
 wake-pc
@@ -81,6 +140,14 @@ wake-pc --help
 wake-pc --mac 02:11:22:33:44:55 --broadcast 192.168.50.255 --port 9
 wake-pc --mac 02:11:22:33:44:55 --wait --wait-host 192.168.50.200 --wait-port 3389
 ```
+
+The PC's **Ethernet cable must be connected**: its wired adapter cannot
+receive a magic packet while unplugged, even if RDP currently works over
+Wi-Fi. The `.180` wait target below is the wired LAN address, not the
+Wi-Fi lease. From No-Face (or another enrolled host), use
+`wake-pc --wait --wait-host 100.113.62.81` to wait for the PC's stable
+Tailscale address instead; this changes only the readiness check, not
+which adapter receives the wake packet.
 
 With no arguments it sends one standard 102-byte UDP magic packet for Ethernet
 MAC `74:56:3C:B4:F5:4E` to LAN broadcast `192.168.50.255:9`. `--mac` identifies

@@ -1,15 +1,18 @@
 # Mac Studio compute companion
 
 The Studio runs native speech inference, an advisory local model, and a
-**native CPU/x265 Tdarr node that is disabled** (see
-[Operations and rollout gates](#operations-and-rollout-gates)). Docker (Colima)
-has been removed until a service needs it; see [Docker](DECISIONS.md#docker).
-Bazarr's Whisper subtitles are moving to the Studio
-([status](ai/README.md#bazarr-transport-and-cutover)). Nothing here authorizes
-Tdarr to replace original media.
+**native Tdarr node that encodes TV episodes with CPU x265 for the server**: it
+is installed and paused until the cutover (see
+[the offload](../docker/docs/TDARR-STUDIO.md) and
+[Installing and starting the Tdarr node](#installing-and-starting-the-tdarr-node)).
+Docker (Colima) has been removed until a service needs it; see
+[Docker](DECISIONS.md#docker). Bazarr's Whisper subtitles are moving to the
+Studio ([status](ai/README.md#bazarr-transport-and-cutover)). The Mac never
+replaces original media: the server validates each encode and publishes it.
 
 See [speech setup](ai/README.md), [model comparisons and limitations](ai/SPEECH.md),
-and [Tdarr's storage-authoritative flow](../docker/docs/TDARR.md). Start with
+[the Tdarr offload](../docker/docs/TDARR-STUDIO.md) and
+[Tdarr's storage-authoritative flow](../docker/docs/TDARR.md). Start with
 [intents and decisions](DECISIONS.md): it records what Dante wants, which
 pieces an agent chose, and how to remove each piece.
 
@@ -18,7 +21,7 @@ pieces an agent chose, and how to remove each piece.
 | Component | Identity / boundary |
 |---|---|
 | Native speech, Ollama, Tdarr, SSH transport | `_studio`, private `/var/lib/studio-worker` home, no admin/wheel/SSH-login access |
-| Mac administrative SSH | `dante`; never lend this account's private key to `_studio` |
+| Mac administrative SSH | `dantebarbieri`; never lend this account's private key to `_studio` |
 | Linux SSH transport | `studio-tunnel`, nologin, dedicated key, no shell/PTY/SFTP, reverse/agent/Unix-socket forwarding |
 | Linux SMB account | `studio`; original media read-only, only the dedicated native job cache writable |
 | Linux fixed TCP relays | UID/GID 65534, read-only root, no capabilities, no-new-privileges, no mounts or credentials |
@@ -70,7 +73,9 @@ Use the canonical mapped paths:
 `/private/var` for these mapped paths. The fixed module require path under
 `/var/lib/studio-worker/tdarr/Custom` is intentionally unchanged.
 
-Build `mount-studio-share.c` on the Mac:
+`mount-studio-share.c` is built on the Mac. The Tdarr installer
+([below](#installing-and-starting-the-tdarr-node)) does it on every run; to build
+it by hand:
 
 ```sh
 clang -Wall -Wextra -Werror -O2 \
@@ -78,7 +83,8 @@ clang -Wall -Wextra -Werror -O2 \
   mount-studio-share.c -o mount-studio-share
 ```
 
-Install the binary as `_studio` mode 0700 in its private home. Create private
+The binary belongs to `_studio` in its private home (the installer uses mode
+0755; the home itself is 0700). Create private
 `mounts/media`, `mounts/cache`, `tmp` and `Library/Preferences` directories.
 The helper reads a worker-owned mode-0600 `Library/Preferences/nsmb.conf`
 containing one `password=` entry with the 64-hex SMB password. Transfer the
@@ -98,18 +104,23 @@ Required installation ownership:
 
 | Path | Owner / mode |
 |---|---|
+| `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-launcher` (built from `studio-tdarr-launcher.c`) | root:wheel 0755; holds the [Full Disk Access](#full-disk-access-for-the-nodes-launcher) grant |
 | `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session` (from `start-tdarr-session.sh`) | root:wheel 0755 |
 | `/Library/PrivilegedHelperTools` and protected ancestor directories | root-owned, no worker write access or replaceable links/ACLs |
 | `/Library/LaunchDaemons/com.danteb.studio-tdarr.plist` | root:wheel 0644 |
 | `/var/log/studio-tdarr` | root:wheel 0700; only regular root-owned log files |
-| Worker home and `start-tdarr.sh` | `_studio`, 0700 |
+| Worker home | `_studio`, 0700 |
+| `start-tdarr.sh` and `mount-studio-share` in the worker home | `_studio` 0755, written by the worker itself (inside the 0700 home) |
 | Worker `tdarr-api-key` and SMB credential file | `_studio`, 0600 |
+| Worker `tdarr-start-paused` | `_studio`, 0600; `false` enables automatic resume, `true` starts paused |
+| Worker `tdarr/Custom` modules (`hevc-offload-v2.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`) | `_studio` 0644, written by the worker itself. Root ownership would not protect them (the worker owns their directory); the server re-validates everything the Mac produces |
 
 Never put root-executed launcher code or root-opened log paths in the
 worker-writable home. Copy/extract the native ARM64 bundle **as the worker**,
 not with a recursive root chown of a worker-writable tree. Its executable is
-`/var/lib/studio-worker/tdarr/Tdarr_Node`; install the two Mac helper modules
-listed in [TDARR.md](../docker/docs/TDARR.md) beside it under `Custom`.
+`/var/lib/studio-worker/tdarr/Tdarr_Node` and its version must match the
+server's Tdarr (both are 3.08.00, with the controller image pinned); the installer puts the three
+Mac helper modules beside it under `Custom`.
 
 Create a dedicated key in Tdarr **Tools -> API Keys**. Run
 `sudo bash set-tdarr-api-key.sh` from a trusted copy on the Mac and paste it at
@@ -120,16 +131,137 @@ with direct database edits. A separate key is revocable, not demonstrated
 per-node least privilege. For rotation/revocation, first stop the native node;
 do not assume an established socket is immediately invalidated.
 
-For a future approved isolated deployment, load the transport daemon before
-the Tdarr daemon. **The installed native Tdarr daemon is currently disabled;
-do not enable it against the shared production controller.** `start-tdarr.sh` verifies
-both mounts, supplies base64-encoded canonical path mappings, and starts paused
-with one CPU transcode worker and zero GPU/health workers. Confirm actual
-real/effective UID and the server's live pause/worker settings after startup.
-The headless system-daemon remount has been exercised; a cold-boot/FileVault
-unlock and recovery test remains separate.
+### Installing and starting the Tdarr node
 
-## Operations and rollout gates
+Load the transport daemon (`com.danteb.studio-transfer`) first, and have the
+node bundle, SMB credential and API key in place. Then, as root from copies of
+`macos/` and `docker/tdarr/` on the Studio:
+
+```sh
+sudo bash macos/install/install-tdarr-node.sh --modules docker/tdarr          # install or update
+sudo bash macos/install/install-tdarr-node.sh --modules docker/tdarr --start  # (re)start the daemon
+sudo bash macos/install/install-tdarr-node.sh --stop                          # stop and disable it
+```
+
+New installations start paused. After the offload cutover, install with
+`--auto-resume --start` to resume encoding automatically after a node restart.
+`--start-paused` restores manual startup. The choice lives in the worker's
+`tdarr-start-paused` file (0600), is written as the worker, and survives ordinary
+installer updates; an absent file means paused, and invalid values or links
+prevent startup. Stop and disable the Mac node before rolling back to Linux
+encoding when auto-resume is enabled.
+
+Every run first checks all its inputs and builds the mount helper in a
+root-owned staging directory; nothing is replaced until those checks and builds
+pass, so a failure changes nothing. Root then writes only root-owned paths: the
+session script, the plist, the log directory and, only when it is missing, the
+launcher. The worker's own files (`mount-studio-share`, `start-tdarr.sh` and,
+with `--modules`, the three worker modules) are written **by the worker** from
+that staging directory. The worker owns its home, and Apple's `install` (per its
+open-source implementation) re-opens its target by name after the rename, so a
+root-run `install` there could be redirected by a symlink the worker plants while
+it runs. An earlier installer left `tdarr/Custom` root-owned; the first run with
+`--modules` moves it aside as `Custom.superseded.<date>`, and the worker cannot
+delete root-owned files, so remove that with `sudo` when convenient. The
+launcher is built and ad-hoc signed **only when it is missing**
+(`--replace-launcher` overrides that); every run prints its CDHash and warns when
+the Full Disk Access grant below is absent. A plain install does not restart a
+running node, so new scripts take effect at the next `--start`.
+
+`--start` unloads the daemon, enables it and boots it in, retrying the bootstrap
+up to three times because launchd can still be tearing the old job down. `--stop`
+unloads and disables it, then waits up to a minute for the `_studio` node, start
+script and any share probe still running on the mounts to finish (a probe can
+outlive the node by up to about 25 s); it exits 3 and lists whatever is left.
+Either one aborts any encode running on the node.
+
+`start-tdarr.sh` treats a hung SMB share like a failed one. Every probe runs
+under a time limit and, at the deadline, is killed together with anything it
+started. A share counts as healthy only if its path is a real mount (a mount
+point sits on a different device than its parent, so the empty directory left by
+a vanished mount cannot pass) and it answers a listing. A mount that no longer
+answers is force-unmounted before the helper runs, because the helper accepts any
+earlier mount. The script mounts each share (three attempts, with a
+force-unmount and a `NetAuthSysAgent` reset between them), proves it can list and
+read the media share and write the cache before it starts the node, and then runs
+a watchdog that stops the node when a share dies (three failed checks a minute
+apart: SIGTERM first, and SIGKILL only if that same node is still there 20 s
+later), so launchd restarts and remounts it. The watchdog ends within a second of
+the node exiting, and a check that finishes after the node has gone is not
+counted as a failure. The node runs at
+`nice -n 10`, starts **paused by default** (or resumes with `--auto-resume`) and registers as
+`Studio-Native` with one CPU transcode worker and no GPU or health-check workers.
+Pause state and worker limits are changed from the server with the node
+configurator ([Node settings](../docker/docs/TDARR-STUDIO.md#node-settings)).
+Whether the server's stored limits or pause state win over the start script's
+values after a re-registration is still one of the
+[open checks](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover), so
+confirm the real and effective UID and the live settings after every start. The
+headless system-daemon remount has been exercised; a cold boot with FileVault
+is covered only by the note in
+[DECISIONS.md](DECISIONS.md#headless-and-back-on-its-own-after-power-loss).
+
+The installer and watchdog have 41 regression tests passing on No-Face against
+stubs and temporary directories. Real install, clean stop/start, preserved FDA,
+SMB mounts and opt-in automatic resume were also exercised during cutover.
+Dead-tunnel recovery and cold boot remain
+[operational follow-ups](../docker/docs/TDARR-STUDIO.md#studio-script-mocked-tests-live-checks).
+
+### A wedged mount agent
+
+`_studio`'s per-user `NetAuthSysAgent` can hang in `LsarLookupNames` and then
+blocks every later mount for that account. `mount-studio-share` bounds its wait
+(`alarm(60)`, exit status 142), and between its three attempts `start-tdarr.sh`
+force-unmounts and kills the agent, which launchd respawns on demand. By hand,
+as root: `pkill -KILL -u "$(id -u _studio)" -x NetAuthSysAgent`. Never take the
+pid from `launchctl print`: a service that is not running reports `0`, and
+`kill -KILL 0` kills the whole process group.
+
+### Full Disk Access for the node's launcher
+
+macOS privacy (TCC) denies every file open on the SMB mounts to a process tree
+that a LaunchDaemon started: the node, ffmpeg and ffprobe all fail with
+`Operation not permitted` although the mount, owner and mode are right. SSH
+sessions work only because `sshd-keygen-wrapper` already holds Full Disk Access.
+Apple binaries as the job's program (`bash`, `sudo`, `cron`) do not pass
+responsibility on to their children, but a third-party program does, so the
+daemon's program is a small launcher, `studio-tdarr-launcher.c`, and one grant
+covers the whole chain below it:
+
+`com.danteb.studio-tdarr` (root LaunchDaemon) → launcher →
+`start-tdarr-session.sh` → `launchctl asuser` → `sudo -u _studio` →
+`start-tdarr.sh` → `Tdarr_Node` → ffmpeg.
+
+The launcher stays narrow. It must be started by launchd as root, takes exactly
+one argument (a root-owned script directly in `/Library/PrivilegedHelperTools`
+whose name starts with `com.danteb.studio-`, not group- or other-writable, with
+no `..`) and runs it with `/bin/bash` and a minimal environment. Do not turn it
+into a launcher for arbitrary commands.
+
+**The grant is bound to the launcher's path and code hash, so never rebuild,
+recompile, re-sign or replace it:** that voids the grant and the node loses its
+mounts. The installer builds it once. If `studio-tdarr-launcher.c` ever has to
+change, run it with `--replace-launcher` and repeat the grant.
+
+To grant it (once), start the daemon so the node's smoke test tries to read a
+share, then switch on `com.danteb.studio-tdarr-launcher` in System Settings >
+Privacy & Security > Full Disk Access. Dante has to do this: `tccutil` cannot
+grant it, `TCC.db` must not be edited, and a configuration profile can carry the
+exception only through MDM. Check it read-only from an SSH session, which holds
+Full Disk Access itself (`auth_value` 2 is allowed; the installer runs the same
+query for the launcher and warns unless it gets 2):
+
+```sh
+sudo sqlite3 -readonly "/Library/Application Support/com.apple.TCC/TCC.db" \
+  "select client,auth_value,auth_reason,datetime(last_modified,'unixepoch','localtime') from access where service='kTCCServiceSystemPolicyAllFiles'"
+```
+
+Denied (`auth_value` 0) rows for `siriactionsd`, Homebrew `ffmpeg` and `ffprobe`,
+`smbd` and a few diagnostic probes are leftovers of the diagnosis and grant
+nothing. Never run `tccutil reset SystemPolicyAllFiles` without naming a client:
+it would also remove the SSH grant.
+
+## Operations
 
 The `studio-transfer` Compose profile is opt-in. Use the main production
 Compose entry point, never a category file standalone:
@@ -140,33 +272,26 @@ docker compose --profile studio-transfer up -d --no-deps \
   studio-media-share studio-transfer-relay studio-tdarr-relay
 ```
 
-The initial deployment uses the production main file plus a private overlay
-at `/srv/docker/data/studio-transfer/compose.studio.yml`; reconcile that overlay
-and profile activation when the repository change lands. Likewise, the live
-SSH Match block is currently a guarded root-owned shadow of the original Nix
-symlink. Merge and activate its declarative Nix changes before relying on a
-future Nix activation to preserve transport. Setup does not perform that
+The initial deployment used the production main file plus a private overlay
+at `/srv/docker/data/studio-transfer/compose.studio.yml`. The 2026-11-22
+restoration activated the declarative restricted SSH transport. Its public key
+is installed as a root-owned regular file: OpenSSH `StrictModes` rejected the
+former symlink through `/nix/store`. Setup itself does not perform Nix
 activation, restart Docker/Tdarr, or reboot either host.
 
-**Native Tdarr rollout is blocked by the installed 3.07 staged scheduler.**
-The copied-media attempt admitted 23 staged production TV jobs despite verified
-live/persisted library exclusions. They failed before encoding when the Mac
-could not create the unmapped `/temp/tdarr-workDir2-*` directories. The native
-daemon was stopped and persistently disabled; the canary was disabled and the
-temporary HomeServer tag restored. No successful canary encode or handoff
-was demonstrated. See [the incident and scheduling boundary](../docker/docs/TDARR.md#prevent-the-mac-from-taking-existing-linux-only-jobs).
-
-`librariesToNotProcess` filters fresh queued selection, **not staged selection**;
-untagged staged work matches any node's tags. A frozen library inventory,
-one worker, or successful settings readback therefore cannot authorize unpause.
-Keep the native daemon disabled on the shared controller. A new attempt needs
-explicit approval for either a separate canary-only controller/state and
-dedicated Linux worker, or a verified scheduler fix covering both selection
-paths. Export only disposable copied media/cache for that experiment, never the
-whole production media tree, and include an eligible disposable decoy as a
-negative scheduling test. New flow guards cannot protect already-staged old
-continuations. Trusted Tdarr controllers/plugins remain part of the boundary;
-this is not a malicious-node sandbox.
+**Tdarr cutover status (2026-11-22).** No-Face is actively encoding the three TV
+libraries with `homeserver-hevc-offload-v2`, one CPU worker, `pools=9` and CRF 20.
+Automatic resume is enabled; Calcifer retains validation/publication, one CPU
+health-check worker and one GPU-type publisher/DV5 worker, with no CPU encoders
+and a four-CPU quota. Tdarr's free tier ignores node
+exclusions and tags, so work is kept apart by worker types, flows, worker limits
+and library schedules instead. The actual production pair passed copied-media
+acceptance before its TV schedules reopened.
+See [the free-tier limits and the 2026-11-13 incident](../docker/docs/TDARR-STUDIO.md#free-tier-limits-and-the-2026-11-13-incident),
+[the acceptance record and follow-ups](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover) and
+[the runbook](../docker/docs/TDARR-STUDIO.md#cutover-and-rollback). Trusted
+Tdarr controllers and plugins remain part of the boundary; this is not a
+malicious-node sandbox.
 
 Speech and Ollama remain loopback-only under `_studio`. Speech timing checks
 and automatic overlap metrics are not human-reviewed translation accuracy.
