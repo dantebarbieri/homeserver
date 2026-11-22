@@ -34,13 +34,23 @@ install), [`ai/README.md`](ai/README.md) and [`ai/SPEECH.md`](ai/SPEECH.md)
 Dante bought this Mac Studio as a compute companion for the homeserver.
 
 > **Reinstalled 2026-11-21 as `No-Face`** (*Dante*: new hardware, fresh
-> macOS install, new admin account). So far only the hostname, SSH access and
-> DNS name below have been redone. Everything else in this file describes the
-> previous install and is **not yet provisioned** on this one (worker
-> accounts, transfer tunnel, Tdarr node, speech/Ollama services, shell
-> dotfiles); re-verify each piece as it is restored. Docker services that
-> still target `ai-studio.home.arpa` now reach this Mac but will fail its new
-> SSH host keys until re-provisioned.
+> macOS install, new admin account). Restored and verified end to end that
+> night: hostname, SSH, DNS, shell, the `_studio` worker and its tool ACLs,
+> Ollama with `qwen3.5:9b-q4_K_M` and `qwen3:8b`, the Whisper adapter with
+> both pinned models and the `mlx-whisper` CLI, the `_bazarr`/`_arrmaint`
+> forwarding accounts, and the server's two tunnels (re-pinned host key;
+> previous `known_hosts` kept as `known_hosts.before-no-face-20261121`). New:
+> [Tailscale BMC route and `wake-pc`](#tailnet-bmc-access-and-wake-pc).
+> **Not provisioned on this install:** the Tdarr transfer tunnel, share mounts
+> and the disabled native Tdarr node (they need the Samba secret, Full Disk
+> Access in the GUI and the new worker transfer key on the server), and the
+> benchmark/comparison evidence under `~/Services/ai-staging` (lost with the
+> old disk). Rows below that describe those are history.
+>
+> A temporary non-admin `copilot` account with passwordless sudo
+> (`/etc/sudoers.d/zz-copilot-temp`, member of `com.apple.access_ssh`) did
+> the overnight work. Remove it:
+> `sudo rm /etc/sudoers.d/zz-copilot-temp && sudo sysadminctl -deleteUser copilot`.
 
 | | |
 |---|---|
@@ -136,17 +146,23 @@ devices.
 
 **Current**
 
-- Homebrew owned by `dante`. Formulae: `bat`, `fastfetch`, `zimfw`, `zoxide`;
-  `ffmpeg`, `ollama` and `uv` serve the AI work.
-- [`admin/`](admin/) holds the dotfiles: `zimrc` uses the server's Zim modules
-  and asciiship prompt; `zshrc` runs fastfetch only for interactive login
-  terminals, so scripted SSH and `scp` stay clean. Zim downloads its modules on
-  the first shell. Machine-specific or secret settings belong in untracked
+- Homebrew owned by `dantebarbieri` (the admin account). Formulae: `bat`,
+  `fastfetch`, `zimfw`, `zoxide`; `ffmpeg`, `ollama` and `uv` serve the AI work
+  once restored.
+- [`admin/`](admin/) holds the dotfiles: `zimrc` uses the server's Zim modules,
+  without asciiship; the prompt comes from the shared
+  [`shell/prompt.zsh`](../shell/prompt.zsh) (reads `user on host in dir`, the
+  host coloured per Ghibli character) which `zshrc` sources after Zim.
+  `zshrc` runs fastfetch only for interactive login terminals, so scripted SSH
+  and `scp` stay clean. Zim downloads its modules on the first shell.
+  Machine-specific or secret settings belong in untracked
   `~/.zprofile.local` / `~/.zshrc.local`.
+- fastfetch keeps its default Apple logo for now; Dante will supply artwork for
+  a custom one.
 
   ```sh
   brew install zimfw fastfetch zoxide bat
-  for f in zshenv zprofile zimrc zshrc; do install -m 0644 admin/$f ~/.$f; done
+  sh admin/install-shell.sh   # dotfiles plus ~/.config/ghibli/prompt.zsh
   ```
 
 ## Names, not IPs
@@ -212,6 +228,39 @@ yet applied. DNS naming and transport are independent: use
 Whisper and Ollama listen only on the Studio's loopback. Only Bazarr reaches
 Whisper. The three *arr maintenance helpers reach Ollama through their
 separate `studio-ollama` SSH forward on the private `arr-ai` Docker network.
+
+## Tailnet: BMC access and wake-pc
+
+**Intent** (*Dante*, 2026-11-21): "get it onto hosted tailscale and lets get a
+wake-pc running on the no-face machine too". The tailnet should reach the
+server's BMC even while the server is down, and the Studio should be able to
+wake the Windows PC like the server's `wake-pc`. The tailnet-wide migration
+(server, Windows, docs) is owned by `docs`/`nixos` changes outside this file.
+
+**Current**
+
+- Open-source `tailscaled` from Homebrew, installed as the boot-time
+  LaunchDaemon `com.tailscale.tailscaled` by `tailscaled install-system-daemon`
+  ([installer](install/install-tailscale.sh)). Tailscale's GUI variants only
+  run after a user logs in; this one starts at boot with no login, though like
+  everything else only after FileVault is unlocked. It copies the binary to
+  `/usr/local/bin/tailscaled`, which `brew upgrade` does not update: rerun
+  `sudo tailscaled install-system-daemon` after upgrading.
+- Logged in as machine `no-face`, advertising only `192.168.50.50/32` (the
+  BMC), with `--accept-routes=false --accept-dns=false` so local routing and
+  DNS stay on the LAN and AdGuard. The route needs approval in the admin
+  console.
+- macOS `tailscaled` does not SNAT subnet-route traffic, so the BMC would reply
+  via the router. `com.danteb.tailscale-bmc-route`
+  ([script](tailscale/tailscale-bmc-route.sh)) turns on IPv4 forwarding and
+  keeps the pf anchor `com.apple/250.danteb-tailscale-bmc` loaded: NAT only
+  for `100.64.0.0/10` to `192.168.50.50` out `en0`. It re-checks every minute
+  because a reload of `/etc/pf.conf` can flush `com.apple` sub-anchors. pf was
+  disabled before; enabling it adds no filter rules.
+- `/usr/local/bin/wake-pc` is [`scripts/wake-pc.py`](../scripts/wake-pc.py)
+  with the CLT's `/usr/bin/python3`, the same packaging as `wake-pc.nix`:
+  identical defaults, `--wait` and exit codes. No-Face is on the same LAN, so
+  the broadcast default works. Tested only with a dummy MAC to loopback.
 
 ## Offload speech-to-text (Whisper)
 
@@ -463,6 +512,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, Tdarr launcher and plists |
 | `macos/install/` | Historical one-time installers from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
+| `macos/tailscale/`, `macos/install/install-tailscale.sh` | BMC subnet-route NAT helper and its plist; Tailscale and `wake-pc` installer |
 | `macos/ai/` | Whisper adapter, Ollama and Whisper plists, `_bazarr` sshd drop-in and provisioning script, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
 | `docker/compose.ai.yml`, `docker/dockerfiles/studio-whisper-tunnel/` | Bazarr's SSH forward to the Studio's Whisper adapter |
@@ -478,6 +528,9 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Whisper, Ollama | `com.danteb.studio-whisper`, `com.danteb.studio-ollama`; models in the worker home | `sudo launchctl bootout system/<label>`, delete the plist and worker data |
 | Bazarr forwarding account | `_bazarr`, `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf`, `/etc/ssh/bazarr-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#bazarr-transport-and-cutover) |
 | Maintenance forwarding account | `_arrmaint`, `/etc/ssh/sshd_config.d/003-arr-maint-forwarding.conf`, `/etc/ssh/arr-maint-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#ollama-transport) |
+| Tailscale | `com.tailscale.tailscaled`, `/usr/local/bin/tailscaled`, state in `/Library/Tailscale/`; Homebrew `tailscale` | `sudo tailscale logout`, `sudo tailscaled uninstall-system-daemon`, `brew uninstall tailscale`, delete the machine in the admin console |
+| BMC route NAT | `com.danteb.tailscale-bmc-route`, `/usr/local/libexec/tailscale-bmc-route.sh`, `/var/log/tailscale-bmc-route.log` | `bootout`, delete the plist and script, `sudo pfctl -a com.apple/250.danteb-tailscale-bmc -F all`, `sudo sysctl -w net.inet.ip.forwarding=0` |
+| wake-pc | `/usr/local/bin/wake-pc` | Delete it |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
 | Isolated Tdarr lab (removed 2026-11-13) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-media.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Removed after explicit authorization. Preflight found regular files/directories only, no symlinks or special files; post-check confirmed all five targets absent |
@@ -516,8 +569,10 @@ is not a leftover model download.
 
 ## Open items
 
-1. Cold-boot test, including the FileVault pre-boot SSH unlock.
+1. Cold-boot test, including the FileVault pre-boot SSH unlock, then check
+   Ollama, Whisper, `tailscaled` and the BMC route come back on their own.
 2. Prune retired SSH keys on the Studio (and the server if retired there too).
+   Remove the temporary `copilot` account (command at the top).
 3. Use `home.arpa` for future service integrations. Admin SSH migration is
    complete on the reachable hosts; the MacBook is intentionally unchanged.
 4. Speech: Bazarr's cutover is complete
