@@ -1,33 +1,59 @@
 #!/bin/bash
-# As run on 2026-11-13 (sudo) from ~/Services/ai-staging, since deleted. The
-# staged files are in macos/. Installs the worker's restricted SSH config, the
-# Samba credential (fetched from the server, never stored in git) and the
-# studio-transfer tunnel.
+# Run with sudo from the Mac admin account after activating its worker's
+# restricted public key on Calcifer. Starts only the tunnel, not Tdarr.
 set -euo pipefail
 umask 077
-[[ "$(id -u)" == 0 ]]
+[[ "$(uname -s)" == Darwin && "$EUID" == 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]] || {
+    echo "Run with sudo on the Mac from the admin account with the homeserver SSH profile." >&2
+    exit 1
+}
+src="$(cd "$(dirname "$0")/.." && pwd)"
 home=/var/lib/studio-worker
-staging=/Users/dante/Services/ai-staging
-install -d -o _studio -g staff -m 700 "$home/.ssh" "$home/Library" \
-    "$home/Library/Preferences" "$home/mounts" "$home/mounts/media" "$home/mounts/cache"
-for pair in 'studio-transfer-ssh.conf:config' 'studio-transfer-known-hosts:known_hosts'; do
-    source="${pair%%:*}"
-    target="${pair#*:}"
-    tr -d '\r' < "$staging/$source" > "$home/.ssh/$target"
-    chown _studio:staff "$home/.ssh/$target"
-    chmod 600 "$home/.ssh/$target"
-done
-credential="$(sudo -u dante /usr/bin/ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-    homeserver cat /srv/docker/data/studio-transfer/samba.env)"
-[[ "$credential" =~ ^ACCOUNT_studio=[a-f0-9]{64}$ ]]
-password="${credential#ACCOUNT_studio=}"
+label=com.danteb.studio-transfer
+cd /
+if launchctl print "system/$label" >/dev/null 2>&1; then
+    echo "Transfer daemon already loaded; stop it before reprovisioning." >&2
+    exit 1
+fi
+plutil -lint "$src/$label.plist"
+worker() {
+    /usr/bin/sudo -n -H -u _studio /usr/bin/env -i HOME="$home" PATH=/usr/bin:/bin:/usr/sbin:/sbin "$@"
+}
+worker /bin/bash -ec '
+    umask 077
+    cd "$HOME"
+    test -f .ssh/id_ed25519_transfer
+    mkdir -p .ssh logs Library/Preferences mounts/media mounts/cache tmp
+'
+# Open worker-controlled destinations only after dropping privileges. Rename
+# from the same directory so a failed read never truncates an installed file.
+put() {
+    worker /bin/bash -ec '
+        umask 077
+        cd "$HOME"
+        temp=$(mktemp "${1}.XXXXXX")
+        trap '\''rm -f "$temp"'\'' EXIT
+        cat > "$temp"
+        test -s "$temp"
+        test ! -d "$1"
+        mv -f "$temp" "$1"
+    ' _ "$1"
+}
+put .ssh/config < "$src/studio-transfer-ssh.conf"
+put .ssh/known_hosts < "$src/studio-transfer-known-hosts"
+
+# Fetch through the admin's existing, pinned SSH connection. Never hand that
+# identity to the worker, nor expose the SMB credential in argv or output.
+credential="$(/usr/bin/sudo -n -H -u "$SUDO_USER" /usr/bin/ssh \
+    -o BatchMode=yes -o StrictHostKeyChecking=yes homeserver cat /srv/docker/data/studio-transfer/samba.env)"
+[[ "$credential" =~ ^ACCOUNT_studio=[a-f0-9]{64}$ ]] || {
+    echo "Invalid Samba credential file; transport not started." >&2
+    exit 1
+}
 printf '[default]\nminauth=ntlmv2\nprotocol_vers_map=4\nsigning_required=yes\n\n[127.0.0.1]\npassword=%s\n' \
-    "$password" > "$home/Library/Preferences/nsmb.conf"
-unset password credential
-chown _studio:staff "$home/Library/Preferences/nsmb.conf"
-chmod 600 "$home/Library/Preferences/nsmb.conf"
-plutil -lint "$staging/com.danteb.studio-transfer.plist"
-install -o root -g wheel -m 644 "$staging/com.danteb.studio-transfer.plist" \
-    /Library/LaunchDaemons/com.danteb.studio-transfer.plist
-launchctl bootstrap system /Library/LaunchDaemons/com.danteb.studio-transfer.plist
-printf 'Restricted SSH transport started; private SMB credential installed.\n'
+    "${credential#ACCOUNT_studio=}" | put Library/Preferences/nsmb.conf
+unset credential
+
+install -o root -g wheel -m 644 "$src/$label.plist" "/Library/LaunchDaemons/$label.plist"
+launchctl bootstrap system "/Library/LaunchDaemons/$label.plist"
+echo "Transfer daemon loaded. Tdarr node state unchanged."

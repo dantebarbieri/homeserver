@@ -41,11 +41,10 @@ Dante bought this Mac Studio as a compute companion for the homeserver.
 > forwarding accounts, and the server's two tunnels (re-pinned host key;
 > previous `known_hosts` kept as `known_hosts.before-no-face-20261121`). New:
 > [Tailscale BMC route and `wake-pc`](#tailnet-bmc-access-and-wake-pc).
-> **Not provisioned on this install:** the Tdarr transfer tunnel, share mounts
-> and the disabled native Tdarr node (they need the Samba secret, Full Disk
-> Access in the GUI and the new worker transfer key on the server), and the
-> benchmark/comparison evidence under `~/Services/ai-staging` (lost with the
-> old disk). Rows below that describe those are history.
+> The Tdarr tunnel and disabled native node were restored the following day
+> ([current status](#offload-video-encoding-tdarr)); historical mount and
+> canary results are not evidence for this install. The benchmark/comparison
+> files under `~/Services/ai-staging` were lost with the old disk.
 >
 > A temporary non-admin `copilot` account with passwordless sudo
 > (`/etc/sudoers.d/zz-copilot-temp`, member of `com.apple.access_ssh`) did
@@ -390,6 +389,42 @@ safety or accuracy guarantee. See [scope, evaluation and rollout](../docker/docs
 
 ## Offload video encoding (Tdarr)
 
+**No-Face restore, 2026-11-22:** Dante chose the existing split: No-Face
+does TV x265 encodes; Calcifer keeps the controller, full-decode verification,
+publication and NVIDIA DV5 sidecars. This is **not cut over**. The live
+controller reports 3.08.00, with just `HomeServer` connected. The three TV
+libraries still use `homeserver-hevc-cpu-v1`. The disabled copied-media
+canary uses `homeserver-hevc-offload-v1` (CPU/GPU worker types, **not** the
+older custom-tag flow described below). Its installer/runbook is in commit
+`b210ee5`, `docker/docs/TDARR-STUDIO.md`.
+
+The matching 3.08.00 Apple Silicon node is installed under `_studio` and
+persistently disabled in launchd. The installer is staged under the No-Face
+admin's `~/Services/tdarr-no-face-restore`. The three staged worker modules
+match the copies in Calcifer's `Custom` directory. The root-owned helper
+`/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-launcher` is the
+only component granted Full Disk Access for Tdarr (verified). The dedicated
+API key was provisioned. The transfer daemon now authenticates as
+`studio-tunnel` from `.80`; the Mac's loopback endpoint returns the live
+controller's healthy status. Calcifer's Nix generation installs the public
+key as a root-owned regular file: OpenSSH `StrictModes` rejected the former
+symlink through `/nix/store`. The two permitted destinations are unchanged.
+The SSH change must also land on `main` to survive subsequent deployments.
+The share mounts and a copied-media encode/return still need to be exercised
+on this install. Do not enable a production worker to test them.
+
+**Isolated test (parked, no encode):** Calcifer's `tdarr-noface-test` and
+`tdarr-noface-test-smb` containers are stopped. Their internal network is
+`tdarr-noface-test`; private state and the disposable sample are under
+`~danteb/tdarr-noface-test`. Neither container mounted production media or
+Tdarr state. On No-Face, the non-login `_tdarrtest` account (UID 496) has
+its own `/private/var/lib/tdarr-lab-worker` home. Its one-shot job
+`com.danteb.tdarr-noface-test` is installed from `PrivilegedHelperTools`,
+not `LaunchDaemons`. The test plist mistakenly passed both a lab and a
+production session script; the launcher refused it (exit 78), before
+mounting shares or registering the node. The sample checksum was unchanged.
+Do not rerun the fresh-account installer or enable the production node.
+
 **Intent:** move CPU-heavy encoding off the server (heat) without lowering
 quality. *Dante* keeps quality-first CPU `libx265` encoding and cares about the
 result, not the configuration.
@@ -419,7 +454,7 @@ Sources: [HandBrake encoder comparison](https://handbrake.fr/docs/en/latest/tech
 [HandBrake on VideoToolbox](https://handbrake.fr/docs/en/latest/technical/video-videotoolbox.html),
 [M1 Pro `hevc_videotoolbox` vs `libx265`](https://yre.jp/en/post/m1mac_h265/).
 
-**Current: not working, disabled.**
+**Earlier custom-tag attempt (not the installed offload flow):**
 
 - Design (agent and a security reviewer): a native node as `_studio` reaches
   the server's controller through the SSH tunnel. The flow

@@ -35,7 +35,11 @@
   };
 
   # A nondefault path makes authentication fail closed without the SSH Match block.
-  environment.etc."ssh/studio-transfer-keys".text = ''
-    from="192.168.50.140",restrict,port-forwarding,permitopen="127.0.0.1:1445",permitopen="127.0.0.1:8266" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ2DJS4gLjceYjEhDwithEwI20Ljgo8TT2nC616y5KOr studio-transfer@ai-studio
-  '';
+  environment.etc."ssh/studio-transfer-keys" = {
+    # StrictModes rejects a symlink through the group-writable /nix/store.
+    mode = "0444";
+    text = ''
+      from="192.168.50.80",restrict,port-forwarding,permitopen="127.0.0.1:1445",permitopen="127.0.0.1:8266" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFKbRYiXxVFT4I9lfLIGxE93cYhs55ZulgeT8FdkI6BB studio-transfer@no-face
+    '';
+  };
 }
