@@ -227,7 +227,7 @@ remain 2026-11-12; all 312 PNGs and both CSS files are unchanged. No API,
 schema, server-reachable logic, modeled rules or sharing behavior changes.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
-page, scripts, stylesheets, manifest, icons and all bundled art (398 files) so
+page, scripts, stylesheets, manifest, icons and all bundled art (399 files) so
 local saves open offline.
 It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
 an online visit gets the newest release.
@@ -236,7 +236,7 @@ The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
 This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
-in either image; 73 manifest-listed game-art PNGs and 312 manifest-listed
+in either image; 74 manifest-listed game-art PNGs and 312 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
 six MirkMap icons drawn from the game's "Map of area" item and (since f7257fc)
 the journal's text copied from the game's `UI.ini`. The web image also
@@ -248,31 +248,51 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `21abd3af0a56fe7325c8311fd705ee0191d1efeb`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/43260676643) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/66) has no open issues |
-| Web | `mirklurk-map:21abd3a`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:21abd3a`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `64cbf776a2c3cf0d32792d4f322f3e6c9bc90c70`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/44967533597) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/67) has no open issues |
+| Web | `mirklurk-map:64cbf77`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:64cbf77`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
 | Exposure | No host ports, no router/firewall changes, no public file listing, no outbound backend network |
 | Health | Each container's `/healthz`; web depends on healthy uploads |
 
+The 0.9.6.5 core pin adds version-gated Spider Silk, Grilled Spider Meat,
+the spider scroll, Mirk Lurker and Deathlob definitions, revised Geomancer
+stats, and rendering of saved spider caves and webbed treasure. It does not
+rewrite authoritative saved positions, terrain or health grids. There are
+74 environment PNGs (including the special cave and updated web/treasure art)
+and 312 unchanged wiki PNGs. The 523-title wiki catalog and its 2026-11-12
+verification date intentionally remain old until the separate verified wiki
+publication and final catalog refresh.
+
+Although no server, Dockerfile, schema or sharing behavior changed, the
+uploads Docker target copies all of `src`, which changed. Build both pinned
+targets and use the normal serialized uploads-then-web dependency rollout;
+do not silently retain the old uploads source label. A pin is not a live
+publication claim. Recheck ordinary clean-tree, source/image, owner,
+exclusive proxy, mounts, timers and protection guards before activation.
+The one-time November 21 peer-repair acceptance exception for the existing
+Studio SSH restart loops does not authorize an exception for this core
+rollout. If unrelated start-time preservation fails, stop and report it;
+do not reuse that exception, redefine the baseline or alter restart policies.
+
 Expected Deno 2.9.7 build identifiers (compare the actual image and live bytes,
 not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.c45b331152.js` | `c45b331152e3754320fa9496214f48bbdb0856e393cba08a700624d30f9e9404` |
-| `edit.efa90ed903.js` | `efa90ed903a7558c2a2772a28429eae87e40506a88fc22c9e711536265e6f453` |
-| `sw.js` | `641ac266eecf8dfa7d967fe3e9a6ac3f505711a36b1bde5fcce8b58c0873ba1c` |
+| `app.2f52a387be.js` | `2f52a387be0ddb6523075db5e924e9ab318a57918b90da7c27d5def99e036faf` |
+| `edit.d4fdc30df3.js` | `d4fdc30df33704c2c221420c20c1074e04c5dac7e03044f5263933f313f32460` |
+| `sw.js` | `851815e08f6bacbf42d82c13b1e038f160871dd7e16b5ceeeae354d7a97537be5` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 398 entries (cache `c2cfb69f25`) and
+unchanged); the service worker keeps 399 entries (cache `4a71617bb1`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
 `Patch notes`. Both
-browser bundles contain `latest:"0.9.5.6"`, `Version 0.9.5.6`,
+browser bundles contain `latest:"0.9.6.5"`, `Version 0.9.5.6`,
 `Wooden Buckler` and verification date `2026-11-12`.
 Both browser bundles contain `Flint_Dagger_icon_(cropped).png` and
 `Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
