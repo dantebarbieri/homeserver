@@ -17,7 +17,10 @@ On the server, after the commits are deployed:
 bash /srv/homeserver/docker/scripts/install-tdarr-dv5-flow.sh --apply
 ```
 
-The installer requires the existing single colocated node to be idle. It
+The wrapper requires exactly one connected Tdarr node with no active workers.
+It therefore refuses while the Mac Studio's node is connected: stop that node
+first (`install-tdarr-node.sh --stop`, see [TDARR-STUDIO.md](TDARR-STUDIO.md))
+and start it again afterwards. The installer
 reads the API key inside the container, never writes it into the flow, and
 uses `Community/customFunction` to load the versioned worker module.
 Re-running it updates only its own flow; it preserves an existing movie
@@ -46,10 +49,17 @@ recreation. The node must use generic GPU tagging (`gpuSelect: "-"`) with
 The watcher polls every ten minutes, scans on startup, excludes `Plex Versions`,
 and holds new files for three minutes before processing. Health checks remain
 disabled for this library. Other libraries and the disabled pilot are untouched.
-Source classification runs on CPU; only eligible Profile 5 files are requeued
-through `tagsWorkerType` for the single GPU worker. Normal films skip conversion.
-This preserves the four CPU transcode workers for existing TV processing while
-preventing concurrent compatibility encodes from colliding on the safety lock.
+The flow opens with a `tagsWorkerType` gate for the GPU worker, so both the
+classification and the conversion run on the Linux GPU worker. A CPU worker on
+any node, including the Mac Studio's, only picks a movie up long enough to
+stage it for a GPU worker, because the module needs the Linux-only
+jellyfin-ffmpeg. Normal films skip conversion after a short classification.
+Only the conversion takes the safety lock, so one GPU worker also prevents
+concurrent compatibility encodes from colliding on it. That worker slot is
+shared with the TV offload's feeding and publishing steps
+([TDARR-STUDIO.md](TDARR-STUDIO.md)), so a long conversion delays them.
+`--enable` also needs exactly one connected node and a Linux GPU worker with
+generic tagging; run it while the Studio node is stopped.
 
 ## Processing contract
 

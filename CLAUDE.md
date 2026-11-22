@@ -18,7 +18,7 @@ A monorepo for homeserver infrastructure (domain: `danteb.com`). The server runs
 |-----------|---------|
 | `docker/` | Docker Compose orchestration — 18 category files, 50+ services |
 | `nixos/` | NixOS system configuration — flake (`flake.nix` + `flake.lock`), `configuration.nix` importing `modules/`, Home Manager in `home/` |
-| `macos/` | Mac Studio (`ai-studio`, `192.168.50.140`) compute companion — isolated native speech/models and a disabled native Tdarr node |
+| `macos/` | Mac Studio (`ai-studio`, `192.168.50.140`) compute companion — isolated native speech/models and a native Tdarr node that takes over the server's TV encoding (installed, activation pending; see `docker/docs/TDARR-STUDIO.md`) |
 | `homepage/` | Homepage dashboard YAML config |
 | `mail-config/` | Portable email/contacts setup (aerc, khard, vdirsyncer) — also used on macOS |
 | `recyclarr-configs/` | TRaSH Guides quality profiles for Sonarr/Radarr |

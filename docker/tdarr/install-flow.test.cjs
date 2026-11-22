@@ -7,19 +7,23 @@ const {
   FLOW_ID, LIBRARY_ID,
 } = require('./install-flow.cjs');
 
-test('flow has no original replacement or compression branch', () => {
+test('flow has no original replacement or compression branch and gates every worker to GPU first', () => {
   const flow = flowDefinition();
   assert.equal(flow._id, FLOW_ID);
   assert.deepEqual(flow.flowPlugins.map(node => node.pluginName),
-    ['inputFile', 'customFunction', 'tagsWorkerType', 'customFunction']);
-  assert.match(flow.flowPlugins[1].inputsDB.code, /dv5-sidecar\.cjs/);
-  assert.match(flow.flowPlugins[1].inputsDB.code, /\.classify\(args\)/);
-  assert.equal(flow.flowPlugins[2].inputsDB.requiredWorkerType, 'GPU');
-  assert.equal(flow.flowEdges.length, 3);
-  assert.equal(flow.flowEdges[0].target, flow.flowPlugins[1].id);
+    ['inputFile', 'tagsWorkerType', 'customFunction', 'customFunction']);
+  assert.deepEqual(flow.flowPlugins.map(node => node.id),
+    ['input', 'gpu-worker', 'classify', 'dv5-sidecar']);
+  assert.equal(flow.flowPlugins[1].inputsDB.requiredWorkerType, 'GPU');
+  assert.equal(flow.flowPlugins[1].inputsDB.requiredNodeTags, '');
+  assert.match(flow.flowPlugins[2].inputsDB.code, /dv5-sidecar\.cjs/);
+  assert.match(flow.flowPlugins[2].inputsDB.code, /\.classify\(args\)/);
+  assert.deepEqual(flow.flowEdges.map(edge => [edge.source, edge.target]), [
+    ['input', 'gpu-worker'], ['gpu-worker', 'classify'], ['classify', 'dv5-sidecar'],
+  ]);
   assert.ok(flow.flowEdges.every(edge => edge.sourceHandle === '1'));
-  assert.equal(flow.flowEdges[1].target, 'gpu-worker');
-  assert.equal(flow.flowEdges[2].target, 'dv5-sidecar');
+  // Nothing may touch the DV5 module before the GPU gate: other nodes do not have it.
+  assert.ok(flow.flowPlugins.slice(0, 2).every(node => !/dv5-sidecar/.test(JSON.stringify(node.inputsDB))));
 });
 
 test('new library retains defaults but cannot start a backlog or replace sources', () => {
