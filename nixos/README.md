@@ -49,6 +49,28 @@ new module must be `git add`ed before it takes effect.
 - **DNS**: `127.0.0.1` (AdGuard Home), `1.1.1.1`, `8.8.8.8`.
 - Boot waits for network readiness (`systemd.network.wait-online`).
 
+### Hosted Tailscale
+
+`modules/tailscale.nix` runs `tailscaled` natively at boot, independently of
+Docker. It preserves the server's DNS and OpenSSH on port 28, does not accept
+subnet routes, and does not advertise the LAN or an exit node. Authentication
+is a one-time `sudo tailscale up` browser login to the same hosted tailnet as
+No-Face and Windows; no auth key belongs in Nix or Git. State persists under
+`/var/lib/tailscale`. The module uses `extraSetFlags`, not `extraUpFlags`
+(the latter only applies when an `authKeyFile` is configured).
+
+No additional router forwarding, globally trusted interface, or UDP firewall
+opening is configured. Tailscale negotiates connectivity using outbound
+traffic and encrypted relays when a direct path is unavailable. Tailnet
+access must be limited to the intended administrator/devices in Tailscale's
+access policy; existing service authentication remains in place.
+
+For recovery, connect to No-Face directly over its Tailscale IP and reach
+the BMC through No-Face's `192.168.50.50/32` subnet route. Neither depends on
+this server. Keep wg-easy during migration until an off-LAN client has
+verified SSH, RDP, and the BMC path. See the repository
+[remote-access setup](../README.md#tailscale-remote-access).
+
 ## Storage
 
 - **Software RAID** (`mdadm`): array `/dev/md0` with a hot spare; mdadm is
