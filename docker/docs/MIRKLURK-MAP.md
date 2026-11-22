@@ -419,7 +419,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.18** and **fd2b:92df:1a5b:1::12**, not
+`compose_proxy` addresses **192.168.128.27** and **fd2b:92df:1a5b:1::1b**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -489,6 +489,14 @@ self-tests failed); do not retry/reset it or redeploy that service as part
 of exact-peer maintenance. Review all intervening upstream changes before
 canonical fast-forward; stop if they affect the narrow deployment contract.
 Do not use historical frozen-edit fingerprints to authorize new edits.
+On 2026-11-22 the same NPM container restarted after the host reboot and
+exclusively acquired .27 / ::1b; Syncthing now owns stale .18 / ::12.
+The reviewed core rollout replaces only these two trusted peers and builds
+both targets as described above. Its actual retained 21abd3a rollback images
+are web `sha256:1b103a8baaf2f688c04439cdbf5ae8a7f8c8c8e6e42b86c0a39b3ab920895ed6`
+and uploads `sha256:4052e7574ebd103f7394bfd312aea6d1976a832ba1f2f982d21f97092e42f480`.
+Reverify ownership, clean canonical state, current images and unrelated
+container starts before activation; no earlier restart-loop exception applies.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
