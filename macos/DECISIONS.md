@@ -49,8 +49,7 @@ Dante bought this Mac Studio as a compute companion for the homeserver.
 >
 > A temporary non-admin `copilot` account with passwordless sudo
 > (`/etc/sudoers.d/zz-copilot-temp`, member of `com.apple.access_ssh`) did
-> the overnight work. Remove it:
-> `sudo rm /etc/sudoers.d/zz-copilot-temp && sudo sysadminctl -deleteUser copilot`.
+> the overnight work; Dante removed it the same night.
 
 | | |
 |---|---|
@@ -574,7 +573,6 @@ is not a leftover model download.
 1. Cold-boot test, including the FileVault pre-boot SSH unlock, then check
    Ollama, Whisper and `tailscaled` come back on their own.
 2. Prune retired SSH keys on the Studio (and the server if retired there too).
-   Remove the temporary `copilot` account (command at the top).
 3. Use `home.arpa` for future service integrations. Admin SSH migration is
    complete on the reachable hosts; the MacBook is intentionally unchanged.
 4. Speech: Bazarr's cutover is complete
