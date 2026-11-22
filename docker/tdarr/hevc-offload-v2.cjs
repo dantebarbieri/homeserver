@@ -1,6 +1,7 @@
 'use strict';
 
-// Two-leg HEVC compression. The Mac Studio only encodes; the server validates and publishes.
+// Two-leg HEVC compression, with the mapped-path handoff fix. Cache tickets retain the v1 format.
+// The Mac Studio only encodes; the server validates and publishes.
 //   prepare / finish  run on the mapped macOS CPU worker (read-only media share, writable cache share)
 //   commit            runs on the Linux GPU worker slot, which Tdarr hands the staged job to
 // The Mac is treated as untrusted-ish: it parses hostile media and can write only the cache share, so

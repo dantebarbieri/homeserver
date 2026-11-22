@@ -63,7 +63,7 @@ encoder/decoder errors are preserved.
 ### Native Mac Studio offload
 
 The TV libraries can encode on the Mac Studio instead of this server. The
-versioned `homeserver-hevc-offload-v1` flow runs the same x265 `slow` recipe on
+versioned `homeserver-hevc-offload-v2` flow runs the same x265 `slow` recipe on
 a mapped Tdarr node there (with `pools` sized for the Studio's cores instead of
 this flow's `pools=4`), and the server still probes, fully decodes, validates
 and publishes every result with the unchanged `hevc-safe-v1.cjs` logic. [TDARR-STUDIO.md](TDARR-STUDIO.md) covers the measured encoder
@@ -211,18 +211,20 @@ idle. Preserve the existing worker limits, flows, originals, sidecars and
 
 ### Worker tuning
 
-With an EPYC CPU you can run more than 2 transcode workers. Each `libx265
-slow` encode **can efficiently use ~4 threads**, so a good starting point is
-**1 worker per 4 physical cores**:
+The No-Face offload deployment leaves **no CPU encoders on Calcifer**. One
+Linux GPU-type slot validates/publishes TV results and runs the DV5 flow;
+one CPU health-check worker remains. No-Face starts with one CPU encoder and
+an x265 pool of nine threads, at `nice -n 10`.
 
 ```yaml
 # compose.starr.yml → tdarr → environment
-transcodecpuWorkers: 4    # bump from 2 — tune based on core count
-healthcheckcpuWorkers: 4  # health checks are lightweight
+transcodecpuWorkers: 0
+transcodegpuWorkers: 1
+healthcheckcpuWorkers: 1
 ```
 
-> **Example:** 16-core EPYC → 4 workers. 32-core → 6–8 workers.
-> Monitor CPU usage after starting and adjust.
+Do not raise Linux CPU encoders while TV libraries use the Mac offload flow.
+Use the guarded [rollback sequence](TDARR-STUDIO.md#cutover-and-rollback).
 
 ### Thread limiting (important!)
 
@@ -235,7 +237,7 @@ cores, causing massive oversubscription and system-wide slowdown.
 
 ```yaml
 # compose.starr.yml → tdarr (top-level service key, not under environment)
-cpus: 12    # 12 logical CPU-equivalents of quota, not 12 pinned physical cores
+cpus: 4    # bounds Calcifer's remaining validation/health-check CPU work
 ```
 
 This is already applied in compose.starr.yml.

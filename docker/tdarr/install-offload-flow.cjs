@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const assert = require('node:assert/strict');
 const { isDeepStrictEqual } = require('node:util');
 const { connect, ROOT, libraryDefinition: baseLibrary } = require('./install-flow.cjs');
-const { PRIVATE_ROOT, CACHE_ROOT, crf: parseCrf } = require('./hevc-offload-v1.cjs');
+const { PRIVATE_ROOT, CACHE_ROOT, crf: parseCrf } = require('./hevc-offload-v2.cjs');
 
 // assert.equal and assert.deepEqual append the compared values (a diff of whole objects) to a custom message, and a
 // flow holds the Sonarr API key: failures must report the message and nothing else.
@@ -13,8 +13,9 @@ function assertSame(actual, expected, message) {
   assert(isDeepStrictEqual(actual, expected), message);
 }
 
-const FLOW_ID = 'homeserver-hevc-offload-v1';
+const FLOW_ID = 'homeserver-hevc-offload-v2';
 const LEGACY_FLOW = 'homeserver-hevc-studio-v1';
+const PREVIOUS_FLOW = 'homeserver-hevc-offload-v1';
 const SAFE_FLOW = 'homeserver-hevc-cpu-v1';
 const SAFE_CACHE = '/temp';
 const LIBRARY_ID = 'homeserver-hevc-studio-canary-v1';
@@ -33,7 +34,7 @@ const USAGE = [
 ].join('\n');
 
 // The same flow runs on both nodes: the platform picks which copy of the module a step loads.
-const step = fn => `module.exports = async args => require(process.platform === 'darwin' ? '${MAC_ROOT}/hevc-offload-v1.cjs' : '${ROOT}/hevc-offload-v1.cjs').${fn}(args);`;
+const step = fn => `module.exports = async args => require(process.platform === 'darwin' ? '${MAC_ROOT}/hevc-offload-v2.cjs' : '${ROOT}/hevc-offload-v2.cjs').${fn}(args);`;
 
 function assertPools(pools) {
   assert(Number.isInteger(pools) && pools >= 1 && pools <= 64, 'pools must be an integer from 1 to 64');
@@ -311,7 +312,7 @@ function buildPlan({ mode, state, macNode, pools: requestedPools, defaults, now 
         { ...libraryDefinition(defaults || libraryTemplate(libraries)), createdAt: now }, 'new disabled canary library');
     } else {
       assert(existing.folder === CANARY_FOLDER && existing.cache === CACHE_ROOT
-        && [LEGACY_FLOW, FLOW_ID].includes(existing.flowId), 'Canary library ID collision');
+        && [LEGACY_FLOW, PREVIOUS_FLOW, FLOW_ID].includes(existing.flowId), 'Canary library ID collision');
       if (existing.flowId !== FLOW_ID) {
         for (const key of DISABLED) {
           assertSame(existing[key], false, 'Canary already enabled; installer will not repoint an active rollout');
@@ -353,7 +354,7 @@ async function install({ crud, request, options = {}, defaults, log = console.lo
   log(`${apply ? 'Applying' : 'Previewing'} ${mode}: ${plan.length ? `${plan.length} change(s)` : 'nothing to change'}`);
   for (const item of plan) log(`  ${item.action} ${item.note}`);
   if (needsModules && plan.length) {
-    for (const file of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs']) await io.access(`${ROOT}/${file}`);
+    for (const file of ['hevc-offload-v2.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs']) await io.access(`${ROOT}/${file}`);
     await io.access(CACHE_ROOT); // Provisioned separately: never create or export a broader cache here.
   }
   if (!apply || !plan.length) return plan;
@@ -411,7 +412,7 @@ async function main() {
 module.exports = {
   flowDefinition, libraryDefinition, libraryTemplate, poolsOf, cutoverPlan, checkNodes, parseArgs, install,
   activeWorkers, quiescent, publisher, encoder, quiet, assertSame,
-  FLOW_ID, LEGACY_FLOW, SAFE_FLOW, SAFE_CACHE, LIBRARY_ID, CANARY_FOLDER, MAC_ROOT, TV_LIBRARIES, DEFAULT_POOLS,
+  FLOW_ID, LEGACY_FLOW, PREVIOUS_FLOW, SAFE_FLOW, SAFE_CACHE, LIBRARY_ID, CANARY_FOLDER, MAC_ROOT, TV_LIBRARIES, DEFAULT_POOLS,
   DEFAULT_MAC_NODE,
 };
 if (require.main === module) {

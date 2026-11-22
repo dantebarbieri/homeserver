@@ -410,6 +410,13 @@ canary and operational gates in
 [`TDARR-STUDIO.md`](../docker/docs/TDARR-STUDIO.md#open-checks-before-cutover)
 pass.
 
+**Cutover preparation, 2026-11-22:** Dante requested committing and activating
+the offload to reduce Calcifer's heat and fan activity. The corrected handoff is
+packaged as `hevc-offload-v2.cjs` / `homeserver-hevc-offload-v2`, leaving the
+older deployed v1 module and flow untouched. The deployment configuration now
+seeds zero Linux CPU encoders, one GPU-type publisher, one CPU health-check
+worker, and a four-CPU container quota. Activation is still pending.
+
 The matching 3.08.00 Apple Silicon node is installed under `_studio` and
 persistently disabled in launchd. The installer is staged under the No-Face
 admin's `~/Services/tdarr-no-face-restore`. The isolated `_tdarrtest` module was updated to the checked-in handoff fix and

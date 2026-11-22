@@ -112,7 +112,7 @@ Required installation ownership:
 | Worker home | `_studio`, 0700 |
 | `start-tdarr.sh` and `mount-studio-share` in the worker home | `_studio` 0755, written by the worker itself (inside the 0700 home) |
 | Worker `tdarr-api-key` and SMB credential file | `_studio`, 0600 |
-| Worker `tdarr/Custom` modules (`hevc-offload-v1.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`) | `_studio` 0644, written by the worker itself. Root ownership would not protect them (the worker owns their directory); the server re-validates everything the Mac produces |
+| Worker `tdarr/Custom` modules (`hevc-offload-v2.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs`) | `_studio` 0644, written by the worker itself. Root ownership would not protect them (the worker owns their directory); the server re-validates everything the Mac produces |
 
 Never put root-executed launcher code or root-opened log paths in the
 worker-writable home. Copy/extract the native ARM64 bundle **as the worker**,

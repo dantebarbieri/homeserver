@@ -13,7 +13,7 @@ MACOS = ROOT / "macos"
 INSTALLER = MACOS / "install/install-tdarr-node.sh"
 BASH = shutil.which("bash")
 LABEL = "com.danteb.studio-tdarr"
-MODULES = ("hevc-offload-v1.cjs", "hevc-safe-v1.cjs", "dv5-sidecar.cjs")
+MODULES = ("hevc-offload-v2.cjs", "hevc-safe-v1.cjs", "dv5-sidecar.cjs")
 INPUTS = (
     "mount-studio-share.c",
     "studio-tdarr-launcher.c",

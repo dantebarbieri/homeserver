@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { connect, ROOT } = require('./install-flow.cjs');
-const { CACHE_ROOT } = require('./hevc-offload-v1.cjs');
+const { CACHE_ROOT } = require('./hevc-offload-v2.cjs');
 const {
   activeWorkers, quiescent, publisher, encoder, quiet, assertSame, FLOW_ID, TV_LIBRARIES, DEFAULT_MAC_NODE,
 } = require('./install-offload-flow.cjs');

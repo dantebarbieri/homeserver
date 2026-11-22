@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseArgs, configure, WORKER_TYPES } = require('./configure-offload-nodes.cjs');
 const { FLOW_ID, SAFE_FLOW, SAFE_CACHE, TV_LIBRARIES } = require('./install-offload-flow.cjs');
-const { CACHE_ROOT } = require('./hevc-offload-v1.cjs');
+const { CACHE_ROOT } = require('./hevc-offload-v2.cjs');
 const { ROOT } = require('./install-flow.cjs');
 
 const MAC = 'Studio-Native';

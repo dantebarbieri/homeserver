@@ -124,7 +124,7 @@ flowchart LR
     C -- "stages for a GPU-type worker" --> D["Linux GPU-type slot<br/>commit: copy, validate, publish<br/>then notify Sonarr or Radarr"]
 ```
 
-The flow `homeserver-hevc-offload-v1` is identical on both nodes. Whichever
+The flow `homeserver-hevc-offload-v2` is identical on both nodes. Whichever
 worker picks up a Queued file first runs `input` and the `cpu` gate: the Linux
 slot stages the file for a CPU worker, and the Mac continues. After `finish`,
 the `gpu` gate does the reverse: the Mac stages the file for the Linux slot.
@@ -186,7 +186,7 @@ worker. Every movie in the DV5 library now takes a short probe in that slot.
 
 ### Checked-in implementation
 
-- `docker/tdarr/hevc-offload-v1.cjs`: the worker module (`prepare` and `finish`
+- `docker/tdarr/hevc-offload-v2.cjs`: the worker module (`prepare` and `finish`
   on the Mac, `commit` on Linux). It reuses the unchanged
   `docker/tdarr/hevc-safe-v1.cjs` and, through it, `dv5-sidecar.cjs`.
 - `docker/tdarr/install-offload-flow.cjs`: the flow, the disabled canary
@@ -196,6 +196,11 @@ worker. Every movie in the DV5 library now takes a short probe in that slot.
 - `docker/tdarr/maintenance.cjs`: the update lease for several nodes.
 - `docker/compose.studio.yml`, `nixos/modules/ssh.nix`: the SMB and Tdarr
   transport. `macos/`: the Studio side ([macos/README.md](../../macos/README.md)).
+
+The v2 module and flow package the mapped-path handoff fix without overwriting
+the older deployed v1 code or saved job snapshots. The cache and manifest
+protocol remain `offload-v1`. The installer can repoint the disabled v1 canary,
+but refuses to repoint an enabled canary or overwrite either version's flow.
 
 The tests are `docker/tdarr/*.test.cjs` (`node --test`, Node 24). Run them on
 Linux, inside the Tdarr container as `abc` with `TDARR_INTEGRATION_TESTS=1` to
@@ -264,7 +269,7 @@ validation kept the original, which is exactly what the 5% rule is for.
 |---|---|---|
 | Media, read-only to the Mac | `/data/media` | `/private/var/lib/studio-worker/mounts/media` (SMB, read-only) |
 | Job cache, the only Mac-writable path | `/temp/studio-native` (host `/tmp/tdarr_transcode_cache/studio-native`) | `/private/var/lib/studio-worker/mounts/cache` (SMB, read-write) |
-| Worker modules | `/app/server/Tdarr/Custom/` | `/var/lib/studio-worker/tdarr/Custom/`: `hevc-offload-v1.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs` |
+| Worker modules | `/app/server/Tdarr/Custom/` | `/var/lib/studio-worker/tdarr/Custom/`: `hevc-offload-v2.cjs`, `hevc-safe-v1.cjs`, `dv5-sidecar.cjs` |
 | Private state | `Custom/state/offload-v1` (0700, Linux only) | none |
 | FFmpeg | Tdarr's `tdarr-ffmpeg` | `/opt/homebrew/bin/ffmpeg` and `ffprobe` (checked: FFmpeg 9.0.2, x265 4.3) |
 | Tdarr node socket | `tdarr:8266` | `http://127.0.0.1:8266` |
@@ -549,9 +554,8 @@ the other checks remain unverified and must pass before production moves.
     orphaned `tdarr-workDir2-*` directories after a job vanishes.
 16. **Partially verified 2026-11-22:** the isolated `_tdarrtest` copy was
     updated and used by the successful canary. The live server's
-    `hevc-offload-v1.cjs` differs from this checkout, and the production
-    `_studio` copy has not been synchronized. Before activation, deploy the
-    intended module version to both sides, verify matching hashes, and confirm
+    `hevc-offload-v1.cjs` predates the mapped-path fix. Deploy the new
+    `hevc-offload-v2.cjs` to both sides without overwriting v1, verify matching hashes, and confirm
     Tdarr's hourly plugin sync leaves the Studio's `Custom/` alone.
 
 ### Studio script mocked tests; live checks remain

@@ -8,7 +8,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {
   prepare, finish, commit, privateCopy, sweep, jobId, relative, JOBS, MAC_FFMPEG, MAC_FFPROBE,
-} = require('./hevc-offload-v1.cjs');
+} = require('./hevc-offload-v2.cjs');
 const { fingerprint, validate } = require('./hevc-safe-v1.cjs');
 const { internals: { runProcess } } = require('./dv5-sidecar.cjs');
 

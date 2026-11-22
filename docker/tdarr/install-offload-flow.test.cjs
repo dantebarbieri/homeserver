@@ -3,10 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  flowDefinition, poolsOf, parseArgs, install, FLOW_ID, LEGACY_FLOW, SAFE_FLOW, SAFE_CACHE, LIBRARY_ID,
+  flowDefinition, poolsOf, parseArgs, install, FLOW_ID, LEGACY_FLOW, PREVIOUS_FLOW, SAFE_FLOW, SAFE_CACHE, LIBRARY_ID,
   CANARY_FOLDER, MAC_ROOT, TV_LIBRARIES, DEFAULT_POOLS,
 } = require('./install-offload-flow.cjs');
-const { CACHE_ROOT, PRIVATE_ROOT } = require('./hevc-offload-v1.cjs');
+const { CACHE_ROOT, PRIVATE_ROOT } = require('./hevc-offload-v2.cjs');
 const { ROOT } = require('./install-flow.cjs');
 
 const MAC = 'Studio-Native';
@@ -64,7 +64,7 @@ function world({ flows, libraries, variables, staged = [], nodes = { a: linux(),
     return structuredClone(w.nodes);
   };
   const available = new Set(present ?? [
-    'hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs',
+    'hevc-offload-v2.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs',
   ].map(file => `${ROOT}/${file}`).concat(CACHE_ROOT));
   w.io = {
     access: async path => {
@@ -115,7 +115,7 @@ test('each custom step loads the module copy that belongs to the node it runs on
   const flow = flowDefinition(NOTIFY);
   for (const fn of ['prepare', 'finish', 'commit']) {
     const { code } = flow.flowPlugins.find(plugin => plugin.id === fn).inputsDB;
-    for (const [platform, expected] of [['darwin', `${MAC_ROOT}/hevc-offload-v1.cjs`], ['linux', `${ROOT}/hevc-offload-v1.cjs`]]) {
+    for (const [platform, expected] of [['darwin', `${MAC_ROOT}/hevc-offload-v2.cjs`], ['linux', `${ROOT}/hevc-offload-v2.cjs`]]) {
       const loaded = [];
       const sandbox = { exports: undefined };
       new Function('module', 'require', 'process', code)(sandbox, path => {
@@ -196,15 +196,15 @@ test('canary install creates the flow, a runnable disabled canary and CRF 20 wit
   assert(w.calls.some(call => call[0] === 'mkdir' && call[1] === `${ROOT}/backups` && call[2].mode === 0o700),
     'backups hold the Sonarr key, so only their owner may enter the directory');
   assert.deepEqual(w.calls.filter(call => call[0] === 'access').map(call => call[1]), [
-    `${ROOT}/hevc-offload-v1.cjs`, `${ROOT}/hevc-safe-v1.cjs`, `${ROOT}/dv5-sidecar.cjs`, CACHE_ROOT,
+    `${ROOT}/hevc-offload-v2.cjs`, `${ROOT}/hevc-safe-v1.cjs`, `${ROOT}/dv5-sidecar.cjs`, CACHE_ROOT,
   ]);
 });
 
 test('a missing module or cache aborts a dry run or an apply before any backup or write', async () => {
   for (const mode of ['canary', 'adopt']) {
     for (const apply of [false, true]) {
-      for (const missing of ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs', 'cache']) {
-        const present = ['hevc-offload-v1.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs'].filter(file => file !== missing)
+      for (const missing of ['hevc-offload-v2.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs', 'cache']) {
+        const present = ['hevc-offload-v2.cjs', 'hevc-safe-v1.cjs', 'dv5-sidecar.cjs'].filter(file => file !== missing)
           .map(file => `${ROOT}/${file}`).concat(missing === 'cache' ? [] : [CACHE_ROOT]);
         const w = world({ present });
         await assert.rejects(w.run({ mode, apply }), /ENOENT/, `${mode} (apply ${apply}) without ${missing}`);
@@ -214,27 +214,31 @@ test('a missing module or cache aborts a dry run or an apply before any backup o
   }
 });
 
-test('an existing canary moves off the legacy flow and nothing else changes', async () => {
-  const w = world({
-    flows: [{ _id: SAFE_FLOW, flowPlugins: [structuredClone(NOTIFY)] }, { _id: LEGACY_FLOW, flowPlugins: [] }],
-    libraries: [...TV_LIBRARIES.map(id => tv(id)), canary()],
-    variables: [...TV_LIBRARIES.map(crf), crf(LIBRARY_ID)],
+for (const previous of [LEGACY_FLOW, PREVIOUS_FLOW]) {
+  test(`a disabled canary moves off ${previous} without changing the old flow`, async () => {
+    const w = world({
+      flows: [{ _id: SAFE_FLOW, flowPlugins: [structuredClone(NOTIFY)] }, { _id: previous, flowPlugins: [] }],
+      libraries: [...TV_LIBRARIES.map(id => tv(id)), canary({ flowId: previous })],
+      variables: [...TV_LIBRARIES.map(crf), crf(LIBRARY_ID)],
+    });
+    const legacy = structuredClone(w.db.FlowsJSONDB[1]);
+    await w.run({ mode: 'canary', apply: true });
+    assert.deepEqual(w.writes.map(write => `${write.collection}:${write.mode}:${write.docID}`), [
+      `FlowsJSONDB:insert:${FLOW_ID}`, `LibrarySettingsJSONDB:update:${LIBRARY_ID}`,
+    ]);
+    assert.deepEqual(w.writes[1].obj, { flowId: FLOW_ID });
+    assert.deepEqual(w.db.FlowsJSONDB.find(flow => flow._id === previous), legacy);
   });
-  const legacy = structuredClone(w.db.FlowsJSONDB[1]);
-  await w.run({ mode: 'canary', apply: true });
-  assert.deepEqual(w.writes.map(write => `${write.collection}:${write.mode}:${write.docID}`), [
-    `FlowsJSONDB:insert:${FLOW_ID}`, `LibrarySettingsJSONDB:update:${LIBRARY_ID}`,
-  ]);
-  assert.deepEqual(w.writes[1].obj, { flowId: FLOW_ID });
-  assert.deepEqual(w.db.FlowsJSONDB.find(flow => flow._id === LEGACY_FLOW), legacy);
-});
+}
 
 test('the installer will not repoint an active canary or accept a foreign library', async () => {
   for (const key of ['processLibrary', 'processTranscodes', 'processHealthChecks', 'folderWatching', 'useFsEvents',
     'scheduledScanFindNew', 'scanOnStart']) {
-    const w = world({ libraries: [...TV_LIBRARIES.map(id => tv(id)), canary({ [key]: true })], variables: TV_LIBRARIES.map(crf) });
-    await assert.rejects(w.run({ mode: 'canary', apply: true }), /already enabled/, key);
-    untouched(w);
+    for (const flowId of [LEGACY_FLOW, PREVIOUS_FLOW]) {
+      const w = world({ libraries: [...TV_LIBRARIES.map(id => tv(id)), canary({ flowId, [key]: true })], variables: TV_LIBRARIES.map(crf) });
+      await assert.rejects(w.run({ mode: 'canary', apply: true }), /already enabled/, key);
+      untouched(w);
+    }
   }
   for (const overrides of [{ folder: '/data/media/tv' }, { cache: '/temp' }, { flowId: SAFE_FLOW }]) {
     const w = world({ libraries: [...TV_LIBRARIES.map(id => tv(id)), canary(overrides)] });

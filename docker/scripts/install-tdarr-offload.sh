@@ -38,7 +38,7 @@ fi
 docker exec "$container" mkdir -p "$destination/backups"
 backup="$destination/backups/modules-$(date +%s)"
 docker exec "$container" mkdir "$backup"
-for file in dv5-sidecar.cjs install-flow.cjs hevc-safe-v1.cjs hevc-offload-v1.cjs install-safe-flows.cjs \
+for file in dv5-sidecar.cjs install-flow.cjs hevc-safe-v1.cjs hevc-offload-v2.cjs install-safe-flows.cjs \
     install-offload-flow.cjs configure-offload-nodes.cjs maintenance.cjs reconcile-sidecars.cjs recover-policy-errors.cjs; do
     if docker exec "$container" test -f "$destination/$file"; then
         docker exec "$container" cp -p "$destination/$file" "$backup/$file"
@@ -46,7 +46,7 @@ for file in dv5-sidecar.cjs install-flow.cjs hevc-safe-v1.cjs hevc-offload-v1.cj
     docker cp "$repo_dir/docker/tdarr/$file" "$container:$destination/$file.new.cjs"
     docker exec "$container" node --check "$destination/$file.new.cjs"
     case "$file" in
-        hevc-safe-v1.cjs | hevc-offload-v1.cjs)
+        hevc-safe-v1.cjs | hevc-offload-v2.cjs)
             docker exec "$container" node -e '
                 const fs = require("fs"), file = process.argv[1];
                 const read = path => fs.readFileSync(path, "utf8").replace(/\r\n/g, "\n");
