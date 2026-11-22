@@ -1,2 +1,4 @@
 typeset -U path PATH
-path=("$HOME/.local/bin" /opt/homebrew/bin /opt/homebrew/sbin $path)
+# /usr/local/bin (wake-pc, tailscaled) is otherwise only added by path_helper
+# in login shells, so `ssh no-face <command>` would miss it.
+path=("$HOME/.local/bin" /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin $path)
