@@ -134,6 +134,14 @@ wake-pc --mac 02:11:22:33:44:55 --broadcast 192.168.50.255 --port 9
 wake-pc --mac 02:11:22:33:44:55 --wait --wait-host 192.168.50.200 --wait-port 3389
 ```
 
+The PC's **Ethernet cable must be connected**: its wired adapter cannot
+receive a magic packet while unplugged, even if RDP currently works over
+Wi-Fi. The `.180` wait target below is the wired LAN address, not the
+Wi-Fi lease. From No-Face (or another enrolled host), use
+`wake-pc --wait --wait-host 100.113.62.81` to wait for the PC's stable
+Tailscale address instead; this changes only the readiness check, not
+which adapter receives the wake packet.
+
 With no arguments it sends one standard 102-byte UDP magic packet for Ethernet
 MAC `74:56:3C:B4:F5:4E` to LAN broadcast `192.168.50.255:9`. `--mac` identifies
 the device; `--broadcast` selects the LAN broadcast destination. A DHCP IP
