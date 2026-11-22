@@ -83,8 +83,9 @@ Keep wg-easy running as a fallback until the off-LAN checks below pass.
   key-only SSH on port 28 during first enrollment.
 - **no-face:** boot-time `tailscaled` plus `wake-pc`; see
   [`macos/DECISIONS.md`](macos/DECISIONS.md) for the installed paths and
-  startup details. Its BMC-only subnet route is `192.168.50.50/32`.
-  Approve that route on the Tailscale Machines page. FileVault must be
+  startup details. Its approved management routes are `192.168.50.1/32`
+  (router), `192.168.50.50/32` (BMC), and `192.168.100.1/32` (modem).
+  Approve these routes on the Tailscale Machines page. FileVault must be
   unlocked after a cold boot before any macOS daemon can run.
 - **Windows:** install the official `Tailscale.Tailscale` WinGet package,
   sign in, then run `tailscale set --unattended=true`. The automatic
@@ -97,11 +98,14 @@ nodes that must remain reachable unattended (revoke lost devices promptly).
 Restrict tailnet access to your administrator identity/devices. Do not make
 calcifer's AdGuard the tailnet's sole global DNS server: recovery should
 work without it. MagicDNS is on, so clients that accept Tailscale DNS (the
-Windows/macOS/phone default) reach `no-face`, `calcifer` and `dante-pc` by
+Windows/macOS/phone default) reach `no-face`, `calcifer` and `totoro` by
 name, or as `<name>.<tailnet>.ts.net`. The same name works at home: peers on
 the LAN connect directly, not through a relay. calcifer and No-Face do not
 accept Tailscale DNS, so use the numeric addresses from `tailscale ip -4`
 there.
+
+Use the [unified `home.arpa` names](#unified-device-dns) in saved connection
+profiles instead of maintaining separate LAN and MagicDNS profiles.
 
 From a remote client on cellular or another network, **with wg-easy off on
 that client**, verify:
@@ -123,9 +127,81 @@ routes by default. Checking the BMC from a machine already on the home LAN
 does not by itself prove subnet routing works. Do not shut down calcifer
 just to test it without a planned maintenance window.
 
+### Unified device DNS
+
+The same fully qualified name works in RDP, VNC, SSH and browsers:
+
+| Name | LAN answer, with Tailscale off | Tailscale answer |
+|---|---|---|
+| `calcifer.home.arpa` | `192.168.50.100` | `100.104.46.115` |
+| `no-face.home.arpa` | `192.168.50.80` | `100.94.21.37` |
+| `totoro.home.arpa` | `192.168.50.190` (Wi-Fi; see wired transition below) | `100.113.62.81` |
+| `okkoto.home.arpa` | **Pending a home DHCP reservation** | `100.117.244.102` |
+| `router.home.arpa` | `192.168.50.1` | Same address, routed through No-Face |
+| `modem.home.arpa` | `192.168.100.1` | Same address, routed through No-Face |
+| `bmc.home.arpa` | `192.168.50.50` | Same address, routed through No-Face |
+
+**LAN view:** AdGuard's DNS rewrites hold the LAN addresses. The existing
+`homeserver.home.arpa` and `ai-studio.home.arpa` aliases remain. Clients must
+use a resolver that knows these records: a public DNS "fallback" such as
+`1.1.1.1` can answer first and return NXDOMAIN. Totoro's Wi-Fi and Ethernet
+now use only AdGuard for IPv4 DNS; its advertised IPv6 DNS is also AdGuard.
+No-Face keeps its `/etc/resolver/home.arpa` override. Other LAN clients that
+receive public fallback DNS from the router may still need that corrected.
+**Router-wide DNS changes are deferred to a maintenance window:** ASUS
+settings changes can reboot the router.
+
+**Tailnet view:** No-Face runs a separate, non-recursive dnsmasq instance from
+[`macos/tailnet-dns.conf`](macos/tailnet-dns.conf). It listens only on
+`100.94.21.37:53` (UDP and TCP), drops privileges to `nobody`, and serves
+`home.arpa` without depending on calcifer, AdGuard or NPM. The
+`com.danteb.tailnet-dns` LaunchDaemon restarts it if the Tailscale interface
+is not ready at boot. FileVault still has to be unlocked first.
+
+In **Tailscale > DNS**, the custom nameserver is `100.94.21.37`, with
+**Restrict to domain: `home.arpa`**. It is not a global nameserver; leave
+**Override DNS servers** off. Client devices must accept Tailscale DNS.
+calcifer and No-Face deliberately retain `--accept-dns=false` and their LAN
+view so production services and LAN-restricted SSH keys keep working.
+If a node is removed and re-enrolled with another Tailscale address, update
+the dnsmasq records before relying on its custom name.
+
+The Windows SSH aliases now use `calcifer.home.arpa` (port 28) and
+`no-face.home.arpa` (port 22), preserving the existing pinned host identities;
+there is no longer an SSH-specific Tailscale/Bonjour switch. The prior config
+is at `~/.ssh/config.before-unified-dns-20261122`. Use `totoro.home.arpa` in
+the MacBook's RDP profile and `no-face.home.arpa` for Screen Sharing/VNC
+(port 5900); those saved profiles are edited on their originating device.
+
+**Totoro's wired transition:** both reservations are confirmed: Ethernet is
+the primary at `.180`, Wi-Fi is `.190`. While Ethernet is disconnected,
+AdGuard deliberately answers `.190`. Once Ethernet is connected and RDP on
+`.180` is reachable, change only the `totoro.home.arpa` AdGuard rewrite to
+`192.168.50.180`; do not publish both addresses while one adapter is offline.
+The name in saved profiles and the tailnet DNS record do not change.
+Windows's computer rename to `Totoro` is staged for the next planned restart;
+the Tailscale node is already `totoro`. No reboot was performed.
+
+**Okkoto:** the MacBook Pro was renamed locally by Dante. Its tailnet DNS alias
+works even while the Tailscale app still displays the old
+`dantes-macbook-pro` machine name. It has no home DHCP reservation yet, so no
+LAN record has been invented. Add that record after reserving an address
+when it returns home. Naming does not enable inbound SSH or Screen Sharing.
+
+Management pages are [the router](http://router.home.arpa/),
+[the modem](https://modem.home.arpa/) and
+[the direct BMC recovery page](https://bmc.home.arpa/).
+They use their existing logins; HTTPS appliances retain their existing
+certificate warnings. The modem's redirects end at its HTTPS login page.
+These are private routes, not WAN administration or public reverse proxies.
+No router/modem settings were changed. Preserve the three `/32` routes when
+updating No-Face's `--advertise-routes` setting (the flag replaces the list).
+Keep numeric management addresses and MagicDNS as recovery fallbacks if the
+private DNS service is unavailable.
+
 ## Wake the Windows PC
 
-The `wake-pc` command sends a Wake-on-LAN packet for DANTE-PC. It is available
+The `wake-pc` command sends a Wake-on-LAN packet for Totoro (formerly DANTE-PC). It is available
 on the homeserver and on No-Face. After connecting to Tailscale, SSH to
 No-Face's Tailscale IP in Termius to wake the PC even when calcifer is down.
 The existing homeserver command also works while that server is available:

@@ -23,4 +23,5 @@ rm -f "$tmp"
 /usr/local/bin/wake-pc --help > /dev/null
 printf 'tailscaled and wake-pc installed.\n'
 # Then, once: sudo tailscale up --hostname=no-face \
-#   --advertise-routes=192.168.50.50/32 --accept-routes=false --accept-dns=false
+#   --advertise-routes=192.168.50.50/32,192.168.50.1/32,192.168.100.1/32 \
+#   --accept-routes=false --accept-dns=false

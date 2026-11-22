@@ -62,7 +62,7 @@ Dante bought this Mac Studio as a compute companion for the homeserver.
 
 | From | How | Key |
 |---|---|---|
-| Windows PC | `ssh no-face` (or `ssh ai-studio`) -> MagicDNS `no-face.<tailnet>.ts.net`, or `no-face.local` while the PC's Tailscale is stopped; `HostKeyAlias no-face` | `~/.ssh/id_ed25519` |
+| Windows PC (Totoro) | `ssh no-face` (or `ssh ai-studio`) -> `no-face.home.arpa`, using LAN or tailnet split DNS; `HostKeyAlias no-face` | `~/.ssh/id_ed25519` |
 | MacBook Pro | Not yet updated for the reinstall | The MacBook's own key |
 | Homeserver (`danteb`) | `ssh studio` (or `ssh no-face`) -> `no-face.home.arpa`, `HostKeyAlias no-face` | `~/.ssh/id_ed25519_studio` |
 | Studio | `ssh homeserver` -> `homeserver.home.arpa` (port 28) | `~/.ssh/id_ed25519` (`dantebarbieri@no-face`) |
@@ -185,14 +185,14 @@ don't need to save random IPs in the server or the Mac".
   the Studio's host key is pinned in `nixos/modules/ssh.nix`. Windows and the
   server keep their pre-No-Face profiles at
   `~/.ssh/config.before-no-face-20261121`.
-- Windows's `ssh no-face` no longer uses AdGuard (*Dante*, 2026-11-21:
-  "preferably the same one so that it works on lan or tailscale with one
-  hostname"). It uses the MagicDNS name, which works at home too because
-  Tailscale connects LAN peers directly (7 ms over Wi-Fi). A `Match` block
-  falls back to Bonjour's `no-face.local` when
-  `~/.ssh/tailscale-running.cmd` (`tailscale status --peers=false`) fails.
-  Both paths were verified, including with Tailscale stopped. The previous
-  profile is at `~/.ssh/config.before-magicdns-20261121`.
+- **2026-11-22:** Dante chose real `home.arpa` split DNS so the same names
+  work in RDP, VNC and SSH, including at home with Tailscale off. Windows's
+  `ssh no-face` now uses `no-face.home.arpa`; the old SSH-only
+  MagicDNS/Bonjour `Match` block is removed. AdGuard answers the LAN address,
+  while No-Face's new tailnet-only DNS daemon answers its Tailscale address.
+  Windows keeps `HostKeyAlias no-face` and the previous profile at
+  `~/.ssh/config.before-unified-dns-20261122`. See
+  [the complete name table and client requirements](../README.md#unified-device-dns).
 
 **Guidance:** use these names in new configuration (web services, Bazarr's
 Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
@@ -200,12 +200,14 @@ Whisper URL, notification hooks, SSH, Screen Sharing). Caveats:
 - AdGuard runs on the server, so anything needed to repair the server should
   keep an IP fallback. From the Studio:
   `ssh -o HostName=192.168.50.100 homeserver`. From the server:
-  `ssh -o HostName=192.168.50.80 studio`. Windows's `ssh no-face` needs no
-  override (above).
-- Windows also lists 1.1.1.1 as a DNS server, which cannot answer `home.arpa`,
-  so lookups can fail intermittently. Its stale `hosts` entry
-  (`192.168.50.140 ai-studio`) should be removed; the explicit IP override
-  above bypasses DNS.
+  `ssh -o HostName=192.168.50.80 studio`. Windows's normal name survives
+  a calcifer outage while Tailscale is on; with Tailscale off, use
+  `ssh -o HostName=no-face.local no-face`.
+- Windows's Wi-Fi and Ethernet no longer use the public `1.1.1.1` DNS
+  fallback, which cannot answer `home.arpa`. Router-wide fallback DNS
+  cleanup is still deferred because applying router settings can reboot it.
+  Windows's old `192.168.50.140 ai-studio` hosts-file entry remains unrelated
+  to the fully qualified names; do not use that bare name outside its SSH alias.
 - Keep host-key verification when changing names. Windows and the server use
   `HostKeyAlias no-face`, and the Studio uses
   `HostKeyAlias [homeserver.home.arpa]:28` for the server. That value is the
@@ -253,8 +255,10 @@ wake the Windows PC like the server's `wake-pc`. The tailnet-wide migration
   everything else only after FileVault is unlocked. It copies the binary to
   `/usr/local/bin/tailscaled`, which `brew upgrade` does not update: rerun
   `sudo tailscaled install-system-daemon` after upgrading.
-- Logged in as machine `no-face` (`100.94.21.37`), advertising only
-  `192.168.50.50/32` (the BMC; route approved 2026-11-21), with
+- Logged in as machine `no-face` (`100.94.21.37`), advertising
+  `192.168.50.50/32` (BMC), `192.168.50.1/32` (router), and
+  `192.168.100.1/32` (modem). Dante approved the two additional routes on
+  2026-11-22. It retains
   `--accept-routes=false --accept-dns=false` so local routing and DNS stay on
   the LAN and AdGuard.
 - No NAT, IP forwarding or pf rules are needed: on macOS `tailscaled` serves
@@ -271,6 +275,36 @@ wake the Windows PC like the server's `wake-pc`. The tailnet-wide migration
   packet could not wake it and `--wait`'s `.180` default would time out. Keep
   the defaults; to check reachability over the tailnet instead, use
   `--wait --wait-host 100.113.62.81` (DANTE-PC's Tailscale address).
+
+### Tailnet-only private DNS
+
+**Intent** (*Dante*, 2026-11-22): one `home.arpa` name per device, usable
+across connection apps on the LAN without Tailscale and remotely with it;
+also reach the router and modem remotely without publishing their admin UIs.
+
+**Current:** Homebrew dnsmasq, installed with
+[`install/install-tailnet-dns.sh`](install/install-tailnet-dns.sh), runs as
+the `com.danteb.tailnet-dns` system LaunchDaemon. It reads
+`/etc/tailnet-dns.conf`, binds only No-Face's Tailscale IPv4 address on UDP/TCP
+53, drops privileges to `nobody`, and logs startup/errors (not queries) to
+`/var/log/tailnet-dns.log`. It serves only the private records, with no
+recursive upstream or dependency on calcifer. Do not start Homebrew's
+separate default dnsmasq service.
+
+Dante configured Tailscale's **restricted** nameserver `100.94.21.37` for
+`home.arpa`, not a global resolver. AdGuard retains the LAN view. Native
+tailnet devices resolve to their stable Tailscale addresses; appliances
+resolve to the three routed management addresses above. The source is
+[`tailnet-dns.conf`](tailnet-dns.conf); the launchd plist restarts the daemon
+if the Tailscale address is not ready at boot. FileVault unlock is still a
+prerequisite. Prior config/plist copies are retained under
+`/var/root/tailnet-dns-backup.*` when the installer runs.
+
+Verified UDP/TCP DNS from Totoro, empty AAAA answers, NXDOMAIN for unknown
+`home.arpa` names, and REFUSED for unrelated domains. Windows selected
+Tailscale routes for the router/modem; both login pages loaded. The installer
+does not modify routing or tailnet policy; those are separate approvals.
+The router and modem themselves were not reconfigured.
 
 ## Offload speech-to-text (Whisper)
 
@@ -523,6 +557,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | `macos/install/` | Historical one-time installers from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
 | `macos/install/install-tailscale.sh` | Tailscale and `wake-pc` installer |
+| `macos/tailnet-dns.conf`, `macos/com.danteb.tailnet-dns.plist`, `macos/install/install-tailnet-dns.sh` | Tailnet-only `home.arpa` DNS source and installer |
 | `macos/ai/` | Whisper adapter, Ollama and Whisper plists, `_bazarr` sshd drop-in and provisioning script, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
 | `docker/compose.ai.yml`, `docker/dockerfiles/studio-whisper-tunnel/` | Bazarr's SSH forward to the Studio's Whisper adapter |
@@ -539,6 +574,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Bazarr forwarding account | `_bazarr`, `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf`, `/etc/ssh/bazarr-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#bazarr-transport-and-cutover) |
 | Maintenance forwarding account | `_arrmaint`, `/etc/ssh/sshd_config.d/003-arr-maint-forwarding.conf`, `/etc/ssh/arr-maint-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#ollama-transport) |
 | Tailscale | `com.tailscale.tailscaled`, `/usr/local/bin/tailscaled`, state in `/Library/Tailscale/`; Homebrew `tailscale` | `sudo tailscale logout`, `sudo tailscaled uninstall-system-daemon`, `brew uninstall tailscale`, delete the machine in the admin console |
+| Tailnet DNS | `/etc/tailnet-dns.conf`, `/Library/LaunchDaemons/com.danteb.tailnet-dns.plist`, `/var/log/tailnet-dns.log`; Homebrew `dnsmasq` | First remove the `home.arpa` restricted nameserver in Tailscale; `sudo launchctl bootout system/com.danteb.tailnet-dns`, remove its config/plist/log, then `brew uninstall dnsmasq` if unused elsewhere |
 | wake-pc | `/usr/local/bin/wake-pc` | Delete it |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr (disabled) | `com.danteb.studio-tdarr`, `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-session`, `/var/log/studio-tdarr`, worker `tdarr/` | Delete; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the flag |
@@ -574,7 +610,7 @@ is not a leftover model download.
 | Bazarr's Whisper link | `studio-whisper` container; key and pinned Studio host key in `/srv/docker/data/studio-whisper-tunnel`; Bazarr's `whisperai` endpoint and timeout | Restore the `whisperasr` service to `compose.ai.yml` from git (last present in `66fa2ee`), point Bazarr back at it, then [remove the transport](ai/README.md#bazarr-transport-and-cutover) |
 | Bazarr migration rollback/evidence | `/srv/docker/data/bazarr/config/studio-migration-20261113/`: pre-cutover config and SQLite backup, aggregate `smoke-result.json`; original image tagged `bazarr-before-studio:20261113` | Backups contain secrets; keep private. Endpoint rollback normally needs only the settings change, not database restoration |
 | Tdarr | `Studio-Native` node, canary library and flow, dedicated API key, snapshots in `/srv/docker/data/tdarr/server/Tdarr/Custom/backups/` (mode 0600; may hold credentials) | Delete in the UI and revoke the key |
-| AdGuard | Two `home.arpa` rewrites | AdGuard UI, DNS rewrites |
+| AdGuard | LAN `home.arpa` rewrites; [current names](../README.md#unified-device-dns) | AdGuard UI, DNS rewrites; keep in sync with the separate tailnet view |
 
 ## Open items
 

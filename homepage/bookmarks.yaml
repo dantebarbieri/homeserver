@@ -12,5 +12,9 @@
           description: ASRock Rack BMC
     - ASUS Router:
         - icon: mdi-router-wireless
-          href: http://www.asusrouter.com
+          href: http://router.home.arpa
           description: GT-BE98 Pro
+    - Modem:
+        - icon: mdi-router-network
+          href: https://modem.home.arpa
+          description: ARRIS (LAN or Tailscale)
