@@ -324,6 +324,10 @@ activated with the system by `home-manager-danteb.service`, with no separate
 - `~/.zimrc`: the Zim module list. Editing it rebuilds `~/.zim/init.zsh` on the
   next shell. zimfw itself comes from nixpkgs, so update it with the flake lock;
   `zimfw upgrade` cannot write to the store.
+- The prompt: `shell/prompt.zsh` (shared with the Mac Studio, sourced right
+  after Zim) replaces Zim's asciiship. It reads `user on host in ~/dir on branch`,
+  shows user and host only over SSH or as root, and colours the host per Ghibli
+  character. Add a new machine's colour to `_ghibli_host_colors` there.
 - `~/.config/git/config`: name, email and SSH commit signing. The system
   `/etc/gitconfig` keeps only machine-wide defaults.
 - `~/.ssh/config`: the `studio`/`no-face` alias for the Mac Studio and the

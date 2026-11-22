@@ -34,11 +34,11 @@ install), [`ai/README.md`](ai/README.md) and [`ai/SPEECH.md`](ai/SPEECH.md)
 Dante bought this Mac Studio as a compute companion for the homeserver.
 
 > **Reinstalled 2026-11-21 as `No-Face`** (*Dante*: new hardware, fresh
-> macOS install, new admin account). So far only the hostname, SSH access and
-> DNS name below have been redone. Everything else in this file describes the
-> previous install and is **not yet provisioned** on this one (worker
-> accounts, transfer tunnel, Tdarr node, speech/Ollama services, shell
-> dotfiles); re-verify each piece as it is restored. Docker services that
+> macOS install, new admin account). So far only the hostname, SSH access,
+> DNS name and shell below have been redone. Everything else in this file
+> describes the previous install and is **not yet provisioned** on this one
+> (worker accounts, transfer tunnel, Tdarr node, speech/Ollama services);
+> re-verify each piece as it is restored. Docker services that
 > still target `ai-studio.home.arpa` now reach this Mac but will fail its new
 > SSH host keys until re-provisioned.
 
@@ -136,17 +136,23 @@ devices.
 
 **Current**
 
-- Homebrew owned by `dante`. Formulae: `bat`, `fastfetch`, `zimfw`, `zoxide`;
-  `ffmpeg`, `ollama` and `uv` serve the AI work.
-- [`admin/`](admin/) holds the dotfiles: `zimrc` uses the server's Zim modules
-  and asciiship prompt; `zshrc` runs fastfetch only for interactive login
-  terminals, so scripted SSH and `scp` stay clean. Zim downloads its modules on
-  the first shell. Machine-specific or secret settings belong in untracked
+- Homebrew owned by `dantebarbieri` (the admin account). Formulae: `bat`,
+  `fastfetch`, `zimfw`, `zoxide`; `ffmpeg`, `ollama` and `uv` serve the AI work
+  once restored.
+- [`admin/`](admin/) holds the dotfiles: `zimrc` uses the server's Zim modules,
+  without asciiship; the prompt comes from the shared
+  [`shell/prompt.zsh`](../shell/prompt.zsh) (reads `user on host in dir`, the
+  host coloured per Ghibli character) which `zshrc` sources after Zim.
+  `zshrc` runs fastfetch only for interactive login terminals, so scripted SSH
+  and `scp` stay clean. Zim downloads its modules on the first shell.
+  Machine-specific or secret settings belong in untracked
   `~/.zprofile.local` / `~/.zshrc.local`.
+- fastfetch keeps its default Apple logo for now; Dante will supply artwork for
+  a custom one.
 
   ```sh
   brew install zimfw fastfetch zoxide bat
-  for f in zshenv zprofile zimrc zshrc; do install -m 0644 admin/$f ~/.$f; done
+  sh admin/install-shell.sh   # dotfiles plus ~/.config/ghibli/prompt.zsh
   ```
 
 ## Names, not IPs

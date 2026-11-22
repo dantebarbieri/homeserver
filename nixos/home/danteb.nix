@@ -1,5 +1,5 @@
-# Home Manager configuration for danteb: zsh (with Zim), the shared prompt and
-# fastfetch logo (../../shell), git identity and SSH client aliases.
+# Home Manager configuration for danteb: zsh (with Zim), the shared prompt
+# (../../shell), git identity and SSH client aliases.
 #
 # Everything here is copied into the world-readable Nix store, so never put
 # secrets in this file. Keep them in ~/.zprofile.local (login shells) or
@@ -107,10 +107,6 @@
       fi
     '';
   };
-
-  # fastfetch wears this machine's Ghibli character (shell/logos).
-  xdg.configFile."fastfetch/config.jsonc".source = ../../shell/fastfetch.jsonc;
-  xdg.configFile."fastfetch/logo.ansi".source = ../../shell/logos/calcifer.ansi;
 
   home.file.".zimrc" = {
     # Rebuild ~/.zim/init.zsh on the next shell. The symlinked ~/.zimrc has a

@@ -4,9 +4,9 @@ zmodule input
 zmodule termtitle
 zmodule utility
 
+# These feed the prompt in ~/.config/ghibli/prompt.zsh (shell/prompt.zsh).
 zmodule duration-info
 zmodule git-info
-zmodule asciiship
 
 zmodule zsh-users/zsh-completions --fpath src
 zmodule completion
