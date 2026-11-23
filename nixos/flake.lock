@@ -71,11 +71,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1795476266,
-        "narHash": "sha256-76MBiF7LZE/OFWri5ahDxgQ8bBhcaicPS5IJlJQeQv0=",
+        "lastModified": 1795476622,
+        "narHash": "sha256-0UudWmd+JKGT25Dn4dyUQoCWFHyjBO8ysxMqsuMUVW4=",
         "owner": "dantebarbieri",
         "repo": "wake",
-        "rev": "055a5b6936a4a405a8eb55d265f26988a83b81ac",
+        "rev": "b1ed548a7267773c64885ee9217ec9e3f69379f6",
         "type": "github"
       },
       "original": {
