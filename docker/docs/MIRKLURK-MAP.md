@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `5bf54cc893d81f5c8f440a8c2fe7fa4a9cbb51b7`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45118648589) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/69) has no open issues |
-| Web | `mirklurk-map:5bf54cc`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:5bf54cc`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `f08bbca7c4cc59f6d944b314de2db6d0935b4606`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45196000626) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/70) has no open issues |
+| Web | `mirklurk-map:f08bbca`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:f08bbca`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -277,17 +277,32 @@ Studio SSH restart loops does not authorize an exception for this core
 rollout. If unrelated start-time preservation fails, stop and report it;
 do not reuse that exception, redefine the baseline or alter restart policies.
 
-Expected split-history Deno 2.9.7 build identifiers (compare the actual image and live bytes,
+The separately reviewed 0.9.9.7 core adds opt-in **Beta (0.9.9.7)** rules while
+**Latest (0.9.6.5)** and no-version defaults remain stable. Saved terrain and
+unknown fields remain authoritative; no seed regeneration or game simulation
+is introduced. The 536-title November 23 catalog and all 391 assets
+(317 wiki PNGs, 74 game PNGs) are unchanged. This core does not publish beta
+wiki text or bundle the separately imported beta artwork: a later verified
+wiki/catalog/art refresh remains required.
+
+Build both pinned targets: uploads copies the changed `src`. Use the normal
+serialized uploads-then-web rollout, exact canonical nginx bind source,
+exclusive current NPM peers and all original privacy/runtime guards. Preserve
+the separately accepted BMC recreation and current wiki post-snapshot runtime;
+do not reuse an old failed updater or legacy mount override. This pin is not
+a live-deployment claim.
+
+Expected beta-core Deno 2.9.7 build identifiers (compare the actual image and live bytes,
 not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.ae464a6dfa.js` | `ae464a6dfac64f3ce696658d7d3929b14195b334bd00b65f00a8dcdb9c533109` |
-| `edit.65193c83f3.js` | `65193c83f3475a9a96cb9a1a8dc5c3abc6e8f441bc0fe7fe2c8665e42e1d6eef` |
-| `sw.js` | `29eed7cff193106c1ea1f5186b828be5c9116a0d1548e022ff1ad0d0f0a468d5` |
+| `app.87bf179325.js` | `87bf17932550604e3dc9dca44326e5956eb2873573ffe2f47b605431d47661f6` |
+| `edit.b1f54f8b10.js` | `b1f54f8b10a474dd0e8c80f5dca42ec47eb5032e59067e680641440c52739f0c` |
+| `sw.js` | `acf7e4402a0d4787c7c02366131392f7478c1f09f0126935b5c0e4349cedcac8` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 404 entries (cache `0b3183272b`) and
+unchanged); the service worker keeps 404 entries (cache `e83e9e0bd5`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
@@ -298,8 +313,9 @@ Both browser bundles contain `Flint_Dagger_icon_(cropped).png` and
 `Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
 `Flint Dagger`. Both browser bundles contain `0.9.0.2`, `0.9.0.1` and
 `Poison Arrow II`. Both browser bundles contain
-`Finish_Raft_sprite_(cropped).png`. Both browser bundles contain `0.9.0.0` and
-`the game's Steam release`, and no longer `next_version_tester`. Both
+`Finish_Raft_sprite_(cropped).png`. Both browser bundles retain `0.9.0.0` and
+`the game's Steam release`; `next_version_tester` now identifies the separate
+0.9.9.7 beta rather than the historical 0.8.9.9 release. Both
 browser bundles contain `Magus Clay (boss)`. Both browser
 bundles contain `Game version rules`, The Terror's icon path
 `M-2 -2.3 L-2.5 -6.1` and Magus Clay's `M0 -6.8 Q2.7 -6 2.7 -3.7`, and no longer
