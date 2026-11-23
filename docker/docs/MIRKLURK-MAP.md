@@ -227,7 +227,7 @@ remain 2026-11-12; all 312 PNGs and both CSS files are unchanged. No API,
 schema, server-reachable logic, modeled rules or sharing behavior changes.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
-page, scripts, stylesheets, manifest, icons and all bundled art (404 files) so
+page, scripts, stylesheets, manifest, icons and all bundled art (417 files) so
 local saves open offline.
 It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
 an online visit gets the newest release.
@@ -236,7 +236,7 @@ The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
 This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
-in either image; 74 manifest-listed game-art PNGs and 317 manifest-listed
+in either image; 74 manifest-listed game-art PNGs and 330 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
 six MirkMap icons drawn from the game's "Map of area" item and (since f7257fc)
 the journal's text copied from the game's `UI.ini`. The web image also
@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `f08bbca7c4cc59f6d944b314de2db6d0935b4606`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45196000626) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/70) has no open issues |
-| Web | `mirklurk-map:f08bbca`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:f08bbca`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `61884a78e8df8a19f6230463acba50defb8e2cfa`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45215406323) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/71) has no open issues |
+| Web | `mirklurk-map:61884a7`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:61884a7`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -280,10 +280,19 @@ do not reuse that exception, redefine the baseline or alter restart policies.
 The separately reviewed 0.9.9.7 core adds opt-in **Beta (0.9.9.7)** rules while
 **Latest (0.9.6.5)** and no-version defaults remain stable. Saved terrain and
 unknown fields remain authoritative; no seed regeneration or game simulation
-is introduced. The 536-title November 23 catalog and all 391 assets
-(317 wiki PNGs, 74 game PNGs) are unchanged. This core does not publish beta
-wiki text or bundle the separately imported beta artwork: a later verified
-wiki/catalog/art refresh remains required.
+is introduced. That core retained the 536-title November 23 catalog and all 391
+assets (317 wiki PNGs, 74 game PNGs).
+
+The final beta wiki refresh follows accepted wiki PR85 publication
+`cc0ebd50509c57c7283d57bd3f7fefe198616666` (685 texts, 26 imported Files).
+It adds exactly fourteen titles and thirteen canonical cropped item icons:
+catalog 550, 330 wiki PNGs and 74 game PNGs, still dated November 23.
+Every prior asset's bytes and metadata remain unchanged. No API, schema,
+model or channel rules change; Latest/default remains 0.9.6.5 and Beta is
+opt-in 0.9.9.7. Artwork does not bypass stable item-picker gates.
+Acceptance uses `0997-wiki-bundle.json`, SHA-256
+`16a32395e9f66a90b7967a9e50288583daf2dc6bb22c4bced10679216ddacfd7`,
+418 distribution files plus unchanged `50x.html` (419 physical files).
 
 Build both pinned targets: uploads copies the changed `src`. Use the normal
 serialized uploads-then-web rollout, exact canonical nginx bind source,
@@ -292,17 +301,17 @@ the separately accepted BMC recreation and current wiki post-snapshot runtime;
 do not reuse an old failed updater or legacy mount override. This pin is not
 a live-deployment claim.
 
-Expected beta-core Deno 2.9.7 build identifiers (compare the actual image and live bytes,
+Expected final beta-wiki Deno 2.9.7 build identifiers (compare the actual image and live bytes,
 not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.87bf179325.js` | `87bf17932550604e3dc9dca44326e5956eb2873573ffe2f47b605431d47661f6` |
-| `edit.b1f54f8b10.js` | `b1f54f8b10a474dd0e8c80f5dca42ec47eb5032e59067e680641440c52739f0c` |
-| `sw.js` | `acf7e4402a0d4787c7c02366131392f7478c1f09f0126935b5c0e4349cedcac8` |
+| `app.720f51cb2c.js` | `720f51cb2c9210675695f60c12445da541d72d7a3572c7fe7cd960ccc62746b4` |
+| `edit.b6a21c0e42.js` | `b6a21c0e429884e6ee660ba04338c62d80be15cccc793998e112e615fe071f54` |
+| `sw.js` | `b0f6f0e93751015082f76478dd65eb611afbb74bb85145a4bbd152fe9f8a5827` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 404 entries (cache `e83e9e0bd5`) and
+unchanged); the service worker keeps 417 entries (cache `4045f0807f`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
