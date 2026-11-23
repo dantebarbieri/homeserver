@@ -5,6 +5,12 @@ internet access and runs with dropped capabilities and resource limits. Its
 root filesystem stays writable because the image patches its Chromium driver
 at runtime.
 
+FlareSolverr's Chromium comes from upstream's image (Debian bookworm packages)
+and can trail Chrome security releases by months: on 2026-11-23 it shipped
+Chromium 152 while the fixes were in 158, and Debian security only reached 156.
+This is accepted rather than patched locally, because swapping in Google Chrome
+risks breaking undetected-chromedriver. Exposure is limited to the indexer and
+manga sites Prowlarr and Suwayomi send it to.
 Two indexers use repo-managed variants of Prowlarr's upstream (Cardigann)
 definitions. Each variant is derived from the upstream definition Prowlarr has
 installed, by an awk program in `docker/prowlarr/`; only the changes below

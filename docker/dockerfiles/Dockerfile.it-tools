@@ -1,0 +1,6 @@
+FROM corentinth/it-tools:latest AS app
+# Upstream's last image (October 2024) froze nginx at 1.26.2. Serve the same static
+# build from a current nginx base, refreshed by the nightly `docker compose build --pull`.
+FROM nginx:stable-alpine
+COPY --from=app /usr/share/nginx/html /usr/share/nginx/html
+COPY --from=app /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf

@@ -118,7 +118,11 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: corentinth/it-tools:latest
+    build:
+      context: dockerfiles
+      dockerfile: Dockerfile.it-tools
+      pull: true
+    image: it-tools-current-nginx:latest
     container_name: it-tools
     networks:
       - proxy
@@ -215,7 +219,11 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: dgtlmoon/sockpuppetbrowser:latest
+    build:
+      context: dockerfiles
+      dockerfile: Dockerfile.sockpuppetbrowser
+      pull: true
+    image: sockpuppetbrowser-chrome-stable:latest
     container_name: sockpuppetbrowser
     shm_size: 2gb
     cap_add: [SYS_ADMIN]

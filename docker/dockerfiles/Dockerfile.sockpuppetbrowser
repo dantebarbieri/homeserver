@@ -1,0 +1,13 @@
+FROM dgtlmoon/sockpuppetbrowser:latest
+# Upstream images lag Chrome stable by weeks. Refresh Chrome (and Debian security
+# updates) on every nightly `docker compose build --pull`; ADD of the repository
+# index busts this layer only when Google publishes a release.
+USER root
+ADD https://dl.google.com/linux/chrome-stable/deb/dists/stable/InRelease /tmp/google-chrome-InRelease
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --only-upgrade google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/* /tmp/google-chrome-InRelease \
+    && dpkg --compare-versions "$(dpkg-query -W -f '${Version}' google-chrome-stable)" ge 158.0.8127.36 \
+    && google-chrome-stable --version
+USER chrome

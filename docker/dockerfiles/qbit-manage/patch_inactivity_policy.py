@@ -5,11 +5,11 @@ import hashlib
 from pathlib import Path
 
 
-REVISION = "e6b2ba0b735b96cb153ef874d176ca6d0fffbf49"
+REVISION = "1732b2b1acb9a3ea4c44b83c822e675d1bbe7fed"
 SOURCE_HASHES = {
     "modules/config.py": "4830037f9798fae46d45c4e0a15026761fae880f40075af2361bcabdaeb8fe0a",
-    "modules/util.py": "37da4a1c407ec10c7423d7f62b8627f90c25c886958ae2d0ac7ab90bcdf367af",
-    "modules/core/share_limits.py": "ec1cfc76a8731fc88b2b72260f35ca4a2af6cbd541cd3c3cb8705b488d468612",
+    "modules/util.py": "53d672a26f6a07df3d0a7a0a7dbf8afb9a57e1fd440ab5a30e1e6bd86c15f82b",
+    "modules/core/share_limits.py": "dba01ff86b8749de46e4188d01266cb0e5ebaee87bbdc271c058238a9b426f05",
 }
 ORIGINAL = '                if self.share_limits[group]["min_seeding_time"] > 0 and self.share_limits[group]["max_ratio"] <= 0:\n'
 REPLACEMENT = '''                if (
