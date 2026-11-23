@@ -136,7 +136,8 @@ The adapter implements the Bazarr Whisper provider's raw 16 kHz, mono,
 signed 16-bit little-endian PCM uploads: `POST /asr?task=transcribe|translate
 &language=<input-code>&output=srt&encode=false` and
 `POST /detect-language?encode=false`. Its optional `video_file` query value is
-ignored, never opened or logged. Other formats, encoded uploads, arbitrary
+ignored, never opened or logged. `GET /` returns `{"version": ...}` with the
+engine package versions, which Bazarr's Test Connection button displays. Other formats, encoded uploads, arbitrary
 models and arbitrary paths are not supported.
 
 Two engines serve requests, each from an offline, pinned snapshot:

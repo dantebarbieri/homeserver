@@ -48,6 +48,11 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("00:00:00,000 --> 00:00:01,000", response.text)
 
+    async def test_root_reports_version_for_bazarr_connection_test(self):
+        response = await self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["version"].startswith("Studio Whisper"))
+
     async def test_detect_language_response(self):
         async def fake_worker(mode, path, language, timeout):
             self.assertEqual((mode, language), ("detect", None))
