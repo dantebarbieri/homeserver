@@ -40,7 +40,7 @@ Dante bought this Mac Studio as a compute companion for the homeserver.
 > both pinned models and the `mlx-whisper` CLI, the `_bazarr`/`_arrmaint`
 > forwarding accounts, and the server's two tunnels (re-pinned host key;
 > previous `known_hosts` kept as `known_hosts.before-no-face-20261121`). New:
-> [Tailscale BMC route and `wake-pc`](#tailnet-bmc-access-and-wake-pc).
+> [Tailscale BMC route and `wake`](#tailnet-bmc-access-and-wake).
 > The Tdarr tunnel and disabled native node were restored the following day
 > ([current status](#offload-video-encoding-tdarr)); historical mount and
 > canary results are not evidence for this install. The benchmark/comparison
@@ -246,13 +246,17 @@ Whisper and Ollama listen only on the Studio's loopback. Only Bazarr reaches
 Whisper. The three *arr maintenance helpers reach Ollama through their
 separate `studio-ollama` SSH forward on the private `arr-ai` Docker network.
 
-## Tailnet: BMC access and wake-pc
+## Tailnet: BMC access and wake
 
 **Intent** (*Dante*, 2026-11-21): "get it onto hosted tailscale and lets get a
 wake-pc running on the no-face machine too". The tailnet should reach the
 server's BMC even while the server is down, and the Studio should be able to
-wake the Windows PC like the server's `wake-pc`. The tailnet-wide migration
+wake the Windows PC like the server can. The tailnet-wide migration
 (server, Windows, docs) is owned by `docs`/`nixos` changes outside this file.
+
+**Intent** (*Dante*, 2026-11-23): replace `wake-pc` with a prettier tool that
+has presets for every machine in the house, is installed on all of them, skips
+the machine it runs on, and auto-updates from its own git repository.
 
 **Current**
 
@@ -272,15 +276,18 @@ wake the Windows PC like the server's `wake-pc`. The tailnet-wide migration
   connections from `192.168.50.80`. Verified from DANTE-PC: its route to
   `192.168.50.50` is via the Tailscale interface and HTTPS returns 200. (A pf
   NAT helper tried first matched no packets and was removed.)
-- `/usr/local/bin/wake-pc` is [`scripts/wake-pc.py`](../scripts/wake-pc.py)
-  with the CLT's `/usr/bin/python3`, the same packaging as `wake-pc.nix`:
-  identical defaults, `--wait` and exit codes. No-Face is on the same LAN, so
-  the broadcast default works. Tested only with a dummy MAC to loopback.
-  The default MAC is DANTE-PC's wired NIC, which must be plugged in: on
-  2026-11-21 it was disconnected and the PC was on Wi-Fi (`.190`), so a magic
-  packet could not wake it and `--wait`'s `.180` default would time out. Keep
-  the defaults; to check reachability over the tailnet instead, use
-  `--wait --wait-host 100.113.62.81` (DANTE-PC's Tailscale address).
+- `/usr/local/bin/wake` is the `aarch64-apple-darwin` release of
+  [dantebarbieri/wake](https://github.com/dantebarbieri/wake), installed by
+  its `install/install.sh` (run with sudo), which also deleted the old
+  `/usr/local/bin/wake-pc`. The root LaunchDaemon `com.danteb.wake-update`
+  (`/Library/LaunchDaemons/com.danteb.wake-update.plist`) runs
+  `wake self-update --quiet` daily at 04:15, logging to
+  `/var/log/wake-update.log`. No-Face is on the same LAN, so the broadcast
+  default works, and `wake all` skips No-Face itself. The `pc` preset's MAC is
+  DANTE-PC's wired NIC, which must be plugged in: on 2026-11-21 it was
+  disconnected and the PC was on Wi-Fi (`.190`), so a magic packet could not
+  wake it. No-Face itself can only be woken from sleep (never from shutdown),
+  and `pmset` has `sleep 0`, so its preset mostly reports status.
 
 ## Offload speech-to-text (Whisper)
 
@@ -668,7 +675,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | `macos/` | Worker provisioning, `home.arpa` resolver, tunnel, share mount helper, the Tdarr launcher (C source), session and start scripts, and plists |
 | `macos/install/` | `install-tdarr-node.sh` installs or updates the Studio's Tdarr node and is safe to rerun: it checks and builds everything before replacing anything, builds the launcher only when missing, and has the worker write its own files, so root never writes inside the worker's tree (Linux-tested only so far). The other installers are historical one-time scripts from 2026-11-13, not ready-to-rerun provisioning: their staging inputs and comparison models were removed; reusable sources are in `macos/` and `macos/ai/` |
 | `macos/checks/` | Isolation checks: worker boundaries, share access, Tdarr node authentication |
-| `macos/install/install-tailscale.sh` | Tailscale and `wake-pc` installer |
+| `macos/install/install-tailscale.sh` | Tailscale installer (`wake` has its own installer in [dantebarbieri/wake](https://github.com/dantebarbieri/wake)) |
 | `macos/ai/` | Whisper adapter, Ollama and Whisper plists, `_bazarr` sshd drop-in and provisioning script, comparison/review helpers, model evaluation and `COMPARISON.md` findings |
 | `docker/compose.studio.yml` | Server Samba share and relays (opt-in profile `studio-transfer`) |
 | `docker/compose.ai.yml`, `docker/dockerfiles/studio-whisper-tunnel/` | Bazarr's SSH forward to the Studio's Whisper adapter |
@@ -685,7 +692,7 @@ keeping storage, databases, *arr apps, DNS, NPM and auth on the server.
 | Bazarr forwarding account | `_bazarr`, `/etc/ssh/sshd_config.d/002-bazarr-forwarding.conf`, `/etc/ssh/bazarr-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#bazarr-transport-and-cutover) |
 | Maintenance forwarding account | `_arrmaint`, `/etc/ssh/sshd_config.d/003-arr-maint-forwarding.conf`, `/etc/ssh/arr-maint-forwarding-keys`, membership in `com.apple.access_ssh` | [Transport removal](ai/README.md#ollama-transport) |
 | Tailscale | `com.tailscale.tailscaled`, `/usr/local/bin/tailscaled`, state in `/Library/Tailscale/`; Homebrew `tailscale` | `sudo tailscale logout`, `sudo tailscaled uninstall-system-daemon`, `brew uninstall tailscale`, delete the machine in the admin console |
-| wake-pc | `/usr/local/bin/wake-pc` | Delete it |
+| wake | `/usr/local/bin/wake`, `com.danteb.wake-update` (`/Library/LaunchDaemons/com.danteb.wake-update.plist`), `/var/log/wake-update.log` | `curl -fsSL https://raw.githubusercontent.com/dantebarbieri/wake/main/install/install.sh \| sudo sh -s -- --uninstall` |
 | Tunnel and mounts | `com.danteb.studio-transfer`; mounts under `/private/var/lib/studio-worker/mounts/` | Unmount, `bootout`, delete the plist |
 | Native Tdarr node (installed, paused until the cutover) | `com.danteb.studio-tdarr` (plist in `/Library/LaunchDaemons`), the launcher and session script `/Library/PrivilegedHelperTools/com.danteb.studio-tdarr-{launcher,session}`, `/var/log/studio-tdarr`, worker `tdarr/` (node, `Custom/` modules and any `Custom.superseded.*` the installer moved aside), the launcher's Full Disk Access entry in System Settings | `sudo bash macos/install/install-tdarr-node.sh --stop` boots it out, disables it, waits up to a minute for the node, its encoders and any share probe to exit and lists whatever is left (exit 3). To remove it, delete those files (`Custom.superseded.*` is root-owned and needs `sudo`) and the launcher's Full Disk Access entry; optionally `sudo launchctl enable system/com.danteb.studio-tdarr` to clear the disabled flag |
 | Isolated Tdarr lab (removed 2026-11-13) | `/Library/LaunchDaemons/com.danteb.tdarr-lab-node.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-media.plist`, `/Library/LaunchDaemons/com.danteb.tdarr-lab-mount-cache.plist`; `/var/lib/studio-worker/tdarr-lab-SfSmBI8k`; `/var/log/tdarr-lab-SfSmBI8k` | Removed after explicit authorization. Preflight found regular files/directories only, no symlinks or special files; post-check confirmed all five targets absent |
