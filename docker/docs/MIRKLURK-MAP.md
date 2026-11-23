@@ -513,6 +513,19 @@ Verify distinct real external IPs form distinct quota buckets and spoofed
 
 ## Guarded release
 
+The final 0.9.6.5 post-wiki release pins both targets to
+`40766cb1bdaa5f4cfa31dc1d14fdde72fd812d75`, after accepted wiki publication
+`f95d8c695620511b33be20caa5619289e39df5fd`. Its 533-title catalog includes
+317 wiki PNGs and the unchanged 74 game PNGs; nine verified crops cover five
+new entities and four version-qualified replacements. Latest remains 0.9.6.5,
+wiki verification is 2026-11-23, and cache `f826f7b00e` precaches 404 files.
+The reviewed distribution contains 405 files, plus nginx's unchanged `50x.html`
+in the web image. Rebuild both targets because uploads copies the entire `src`
+tree, even though API/storage contracts are unchanged. Retain the actual
+accepted core images as rollback, recheck current exclusive NPM peers and
+all ordinary guards, and perform separate full-byte/public/lifecycle acceptance.
+Do not conflate this rollout with the earlier core or exact-peer recovery.
+
 ### Explicit opt-in isolated source preparation for frozen unrelated edits
 
 Ordinary deployment still requires its existing whole-clean canonical tree.
