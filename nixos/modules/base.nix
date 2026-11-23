@@ -1,5 +1,5 @@
 # Boot, kernel hardening, Nix settings, locale and privilege escalation.
-{ ... }:
+{ pkgs, ... }:
 
 {
   # Boot
@@ -21,6 +21,15 @@
     "net.core.bpf_jit_harden" = 2;          # Harden BPF JIT compiler
     "kernel.unprivileged_bpf_disabled" = 1;  # Disable unprivileged BPF
   };
+
+  # Never load kernel SCTP. Nothing here uses it (WebRTC data channels run
+  # SCTP in userspace over UDP), yet any container can make the host autoload
+  # it with one socket() call. NGINX2Root (November 2026) used an unpatched
+  # SCTP bug to turn nginx code execution into host root. Unlike `blacklist`,
+  # `install` also refuses explicit loads.
+  boot.extraModprobeConfig = ''
+    install sctp ${pkgs.coreutils}/bin/false
+  '';
 
   # Unfree + NVIDIA EULA
   nixpkgs.config.allowUnfree = true;
