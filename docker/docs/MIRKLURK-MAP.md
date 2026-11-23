@@ -227,7 +227,7 @@ remain 2026-11-12; all 312 PNGs and both CSS files are unchanged. No API,
 schema, server-reachable logic, modeled rules or sharing behavior changes.
 MirkMap is installable (web app manifest,
 service worker): after the first visit it keeps the page, the save editor's
-page, scripts, stylesheets, manifest, icons and all bundled art (399 files) so
+page, scripts, stylesheets, manifest, icons and all bundled art (404 files) so
 local saves open offline.
 It never caches `/api/`; pages are fetched network-first (up to 3 seconds) so
 an online visit gets the newest release.
@@ -236,7 +236,7 @@ The application, Dockerfile and base nginx configuration live in
 [dantebarbieri/mirklurk-map](https://github.com/dantebarbieri/mirklurk-map).
 This repository owns pinned Compose services, the narrow nginx integration,
 Homepage entry and operational runbook. No game binaries or user saves ship
-in either image; 74 manifest-listed game-art PNGs and 312 manifest-listed
+in either image; 74 manifest-listed game-art PNGs and 317 manifest-listed
 mirklurk.wiki pictures (`assets/wiki/`) are used with permission, as are the
 six MirkMap icons drawn from the game's "Map of area" item and (since f7257fc)
 the journal's text copied from the game's `UI.ini`. The web image also
@@ -248,16 +248,16 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `64cbf776a2c3cf0d32792d4f322f3e6c9bc90c70`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/44967533597) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/67) has no open issues |
-| Web | `mirklurk-map:64cbf77`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:64cbf77`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `40766cb1bdaa5f4cfa31dc1d14fdde72fd812d75`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45099889033) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/68) has no open issues |
+| Web | `mirklurk-map:40766cb`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:40766cb`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
 | Exposure | No host ports, no router/firewall changes, no public file listing, no outbound backend network |
 | Health | Each container's `/healthz`; web depends on healthy uploads |
 
-The 0.9.6.5 core pin adds version-gated Spider Silk, Grilled Spider Meat,
+The earlier 0.9.6.5 core pin added version-gated Spider Silk, Grilled Spider Meat,
 Spider Meat, Mirk Lurker and Deathlob definitions, revised Geomancer
 stats, and rendering of saved spider caves and webbed treasure. It does not
 rewrite authoritative saved positions, terrain or health grids. There are
@@ -277,23 +277,23 @@ Studio SSH restart loops does not authorize an exception for this core
 rollout. If unrelated start-time preservation fails, stop and report it;
 do not reuse that exception, redefine the baseline or alter restart policies.
 
-Expected Deno 2.9.7 build identifiers (compare the actual image and live bytes,
+Expected final post-wiki Deno 2.9.7 build identifiers (compare the actual image and live bytes,
 not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.2f52a387be.js` | `2f52a387be0ddb6523075db5e924e9ab318a57918b90da7c27d5def99e036faf` |
-| `edit.d4fdc30df3.js` | `d4fdc30df33704c2c221420c20c1074e04c5dac7e03044f5263933f313f32460` |
-| `sw.js` | `851815e08f6bacbf42d82c13b1e038f160871dd7e16b5ceeeae354d7a97537be5` |
+| `app.c2ee2a4795.js` | `c2ee2a4795c9dd65033ddaab49cf7f51e2f4d22e8ddd8f7398e14b308bd2cc66` |
+| `edit.a630d91a68.js` | `a630d91a685e9b4071a89f06a923712ac9e44ae5b99850d4f823f09e68220d13` |
+| `sw.js` | `4e16ab467ae7adad72115801c8ce7c917b1bdc4161069e7cea57b521172efbbbc` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 399 entries (cache `4a71617bb1`) and
+unchanged); the service worker keeps 404 entries (cache `f826f7b00e`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
 `Patch notes`. Both
-browser bundles contain `latest:"0.9.6.5"`, `Version 0.9.5.6`,
-`Wooden Buckler` and verification date `2026-11-12`.
+browser bundles contain `latest:"0.9.6.5"`, `Version 0.9.6.5`,
+`Wooden Buckler` and verification date `2026-11-23`.
 Both browser bundles contain `Flint_Dagger_icon_(cropped).png` and
 `Version 0.9.1.0`. Both browser bundles contain `0.9.1.0`, `Flint (Large)` and
 `Flint Dagger`. Both browser bundles contain `0.9.0.2`, `0.9.0.1` and
@@ -525,6 +525,13 @@ tree, even though API/storage contracts are unchanged. Retain the actual
 accepted core images as rollback, recheck current exclusive NPM peers and
 all ordinary guards, and perform separate full-byte/public/lifecycle acceptance.
 Do not conflate this rollout with the earlier core or exact-peer recovery.
+Acceptance must compare both pinned source labels and every file's size and
+full SHA-256 against the final `0965-wiki-bundle.json` (manifest SHA-256
+`6f7a6c4cea7d2c4cb2c8d033792e41049da010dde613af4d6f18bbf2ad748ffd`),
+including all nine imported crops, over both public address families.
+Require exactly 405 distribution files, the unchanged additional `50x.html`,
+404 precache entries and the current identifiers above; historical core hashes
+and image IDs are rollback evidence, not final-release acceptance criteria.
 
 ### Explicit opt-in isolated source preparation for frozen unrelated edits
 
