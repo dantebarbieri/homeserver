@@ -44,6 +44,7 @@ class HealthCleanupTests(unittest.TestCase):
                     files = builtins.attrNames hm.home.file;
                   };
                   primary = c.systemd.network.networks."40-enp66s0f1".networkConfig;
+                  modprobeConfig = c.environment.etc."modprobe.d/nixos.conf".text;
                   mailSyncService = builtins.hasAttr "vdirsyncer-sync" c.systemd.services;
                   mailSyncTimer = builtins.hasAttr "vdirsyncer-sync" c.systemd.timers;
                   packages = map system.pkgs.lib.getName c.environment.systemPackages;
@@ -156,6 +157,11 @@ class HealthCleanupTests(unittest.TestCase):
         self.assertFalse(self.config["scrubRestart"])
         for key in ("scrubFailure", "updateFailure", "upgradeFailure"):
             self.assertEqual(self.config[key], "ntfy-failure@%n.service")
+
+    def test_sctp_module_cannot_load(self):
+        # NixOS has no /bin/false, so the rule must name a store path.
+        self.assertRegex(self.config["modprobeConfig"],
+                         r"(?m)^install sctp /nix/store/[^/\s]+/bin/false$")
 
     def test_upgrade_builds_the_locked_flake(self):
         # Tokenize like bash: an unquoted `&` in the URL would background
