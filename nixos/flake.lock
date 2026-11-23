@@ -60,7 +60,28 @@
       "inputs": {
         "home-manager": "home-manager",
         "nix-index-database": "nix-index-database",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "wake": "wake"
+      }
+    },
+    "wake": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1795476266,
+        "narHash": "sha256-76MBiF7LZE/OFWri5ahDxgQ8bBhcaicPS5IJlJQeQv0=",
+        "owner": "dantebarbieri",
+        "repo": "wake",
+        "rev": "055a5b6936a4a405a8eb55d265f26988a83b81ac",
+        "type": "github"
+      },
+      "original": {
+        "owner": "dantebarbieri",
+        "repo": "wake",
+        "type": "github"
       }
     }
   },
