@@ -36,9 +36,21 @@ npm_login() {
     | jq -r '.token'
 }
 
+# The daily update recreates NPM and this monitor together, and NPM's API
+# answers ~15 s after its container starts. Wait for it before logging in.
+npm_ready() {
+  waited=0
+  until curl -sf -o /dev/null "${NPM_API}/"; do
+    [ "$waited" -lt "$NPM_READY_TIMEOUT" ] || return 1
+    sleep 5
+    waited=$((waited + 5))
+  done
+}
+
 LAST_IP=""
 FAIL_COUNT=0
 MAX_FAILURES="${MAX_FAILURES:-3}"
+NPM_READY_TIMEOUT="${NPM_READY_TIMEOUT:-300}"
 
 log "[bmc-ip-monitor] starting (domain=${PROXY_DOMAIN}, interval=${CHECK_INTERVAL}s, max_failures=${MAX_FAILURES})"
 ntfy_outbox_start || { log "ERROR: ntfy outbox unavailable"; exit 1; }
@@ -74,10 +86,17 @@ while :; do
   log "BMC IP is ${BMC_IP} (was: ${LAST_IP:-unknown})"
 
   # Step 3: Authenticate to NPM
+  if ! npm_ready; then
+    log "ERROR: NPM API not ready after ${NPM_READY_TIMEOUT}s"
+    ntfy "BMC IP Monitor: NPM Unreachable" \
+      "NPM API did not answer for ${NPM_READY_TIMEOUT}s" "high" "warning,computer" || true
+    sleep "$CHECK_INTERVAL"
+    continue
+  fi
   TOKEN=$(npm_login) || true
   if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
     log "ERROR: NPM API authentication failed"
-    ntfy "BMC IP Monitor: NPM Auth Failed" "Could not authenticate to NPM API" "high" "warning,computer" || true
+    ntfy "BMC IP Monitor: NPM Auth Failed" "NPM API is up but rejected the login" "high" "warning,computer" || true
     sleep "$CHECK_INTERVAL"
     continue
   fi

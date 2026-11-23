@@ -129,6 +129,20 @@ class ShellPublisherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "first\nsecond\n")
 
+    def test_bmc_waits_for_npm_api_with_timeout(self):
+        script = SCRIPTS["bmc"][0].read_text()
+        start = script.index("npm_ready() {")
+        func = script[start:script.index("\n}\n", start) + 3]
+        program = (
+            'curl() { n=$((n + 1)); [ "$n" -gt "$NOT_READY" ]; }\n'
+            'sleep() { :; }\n'
+            'NPM_API=http://npm/api; NPM_READY_TIMEOUT=10\n' + func +
+            'n=0; NOT_READY=2; npm_ready || exit 1; [ "$n" -eq 3 ] || exit 2\n'
+            'n=0; NOT_READY=99; if npm_ready; then exit 3; fi; [ "$n" -eq 3 ] || exit 4\n'
+        )
+        result = subprocess.run([SH, "-c", program], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_queue_sync_failure_is_reported(self):
         for fail_directory in (False, True):
             with self.subTest(fail_directory=fail_directory), tempfile.TemporaryDirectory() as tmp:
