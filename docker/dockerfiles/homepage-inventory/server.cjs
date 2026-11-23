@@ -19,11 +19,6 @@ const appRevisionSources = {
   "mirklurk-map-uploads": "https://github.com/dantebarbieri/mirklurk-map",
 };
 const versionFiles = {
-  "wg-easy": {
-    path: "/app/package.json",
-    parse: (text) => JSON.parse(text).release?.version,
-    prefix: "v",
-  },
   "satisfactory-server": {
     path: "/config/gamefiles/steamapps/appmanifest_1690800.acf",
     parse: (text) => text.match(/"buildid"\s+"(\d+)"/)?.[1],
@@ -155,10 +150,6 @@ function createServer({
 } = {}) {
   const cache = new Map();
   const pending = new Map();
-  const readContainerFile = async (name, filename) => archiveText(
-    await requestDocker(`/containers/${name}/archive?path=${encodeURIComponent(filename)}`, { binary: true }),
-    path.posix.basename(filename),
-  );
   async function inventory(name, withStats) {
     const key = `${withStats ? "stats" : "containers"}/${name}`;
     const cached = cache.get(key);
@@ -172,7 +163,7 @@ function createServer({
         let value;
         if (withStats) {
           try {
-            value = requestStats ? await requestStats(name) : await applicationStats(name, { readContainerFile });
+            value = requestStats ? await requestStats(name) : await applicationStats(name);
           } catch {
             throw new InventoryError(`Application statistics unavailable: ${name}`);
           }
