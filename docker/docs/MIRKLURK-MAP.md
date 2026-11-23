@@ -506,6 +506,22 @@ commit. Use the same-current-image web-only procedure above; no NPM restart,
 API apply, app build, uploads recreation or broader network trust is required.
 Retain the earlier core acceptance and subsequent outage as separate records,
 and obtain fresh current-identity/public/rollback/no-collateral acceptance.
+At 2026-11-23 14:10 UTC, fresh read-only checks found the completed ordinary
+04:00 CST updater had recreated NPM and map web around 10:05 UTC. Current NPM
+exclusively owns .35 / ::23; Nextcloud now owns stale .46 / ::2e. Replace only
+these two trust entries through normal reviewed CI/merge and the established
+same-current-image web-only activation. Preserve the accepted 5bf54cc split-
+history source, stable Latest 0.9.6.5 and both actual images:
+web `sha256:5edba7c164094479cc3772569225f5184dfcdecda811625b17b577f64f1438ad`,
+uploads `sha256:1a969945354a227375f32587e4615078dffc7f48b7d741a003ca137987dcda3f`.
+Keep uploads unchanged; no beta build/import, NPM recreation/API apply, subnet
+trust or unrelated repair. Reverify exclusive current ownership before merge,
+activation and acceptance; verify all 405 distribution files plus unchanged
+`50x.html` over IPv4/IPv6, 404 precache/cache `0b3183272b`, current protection
+and one separate sharing/identity lifecycle with independent acceptance.
+Capture the updater's new successful invocation as current preservation evidence,
+not a claim that this repair fixed the historical Homepage failure. After
+release, artwork maintenance still needs a fresh paired preimport snapshot.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
