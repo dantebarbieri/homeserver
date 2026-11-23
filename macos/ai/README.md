@@ -136,9 +136,11 @@ The adapter implements the Bazarr Whisper provider's raw 16 kHz, mono,
 signed 16-bit little-endian PCM uploads: `POST /asr?task=transcribe|translate
 &language=<input-code>&output=srt&encode=false` and
 `POST /detect-language?encode=false`. Its optional `video_file` query value is
-ignored, never opened or logged. `GET /` returns `{"version": ...}` with the
-engine package versions, which Bazarr's Test Connection button displays. Other formats, encoded uploads, arbitrary
-models and arbitrary paths are not supported.
+ignored, never opened or logged. Bazarr's **Test Connection** button appends
+`/status` to the configured endpoint. `GET /status` returns `{"version": ...}`
+with the engine package versions, as does `GET /`. Neither starts a speech job.
+Other formats, encoded uploads, arbitrary models and arbitrary paths are not
+supported.
 
 Two engines serve requests, each from an offline, pinned snapshot:
 
@@ -266,8 +268,9 @@ Set it up in this order, keeping an admin SSH session to the Studio open:
 3. Deploy from `main` through the main Compose entry point: build with
    `docker compose build --pull studio-whisper bazarr`, then
    `docker compose up -d --no-deps studio-whisper bazarr`.
-   Check `docker compose logs studio-whisper` and reach the adapter from
-   Bazarr. A GET to `/asr` returns 405; only POST invokes inference.
+   Check `docker compose logs studio-whisper`, then run
+   `docker compose exec bazarr curl -fsS http://studio-whisper:9000/status`
+   to check the same URL as Bazarr's **Test Connection** button.
 4. In Bazarr's Whisper provider settings, set the endpoint to
    `http://studio-whisper:9000` and the transcription/translation timeout to
    `30000` seconds; leave the connection timeout alone. Bazarr waits for the

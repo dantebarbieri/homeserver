@@ -160,8 +160,8 @@ def engine_version():
     return "Studio Whisper" + (f" ({', '.join(parts)})" if parts else "")
 
 
-# Bazarr's "Test Connection" button GETs the bare endpoint and shows its version.
 @app.get("/")
+@app.get("/status")
 async def version():
     return {"version": engine_version()}
 

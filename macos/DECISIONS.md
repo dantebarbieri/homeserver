@@ -339,6 +339,8 @@ that Telugu first match the server.
 - Bazarr uses a patched image ([`docker/dockerfiles/bazarr`](../docker/dockerfiles/bazarr))
   that rejects HTTP errors instead of saving them as subtitles. The build
   fails, keeping the previous container, if the patch stops matching upstream.
+- Bazarr's **Test Connection** appends `/status` to the provider URL. The
+  adapter route for that check returns the engine versions without running inference.
 - Bazarr reaches the Studio's loopback adapter through the server's
   `studio-whisper` SSH forward as the forward-only Mac account `_bazarr`
   ([transport](ai/README.md#bazarr-transport-and-cutover)). An
