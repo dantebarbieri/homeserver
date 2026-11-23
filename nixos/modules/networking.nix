@@ -1,5 +1,5 @@
 # Bonded NICs, systemd-networkd, DNS and the host firewall.
-{ ... }:
+{ pkgs, ... }:
 
 {
   # Hostname (Ghibli theme: drives the house and runs hot). The flake also
@@ -90,5 +90,31 @@
   systemd.network.wait-online = {
     enable = true;
     extraArgs = [ "--interface=bond0" ];
+  };
+
+  # Arm Wake-on-LAN (magic packet) on both bond members so `wake calcifer`
+  # can power the server on; the NIC listens on its permanent MAC once the OS
+  # is off. ethtool rather than networking.interfaces.*.wakeOnLan: that writes
+  # a 40-*.link file, which would replace 99-default.link and its interface
+  # naming. X550 WoL support depends on the card's EEPROM, so an unsupported
+  # port is logged, not failed; IPMI (192.168.50.50) is the fallback.
+  systemd.services.wake-on-lan = {
+    description = "Enable Wake-on-LAN on enp66s0f0 and enp66s0f1";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "sys-subsystem-net-devices-enp66s0f0.device" "sys-subsystem-net-devices-enp66s0f1.device" ];
+    path = [ pkgs.ethtool ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      for nic in enp66s0f0 enp66s0f1; do
+        if ethtool -s "$nic" wol g; then
+          echo "$nic: $(ethtool "$nic" | grep -E '^\s*Wake-on:' | xargs)"
+        else
+          echo "$nic: Wake-on-LAN not supported; use IPMI to power on"
+        fi
+      done
+    '';
   };
 }

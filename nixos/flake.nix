@@ -16,6 +16,12 @@
       url = "github:nix-community/nix-index-database";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # `wake` CLI (modules/users.nix); the same tool installs itself on the
+    # Mac Studio and Windows PC from the repo's releases.
+    wake = {
+      url = "github:dantebarbieri/wake";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =

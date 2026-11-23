@@ -96,7 +96,7 @@ login page from switching to `www.asusrouter.com`.
   run `sudo tailscale up --accept-dns=false --accept-routes=false --ssh=false`
   and complete browser login. Explicit flags preserve existing DNS and
   key-only SSH on port 28 during first enrollment.
-- **no-face:** boot-time `tailscaled` plus `wake-pc`; see
+- **no-face:** boot-time `tailscaled` plus `wake`; see
   [`macos/DECISIONS.md`](macos/DECISIONS.md) for the installed paths and
   startup details. Its BMC-only subnet route is `192.168.50.50/32`.
   Approve that route on the Tailscale Machines page. FileVault must be
@@ -129,7 +129,7 @@ connected, verify:
    BMC's own credentials and expect its existing self-signed certificate.
    `ipmi.danteb.com` still depends on calcifer's NPM/Authelia and is **not**
    the recovery path.
-4. SSH to no-face and use `wake-pc --wait` when the PC is intentionally
+4. SSH to no-face and use `wake pc --wait` when the PC is intentionally
    asleep. This sends the magic packet locally on the LAN.
 
 On Linux remote clients, enable route acceptance with
@@ -138,72 +138,40 @@ routes by default. Checking the BMC from a machine already on the home LAN
 does not by itself prove subnet routing works. Do not shut down calcifer
 just to test it without a planned maintenance window.
 
-## Wake the Windows PC
+## Wake machines on the LAN
 
-The `wake-pc` command sends a Wake-on-LAN packet for DANTE-PC. It is available
-on the homeserver and on No-Face. After connecting to Tailscale, SSH to
-No-Face's Tailscale IP in Termius to wake the PC even when calcifer is down.
-The existing homeserver command also works while that server is available:
-
-```bash
-wake-pc
-wake-pc --wait
-wake-pc --wait 60
-wake-pc --help
-wake-pc --mac 02:11:22:33:44:55 --broadcast 192.168.50.255 --port 9
-wake-pc --mac 02:11:22:33:44:55 --wait --wait-host 192.168.50.200 --wait-port 3389
-```
-
-The PC's **Ethernet cable must be connected**: its wired adapter cannot
-receive a magic packet while unplugged, even if RDP currently works over
-Wi-Fi. The `.180` wait target below is the wired LAN address, not the
-Wi-Fi lease. From No-Face (or another enrolled host), use
-`wake-pc --wait --wait-host 100.113.62.81` to wait for the PC's stable
-Tailscale address instead; this changes only the readiness check, not
-which adapter receives the wake packet.
-
-With no arguments it sends one standard 102-byte UDP magic packet for Ethernet
-MAC `74:56:3C:B4:F5:4E` to LAN broadcast `192.168.50.255:9`. `--mac` identifies
-the device; `--broadcast` selects the LAN broadcast destination. A DHCP IP
-change does not change the Ethernet MAC, so the PC's current IP is not needed.
-There is no `--ip` option, hostname lookup, or ARP discovery.
-
-Without `--wait`, success means **packet sent**, not verified readiness.
-`--wait [SECONDS]` waits up to 120 seconds by default for a TCP connection to
-RDP at `192.168.50.180:3389`. This means the RDP port is reachable, not that
-Windows login has completed or that this command caused a wake: the PC may
-already have been online. A timeout means RDP was not reachable, not proof of
-a power failure. Both wake senders have successfully woken this PC in a
-user-controlled test; the exact tested power state was not recorded.
-
-`--wait-host` and `--wait-port` customize only the verification endpoint and
-require `--wait`; changing `--mac` does not change that endpoint automatically.
-Unlike the Ethernet MAC, the verification IP must be updated if DHCP changes it.
-Numeric IPv4 targets avoid stale hostname lookup and bound connection attempts
-to the overall timeout; no ping or ARP discovery is used. No router port
-forwarding, exposed UDP port, or network changes are needed: the homeserver
-sends locally on the LAN.
-
-The source is `scripts/wake-pc.py`; `scripts/wake-pc.nix` packages it with a
-Nix-managed Python interpreter. `nixos/modules/users.nix` includes that package
-in `users.users.danteb.packages`, so it is installed declaratively for `danteb`
-at `/etc/profiles/per-user/danteb/bin/wake-pc` on a system rebuild:
+[`wake`](https://github.com/dantebarbieri/wake) sends Wake-on-LAN magic
+packets to the machines in the house. It is installed on calcifer (from the
+flake input in `nixos/flake.nix`, via `nixos/modules/users.nix`), No-Face and
+the Windows PC, and always skips the machine it runs on. Over Tailscale, SSH
+to No-Face to wake the PC even while calcifer is down.
 
 ```bash
-sudo nixos-rebuild switch
-command -v wake-pc
+wake pc            # send the packet
+wake pc --wait     # ...and wait (up to 120 s) until RDP answers
+wake all -w 60     # every other machine
+wake status        # which machines are up
+wake list          # presets: pc, no-face, calcifer
 ```
 
-No pip packages or shell PATH edits are needed. Rebuilds capture the checked-out
-source, and the command is restored from configuration rather than depending on
-an imperative user-profile installation. If migrating from the earlier manual
-installation, verify the declarative command works before running
-`nix profile remove wake-pc`; otherwise the older `~/.nix-profile/bin` copy
-can shadow declarative updates. Exit codes are `0`
-for a successful send/help (or RDP reachability with `--wait`), `1` for send,
-verification errors or timeout, `2` for invalid arguments, and `130` for Ctrl-C.
-Run non-disruptive unit and loopback-packet checks locally with
-`uv run --no-project python -B -m unittest discover -s scripts/tests -p 'test_wake_pc.py'`.
+- **pc** (`74:56:3C:B4:F5:4E`, RDP on `192.168.50.180:3389`): its **Ethernet
+  cable must be connected**; the wired adapter can't receive a magic packet
+  while unplugged, even if RDP works over Wi-Fi.
+- **no-face** wakes only from sleep (Apple Silicon can't be woken from
+  shutdown), and it is set never to sleep, so this is rarely needed.
+- **calcifer** gets the packet on both bonded NICs' permanent MACs. The
+  `wake-on-lan` unit in `nixos/modules/networking.nix` arms WoL on them at
+  boot; check it with `systemctl status wake-on-lan`, since X550 support
+  depends on the card. If `WAKE_IPMI_USER` and `IPMI_PASSWORD` are set (in
+  `~/.zshrc.local`, never in the repo) and `ipmitool` is installed, `wake
+  calcifer` also asks the BMC for `chassis power on`.
+
+`wake` checks the machine's port first and skips one that already answers
+(`--force` sends anyway). No router or firewall changes are needed: packets go
+to the LAN broadcast `192.168.50.255:9`. Presets, installers and the release
+process are in the [wake README](https://github.com/dantebarbieri/wake#readme);
+the macOS and Windows copies update themselves daily, calcifer's with the
+flake lock.
 
 ## Starr installer hosting
 

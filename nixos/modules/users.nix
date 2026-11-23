@@ -1,5 +1,5 @@
 # Login accounts.
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 {
   # User
@@ -21,7 +21,7 @@
       ];
       packages = with pkgs; [
         tree
-        (import ../../scripts/wake-pc.nix { inherit pkgs; })
+        inputs.wake.packages.${pkgs.stdenv.hostPlatform.system}.default
       ];
     };
     groups.studio-tunnel = { };

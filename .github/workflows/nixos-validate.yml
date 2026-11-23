@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - nixos/**
-      - scripts/wake-pc.nix
       - docker/scripts/mirklurk-backup.sh
       - docker/scripts/reconcile-docker-socket-consumers.sh
       - docker/scripts/restart-daemon-interrupted-containers.py
@@ -13,7 +12,6 @@ on:
   pull_request:
     paths:
       - nixos/**
-      - scripts/wake-pc.nix
       - docker/scripts/mirklurk-backup.sh
       - docker/scripts/reconcile-docker-socket-consumers.sh
       - docker/scripts/restart-daemon-interrupted-containers.py
