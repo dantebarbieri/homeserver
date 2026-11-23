@@ -12,6 +12,17 @@ COPY --from=app /docker-entrypoint.d/18-resolve-base-url.envsh /docker-entrypoin
 COPY --from=app /docker-entrypoint.d/19-skip-envsubst-if-readonly.envsh /docker-entrypoint.d/
 COPY --from=app /docker-entrypoint.d/25-remove-ipv6-listen-if-unavailable.sh /docker-entrypoint.d/
 
+# Overlay: a standalone Discord timestamp generator and the catalog entry that lists it.
+# The fork's service worker answers every navigation with index.html, so exempt the page,
+# or visitors who already have the worker would get the app's 404 instead. The build fails
+# if a fork release changes that line, rather than shipping a page nobody can reach.
+COPY it-tools-overlay/discord-timestamp.html it-tools-overlay/external-tools.json /usr/share/nginx/html/
+USER root
+RUN sed -i 's|\(NavigationRoute([A-Za-z_$][A-Za-z0-9_$]*\.createHandlerBoundToURL("index\.html")\))|\1,{denylist:[/^\\/discord-timestamp\\.html/]})|' /usr/share/nginx/html/sw.js \
+    && grep -qF 'denylist:[/^\/discord-timestamp\.html/]' /usr/share/nginx/html/sw.js \
+    && chmod a+r /usr/share/nginx/html/discord-timestamp.html /usr/share/nginx/html/external-tools.json
+USER 101
+
 ENV BASE_URL=/ \
     PORT=80
 
