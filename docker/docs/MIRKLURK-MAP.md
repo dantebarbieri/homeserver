@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `40766cb1bdaa5f4cfa31dc1d14fdde72fd812d75`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45099889033) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/68) has no open issues |
-| Web | `mirklurk-map:40766cb`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:40766cb`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `5bf54cc893d81f5c8f440a8c2fe7fa4a9cbb51b7`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45118648589) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/69) has no open issues |
+| Web | `mirklurk-map:5bf54cc`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:5bf54cc`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -277,17 +277,17 @@ Studio SSH restart loops does not authorize an exception for this core
 rollout. If unrelated start-time preservation fails, stop and report it;
 do not reuse that exception, redefine the baseline or alter restart policies.
 
-Expected final post-wiki Deno 2.9.7 build identifiers (compare the actual image and live bytes,
+Expected split-history Deno 2.9.7 build identifiers (compare the actual image and live bytes,
 not just HTTP status):
 
 | Asset | SHA-256 |
 |---|---|
-| `app.c2ee2a4795.js` | `c2ee2a4795c9dd65033ddaab49cf7f51e2f4d22e8ddd8f7398e14b308bd2cc66` |
-| `edit.a630d91a68.js` | `a630d91a685e9b4071a89f06a923712ac9e44ae5b99850d4f823f09e68220d13` |
-| `sw.js` | `4e16ab467ae7adad72115801c8ce7c917b1bdc4161069e7cea57b521172efbbbc` |
+| `app.ae464a6dfa.js` | `ae464a6dfac64f3ce696658d7d3929b14195b334bd00b65f00a8dcdb9c533109` |
+| `edit.65193c83f3.js` | `65193c83f3475a9a96cb9a1a8dc5c3abc6e8f441bc0fe7fe2c8665e42e1d6eef` |
+| `sw.js` | `29eed7cff193106c1ea1f5186b828be5c9116a0d1548e022ff1ad0d0f0a468d5` |
 
 Stylesheets are `style.eac19037ec.css` and `editor.b1df531e67.css` (both
-unchanged); the service worker keeps 404 entries (cache `f826f7b00e`) and
+unchanged); the service worker keeps 404 entries (cache `0b3183272b`) and
 lists both bundles, `assets/wiki/being_41.26af089dcc.png` and
 `assets/wiki/item_277.b27dd464e2.png`, which are served as `image/png`. Both
 browser bundles contain `Version 0.9.1.2`, `Version history` and
@@ -529,9 +529,30 @@ Acceptance must compare both pinned source labels and every file's size and
 full SHA-256 against the final `0965-wiki-bundle.json` (manifest SHA-256
 `6f7a6c4cea7d2c4cb2c8d033792e41049da010dde613af4d6f18bbf2ad748ffd`),
 including all nine imported crops, over both public address families.
+That completed release used cache `f826f7b00e` and the historical 40766cb
+identifiers, not the subsequently refreshed current identifiers above.
 Require exactly 405 distribution files, the unchanged additional `50x.html`,
-404 precache entries and the current identifiers above; historical core hashes
+404 precache entries and the release-specific identifiers; historical core hashes
 and image IDs are rollback evidence, not final-release acceptance criteria.
+
+### Split version-history catalog refresh
+
+After the accepted wiki history revision `ec6f5e8d` (671 text pages),
+`5bf54cc893d81f5c8f440a8c2fe7fa4a9cbb51b7` adds exactly three version-title
+links, bringing the catalog to 536 titles. Latest remains 0.9.6.5 and wiki
+verification remains 2026-11-23. All 317 wiki PNGs and 74 game PNGs are unchanged;
+there are no API, schema, model or artwork changes. Build/pin both targets
+because uploads still copies `src`, then use the same ordinary serialized
+uploads-then-web guarded rollout.
+
+Current acceptance uses `split-history-bundle.json`, SHA-256
+`6bb4bd83cf26883ea9a9eedfd8ea899b42b2b29f94217df6413b4a0ddd89b166`:
+405 distribution files, unchanged additional `50x.html`, 404 precache entries
+and cache `0b3183272b`, with current bundle hashes above. Retain actual accepted
+40766cb image IDs as rollback and reverify all guards, full public IPv4/IPv6
+bytes, normal protection/identity/sharing and independent acceptance in a
+separate window. Preserve earlier completed release records; never substitute
+their cache, hashes or lifecycle run for this refresh's acceptance.
 
 ### Explicit opt-in isolated source preparation for frozen unrelated edits
 
