@@ -129,6 +129,59 @@ class ShellPublisherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "first\nsecond\n")
 
+    def test_bmc_waits_for_npm_api_with_timeout(self):
+        script = SCRIPTS["bmc"][0].read_text()
+        start = script.index("npm_ready() {")
+        func = script[start:script.index("\n}\n", start) + 3]
+        program = (
+            'curl() { n=$((n + 1)); [ "$n" -gt "$NOT_READY" ]; }\n'
+            'date() { printf "%s\\n" "$now"; }\n'
+            'sleep() { now=$((now + $1)); }\n'
+            'NPM_API=http://npm/api; NPM_READY_TIMEOUT=11\n' + func +
+            'n=0; now=0; NOT_READY=2; npm_ready || exit 1; [ "$n" -eq 3 ] || exit 2\n'
+            'n=0; now=0; NOT_READY=99; if npm_ready; then exit 3; fi\n'
+            '[ "$n" -eq 3 ] && [ "$now" -eq 11 ] || exit 4\n'
+        )
+        result = subprocess.run([SH, "-c", program], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_bmc_readiness_timeout_bounds_a_stalled_http_response(self):
+        if subprocess.run([SH, "-c", "command -v curl >/dev/null"]).returncode:
+            self.skipTest("curl is unavailable")
+        release = threading.Event()
+        requests = []
+
+        class Stalled(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Length", "1")
+                self.end_headers()
+                release.wait(5)
+
+            def log_message(self, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Stalled)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            script = SCRIPTS["bmc"][0].read_text()
+            start = script.index("npm_ready() {")
+            func = script[start:script.index("\n}\n", start) + 3]
+            program = (
+                f"NPM_API=http://127.0.0.1:{server.server_port}/api\n"
+                "NPM_READY_TIMEOUT=1\n" + func + "\nnpm_ready\n"
+            )
+            result = subprocess.run([SH, "-c", program], capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(requests, ["/api/"])
+        finally:
+            release.set()
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
     def test_queue_sync_failure_is_reported(self):
         for fail_directory in (False, True):
             with self.subTest(fail_directory=fail_directory), tempfile.TemporaryDirectory() as tmp:
