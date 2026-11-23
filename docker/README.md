@@ -68,6 +68,15 @@ Dashdot retains the upstream NVIDIA image but builds with the supported Node 24
 runtime; the build requires Node 24.22.3 and OpenSSL 3.5.9 or newer, and the
 scheduled build refreshes both base images.
 
+## BMC Proxy Monitor
+
+`bmc-ip-monitor` checks the BMC address every 15 minutes and reconciles the IPMI
+proxy host on startup or an address change. Before authenticating, it waits up
+to `NPM_READY_TIMEOUT` (default: 300 seconds, including HTTP requests) for NPM's
+API, avoiding false authentication alerts during the daily update. Persistent
+unavailability raises `NPM Unreachable`; a failed login after a successful
+readiness probe raises `NPM Auth Failed`.
+
 ## Shared Templates
 
 `compose.common.yml` provides reusable service templates:

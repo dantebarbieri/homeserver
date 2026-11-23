@@ -39,11 +39,21 @@ npm_login() {
 # The daily update recreates NPM and this monitor together, and NPM's API
 # answers ~15 s after its container starts. Wait for it before logging in.
 npm_ready() {
-  waited=0
-  until curl -sf -o /dev/null "${NPM_API}/"; do
-    [ "$waited" -lt "$NPM_READY_TIMEOUT" ] || return 1
-    sleep 5
-    waited=$((waited + 5))
+  deadline=$(( $(date +%s) + NPM_READY_TIMEOUT ))
+  while :; do
+    remaining=$((deadline - $(date +%s)))
+    [ "$remaining" -gt 0 ] || return 1
+    if curl -sf --connect-timeout 5 --max-time "$remaining" \
+        -o /dev/null "${NPM_API}/"; then
+      return 0
+    fi
+    remaining=$((deadline - $(date +%s)))
+    [ "$remaining" -gt 0 ] || return 1
+    if [ "$remaining" -gt 5 ]; then
+      sleep 5
+    else
+      sleep "$remaining"
+    fi
   done
 }
 
@@ -96,7 +106,8 @@ while :; do
   TOKEN=$(npm_login) || true
   if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
     log "ERROR: NPM API authentication failed"
-    ntfy "BMC IP Monitor: NPM Auth Failed" "NPM API is up but rejected the login" "high" "warning,computer" || true
+    ntfy "BMC IP Monitor: NPM Auth Failed" \
+      "NPM readiness probe passed, but API authentication failed" "high" "warning,computer" || true
     sleep "$CHECK_INTERVAL"
     continue
   fi
