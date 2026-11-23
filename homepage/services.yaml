@@ -427,19 +427,6 @@
             - { field: failed, label: Failed (24h), format: text }
             - { field: totp, label: TOTP Setups, format: text }
             - { field: passkeys, label: Passkeys, format: text }
-    - WireGuard:
-        icon: wireguard.svg
-        href: https://wireguard.danteb.com
-        description: VPN Server
-        siteMonitor: https://wireguard.danteb.com
-        server: my-docker
-        container: wg-easy
-        widget:
-          <<: *container-info
-          url: http://homepage-inventory:8080/stats/wg-easy
-          mappings:
-            - { field: peers, label: Peers, format: text }
-            - { field: enabled, label: Enabled, format: text }
 
 - Monitoring:
     - ChasEx:

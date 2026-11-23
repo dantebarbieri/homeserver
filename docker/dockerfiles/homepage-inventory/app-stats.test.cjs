@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { applicationStats, metricValues, pdfCatalog, peerStats, statsNames, toolCatalog } = require("./app-stats.cjs");
+const { applicationStats, metricValues, pdfCatalog, statsNames, toolCatalog } = require("./app-stats.cjs");
 
 test("compiled ConvertX releases need only SQLite aggregates, not archived JavaScript files", async () => {
   const result = { completed: "31", other: "4", jobs: "0" };
@@ -9,7 +9,6 @@ test("compiled ConvertX releases need only SQLite aggregates, not archived JavaS
       assert.equal(name, "convertx");
       return result;
     },
-    readContainerFile: () => assert.fail("Compiled ConvertX has no JavaScript registry"),
   }), result);
   await assert.rejects(applicationStats("convertx", {
     readSqliteStats: () => { throw new Error("Database unavailable"); },
@@ -46,17 +45,6 @@ test("PDF actions exclude administration and count file-accepting document APIs,
   assert.throws(() => pdfCatalog({ openapi: "3.0", paths: {} }), /Missing PDF/);
 });
 
-test("peer aggregates expose no names, keys or addresses, and never claim an enabled peer is connected", () => {
-  const value = { server: { privateKey: "private" }, clients: {
-    one: { enabled: true, name: "private", publicKey: "private" },
-    two: { enabled: false, address: "private" },
-  } };
-  assert.deepEqual(peerStats(JSON.stringify(value)), { peers: "2", enabled: "1" });
-  assert.deepEqual(peerStats('{"clients":{}}'), { peers: "0", enabled: "0" });
-  assert.throws(() => peerStats('{"clients":{"one":{"enabled":"true"}}}'), /Invalid peer/);
-  assert.throws(() => peerStats('{"clients":[]}'), /Invalid peer configuration/);
-});
-
 test("metrics require a real declared family and valid samples, including an explicitly empty family", () => {
   assert.deepEqual(metricValues('# TYPE calls counter\ncalls{engine="a"} 12\ncalls{engine="b"} 4\n', "calls"), [12, 4]);
   assert.deepEqual(metricValues("# TYPE calls counter\n", "calls"), []);
@@ -67,7 +55,7 @@ test("metrics require a real declared family and valid samples, including an exp
 });
 
 test("statistics source allowlist cannot expose arbitrary service, URL, or file requests", () => {
-  for (const name of ["convertx", "snapotter", "authelia", "synapse", "element", "it-tools", "stirling-pdf", "wg-easy", "searxng"]) {
+  for (const name of ["convertx", "snapotter", "authelia", "synapse", "element", "it-tools", "stirling-pdf", "searxng"]) {
     assert.ok(statsNames.has(name));
   }
   for (const name of ["toString", "http://example.com", "../../etc/shadow", "unknown"]) {

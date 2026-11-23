@@ -48,7 +48,6 @@ link_token = false
 pass_searxng_org = false
 pass_ip = [
   "172.16.0.0/12",           # Docker bridge networks
-  "10.8.0.0/24",             # WireGuard
   "192.168.50.0/24",         # LAN
 ]
 ```

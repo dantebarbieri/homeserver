@@ -76,7 +76,20 @@ Hosted Tailscale replaces the server-as-VPN-gateway dependency: install and
 authenticate a client on **calcifer**, **no-face**, **Windows**, and each
 remote phone/laptop, all in the same tailnet. It is split-tunnel access,
 not an exit node: ordinary internet traffic stays on the client's network.
-Keep wg-easy running as a fallback until the off-LAN checks below pass.
+
+**Legacy VPN rollback:** wg-easy is no longer deployed. Its peer keys and
+configuration remain in `${DATA}/wg-easy`, not in Git or a NixOS generation.
+Keep its two `WGEASY_*` environment values in private backup before removing
+them from production `.env`. To restore the service, revert its removal in
+Git, remove the host-local `wg-easy: !reset null` Compose override if present,
+restore the environment values, and apply the firewall configuration. Pin the
+last deployed image (`ghcr.io/wg-easy/wg-easy@sha256:5f26407fd2ede54df76d63304ef184576a6c1bb73f934a58a11abdd852fab549`)
+rather than pointing `latest` at the retained keys. Then run
+`docker compose up -d --no-deps wg-easy` from `/srv/homeserver/docker`.
+
+For the [ASUS router over Tailscale](http://router.home.arpa/Main_Login.asp?redirct=false),
+bookmark that exact URL. The router's `redirct=false` parameter keeps its
+login page from switching to `www.asusrouter.com`.
 
 - **calcifer:** native NixOS daemon, managed by
   [`nixos/modules/tailscale.nix`](nixos/modules/tailscale.nix); after deployment,
@@ -105,8 +118,8 @@ the LAN connect directly, not through a relay. calcifer and No-Face do not
 accept Tailscale DNS, so use the numeric addresses from `tailscale ip -4`
 there.
 
-From a remote client on cellular or another network, **with wg-easy off on
-that client**, verify:
+From a remote client on cellular or another network, with only Tailscale
+connected, verify:
 
 1. SSH to calcifer's Tailscale IP on port 28 and no-face's on port 22,
    using their normal accounts and keys.

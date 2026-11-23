@@ -182,38 +182,9 @@ Only Grafana joins the `proxy` network. Prometheus, Loki, cAdvisor, and node-exp
 
 ## ~~Priority 3: VPN Server for Remote Access~~ ✅ Done
 
-Currently no way to access the homeserver remotely except SSH on port 28. A VPN server allows secure access to all services (including internal-only ones) from phone/laptop on untrusted networks.
-
-### Option A: WireGuard in Docker (recommended)
-
-Run as a Docker container using `wg-easy` (web management UI for peer/client management). Keeps all service logic in Docker for portability — if you ever migrate off NixOS, the VPN moves with the compose stack.
-
-- Image: `ghcr.io/wg-easy/wg-easy:latest`
-- Add to `docker/compose.core.yml` or `docker/compose.utilities.yml`
-- Join `proxy` network for the web UI (has built-in password auth — no Authelia needed for the management UI, but consider Authelia since it's a VPN management portal)
-- Requires UDP port 51820 opened on NixOS firewall + router — **router IPv4 port forward and IPv6 firewall rule already added** (2026-04-01), NixOS firewall still needed
-- Environment variables: `WG_HOST` (public hostname/IP), `PASSWORD_HASH` (for web UI), `WG_DEFAULT_DNS` (optional, point to local DNS)
-
-### Option B: Tailscale (alternative — NixOS-native)
-
-NixOS has a first-class module. Zero-config, NAT traversal, MagicDNS. No port forwarding needed. However, this ties the VPN to NixOS rather than Docker, making it less portable.
-
-```nix
-services.tailscale.enable = true;
-```
-
-After `nixos-rebuild switch`, run `sudo tailscale up` to authenticate. Install Tailscale on phone/laptop. All devices see each other on a private `100.x.x.x` mesh.
-
-### Files to modify
-
-- **WireGuard (recommended)**: New entry in `docker/compose.core.yml` or `docker/compose.utilities.yml`, `docker/sample.env` for `WG_HOST` and password hash, `networking.firewall.allowedUDPPorts` in `configuration.nix` (add 51820). Router IPv4 port forwarding and IPv6 firewall rule for UDP 51820 are already done.
-- **Tailscale**: `nixos/configuration.nix` — Add `services.tailscale.enable = true;` and `networking.firewall.trustedInterfaces = [ "tailscale0" ];`
-
-### Verification
-
-- **WireGuard**: Access `https://wireguard.danteb.com` (`vpn.danteb.com` redirects here), log in to wg-easy UI, create a client config. Import on phone. Disconnect from home WiFi, use cellular. Access `https://jellyfin.danteb.com` — should work via the tunnel. Run `curl ifconfig.me` on the client to confirm traffic routes through the VPN.
-- **Tailscale**: After `sudo tailscale up`, run `tailscale status` to confirm the server appears. From another Tailscale device, `ping 100.x.x.x` (the server's Tailscale IP). Access `http://100.x.x.x:8096` (Jellyfin) to confirm internal services are reachable.
-- For either: test from a non-home network (cellular, coffee shop WiFi) to confirm remote access works
+Hosted Tailscale superseded the original Docker VPN server. See
+[Tailscale remote access](README.md#tailscale-remote-access) for the deployed
+configuration, off-LAN checks, and rollback notes.
 
 ---
 
@@ -674,7 +645,7 @@ services.fail2ban = {
 |---|------|------|------|--------|-------|
 | 1 | ~~Backup automation~~ ✅ | NixOS + Docker | Fixes critical gap | Medium | |
 | 2 | ~~Monitoring stack (Prometheus/Grafana/Loki)~~ ✅ | Docker | None (additive) | Medium-High | Grafana uses own auth; Prometheus/cAdvisor internal only |
-| 3 | ~~VPN server (WireGuard in Docker)~~ ✅ | Docker | Low | Low | wg-easy container; portable across OS |
+| 3 | ~~VPN for remote access~~ ✅ | Tailscale | Low | Low | Split-tunnel access to hosts and selected LAN devices |
 | 4 | ~~Kernel hardening (sysctl)~~ ✅ | NixOS | Low (test first) | Low | All settings validated against CIS/KSPP |
 | 5 | ~~Uptime monitoring (Upptime + Kuma)~~ ✅ | Docker + GitHub | None (additive) | Low | Kuma monitors configured with ntfy alerts, Upptime expanded to 33 services |
 | 6 | Container hardening (limits, caps, read-only) | Docker | Medium (test each) | Medium | Incremental per-service, not global; limits are safety nets |
