@@ -2,7 +2,7 @@ const { readStats, databaseFiles } = require("./stats.cjs");
 const { readPostgresStats } = require("./postgres.cjs");
 
 const statsNames = new Set([
-  ...Object.keys(databaseFiles), "searxng", "it-tools", "stirling-pdf", "wg-easy",
+  ...Object.keys(databaseFiles), "searxng", "it-tools", "stirling-pdf",
   "synapse", "element", "authelia", "snapotter",
 ]);
 
@@ -90,23 +90,11 @@ function pdfCatalog(document) {
   return { actions: count(actions), categories: count(categories.size) };
 }
 
-function peerStats(body) {
-  const config = JSON.parse(body);
-  if (!config.clients || typeof config.clients !== "object" || Array.isArray(config.clients)) {
-    throw new Error("Invalid peer configuration");
-  }
-  const peers = Object.values(config.clients);
-  if (!peers.every((peer) => peer && typeof peer.enabled === "boolean")) throw new Error("Invalid peer");
-  return { peers: count(peers.length), enabled: count(peers.filter((peer) => peer.enabled).length) };
-}
-
-async function applicationStats(name, { readContainerFile, readSqliteStats = readStats }) {
+async function applicationStats(name, { readSqliteStats = readStats } = {}) {
   if (Object.hasOwn(databaseFiles, name)) {
     return readSqliteStats(name);
   }
   switch (name) {
-    case "wg-easy":
-      return peerStats(await readContainerFile(name, "/etc/wireguard/wg0.json"));
     case "synapse":
     case "element":
       return readPostgresStats("synapse");
@@ -152,4 +140,4 @@ async function applicationStats(name, { readContainerFile, readSqliteStats = rea
   }
 }
 
-module.exports = { applicationStats, count, metricValues, pdfCatalog, peerStats, statsNames, toolCatalog };
+module.exports = { applicationStats, count, metricValues, pdfCatalog, statsNames, toolCatalog };

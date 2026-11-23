@@ -83,7 +83,6 @@ If not already created, set up an NPM Access List named `LAN+WG` with:
 - **Satisfy Any**
 - **Allow** entries:
   - `192.168.50.0/24` — LAN
-  - `10.8.0.0/24` — WireGuard
   - `172.16.0.0/12` — Docker bridge networks
 - **Deny all** (default)
 

@@ -48,6 +48,16 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("00:00:00,000 --> 00:00:01,000", response.text)
 
+    async def test_bazarr_status_and_root_report_engine_versions(self):
+        versions = {"mlx-whisper": "1.2.3", "faster-whisper": "4.5.6"}
+        with patch.object(whisper_adapter.metadata, "version", side_effect=versions.__getitem__):
+            for path in ("/status", "/"):
+                with self.subTest(path=path):
+                    response = await self.client.get(path)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()["version"],
+                                     "Studio Whisper (mlx-whisper 1.2.3, faster-whisper 4.5.6)")
+
     async def test_detect_language_response(self):
         async def fake_worker(mode, path, language, timeout):
             self.assertEqual((mode, language), ("detect", None))

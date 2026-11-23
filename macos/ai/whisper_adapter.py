@@ -1,6 +1,7 @@
 """Loopback-only Bazarr PCM/SRT subset of the Whisper ASR API."""
 
 import asyncio
+from importlib import metadata
 import logging
 import os
 from pathlib import Path
@@ -147,6 +148,22 @@ async def process(request, mode, language=None):
                 raise HTTPException(504, "Speech worker timed out")
     finally:
         await form.close()
+
+
+def engine_version():
+    parts = []
+    for name in ("mlx-whisper", "faster-whisper"):
+        try:
+            parts.append(f"{name} {metadata.version(name)}")
+        except metadata.PackageNotFoundError:
+            pass
+    return "Studio Whisper" + (f" ({', '.join(parts)})" if parts else "")
+
+
+@app.get("/")
+@app.get("/status")
+async def version():
+    return {"version": engine_version()}
 
 
 @app.post("/asr")

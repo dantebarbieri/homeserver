@@ -73,9 +73,10 @@ access policy; existing service authentication remains in place.
 
 For recovery, connect to No-Face directly over its Tailscale IP and reach
 the BMC through No-Face's `192.168.50.50/32` subnet route. Neither depends on
-this server. Keep wg-easy during migration until an off-LAN client has
-verified SSH, RDP, and the BMC path. See the repository
-[remote-access setup](../README.md#tailscale-remote-access).
+this server. The old wg-easy service and its UDP 51820 firewall opening
+have been removed from the deployment configuration.
+See the [remote-access setup](../README.md#tailscale-remote-access) for
+off-LAN checks and rollback instructions.
 
 ## Storage
 

@@ -134,7 +134,6 @@ Metrics are
 | Stirling PDF | File-accepting document actions and their categories in the deployed OpenAPI schema. Excludes administrative APIs. These are API action capabilities, not unique UI-tool counts or completed conversions; no external analytics is enabled. |
 | SearXNG | Enabled engines; engine request calls since the metrics process started; unweighted mean of available per-engine response-time averages. One search fans out to several engines, so calls are **not search counts** and engine latency is not end-to-end search latency. Counters reset on restart; absent timing samples display No samples, not zero milliseconds. |
 | SnapOtter | Queued/running jobs; retained completed/failed jobs with completion timestamps in the last 24 hours. Uses an aggregate-only PostgreSQL view; no administrator token or job details. |
-| WireGuard | Configured peers and enabled peers from `wg0.json`. Enabled does **not** imply a recent handshake; traffic/live connection data needs authenticated v14 API access. No keys, addresses or peer names leave the adapter. |
 | Element / Synapse | Non-deactivated, non-guest local users; all known room records; distinct users in Synapse's daily-visit tracking during the last 24 hours. These are homeserver metrics, not Element browser sessions or message contents. |
 | Authelia | Successful/failed authentication-log events in the last 24 hours, TOTP configurations, and registered WebAuthn credentials. Authentication attempts are not distinct users. No usernames, IPs, authentication secrets or log records are returned. |
 
@@ -194,9 +193,8 @@ or complete inspection responses. Containers must belong to Compose project
 `compose`. Only GET is accepted; this is not a general-purpose Docker proxy.
 
 Version sources are deliberately explicit. Verified application image labels
-and database/NPM image version variables supply application versions. WireGuard
-reads the installed package's `release.version` (v14), **not** its unrelated
-`package.json` version. Satisfactory reads its installed Steam build ID.
+and database/NPM image version variables supply application versions.
+Satisfactory reads its installed Steam build ID.
 Application-owned Git revisions appear as `Build <revision>`. Otherwise the
 widget says `Image <ID>`, an immutable image identity, **not an application
 version**. In particular, inherited Ubuntu, Node, Nginx, and Deno versions must
@@ -218,9 +216,8 @@ Docker API authorization boundary**: the adapter is a trusted socket consumer.
 (Homepage itself no longer is: it reaches Docker only through
 `homepage-socket-proxy`, which allows container list and stats.) Keep the
 adapter internal, and never expose its socket or raw
-Docker inspection data to browsers. Archive reads are fixed version files for
-WireGuard/Satisfactory and the filtered WireGuard peer configuration; no arbitrary file paths or exec endpoints
-are offered.
+Docker inspection data to browsers. The only archive read is Satisfactory's
+fixed Steam build manifest; no arbitrary file paths or exec endpoints are offered.
 
 Service-specific icons use verified Dashboard Icons filenames where available,
 including infrastructure and database backends. Custom apps and helpers without

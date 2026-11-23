@@ -136,18 +136,6 @@ test("uses an application revision only when its source matches, not an inherite
   assert.equal(imageVersion("unknown-app", value), "Image aaaaaaaaaaaa");
 });
 
-test("reads WireGuard's release, not its unrelated package version", async (t) => {
-  const calls = [];
-  const { request } = await fixture(t, { requestDocker: async (url, options) => {
-    calls.push(url);
-    if (url.endsWith("/json")) return copy(container);
-    assert.equal(options.binary, true);
-    return tar("package.json", '{"version":"1.0.1","release":{"version":"14"}}');
-  } });
-  assert.equal((await (await request("/containers/wg-easy")).json()).version, "v14");
-  assert.deepEqual(calls, ["/containers/wg-easy/json", "/containers/wg-easy/archive?path=%2Fapp%2Fpackage.json"]);
-});
-
 test("reads the installed Satisfactory Steam build, not the image's Ubuntu version", async (t) => {
   const { request } = await fixture(t, { requestDocker: async (url) => url.endsWith("/json")
     ? copy(container) : tar("appmanifest_1690800.acf", '"AppState"\n{\n "buildid" "24656085"\n}\n') });
@@ -238,7 +226,7 @@ test("statistics routes are fixed, GET-only and project-scoped", async (t) => {
     requestStats: () => { queries++; return []; },
     requestDocker: async () => value,
   });
-  for (const url of ["/stats/toString", "/stats/unknown", "/stats/aurral?sql=SELECT", "/stats/aurral/elsewhere"]) {
+  for (const url of ["/stats/toString", "/stats/unknown", "/stats/wg-easy", "/stats/aurral?sql=SELECT", "/stats/aurral/elsewhere"]) {
     assert.equal((await request(url)).status, 404);
   }
   assert.equal((await request("/stats/aurral", { method: "POST" })).status, 405);

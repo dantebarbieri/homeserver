@@ -12,5 +12,5 @@
           description: ASRock Rack BMC
     - ASUS Router:
         - icon: mdi-router-wireless
-          href: http://www.asusrouter.com
+          href: http://router.home.arpa/Main_Login.asp?redirct=false
           description: GT-BE98 Pro

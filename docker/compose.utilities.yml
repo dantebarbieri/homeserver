@@ -1,5 +1,5 @@
 # Utility services
-# vaultwarden, syncthing, couchdb, ntfy, adguardhome, wg-easy, it-tools,
+# vaultwarden, syncthing, couchdb, ntfy, adguardhome, it-tools,
 # code-server, convertx, snapotter, stirling-pdf, changedetection-io,
 # sockpuppetbrowser
 
@@ -111,30 +111,6 @@ services:
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-    networks:
-      - proxy
-
-  wg-easy:
-    extends:
-      file: compose.common.yml
-      service: common-service
-    image: ghcr.io/wg-easy/wg-easy:latest
-    container_name: wg-easy
-    cap_add:
-      - NET_ADMIN
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv4.ip_forward=1
-    environment:
-      WG_HOST: ${WGEASY_HOST}
-      PASSWORD_HASH: ${WGEASY_PASSWORD_HASH}
-      WG_DEFAULT_DNS: 192.168.50.100
-      WG_POST_UP: "iptables-nft -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE; iptables-nft -A INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables-nft -A FORWARD -i wg0 -j ACCEPT; iptables-nft -A FORWARD -o wg0 -j ACCEPT;"
-      WG_POST_DOWN: "iptables-nft -t nat -D POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE; iptables-nft -D INPUT -p udp -m udp --dport 51820 -j ACCEPT; iptables-nft -D FORWARD -i wg0 -j ACCEPT; iptables-nft -D FORWARD -o wg0 -j ACCEPT;"
-    volumes:
-      - ${DATA}/wg-easy:/etc/wireguard
-    ports:
-      - "51820:51820/udp"
     networks:
       - proxy
 
