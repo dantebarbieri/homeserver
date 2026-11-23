@@ -228,7 +228,10 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    build:
+      context: dockerfiles/flaresolverr
+      pull: true
+    image: flaresolverr-chrome-stable:latest
     container_name: flaresolverr
     cap_drop:
       - ALL

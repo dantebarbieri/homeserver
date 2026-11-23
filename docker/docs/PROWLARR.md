@@ -5,12 +5,16 @@ internet access and runs with dropped capabilities and resource limits. Its
 root filesystem stays writable because the image patches its Chromium driver
 at runtime.
 
-FlareSolverr's Chromium comes from upstream's image (Debian bookworm packages)
-and can trail Chrome security releases by months: on 2026-11-23 it shipped
-Chromium 152 while the fixes were in 158, and Debian security only reached 156.
-This is accepted rather than patched locally, because swapping in Google Chrome
-risks breaking undetected-chromedriver. Exposure is limited to the indexer and
-manga sites Prowlarr and Suwayomi send it to.
+FlareSolverr is built from `dockerfiles/flaresolverr`: upstream's image with its
+Debian Chromium (152 on 2026-11-23, while the fixes were in 158 and Debian
+security only reached 156) replaced by Chrome for Testing stable and the
+matching chromedriver on every nightly `docker compose build --pull`. The build
+fails unless the two versions match and stable is at least 158.0.8127.36.
+Before adopting it, real Cloudflare solves against ext.to and bt4gprx.com
+succeeded on 158.0.8127.88 as on 152, with the production hardening flags.
+Exposure is limited to the indexer and manga sites Prowlarr and Suwayomi send
+it to.
+
 Two indexers use repo-managed variants of Prowlarr's upstream (Cardigann)
 definitions. Each variant is derived from the upstream definition Prowlarr has
 installed, by an awk program in `docker/prowlarr/`; only the changes below

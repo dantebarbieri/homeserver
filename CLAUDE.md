@@ -125,7 +125,8 @@ The guiding principle: prefer the **concept, protocol, or canonical project name
 - `dockerfiles/convertx/` — extends upstream ConvertX with the optional packages, ImageMagick tweaks, and LibreOffice wrapper its conversions need
 - `dockerfiles/Dockerfile.jellyfin` — patches Jellyfin's `index.html` to inject the Finity theme
 - `dockerfiles/Dockerfile.sockpuppetbrowser` — refreshes Google Chrome stable and Debian packages on each nightly build, since the upstream image lags Chrome security releases
-- `dockerfiles/Dockerfile.it-tools` — serves upstream IT-Tools' static build from a current `nginx:stable-alpine` (upstream's last image froze nginx in 2024)
+- `dockerfiles/flaresolverr/` — FlareSolverr with Debian's Chromium swapped for Chrome for Testing stable plus its matching chromedriver on each nightly build (`install-chrome.py`; fails if the versions differ)
+- `dockerfiles/Dockerfile.it-tools` — serves sharevb's IT-Tools fork (~480 tools: timezone, calendar, Markdown, GPT-token and more; pinned by digest) from a current `nginx-unprivileged:stable-alpine` on port 80, since the fork's own image freezes nginx between its releases; bump the tag and digest together
 - `dockerfiles/Dockerfile.sveltekit` — generic multi-stage SvelteKit build, parameterized via `ARG APP_NAME`
 - `dockerfiles/arr-maint/` — queue auto-fixers for Lidarr, Radarr and Sonarr: one image, a shared engine plus per-app rules, selected by `APP`
 - `dockerfiles/bazarr/` — patches Bazarr's Whisper provider to reject HTTP errors instead of saving them as subtitles; the build fails if the patch no longer fits
