@@ -223,6 +223,7 @@ services:
       context: dockerfiles
       dockerfile: Dockerfile.sockpuppetbrowser
       pull: true
+      no_cache: true
     image: sockpuppetbrowser-chrome-stable:latest
     container_name: sockpuppetbrowser
     shm_size: 2gb

@@ -34,6 +34,8 @@ test('moves a nonexistent time forward and picks the first of a repeated time', 
   assert.equal(page.wallToInputValue(page.epochToWall(gap, 'America/New_York')), '2024-03-10T03:30:00');
 
   assert.equal(iso(toEpoch(wall(2024, 11, 3, 1, 30), 'America/New_York')), '2024-11-03T05:30:00Z');
+  assert.equal(iso(toEpoch(wall(2024, 10, 27, 2, 30), 'Europe/Berlin')), '2024-10-27T00:30:00Z');
+  assert.equal(iso(toEpoch(wall(2024, 4, 7, 1, 45), 'Australia/Lord_Howe')), '2024-04-06T14:45:00Z');
 });
 
 test('round-trips wall time in every supported zone', () => {
@@ -53,7 +55,11 @@ test('accepts seconds, milliseconds and pasted Discord codes', () => {
   assert.deepEqual({ ...page.parseTimestampInput(' <t:1700000000:R> ') }, { seconds: 1700000000, unit: 'seconds' });
   assert.deepEqual({ ...page.parseTimestampInput('t:1700000000') }, { seconds: 1700000000, unit: 'seconds' });
   assert.deepEqual({ ...page.parseTimestampInput('1700000000123') }, { seconds: 1700000000, unit: 'milliseconds' });
-  for (const bad of ['', 'abc', '1.5', '<t:1700000000:x>', '99999999999999999', '<t:>']) {
+  const lastSecond = Date.UTC(9999, 11, 31, 23, 59, 59) / 1000;
+  for (const input of [String(lastSecond), page.discordCode(lastSecond, 'F')]) {
+    assert.deepEqual({ ...page.parseTimestampInput(input) }, { seconds: lastSecond, unit: 'seconds' });
+  }
+  for (const bad of ['', 'abc', '1.5', '<t:1700000000:x>', '<t:1700000000123:F>', '99999999999999999', '<t:>']) {
     assert.equal(page.parseTimestampInput(bad), null, bad);
   }
 });

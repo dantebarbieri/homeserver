@@ -138,14 +138,15 @@ function tzOffsetMs(epochMs, timeZone) {
 // moves forward past the gap; one that occurs twice resolves to its first occurrence.
 function wallToEpochSec(w, timeZone) {
   var local = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second);
-  var o = tzOffsetMs(local, timeZone);
-  var utc = local - o;
-  var o2 = tzOffsetMs(utc, timeZone);
-  if (o2 === o) return utc / 1000;
-  utc -= o2 - o;
-  var o3 = tzOffsetMs(utc, timeZone);
-  if (o3 === o2) return utc / 1000;
-  return (local - Math.min(o2, o3)) / 1000;
+  var dayMs = 24 * 60 * 60 * 1000;
+  var before = tzOffsetMs(local - dayMs, timeZone);
+  var after = tzOffsetMs(local + dayMs, timeZone);
+  if (before === after) return (local - before) / 1000;
+  var largerOffset = Math.max(before, after);
+  var earlier = local - largerOffset;
+  // Prefer the earlier candidate if it maps back; in a gap the later one shifts forward.
+  if (tzOffsetMs(earlier, timeZone) === largerOffset) return earlier / 1000;
+  return (local - Math.min(before, after)) / 1000;
 }
 
 function epochToWall(epochSec, timeZone) {
@@ -176,7 +177,7 @@ function inRange(sec) {
   return Number.isInteger(sec) && sec >= MIN_SECONDS && sec <= MAX_SECONDS;
 }
 
-// Accepts seconds, milliseconds (13 digits) or a pasted Discord code such as <t:1700000000:R>.
+// Discord codes always use seconds; bare numbers with 13 or more digits are milliseconds.
 function parseTimestampInput(text) {
   var s = String(text).trim();
   var m = /^<?t:(-?\d+)(?::[tTdDfFR])?>?$/.exec(s);
@@ -184,7 +185,7 @@ function parseTimestampInput(text) {
   if (digits === null) return null;
   var n = Number(digits);
   var unit = 'seconds';
-  if (Math.abs(n) >= 1e11) { n = Math.floor(n / 1000); unit = 'milliseconds'; }
+  if (!m && Math.abs(n) >= 1e12) { n = Math.floor(n / 1000); unit = 'milliseconds'; }
   return inRange(n) ? { seconds: n, unit: unit } : null;
 }
 
