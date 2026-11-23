@@ -39,25 +39,28 @@ function metricValues(body, name) {
   });
 }
 
+// The frontend's `tools.store` chunk registers every tool as
+// `define({name,path:`/x`,[redirectFrom:[..],]description,..,category:`Cat`})`; a tool
+// without a category lands in the app's default "Development" group.
 function toolCatalog(bundle) {
-  const registrations = new Map([...bundle.matchAll(
-    /([A-Za-z_$][\w$]*)=[A-Za-z_$][\w$]*\(\{name:[^{}]{1,400}?,path:"(\/[a-z0-9-]+)",description:/g,
-  )].map((match) => [match[1], match[2]]));
-  const groups = [...bundle.matchAll(/\{name:"([^"]+)",components:\[([\w$,]+)\]\}/g)];
-  if (groups.length < 2 || registrations.size < 2) throw new Error("Unrecognized tool catalog");
+  const registrations = [...bundle.matchAll(
+    /\bpath:`(\/[a-z0-9-]+)`,(?:redirectFrom:\[[^\]\n]{0,200}\],)?description:/g,
+  )];
+  if (registrations.length < 2) throw new Error("Unrecognized tool catalog");
   const paths = new Set();
   const categories = new Set();
-  for (const group of groups) {
-    if (categories.has(group[1])) throw new Error("Duplicate category");
-    categories.add(group[1]);
-    for (const id of group[2].split(",")) {
-      const path = registrations.get(id);
-      if (!path || paths.has(path)) throw new Error("Incomplete tool catalog");
-      paths.add(path);
-    }
-  }
-  if (paths.size !== registrations.size) throw new Error("Uncategorized tools");
+  registrations.forEach((match, index) => {
+    if (paths.has(match[1])) throw new Error("Duplicate tool");
+    paths.add(match[1]);
+    const rest = bundle.slice(match.index, registrations[index + 1]?.index);
+    const end = rest.indexOf("});");
+    categories.add(/\bcategory:`([^`]{1,40})`/.exec(end < 0 ? rest : rest.slice(0, end))?.[1] ?? "Development");
+  });
   return { tools: count(paths.size), categories: count(categories.size) };
+}
+
+function toolCatalogAsset(html) {
+  return /<link[^>]+href="(?:\.?\/)?(assets\/tools\.store-[A-Za-z0-9_-]+\.js)"/.exec(html)?.[1];
 }
 
 function pdfCatalog(document) {
@@ -110,9 +113,9 @@ async function applicationStats(name, { readSqliteStats = readStats } = {}) {
     }
     case "it-tools": {
       const html = await text("http://it-tools/");
-      const asset = /<script[^>]+src="(\/assets\/index-[A-Za-z0-9_-]+\.js)"/.exec(html)?.[1];
+      const asset = toolCatalogAsset(html);
       if (!asset) throw new Error("Missing tool catalog asset");
-      return toolCatalog(await text(`http://it-tools${asset}`));
+      return toolCatalog(await text(`http://it-tools/${asset}`));
     }
     case "stirling-pdf":
       return pdfCatalog(await json("http://stirling-pdf:8080/v1/api-docs"));
@@ -140,4 +143,4 @@ async function applicationStats(name, { readSqliteStats = readStats } = {}) {
   }
 }
 
-module.exports = { applicationStats, count, metricValues, pdfCatalog, statsNames, toolCatalog };
+module.exports = { applicationStats, count, metricValues, pdfCatalog, statsNames, toolCatalog, toolCatalogAsset };

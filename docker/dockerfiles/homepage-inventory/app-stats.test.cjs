@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { applicationStats, metricValues, pdfCatalog, statsNames, toolCatalog } = require("./app-stats.cjs");
+const { applicationStats, metricValues, pdfCatalog, statsNames, toolCatalog, toolCatalogAsset } = require("./app-stats.cjs");
 
 test("compiled ConvertX releases need only SQLite aggregates, not archived JavaScript files", async () => {
   const result = { completed: "31", other: "4", jobs: "0" };
@@ -15,17 +15,24 @@ test("compiled ConvertX releases need only SQLite aggregates, not archived JavaS
   }), /Database unavailable/);
 });
 
-test("tool catalog counts only registered category members, without executing scripts", () => {
+test("tool catalog counts registered tools and their categories, without executing scripts", () => {
   const bundle = `
-    one=define({name:translate("tools.one.title"),path:"/one",description:translate("one")});
-    two=define({name:"Two",path:"/two",description:"Two"});
-    groups=[{name:"Crypto",components:[one]},{name:"Web",components:[two]}];
+    one=define({name:translate("tools.one.title"),path:\`/one\`,description:translate("one"),icon:load(()=>x),category:\`Crypto\`});
+    two=define({name:"Two",path:\`/two\`,redirectFrom:[\`/old-two\`],description:"Two",component:()=>import(\`./two.js\`),category:\`Web\`});
+    three=define({name:"Three",path:\`/three\`,description:"Three"});
     throw new Error("must not execute");
   `;
-  assert.deepEqual(toolCatalog(bundle), { tools: "2", categories: "2" });
-  assert.throws(() => toolCatalog(bundle.replace("components:[two]", "components:[missing]")), /Incomplete/);
-  assert.throws(() => toolCatalog(bundle.replace("components:[two]", "components:[one]")), /Incomplete/);
+  assert.deepEqual(toolCatalog(bundle), { tools: "3", categories: "3" });
+  assert.deepEqual(toolCatalog(bundle.replace("category:`Web`", "category:`Crypto`")), { tools: "3", categories: "2" });
+  assert.throws(() => toolCatalog(bundle.replace("/three", "/one")), /Duplicate/);
   assert.throws(() => toolCatalog("<html>login</html>"), /Unrecognized/);
+});
+
+test("tool catalog chunk is found from the modulepreload link, with the base-relative path", () => {
+  assert.equal(toolCatalogAsset('<link rel="modulepreload" crossorigin href="./assets/tools.store-CTlhXkV0.js">'),
+    "assets/tools.store-CTlhXkV0.js");
+  assert.equal(toolCatalogAsset('<link href="/assets/tools.store-a_b-1.js" rel="modulepreload">'), "assets/tools.store-a_b-1.js");
+  assert.equal(toolCatalogAsset('<script src="./assets/index-abc.js"></script>'), undefined);
 });
 
 test("PDF actions exclude administration and count file-accepting document APIs, not every POST", () => {

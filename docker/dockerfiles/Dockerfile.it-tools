@@ -1,0 +1,36 @@
+# sharevb's IT-Tools fork (GPL-3.0, https://github.com/sharevb/it-tools): about 480 tools
+# against upstream's ~100, including timezone, calendar, Markdown, GPT-token and Docker/nginx
+# helpers. Pinned to a release; bump the tag and digest together after reading its notes.
+FROM sharevb/it-tools:2026.11.22@sha256:bcbb29086ca71f1ff23c7dc061f8c9b6e50f1267b4dc704327bb29ba55a8b87d AS app
+
+# Serve the same build from a freshly pulled nginx, so nginx security releases arrive with
+# the nightly `docker compose build --pull` instead of waiting for the next fork release.
+FROM nginx/nginx-unprivileged:stable-alpine
+COPY --from=app /usr/share/nginx/html /usr/share/nginx/html
+COPY --from=app /etc/nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=app /docker-entrypoint.d/18-resolve-base-url.envsh /docker-entrypoint.d/
+COPY --from=app /docker-entrypoint.d/19-skip-envsubst-if-readonly.envsh /docker-entrypoint.d/
+COPY --from=app /docker-entrypoint.d/25-remove-ipv6-listen-if-unavailable.sh /docker-entrypoint.d/
+
+# Overlay: a standalone Discord timestamp generator and the catalog entry that lists it.
+# The fork's service worker answers every navigation with index.html, so exempt the page,
+# or visitors who already have the worker would get the app's 404 instead. The build fails
+# if a fork release changes that line, rather than shipping a page nobody can reach.
+COPY it-tools-overlay/discord-timestamp.html it-tools-overlay/external-tools.json /usr/share/nginx/html/
+USER root
+RUN sed -i 's|\(NavigationRoute([A-Za-z_$][A-Za-z0-9_$]*\.createHandlerBoundToURL("index\.html")\))|\1,{denylist:[/^\\/discord-timestamp\\.html/]})|' /usr/share/nginx/html/sw.js \
+    && grep -qF 'denylist:[/^\/discord-timestamp\.html/]' /usr/share/nginx/html/sw.js \
+    && chmod a+r /usr/share/nginx/html/discord-timestamp.html /usr/share/nginx/html/external-tools.json
+USER 101
+
+ENV BASE_URL=/ \
+    PORT=80
+
+# Render the template once, as the fork does, so a read-only filesystem still gets the
+# SPA fallback and the COOP/COEP headers the WebAssembly tools need. Port 80 (the fork
+# defaults to 8080) is what Nginx Proxy Manager and homepage-inventory already expect;
+# the unprivileged nginx can bind it because Docker lowers ip_unprivileged_port_start.
+RUN . /docker-entrypoint.d/18-resolve-base-url.envsh \
+    && envsubst '${PORT} ${BASE_URL} ${BASE_URL_REGEX} ${BASE_URL_NO_SLASH_REGEX}' \
+        < /etc/nginx/templates/default.conf.template \
+        > /etc/nginx/conf.d/default.conf

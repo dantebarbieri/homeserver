@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Discord timestamp generator - IT Tools</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+:root {
+  --bg: #f5f6f8; --card: #fff; --text: #1d2125; --muted: #5d6671; --line: #d9dde3;
+  --accent: #14996b; --accent-text: #fff; --code-bg: #eef1f4; --warn: #a15c00;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #18181c; --card: #25252b; --text: #e8eaed; --muted: #a0a7b0; --line: #3a3a43;
+    --accent: #1fbf8a; --accent-text: #08231a; --code-bg: #1b1b20; --warn: #f0b45a;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+a { color: var(--accent); }
+h1 { margin: 8px 0 4px; font-size: 1.7rem; }
+h2 { margin: 28px 0 10px; font-size: 1.1rem; }
+.lead, .hint { color: var(--muted); }
+.lead { margin: 0 0 20px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.grid { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+.grid .wide { grid-column: 1 / -1; }
+@media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+label { display: block; font-size: .85rem; font-weight: 600; color: var(--muted); }
+input, select, button {
+  font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
+label input, label select { display: block; width: 100%; margin-top: 4px; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+input[aria-invalid="true"] { border-color: var(--warn); }
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+#note { min-height: 1.4em; margin: 12px 0 0; color: var(--warn); font-size: .9rem; }
+.meta { margin: 6px 0 0; font-size: .85rem; color: var(--muted); }
+ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+li {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; display: grid; gap: 4px 12px; grid-template-columns: 1fr auto; align-items: center;
+}
+.name { font-size: .8rem; font-weight: 600; color: var(--muted); }
+.preview { font-size: 1.05rem; grid-column: 1; }
+code {
+  font: .9rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--code-bg); border-radius: 6px; padding: 2px 6px; word-break: break-all;
+}
+li code { justify-self: start; }
+li button { grid-column: 2; grid-row: 1 / span 3; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <p><a href="/">&larr; All tools</a></p>
+  <h1>Discord timestamp generator</h1>
+  <p class="lead">Pick a date, time and time zone, then paste a code into Discord. Every reader sees it in their own time zone and language.</p>
+
+  <noscript><p class="card">This tool needs JavaScript.</p></noscript>
+
+  <section class="card" aria-label="Date and time">
+    <div class="grid">
+      <label>Date and time
+        <input id="when" type="datetime-local" step="1">
+      </label>
+      <label>Time zone
+        <select id="zone"></select>
+      </label>
+      <label class="wide">Unix timestamp (seconds). A pasted Discord code works too.
+        <input id="unix" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="1700000000 or &lt;t:1700000000:F&gt;">
+      </label>
+      <div class="wide row">
+        <button id="now" type="button" class="primary">Now</button>
+        <span class="hint">Changing the time zone keeps the clock time and recalculates the timestamp.</span>
+      </div>
+    </div>
+    <p id="note" role="status"></p>
+    <p class="meta">UTC <code id="iso"></code></p>
+  </section>
+
+  <h2>Formats</h2>
+  <ul id="formats"></ul>
+  <p class="hint">Previews use your browser's language and time zone, as Discord does for each reader, and may differ slightly from Discord's wording. Supported years: 1000 to 9999.</p>
+  <span id="copied" class="sr" role="status"></span>
+</main>
+
+<script>
+var MIN_SECONDS = -30610224000; // 1000-01-01T00:00:00Z
+var MAX_SECONDS = 253402300799; // 9999-12-31T23:59:59Z
+
+var FORMATS = [
+  { flag: 't', name: 'Short time' },
+  { flag: 'T', name: 'Long time' },
+  { flag: 'd', name: 'Short date' },
+  { flag: 'D', name: 'Long date' },
+  { flag: 'f', name: 'Short date and time' },
+  { flag: 'F', name: 'Long date and time' },
+  { flag: 'R', name: 'Relative' }
+];
+
+var zoneFormatters = {};
+
+function zoneParts(epochMs, timeZone) {
+  var dtf = zoneFormatters[timeZone];
+  if (!dtf) {
+    dtf = zoneFormatters[timeZone] = new Intl.DateTimeFormat('en-US', {
+      timeZone: timeZone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', second: 'numeric'
+    });
+  }
+  var out = {};
+  dtf.formatToParts(new Date(epochMs)).forEach(function (p) { out[p.type] = Number(p.value); });
+  out.hour %= 24;
+  return out;
+}
+
+// Offset of the zone from UTC at an instant, in milliseconds.
+function tzOffsetMs(epochMs, timeZone) {
+  var p = zoneParts(epochMs, timeZone);
+  var asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return asUtc - Math.floor(epochMs / 1000) * 1000;
+}
+
+// Wall-clock time in a zone to Unix seconds. A time inside a daylight-saving gap
+// moves forward past the gap; one that occurs twice resolves to its first occurrence.
+function wallToEpochSec(w, timeZone) {
+  var local = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second);
+  var dayMs = 24 * 60 * 60 * 1000;
+  var before = tzOffsetMs(local - dayMs, timeZone);
+  var after = tzOffsetMs(local + dayMs, timeZone);
+  if (before === after) return (local - before) / 1000;
+  var largerOffset = Math.max(before, after);
+  var earlier = local - largerOffset;
+  // Prefer the earlier candidate if it maps back; in a gap the later one shifts forward.
+  if (tzOffsetMs(earlier, timeZone) === largerOffset) return earlier / 1000;
+  return (local - Math.min(before, after)) / 1000;
+}
+
+function epochToWall(epochSec, timeZone) {
+  return zoneParts(epochSec * 1000, timeZone);
+}
+
+function pad(n, width) {
+  var s = String(Math.abs(n));
+  while (s.length < width) s = '0' + s;
+  return s;
+}
+
+function wallToInputValue(w) {
+  return pad(w.year, 4) + '-' + pad(w.month, 2) + '-' + pad(w.day, 2) + 'T' +
+    pad(w.hour, 2) + ':' + pad(w.minute, 2) + ':' + pad(w.second, 2);
+}
+
+function parseInputValue(value) {
+  var m = /^(\d{4,})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d))?$/.exec(value || '');
+  if (!m) return null;
+  return {
+    year: Number(m[1]), month: Number(m[2]), day: Number(m[3]),
+    hour: Number(m[4]), minute: Number(m[5]), second: Number(m[6] || 0)
+  };
+}
+
+function inRange(sec) {
+  return Number.isInteger(sec) && sec >= MIN_SECONDS && sec <= MAX_SECONDS;
+}
+
+// Discord codes always use seconds; bare numbers with 13 or more digits are milliseconds.
+function parseTimestampInput(text) {
+  var s = String(text).trim();
+  var m = /^<?t:(-?\d+)(?::[tTdDfFR])?>?$/.exec(s);
+  var digits = m ? m[1] : /^-?\d+$/.test(s) ? s : null;
+  if (digits === null) return null;
+  var n = Number(digits);
+  var unit = 'seconds';
+  if (!m && Math.abs(n) >= 1e12) { n = Math.floor(n / 1000); unit = 'milliseconds'; }
+  return inRange(n) ? { seconds: n, unit: unit } : null;
+}
+
+var RELATIVE_UNITS = [
+  ['year', 31536000], ['month', 2592000], ['day', 86400],
+  ['hour', 3600], ['minute', 60], ['second', 1]
+];
+
+function relativeTime(diffSec, locale) {
+  var abs = Math.abs(diffSec);
+  var rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  for (var i = 0; i < RELATIVE_UNITS.length; i++) {
+    if (abs >= RELATIVE_UNITS[i][1]) {
+      return rtf.format(Math.trunc(diffSec / RELATIVE_UNITS[i][1]), RELATIVE_UNITS[i][0]);
+    }
+  }
+  return rtf.format(0, 'second');
+}
+
+function formatPreview(flag, sec, nowSec, opts) {
+  opts = opts || {};
+  if (flag === 'R') return relativeTime(sec - nowSec, opts.locale);
+  var date = new Date(sec * 1000);
+  function fmt(o) {
+    var copy = { timeZone: opts.timeZone };
+    for (var k in o) copy[k] = o[k];
+    return new Intl.DateTimeFormat(opts.locale, copy).format(date);
+  }
+  var time = { hour: 'numeric', minute: '2-digit' };
+  var longDate = { year: 'numeric', month: 'long', day: 'numeric' };
+  switch (flag) {
+    case 't': return fmt(time);
+    case 'T': return fmt({ hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    case 'd': return fmt({ year: 'numeric', month: '2-digit', day: '2-digit' });
+    case 'D': return fmt(longDate);
+    case 'f': return fmt(longDate) + ' ' + fmt(time);
+    case 'F': return fmt({ weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' ' + fmt(time);
+  }
+  return '';
+}
+
+function discordCode(sec, flag) {
+  return '<t:' + sec + ':' + flag + '>';
+}
+
+function zoneList() {
+  var zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+  if (zones.indexOf('UTC') < 0) zones = ['UTC'].concat(zones);
+  return zones;
+}
+
+function init() {
+  var whenEl = document.getElementById('when');
+  var zoneEl = document.getElementById('zone');
+  var unixEl = document.getElementById('unix');
+  var nowEl = document.getElementById('now');
+  var noteEl = document.getElementById('note');
+  var isoEl = document.getElementById('iso');
+  var listEl = document.getElementById('formats');
+  var copiedEl = document.getElementById('copied');
+
+  var browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  var zones = zoneList();
+  if (zones.indexOf(browserZone) < 0) zones.unshift(browserZone);
+  zones.forEach(function (z) {
+    var opt = document.createElement('option');
+    opt.value = opt.textContent = z;
+    zoneEl.appendChild(opt);
+  });
+  zoneEl.value = browserZone;
+
+  var epoch = Math.floor(Date.now() / 1000);
+  var rows = FORMATS.map(function (f) {
+    var li = document.createElement('li');
+    var name = document.createElement('span');
+    var preview = document.createElement('span');
+    var code = document.createElement('code');
+    var btn = document.createElement('button');
+    name.className = 'name';
+    name.textContent = f.name;
+    preview.className = 'preview';
+    btn.type = 'button';
+    btn.textContent = 'Copy';
+    btn.addEventListener('click', function () { copy(code.textContent, btn); });
+    li.append(name, preview, code, btn);
+    listEl.appendChild(li);
+    return { flag: f.flag, preview: preview, code: code };
+  });
+
+  function copy(text, btn) {
+    var done = function (ok) {
+      btn.textContent = ok ? 'Copied' : 'Copy failed';
+      copiedEl.textContent = ok ? 'Copied ' + text : 'Copy failed';
+      setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(fallbackCopy(text)); });
+    } else {
+      done(fallbackCopy(text));
+    }
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  function render() {
+    var nowSec = Math.floor(Date.now() / 1000);
+    isoEl.textContent = new Date(epoch * 1000).toISOString().replace('.000Z', 'Z');
+    rows.forEach(function (r) {
+      r.code.textContent = discordCode(epoch, r.flag);
+      r.preview.textContent = formatPreview(r.flag, epoch, nowSec);
+    });
+  }
+
+  function tickRelative() {
+    var nowSec = Math.floor(Date.now() / 1000);
+    rows.forEach(function (r) {
+      if (r.flag === 'R') r.preview.textContent = formatPreview('R', epoch, nowSec);
+    });
+  }
+
+  function setNote(text) { noteEl.textContent = text || ''; }
+
+  function showFields(except) {
+    if (except !== 'when') whenEl.value = wallToInputValue(epochToWall(epoch, zoneEl.value));
+    if (except !== 'unix') unixEl.value = String(epoch);
+    unixEl.removeAttribute('aria-invalid');
+  }
+
+  function fromWall(w) {
+    var sec = wallToEpochSec(w, zoneEl.value);
+    if (!inRange(sec)) { setNote('Choose a year from 1000 to 9999.'); return false; }
+    epoch = sec;
+    var back = epochToWall(epoch, zoneEl.value);
+    setNote(wallToInputValue(back) !== wallToInputValue(w)
+      ? 'That time does not exist in ' + zoneEl.value + ' (clocks skip forward). Using ' + wallToInputValue(back).replace('T', ' ') + '.'
+      : '');
+    return true;
+  }
+
+  whenEl.addEventListener('input', function () {
+    var w = parseInputValue(whenEl.value);
+    if (!w) { setNote('Enter a complete date and time.'); return; }
+    if (fromWall(w)) { showFields('when'); render(); }
+  });
+
+  zoneEl.addEventListener('change', function () {
+    var w = parseInputValue(whenEl.value);
+    if (w) fromWall(w);
+    showFields(null);
+    render();
+  });
+
+  unixEl.addEventListener('input', function () {
+    var parsed = parseTimestampInput(unixEl.value);
+    if (!parsed) {
+      unixEl.setAttribute('aria-invalid', 'true');
+      setNote('Enter whole seconds, or a code like <t:1700000000:F>. Years 1000 to 9999 only.');
+      return;
+    }
+    unixEl.removeAttribute('aria-invalid');
+    epoch = parsed.seconds;
+    setNote(parsed.unit === 'milliseconds' ? 'That looks like milliseconds; converted to seconds.' : '');
+    showFields('unix');
+    render();
+  });
+
+  nowEl.addEventListener('click', function () {
+    epoch = Math.floor(Date.now() / 1000);
+    setNote('');
+    showFields(null);
+    render();
+  });
+
+  showFields(null);
+  render();
+  setInterval(tickRelative, 1000);
+}
+
+if (typeof document !== 'undefined') init();
+</script>
+</body>
+</html>

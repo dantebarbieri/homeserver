@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Discord timestamp generator",
+    "path": "/discord-timestamp",
+    "description": "Build Discord <t:UNIX:F> timestamps for any date, time and time zone, with every format and a live preview.",
+    "keywords": ["discord", "timestamp", "time", "unix", "epoch", "relative", "timezone", "markdown"],
+    "category": "Datetime",
+    "markdownContent": "**[Open the Discord timestamp generator](/discord-timestamp.html)**\n\nPick a date, time and time zone, then copy a `<t:UNIX:F>` code into Discord. Every reader sees it in their own time zone and language."
+  }
+]
