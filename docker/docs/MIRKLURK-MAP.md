@@ -419,7 +419,7 @@ Alternatively the owner can paste the file into that host's Advanced tab.
 
 `nginx/mirklurk-map.conf` follows the exact source nginx contract and adds only
 real-IP trust plus API error-log suppression. It trusts NPM's observed
-`compose_proxy` addresses **192.168.128.27** and **fd2b:92df:1a5b:1::1b**, not
+`compose_proxy` addresses **192.168.128.46** and **fd2b:92df:1a5b:1::2e**, not
 the shared Docker subnet. Confirm these addresses before each deploy; if NPM
 is recreated with different addresses, update/review this file before enabling
 uploads. The 2026-10-21 daily update recreated NPM, moving it from
@@ -497,6 +497,15 @@ are web `sha256:1b103a8baaf2f688c04439cdbf5ae8a7f8c8c8e6e42b86c0a39b3ab920895ed6
 and uploads `sha256:4052e7574ebd103f7394bfd312aea6d1976a832ba1f2f982d21f97092e42f480`.
 Reverify ownership, clean canonical state, current images and unrelated
 container starts before activation; no earlier restart-loop exception applies.
+At 2026-11-23 00:46 UTC, read-only recovery verification found the externally
+recreated NPM and map web services already running since 00:00:44/45 UTC.
+NPM now exclusively owns .46 / ::2e; plex-navidrome-sync owns stale .27 / ::1b.
+Replace only those two trusted peers through normal review/CI, preserving the
+accepted 64cbf776 core images and the legitimate intervening Homepage Dockerfile
+commit. Use the same-current-image web-only procedure above; no NPM restart,
+API apply, app build, uploads recreation or broader network trust is required.
+Retain the earlier core acceptance and subsequent outage as separate records,
+and obtain fresh current-identity/public/rollback/no-collateral acceptance.
 Web nginx always overwrites `X-Upload-IP` with its validated client IP.
 Backend `TRUST_UPLOAD_PROXY=true` is safe only on the two-service private network.
 Verify distinct real external IPs form distinct quota buckets and spoofed
