@@ -87,9 +87,11 @@ catching up after a paused or hidden tab never lights up the whole map. Far-side
 globe events cannot flash unless **Follow** turns to them, which replays their
 flash and summary on arrival. Reduced-motion replaces the animation with a static
 white outline for the same six seconds. Brief summary cards last 4.5 seconds.
-Summaries are bounded to the latest three on desktop (nudged apart when events
-share a location) or one bottom card on phones, with
-overflow disclosed during bursts. Hover/focus always offers details: the hover
+Desktop summaries track the dot center, not the expanding rings. Up to three are
+shown; when events share a location, cards keep their separate spots as older
+ones fade. With Follow on, an offscreen arrival's card appears only once its
+dot is in view. Phones show one bottom card, with overflow disclosed during bursts.
+Hover/focus always offers details: the hover
 card shows how long ago the event happened (top right, kept current while open)
 and a hint that matches what a click does. Normal
 desktop clicks highlight the corresponding stream row. In fullscreen, or on

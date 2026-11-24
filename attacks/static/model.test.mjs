@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {TYPES, mergeEvents, located, project, duration, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
-import {constrainView, zoomView, flyPath, fitView, easeInOut} from "./map-view.mjs";
+import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
   const first = {id: "a", type: "ssh", cursor: "1795530000000000001"};
@@ -118,6 +118,25 @@ test("map zoom anchors the selected region and clamps panning at every viewport 
   const changed = zoomView(zoomed, 2, {x: 700, y: 300}, 1000, 500);
   assert.equal(zoomed.x + .2 * zoomed.width, changed.x + .2 * changed.width);
   assert.equal(zoomed.y + .1 * zoomed.height, changed.y + .1 * changed.height);
+});
+
+test("same-city summaries stay separated and keep their offsets as the globe moves or neighbors expire", () => {
+  const bounds = {width: 950, height: 480};
+  for (const [x, y] of [[475, 240], [945, 5]]) {
+    const cards = [];
+    for (const h of [115, 120, 110]) {
+      const card = placeArrival(x, y, 260, h, bounds, cards);
+      assert.ok(card.left >= 8 && card.top >= 8 && card.left + card.width <= 942 && card.top + h <= 472);
+      assert.ok(cards.every(p => p.top + p.height <= card.top || card.top + h <= p.top ||
+        p.left + p.width <= card.left || card.left + card.width <= p.left));
+      cards.push(card);
+    }
+    const last = cards.at(-1);
+    const held = placeArrival(x, y, 260, last.height, bounds, [], last);
+    assert.deepEqual(held, last);
+    const moved = placeArrival(x + 1, y - 2, 260, last.height, bounds, [], held);
+    assert.ok(Math.abs(moved.left - held.left) <= 1 && Math.abs(moved.top - held.top) <= 2);
+  }
 });
 
 test("follow flights land exactly, pull back on long hops and frame new dots", () => {

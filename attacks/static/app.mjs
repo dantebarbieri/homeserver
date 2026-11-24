@@ -1,5 +1,5 @@
 import {TYPES, mergeEvents, project, located, duration, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
-import {createMapView, fitView} from "./map-view.mjs";
+import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
 import {MAP_FILES} from "./atlas.mjs";
@@ -488,9 +488,9 @@ function tooltip(item, point) {
     node("span", `${TYPES[item.type].label} · port ${item.port}${item.user ? ` · user ${item.user}` : ""}`),
     node("small", `${new Date(item.timestamp * 1000).toLocaleString()} · ${opensDetail() ? "Click for details" : "Click to find in stream"}`));
   target.hidden = false;
-  const box = point.getBoundingClientRect(), parent = $("map").parentElement.getBoundingClientRect();
-  target.style.left = `${Math.max(8, Math.min(box.left - parent.left + 12, parent.width - target.offsetWidth - 8))}px`;
-  target.style.top = `${Math.max(8, Math.min(box.top - parent.top - target.offsetHeight - 12, parent.height - target.offsetHeight - 8))}px`;
+  const center = point.getScreenCTM(), parent = $("map").parentElement.getBoundingClientRect();
+  target.style.left = `${Math.max(8, Math.min(center.e - parent.left + 12, parent.width - target.offsetWidth - 8))}px`;
+  target.style.top = `${Math.max(8, Math.min(center.f - parent.top - target.offsetHeight - 12, parent.height - target.offsetHeight - 8))}px`;
 }
 
 // Fullscreen and mobile open the details panel; the inline desktop map scrolls to the stream row instead.
@@ -510,27 +510,20 @@ function positionArrivals() {
   const parent = $("map").parentElement.getBoundingClientRect();
   const mobile = matchMedia("(max-width: 650px)").matches;
   const placed = [];
-  const overlaps = (a, b) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
   for (const [id, entry] of arrivals) {
     const point = pointNodes.get(id);
     if (!point || point.hasAttribute("hidden") || performance.now() >= entry.expires) {
       entry.node.remove(); arrivals.delete(id); continue;
     }
-    const box = point.getBoundingClientRect();
     if (mobile) {
       entry.node.style.left = "10px"; entry.node.style.top = "auto"; entry.node.style.bottom = "12px";
     } else {
       entry.node.style.bottom = "auto";
-      const width = entry.node.offsetWidth, height = entry.node.offsetHeight;
-      const fit = (left, top) => ({left: Math.max(8, Math.min(left, parent.width - width - 8)), top: Math.max(8, Math.min(top, parent.height - height - 8)), width, height});
-      let spot = fit(box.left - parent.left + 12, box.top - parent.top - height - 14);
-      // Cards for dots in the same city would stack exactly; slide each clear of the ones already placed.
-      for (let attempt = 0; attempt < placed.length; attempt++) {
-        const hit = placed.find(other => overlaps(spot, other));
-        if (!hit) break;
-        const options = [fit(spot.left, hit.top + hit.height + 8), fit(spot.left, hit.top - height - 8), fit(hit.left + hit.width + 8, spot.top)];
-        spot = options.find(option => !placed.some(other => overlaps(option, other))) ?? options[0];
-      }
+      // The group's origin is the projected dot; its bounding box includes the animated flash rings.
+      const center = point.getScreenCTM();
+      const spot = placeArrival(center.e - parent.left, center.f - parent.top, entry.node.offsetWidth,
+        entry.node.offsetHeight, parent, placed, entry.spot);
+      entry.spot = spot;
       placed.push(spot);
       entry.node.style.left = `${spot.left}px`; entry.node.style.top = `${spot.top}px`;
     }
@@ -618,26 +611,29 @@ function followTick() {
   const queued = new Map(followQueue);
   const items = [...queued.keys()].map(id => pointData.get(pointNodes.get(id))).sort((a, b) => b.observedAt - a.observedAt);
   followQueue.clear();
+  function showMissed() {
+    let room = FLASH.maxConcurrent - pulses.size;
+    const missed = items.filter(item => queued.get(item.id).unseen && pointNodes.has(item.id) && onScreen(item)
+      && (pulses.has(item.id) || room-- > 0));
+    for (const item of missed.toReversed()) replayArrival(item);
+    if (missed.length) positionArrivals();
+  }
   let target;
   if (isGlobe()) {
-    if (items.every(item => onScreen(item, FOLLOW.inner))) return;
+    if (items.every(item => onScreen(item, FOLLOW.inner))) return showMissed();
     const [longitude, latitude] = followCenter(items, FOLLOW.spread * globe.reach());
     target = {longitude, latitude};
   } else {
     const points = items.map(item => { const [x, y] = mapProject(item.longitude, item.latitude); return {x, y}; });
     const box = $("map").getBoundingClientRect(), goal = fitView(points, followZoom, box.width, box.height);
-    if (items.every(item => onScreen(item, FOLLOW.inner)) && mapView.zoom() >= goal.zoom * .8) return;
+    if (items.every(item => onScreen(item, FOLLOW.inner)) && mapView.zoom() >= goal.zoom * .8) return showMissed();
     target = {points, zoom: followZoom};
   }
   mapView.flyTo(target, landed => {
     followHold = performance.now() + FOLLOW.holdMs;
     // An interrupted move (zoom, projection change) keeps its dots queued for the next one.
     if (!landed) { for (const [id, entry] of queued) if (!followQueue.has(id)) followQueue.set(id, entry); return; }
-    let room = FLASH.maxConcurrent - pulses.size;
-    const missed = items.filter(item => queued.get(item.id).unseen && pointNodes.has(item.id) && onScreen(item)
-      && (pulses.has(item.id) || room-- > 0));
-    for (const item of missed.toReversed()) replayArrival(item);
-    if (missed.length) positionArrivals();
+    showMissed();
   });
 }
 
@@ -694,8 +690,12 @@ function mapPoints() {
       });
       $("map-points").append(point);
       pointNodes.set(item.id, point);
-      if (age < 5 && visible) arrival(item);
-      if (age < 5 && following && mapView.interactive()) followQueue.set(item.id, {queued: performance.now(), unseen: !onScreen(item)});
+      if (age < 5) {
+        const tracking = following && mapView.interactive();
+        const seen = tracking ? onScreen(item) : visible;
+        if (seen) arrival(item);
+        if (tracking) followQueue.set(item.id, {queued: performance.now(), unseen: !seen});
+      }
     }
     pointData.set(point, item);
     point.style.setProperty("--opacity", String(opacity));

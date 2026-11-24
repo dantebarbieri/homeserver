@@ -52,6 +52,30 @@ export function fitView(points, maxZoom, width, height, margin = .6) {
   return constrainView({zoom: Math.min(maxZoom, fit), x: (left + right) / 2, y: (top + bottom) / 2}, width, height);
 }
 
+// Keep the chosen offset from the dot even after a neighboring card expires.
+export function placeArrival(x, y, width, height, bounds, placed, previous) {
+  const dx = previous?.dx ?? 12, dy = previous?.dy ?? -height - 14;
+  const fit = (position, limit) => Math.max(8, Math.min(position, limit - 8));
+  const left = fit(x + dx, bounds.width - width), top = fit(y + dy, bounds.height - height);
+  const clear = (l, t) => placed.every(p =>
+    l >= p.left + p.width || l + width <= p.left || t >= p.top + p.height || t + height <= p.top);
+  const preferred = {left, top, width, height, dx, dy};
+  if (clear(left, top)) return preferred;
+
+  const columns = [left, ...placed.flatMap(p => [p.left + p.width + 8, p.left - width - 8])];
+  const rows = [top, ...placed.flatMap(p => [p.top + p.height + 8, p.top - height - 8])];
+  let best = preferred, distance = Infinity;
+  for (const column of columns) for (const row of rows) {
+    const l = fit(column, bounds.width - width), t = fit(row, bounds.height - height);
+    const move = Math.hypot(l - left, t - top);
+    if (move < distance && clear(l, t)) {
+      best = {left: l, top: t, width, height, dx: l === left ? dx : l - x, dy: t === top ? dy : t - y};
+      distance = move;
+    }
+  }
+  return best;
+}
+
 export function createMapView({panel, svg, globe, isGlobe, resetPoints, changed, closed, interacted = () => {}}) {
   const $ = id => document.getElementById(id);
   const calm = matchMedia("(prefers-reduced-motion: reduce)");
