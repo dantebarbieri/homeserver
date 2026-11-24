@@ -48,6 +48,8 @@ PORTS = {
 }
 TYPES = frozenset({"endlessh", "ssh", "authelia", "web", "git", "plex", "minecraft", "game"})
 VERDICTS = frozenset(value[2] for value in KINDS.values())
+OWN_NETWORKS = ("10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+                "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10")
 NPM = re.compile(
     r'^\[(?P<time>[^]]+)\] \S+ \S+ (?P<status>\d{3}) - '
     r'(?P<method>[A-Z]+) (?P<scheme>https?) (?P<host>\S+) "(?P<path>[^"]*)" '
@@ -79,6 +81,23 @@ def public(value):
     return ip.is_global and not ip.is_multicast
 
 
+def home_networks(values):
+    if not isinstance(values, list) or len(values) > 16:
+        raise ValueError("Expected a bounded list of home IPv6 networks")
+    result = []
+    for value in values:
+        network = ipaddress.ip_network(value)
+        if network.version != 6 or network.prefixlen != 64 or not public(str(network.network_address)):
+            raise ValueError("Expected global home IPv6 /64 networks")
+        result.append(str(network))
+    return sorted(set(result))
+
+
+def traffic_origin(ip, networks=()):
+    value = ipaddress.ip_address(ip)
+    return "own" if any(value in ipaddress.ip_network(cidr) for cidr in (*OWN_NETWORKS, *networks)) else "external"
+
+
 def event(kind, ip, timestamp, **fields):
     ip = address(ip)
     if not ip or kind not in KINDS or not math.isfinite(timestamp):
@@ -89,6 +108,8 @@ def event(kind, ip, timestamp, **fields):
 
 
 def parse_endlessh(line, timestamp):
+    if re.search(r"\bListening on \[ipv[46]\]:\d+", line):
+        return {"restart": True, "timestamp": timestamp}
     match = re.search(r"\b(ACCEPT|CLOSE) host=(\S+) port=(\d+)(.*)", line)
     if not match:
         return None
@@ -200,8 +221,11 @@ def parse_flow(line, timestamp):
     if not isinstance(data, dict) or data.get("schema") != "attacks-flow-v1":
         return None
     if data.get("heartbeat") is True:
-        return {"heartbeat": True, "timestamp": timestamp,
-                "suppressed": max(0, int(data.get("suppressed", 0)))}
+        result = {"heartbeat": True, "timestamp": timestamp,
+                  "suppressed": max(0, int(data.get("suppressed", 0)))}
+        if "ownNetworks" in data:
+            result["ownNetworks"] = home_networks(data["ownNetworks"])
+        return result
     port, ip = data.get("port"), address(data.get("ip"))
     if port not in PORTS or not ip or not public(ip) or data.get("protocol") not in ("tcp", "udp"):
         return None

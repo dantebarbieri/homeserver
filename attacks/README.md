@@ -2,7 +2,8 @@
 
 Private, read-only security-event observatory for **attacks.danteb.com**.
 A charcoal UI with an SVG world map, live event stream, exact IP/username
-and outcome filters, inspectable evidence badges, and Prometheus aggregates.
+and outcome filters, inspectable evidence badges, Loki window statistics, and
+Prometheus lifetime counters and live gauges.
 There is no classifier queue for a human to work through, and no AI dependency.
 
 ## What the badges mean
@@ -21,6 +22,16 @@ Every event includes a plain-language evidence explanation. A failed sign-in
 can be a legitimate typo; a port connection can be a real player, viewer or
 health check. Successful SSH logins are audit events, **not attack counts**.
 The aggregate is deliberately called **events observed**, not attackers.
+
+**Own** means the source belongs to LAN/private, loopback, link-local, Tailscale
+address space, or the home's public IPv6 /64. The host capture heartbeat reports
+usable global /64s from `bond0`; the collector does not hardcode a changing ISP
+prefix. Own traffic is retained as audit evidence, hidden by default behind
+**Show own traffic**, and always excluded from the map and aggregate cards.
+This is a network classification, not proof of identity or permission.
+Other legitimate public clients and game-server status pollers can still appear.
+Missing/stale network metadata reports an error and holds source checkpoints,
+rather than silently counting home IPv6 clients as external.
 
 SSH's existing `LogLevel VERBOSE`, key-only authentication and fail2ban policy
 are unchanged. Unsupported password-method requests are not necessarily logged
@@ -195,12 +206,38 @@ does not add push notifications or background attack polling.
 ### Attacker time wasted
 
 `attacks_endlessh_seconds_total` sums the durations in completed Endlessh `CLOSE`
-records, once per source event. The card shows the selected-period increase and
-the cumulative total since this collector started. Concurrent connections each
+records, once per source event. The main card uses **Loki's sum of completed
+durations logged in the selected window, plus the full elapsed age of currently
+observed external sessions**. Ongoing ages are not clipped at the window boundary.
+Concurrent connections each
 contribute their duration: these are **bot connection-hours, not human hours**.
-Open connections and sessions lost during an Endlessh restart have no completed
-duration yet. Period increases are Prometheus scrape-based estimates; lifetime
-counters persist in the collector's SQLite state.
+The active set is persisted and deduplicated by source address/port; a close
+removes it, and an Endlessh "Listening on" restart clears prior opens without
+inventing completed durations. The UI ticks between samples, stopping estimates
+after 90 seconds without fresh telemetry. Source lag or delivery errors disable
+live estimates. The API uses one delivered-data watermark for the active snapshot
+and completed log sums, so a racing close is not counted twice.
+
+Live tracking starts with newly observed accepts after this feature's activation.
+Already-open sessions are not reconstructed; their actual close records will
+still contribute completed durations. Sessions lost during a restart have no
+completed duration. The live gauges are `attacks_endlessh_trapped_connections`
+and `attacks_endlessh_trapped_now_seconds`; consult `attacks_source_ready` before
+using gauges for alerts.
+
+The secondary lifetime figure remains Prometheus's **completed external** counter,
+with its classification start date shown. Pre-upgrade counters are preserved as
+`origin="legacy"`: their own/external split is unknowable from aggregate labels,
+so they are not guessed into the new external lifetime counter. New counters carry
+`origin="own"` or `origin="external"`. SQLite persists all three.
+
+Window totals, failures and the per-minute timeline count normalized Loki records,
+not Prometheus `increase()` estimates. This avoids missing the first event of a
+new counter series and extrapolated fractional counts. It trades cheap time-series
+queries for bounded log scans; the UI's maximum window is Loki's 30-day retention,
+while Prometheus retains 90 days. Failures are reported, never replaced with fake
+zeroes. Timeline gaps from valid, quiet queries are zero-filled. Extracted
+high-cardinality fields are removed before aggregation.
 
 ## Data flow and limits
 
@@ -224,7 +261,8 @@ NPM access files (read-only) ─────────────────
 ```
 
 The normalizer has no Docker socket or capture capability. SQLite stores
-cursors, deduplication IDs, cumulative counters, and undelivered events, **not
+cursors, deduplication IDs, cumulative counters, bounded active-session state,
+and undelivered events, **not
 a second searchable event archive**. The web container has no writable state,
 log mounts, keys or host privileges. Neither publishes a host port.
 
@@ -261,14 +299,18 @@ later than the overlap can be missed. Source-format changes require parser
 updates; a successful quiet query does not prove that the source is logging.
 
 Loki's normalized log timestamp is **collection time**, with original event time
-kept in the JSON and details. Window filtering and Prometheus counters therefore
-agree on when an event was observed, including catch-up after outages.
+kept in the JSON and details. Window filtering and counters therefore use when an
+event was observed, including ordinary catch-up after outages. **No historical
+backfill, counter reconstruction or relaxed Loki ingestion limits are used.**
+Existing normalized logs stay in place; the API applies own-network filtering to
+older unlabeled records at read time, rather than rewriting or re-importing them.
+Current home prefixes cannot identify a previously used, now-unknown ISP prefix.
 Delivery is at-least-once; replayed IDs are deduplicated in the UI and never
 re-increment persistent counters. The outbox holds at most 50,000 events and
 applies explicit backpressure rather than silently dropping on overflow.
 
 IPs, usernames, URLs, network organizations and key fingerprints are **never Prometheus labels**.
-Metric dimensions are bounded kind/type/country codes. Logs drop URL queries,
+Metric dimensions are bounded kind/type/country/origin codes. Logs drop URL queries,
 fragments, long token-like path components, raw messages, cookies, passwords,
 and request bodies. Existing upstream raw Loki logs retain their existing policy.
 The normalized events still contain private activity: protect the entire site,

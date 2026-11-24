@@ -115,10 +115,13 @@ def run(image, subnet=None):
                     "Invalid user guest from 8.8.8.8 port 1234",
                     f"Accepted publickey for fixture-user from 8.8.8.8 port 1235 ssh2: ED25519 {fingerprint}",
                     "Accepted publickey for other-user from 8.8.8.8 port 1236 ssh2: ED25519 SHA256:unknown",
+                    f"Accepted publickey for fixture-user from 100.100.1.2 port 1237 ssh2: ED25519 {fingerprint}",
+                    f"Accepted publickey for fixture-user from 2001:4860:1::123 port 1238 ssh2: ED25519 {fingerprint}",
                 ]),
                 ({"security_source": "fail2ban"}, ["[sshd] Ban 8.8.8.8"]),
                 ({"security_source": "connections"}, [
-                    json.dumps({"schema": "attacks-flow-v1", "heartbeat": True, "suppressed": 2}),
+                    json.dumps({"schema": "attacks-flow-v1", "heartbeat": True, "suppressed": 2,
+                                "ownNetworks": ["2001:4860:1::/64"]}),
                     json.dumps({"schema": "attacks-flow-v1", "ip": "8.8.8.8", "port": 36676, "sourcePort": 5000, "protocol": "tcp"}),
                 ]),
             ]
@@ -138,14 +141,42 @@ def run(image, subnet=None):
             assert next(item for item in rows if item["kind"] == "ssh_accepted")["keyLabel"] == "fixture-key"
             filtered = http(addresses["web"], "/api/events?" + urlencode({"outcome": "accepted", "user": "fixture-user"}))
             assert len(filtered["events"]) == 1
+            own = http(addresses["web"], "/api/events?own=1")["events"]
+            assert len(own) == 11 and sum(item["origin"] == "own" for item in own) == 2
             stats = eventually(lambda: (result if (result := http(addresses["web"], "/api/stats"))["lifetimeTrappedSeconds"] == 120.5 else None))
             assert stats["available"]
+            assert sum(item["value"] for item in stats["totals"]) == 9
+            assert stats["trappedSeconds"] == 120.5
+            assert any(float(number) > 0 for _, number in stats["timeline"])
+            assert stats["trapping"]["connections"] == 0
             metrics = http(addresses["collector"], "/metrics")
             assert "8.8.8.8" not in metrics and "fixture-user" not in metrics
             assert http(addresses["web"], "/api/status")["geo"]["state"] == "unavailable"
             time.sleep(5)
             assert len(http(addresses["web"], "/api/events")["events"]) == 9
-            print("PASS: raw logs -> normalizer -> Loki -> filtered API; Prometheus; SSH key recognition; offline cloud/VPN evidence; replay deduplication; credential redaction.")
+            def push_endlessh(line):
+                http(addresses["loki"], "/loki/api/v1/push", {"streams": [
+                    {"stream": {"container": "endlessh"}, "values": [[str(time.time_ns()), line]]}]})
+            push_endlessh("ACCEPT host=8.8.8.8 port=9999 n=1/4096")
+            active = eventually(lambda: (s if (s := http(addresses["web"], "/api/stats"))["trapping"]["connections"] == 1 else None))
+            time.sleep(2)
+            later = http(addresses["web"], "/api/stats")
+            assert later["trapping"]["seconds"] > active["trapping"]["seconds"]
+            assert later["trappedSeconds"] == 120.5
+            push_endlessh("CLOSE host=8.8.8.8 port=9999 time=8 bytes=200")
+            closed = eventually(lambda: (s if (s := http(addresses["web"], "/api/stats"))["trappedSeconds"] == 128.5 else None))
+            assert closed["trapping"]["connections"] == 0
+            # Legacy unlabeled events are filtered in-place, never re-imported.
+            old_ns = time.time_ns() - 1_000_000_000
+            legacy = {"id": "legacy-own", "type": "ssh", "kind": "ssh_accepted", "ip": "100.100.1.3",
+                      "observedAt": old_ns / 1e9, "timestamp": old_ns / 1e9}
+            http(addresses["loki"], "/loki/api/v1/push", {"streams": [
+                {"stream": {"job": "attacks", "type": "ssh", "kind": "ssh_accepted"},
+                 "values": [[str(old_ns), json.dumps(legacy)]]}]})
+            assert not any(item["id"] == "legacy-own" for item in http(addresses["web"], "/api/events")["events"])
+            assert next(item for item in http(addresses["web"], "/api/events?own=1")["events"]
+                        if item["id"] == "legacy-own")["origin"] == "own"
+            print("PASS: isolated source ingestion, own/legacy filtering, exact Loki totals and nonzero timeline, Prometheus counters, live open/close accounting, replay deduplication, credential redaction.")
         except (AssertionError, RuntimeError, OSError, ValueError, KeyError):
             if "addresses" in locals():
                 for endpoint in ("/api/events", "/api/status"):

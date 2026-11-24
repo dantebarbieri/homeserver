@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, mergeEvents, located, project, duration, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
+import {TYPES, mergeEvents, located, project, duration, liveTrapping, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -75,6 +75,25 @@ test("unlocated events do not displace held dots and unknown countries never inv
   assert.equal(mapActivity([{id: "missing", observedAt: 2000}, ...dots(7)], MAP_DEFAULTS, 10000).points.length, 7);
   assert.equal(countryFlag("US"), "\u{1f1fa}\u{1f1f8}");
   for (const code of [undefined, "ZZ", "XX", "usa", "<script>"]) assert.equal(countryFlag(code), "");
+});
+
+test("own traffic stays off the map even in history mode without displacing external dots", () => {
+  const external = dots(7);
+  const own = {...dots(1)[0], id: "own", origin: "own", observedAt: 20000};
+  for (const history of [true, false]) {
+    const activity = mapActivity([own, ...external], MAP_DEFAULTS, 20000, history);
+    assert.deepEqual(activity.points.map(({item}) => item.id), external.map(item => item.id));
+    assert.ok(activity.points.every(({opacity}) => opacity === 1));
+  }
+});
+
+test("live trapping ticks between samples, switches on close, and stops on stale or failed telemetry", () => {
+  const opened = {available: true, seconds: 10, connections: 2};
+  assert.deepEqual(liveTrapping(opened, 5000), {seconds: 20, connections: 2});
+  assert.deepEqual(liveTrapping({available: true, seconds: 0, connections: 0}, 5000), {seconds: 0, connections: 0});
+  assert.equal(liveTrapping(opened, 90001), null);
+  assert.equal(liveTrapping({...opened, available: false}, 1000), null);
+  assert.equal(liveTrapping(null, 0), null);
 });
 
 test("simulated arrivals are unique, located, documentation-range addresses that merge newest first", () => {

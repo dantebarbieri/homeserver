@@ -13,18 +13,18 @@ import time
 import maxminddb
 
 from common import Client, UpstreamError
-from events import KINDS, PARSERS, identity, parse_npm, public, text
+from events import KINDS, PARSERS, home_networks, identity, parse_flow, parse_npm, public, text, traffic_origin
 from networks import Networks
 from ssh_keys import SSHKeys
 
 
 LOG = logging.getLogger("attacks")
 SELECTORS = {
-    "endlessh": '{container="endlessh"} |~ "(^| )(ACCEPT|CLOSE) host="',
+    "connections": '{security_source="connections"} |= "attacks-flow-v1"',
+    "endlessh": '{container="endlessh"} |~ "(^| )(ACCEPT|CLOSE) host=|Listening on"',
     "authelia": '{container="authelia"} |= "Unsuccessful" |= "authentication attempt"',
     "ssh": '{security_source="ssh"} |~ "Invalid user |Failed |Accepted .* for |maximum authentication attempts|Connection (closed|reset) by|Disconnected from|banner exchange:|kex_exchange_identification:"',
     "fail2ban": '{security_source="fail2ban"} |= " Ban "',
-    "connections": '{security_source="connections"} |= "attacks-flow-v1"',
 }
 NANO = 1_000_000_000
 
@@ -56,11 +56,25 @@ class Store:
             CREATE INDEX IF NOT EXISTS seen_at ON seen(at);
             CREATE TABLE IF NOT EXISTS outbox (id TEXT PRIMARY KEY, ns INTEGER, body TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS counters
-              (kind TEXT, category TEXT, country TEXT, count INTEGER, seconds REAL,
-               PRIMARY KEY(kind,category,country));
+              (kind TEXT, category TEXT, country TEXT, origin TEXT, count INTEGER, seconds REAL,
+               PRIMARY KEY(kind,category,country,origin));
+            CREATE TABLE IF NOT EXISTS trapped
+              (ip TEXT, port INTEGER, since REAL, changed REAL, PRIMARY KEY(ip,port));
         """)
+        # Old counters cannot be split by IP. Preserve them, explicitly unclassified.
+        if "origin" not in {row[1] for row in self.db.execute("PRAGMA table_info(counters)")}:
+            with self.db:
+                self.db.execute("BEGIN IMMEDIATE")
+                self.db.execute("ALTER TABLE counters RENAME TO legacy_counters")
+                self.db.execute("""CREATE TABLE counters
+                    (kind TEXT, category TEXT, country TEXT, origin TEXT, count INTEGER, seconds REAL,
+                     PRIMARY KEY(kind,category,country,origin))""")
+                self.db.execute("INSERT INTO counters SELECT kind,category,country,'legacy',count,seconds FROM legacy_counters")
+                self.db.execute("DROP TABLE legacy_counters")
         if self.get("started") is None:
             self.set("started", clock())
+        if self.get("origins_started") is None:
+            self.set("origins_started", clock())
 
     def get(self, key, default=None):
         with self.lock:
@@ -72,35 +86,79 @@ class Store:
             self.db.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (key, json.dumps(value)))
 
     def enqueue(self, item, source, key):
-        item = {**item, "id": identity(source, key), "source": source, "observedAt": self.clock()}
-        country = item.get("countryCode", "ZZ")
         with self.lock, self.db:
+            observed = max(self.clock(), self.get("last_observed", 0) + .000001,
+                           self.get("published", {}).get("through", 0) + .000001)
+            item = {**item, "id": identity(source, key), "source": source, "observedAt": observed,
+                    "origin": item.get("origin", traffic_origin(item["ip"]))}
+            country = item.get("countryCode", "ZZ")
             if self.db.execute("SELECT 1 FROM seen WHERE id=?", (item["id"],)).fetchone():
                 return False
             if self.db.execute("SELECT count(*) FROM outbox").fetchone()[0] >= 50000:
                 raise UpstreamError("Outbox full; source checkpoint has not advanced")
             self.db.execute("INSERT INTO seen VALUES (?,?)", (item["id"], self.clock()))
             self.db.execute("INSERT INTO outbox VALUES (?,?,?)",
-                            (item["id"], time.time_ns(), json.dumps(item, allow_nan=False)))
+                            (item["id"], int(observed * NANO), json.dumps(item, allow_nan=False)))
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('last_observed',?)", (json.dumps(observed),))
             self.db.execute("""
-                INSERT INTO counters VALUES (?,?,?,1,?)
-                ON CONFLICT(kind,category,country) DO UPDATE SET
+                INSERT INTO counters VALUES (?,?,?,?,1,?)
+                ON CONFLICT(kind,category,country,origin) DO UPDATE SET
                     count=count+1, seconds=seconds+excluded.seconds
-            """, (item["kind"], item["type"], country, item.get("duration", 0)))
+            """, (item["kind"], item["type"], country, item["origin"], item.get("duration", 0)))
+            if item["kind"] == "endlessh_close" or (item["origin"] == "external" and item["kind"] == "endlessh_open"):
+                self.track(item)
         return True
+
+    def track(self, item):
+        timestamp = item["timestamp"]
+        if timestamp < max(self.get("origins_started"), self.get("endlessh_restart", 0)):
+            return
+        self.db.execute("""INSERT INTO trapped VALUES (?,?,?,?)
+            ON CONFLICT(ip,port) DO UPDATE SET since=excluded.since, changed=excluded.changed
+            WHERE excluded.changed > changed OR (excluded.changed = changed AND excluded.since IS NULL)""",
+                        (item["ip"], item["sourcePort"],
+                         timestamp if item["kind"] == "endlessh_open" else None, timestamp))
+        if self.db.execute("SELECT count(*) FROM trapped WHERE since IS NOT NULL").fetchone()[0] > 4096:
+            raise UpstreamError("Endlessh active-session limit exceeded; checkpoint retained")
+        self.db.execute("DELETE FROM trapped WHERE since IS NULL AND changed<?", (self.clock() - 172800,))
+
+    def restart(self, timestamp):
+        with self.lock, self.db:
+            if timestamp > self.get("endlessh_restart", 0):
+                self.db.execute("DELETE FROM trapped WHERE changed<=?", (timestamp,))
+                self.db.execute("INSERT OR REPLACE INTO meta VALUES ('endlessh_restart',?)", (json.dumps(timestamp),))
+
+    def publish(self):
+        # Publish the open set only when all preceding closes are visible in Loki.
+        # The API bounds its completed-duration query by the same watermark.
+        if self.db.execute("SELECT 1 FROM outbox LIMIT 1").fetchone():
+            return
+        sessions = [row[0] for row in self.db.execute("SELECT since FROM trapped WHERE since IS NOT NULL")]
+        value = {"through": max(self.clock(), self.get("last_observed", 0)), "sessions": sessions}
+        self.db.execute("INSERT OR REPLACE INTO meta VALUES ('published',?)", (json.dumps(value),))
+
+    def trapping(self):
+        with self.lock:
+            published = self.get("published", {"through": 0, "sessions": []})
+        now = self.clock()
+        return {"connections": len(published["sessions"]),
+                "seconds": sum(max(0, now - since) for since in published["sessions"]),
+                "asOf": now, "through": published["through"], "since": self.get("origins_started")}
 
     def flush(self, client):
         with self.lock:
             rows = self.db.execute("SELECT id,ns,body FROM outbox ORDER BY ns,id LIMIT 1000").fetchall()
         if not rows:
+            with self.lock, self.db:
+                self.publish()
             return
         streams = {}
         for _, ns, body in rows:
             item = json.loads(body)
-            key = (item["source"], item["type"], item["kind"])
+            key = (item["source"], item["type"], item["kind"], item.get("origin", "legacy"))
             streams.setdefault(key, []).append([str(ns), body])
         client.request("/loki/api/v1/push", payload={"streams": [
-            {"stream": {"job": "attacks", "source": key[0], "type": key[1], "kind": key[2]},
+            {"stream": {"job": "attacks", "source": key[0], "type": key[1], "kind": key[2], "origin": key[3]},
              "values": values} for key, values in streams.items()
         ]})
         # A crash after delivery may replay IDs. The UI deduplicates those IDs.
@@ -108,22 +166,30 @@ class Store:
             self.db.executemany("DELETE FROM outbox WHERE id=?", ((row[0],) for row in rows))
             self.db.execute("DELETE FROM seen WHERE at<? AND id NOT IN (SELECT id FROM outbox)",
                             (self.clock() - 172800,))
+            self.publish()
 
     def metrics(self):
         with self.lock:
-            rows = self.db.execute("SELECT kind,category,country,count,seconds FROM counters").fetchall()
+            rows = self.db.execute("SELECT kind,category,country,origin,count,seconds FROM counters").fetchall()
             queued = self.db.execute("SELECT count(*) FROM outbox").fetchone()[0]
+            active = [row[0] for row in self.db.execute("SELECT since FROM trapped WHERE since IS NOT NULL")]
         result = ["# TYPE attacks_events_total counter", "# TYPE attacks_endlessh_seconds_total counter",
-                  f"attacks_outbox_events {queued}", f"attacks_started_seconds {self.get('started')}"]
-        present = {row[0] for row in rows}
+                  f"attacks_outbox_events {queued}", f"attacks_started_seconds {self.get('started')}",
+                  f"attacks_origins_started_seconds {self.get('origins_started')}",
+                  "# TYPE attacks_endlessh_trapped_connections gauge",
+                  f"attacks_endlessh_trapped_connections {len(active)}",
+                  "# TYPE attacks_endlessh_trapped_now_seconds gauge",
+                  f"attacks_endlessh_trapped_now_seconds {sum(max(0, self.clock() - since) for since in active)}"]
+        present = {(row[0], row[3]) for row in rows}
         for kind, (category, _, _) in KINDS.items():
-            if kind not in present:
-                rows.append((kind, category, "ZZ", 0, 0))
-        for kind, category, country, count, seconds in rows:
-            labels = f'kind="{kind}",type="{category}",country="{country}"'
+            for origin in ("own", "external"):
+                if (kind, origin) not in present:
+                    rows.append((kind, category, "ZZ", origin, 0, 0))
+        for kind, category, country, origin, count, seconds in rows:
+            labels = f'kind="{kind}",type="{category}",country="{country}",origin="{origin}"'
             result.append(f"attacks_events_total{{{labels}}} {count}")
             if kind == "endlessh_close":
-                result.append(f"attacks_endlessh_seconds_total{{country=\"{country}\"}} {seconds}")
+                result.append(f'attacks_endlessh_seconds_total{{country="{country}",origin="{origin}"}} {seconds}')
         return "\n".join(result) + "\n"
 
 
@@ -191,7 +257,26 @@ class Collector:
         self.networks = networks or Networks(os.environ.get("NETWORK_DATA_DIR", "/geo"))
 
     def enrich(self, item):
-        return self.keys.annotate(self.networks.enrich(self.geo.enrich(item)))
+        own = self.own_traffic()
+        if own["state"] != "ready":
+            raise UpstreamError(own["message"])
+        return {**self.keys.annotate(self.networks.enrich(self.geo.enrich(item))),
+                "origin": traffic_origin(item["ip"], own["networks"])}
+
+    def own_traffic(self):
+        ready = "ownNetworks" in self.capture and time.time() - self.capture.get("timestamp", 0) <= 90
+        return {"state": "ready" if ready else "error",
+                "message": "LAN, tailnet and home IPv6 traffic excluded from attack totals" if ready
+                else "Fresh host network metadata unavailable; source checkpoints retained",
+                "networks": home_networks(self.capture.get("ownNetworks", []))}
+
+    def refresh_capture(self, now):
+        query = SELECTORS["connections"] + ' |= "heartbeat"'
+        for ns, line, _ in self.loki.query(query, int((now - 90) * NANO), int((now - 3) * NANO)):
+            item = parse_flow(line, ns / NANO)
+            if item and item.get("heartbeat") and item["timestamp"] >= self.capture.get("timestamp", 0):
+                self.capture = item
+                self.store.set("capture", item)
 
     def raw(self, source, now):
         cursor = self.store.get("cursor:" + source, int((now - 600) * NANO))
@@ -208,6 +293,9 @@ class Collector:
                 if item["timestamp"] >= self.capture.get("timestamp", 0):
                     self.capture = item
                     self.store.set("capture", item)
+                continue
+            if item.get("restart"):
+                self.store.restart(item["timestamp"])
                 continue
             key = json.dumps([ns, labels, line], sort_keys=True)
             counts[key] += 1
@@ -263,6 +351,10 @@ class Collector:
 
     def tick(self):
         now = time.time()
+        try:
+            self.refresh_capture(now)
+        except (UpstreamError, OSError, ValueError) as error:
+            LOG.error("Host network metadata refresh failed: %s", type(error).__name__)
         if now - self.last_geo >= 60:
             self.geo.reload()
             self.keys.reload()
@@ -291,7 +383,12 @@ class Collector:
         if time.time() - self.capture.get("timestamp", 0) > 90:
             sources["connections"] = {**sources["connections"], "state": "error",
                                       "message": "Host capture heartbeat missing or stale"}
+        own = self.own_traffic()
+        trapping = {**self.store.trapping(), "available": own["state"] == "ready" and all(
+            sources[name]["state"] == "ready" and sources[name].get("lagSeconds", 0) <= 90
+            and time.time() - sources[name].get("lastSuccess", 0) <= 90 for name in ("endlessh", "delivery"))}
         return {"sources": sources, "geo": self.geo.status, "sshKeys": self.keys.status, "networks": self.networks.status,
+                "ownTraffic": own, "trapping": trapping,
                 "lastTick": self.last_tick, "capture": self.capture,
                 "startedAt": self.store.get("started")}
 
@@ -312,6 +409,7 @@ def main():
                 body = store.metrics()
                 for name, value in status["sources"].items():
                     body += f'attacks_source_ready{{source="{name}"}} {int(value["state"] == "ready")}\n'
+                body += f'attacks_source_ready{{source="own_traffic"}} {int(status["ownTraffic"]["state"] == "ready")}\n'
                 body += f'attacks_capture_suppressed_total {collector.capture.get("suppressed", 0)}\n'
                 content_type = "text/plain; version=0.0.4"
                 code = 200

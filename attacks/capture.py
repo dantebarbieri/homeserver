@@ -4,13 +4,25 @@ from collections import OrderedDict
 import ipaddress
 import json
 import os
+from pathlib import Path
 import select
 import struct
 import subprocess
 import sys
 import time
 
-from events import PORTS
+from events import PORTS, home_networks
+
+
+def interface_networks(content, interface):
+    networks = []
+    for line in content.splitlines():
+        address, _, prefix, _, flags, name = line.split()
+        ip = ipaddress.IPv6Address(int(address, 16))
+        if name != interface or not ip.is_global or ip.is_multicast or int(flags, 16) & 0x48:
+            continue
+        networks.append(str(ipaddress.ip_network(f"{ip}/{int(prefix, 16)}", strict=False)))
+    return home_networks(networks)
 
 
 def packet(data, linktype=1):
@@ -83,7 +95,9 @@ def run():
             now = time.time()
             if now - heartbeat >= 30:
                 print(json.dumps({"schema": "attacks-flow-v1", "heartbeat": True,
-                                  "suppressed": suppressed}), flush=True)
+                                  "suppressed": suppressed,
+                                  "ownNetworks": interface_networks(
+                                      Path("/proc/net/if_inet6").read_text(), interface)}), flush=True)
                 heartbeat = now
             ready, _, _ = select.select([process.stdout], [], [], 1)
             if not ready:

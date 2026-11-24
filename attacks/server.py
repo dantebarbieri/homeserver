@@ -14,7 +14,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from common import UpstreamError, clients
-from events import TYPES, VERDICTS
+from events import OWN_NETWORKS, TYPES, VERDICTS, home_networks, traffic_origin
 
 
 ROOT = Path(__file__).parent / "static"
@@ -42,19 +42,23 @@ def parameters(query):
         raise BadRequest("Invalid query parameters") from None
 
 
-def event_query(params, now):
-    if set(params) - {"range", "type", "outcome", "ip", "user", "before", "after"}:
+def event_query(params, now, networks=()):
+    if set(params) - {"range", "type", "outcome", "ip", "user", "before", "after", "own"}:
         raise BadRequest("Unknown filter")
+    if params.get("own", "0") not in ("0", "1"):
+        raise BadRequest("Unknown own-traffic setting")
     period = params.get("range", "24h")
     if period not in RANGES:
         raise BadRequest("Unknown time range")
-    selector = '{job="attacks"'
+    selector = '{job="attacks"' + (',origin!="own"' if params.get("own") != "1" else "")
     category = params.get("type", "")
     if category:
         if category not in TYPES:
             raise BadRequest("Unknown event type")
         selector += ",type=" + json.dumps(category)
     selector += "} | json"
+    if params.get("own") != "1":
+        selector += exclude_own(networks)
     if params.get("outcome"):
         if params["outcome"] not in VERDICTS:
             raise BadRequest("Unknown outcome")
@@ -87,13 +91,19 @@ def event_query(params, now):
     return selector + ' | __error__=""', start, max(start, end)
 
 
+def exclude_own(networks):
+    # Missing origin labels are pre-upgrade events, not missing history.
+    return "".join(f" | ip != ip({json.dumps(cidr)})" for cidr in (*OWN_NETWORKS, *networks))
+
+
 class API:
     def __init__(self, loki, prometheus, collector):
         self.loki, self.prometheus, self.collector = loki, prometheus, collector
         self.slots = threading.BoundedSemaphore(6)
 
     def events(self, params):
-        query, start, end = event_query(params, time.time())
+        networks = self.own_networks(self.collector.request("/status"))
+        query, start, end = event_query(params, time.time(), networks)
         data = self.loki.request("/loki/api/v1/query_range", {
             "query": query, "start": start, "end": end,
             "direction": "forward" if "after" in params else "backward", "limit": LIMIT + 1,
@@ -107,7 +117,8 @@ class API:
                 if (not isinstance(item, dict) or item.get("type") not in TYPES
                         or not isinstance(item.get("id"), str)):
                     raise UpstreamError("Invalid normalized event")
-                rows.append({**item, "cursor": ns})
+                origin = "own" if item.get("origin") == "own" else traffic_origin(item["ip"], networks)
+                rows.append({**item, "origin": origin, "cursor": ns})
         rows.sort(key=lambda item: int(item["cursor"]), reverse="after" not in params)
         more = len(rows) > LIMIT
         # Do not silently drop events sharing a pagination timestamp.
@@ -127,26 +138,63 @@ class API:
             raise UpstreamError("Invalid metrics response from Prometheus")
         return data["data"]["result"]
 
+    @staticmethod
+    def own_networks(status):
+        own = status.get("ownTraffic", {})
+        if own.get("state") != "ready":
+            raise UpstreamError("Own-traffic classification unavailable; check host capture health")
+        return home_networks(own["networks"])
+
+    def loki_metrics(self, query, **params):
+        ranged = "start" in params
+        endpoint = "/loki/api/v1/query_range" if ranged else "/loki/api/v1/query"
+        data = self.loki.request(endpoint, {"query": query, **params})
+        if (data.get("status") != "success"
+                or data.get("data", {}).get("resultType") != ("matrix" if ranged else "vector")):
+            raise UpstreamError("Invalid statistics response from Loki")
+        return data["data"]["result"]
+
     def stats(self, params):
         period = params.get("range", "24h")
         if set(params) - {"range"} or period not in RANGES:
             raise BadRequest("Unknown statistics range")
         now, seconds = time.time(), RANGES[period]
-        totals = self.prometheus_query(f"sum by (type,kind) (increase(attacks_events_total[{period}]))")
-        trapped = self.prometheus_query(f"sum(increase(attacks_endlessh_seconds_total[{period}]))")
-        lifetime_trapped = self.prometheus_query("sum(attacks_endlessh_seconds_total)")
-        timeline = self.prometheus_query("sum(rate(attacks_events_total[5m])) * 60",
-                                         start=int(now - seconds), end=int(now), step=max(60, seconds // 120))
+        status = self.collector.request("/status")
+        networks = self.own_networks(status)
+        trapping = status["trapping"]
+        query = '{job="attacks",origin!="own"} | json' + exclude_own(networks)
+        query += f' | observedAt <= {float(trapping["through"]):.6f} | __error__=""'
+        instant = {"time": str(int(now * NANO))}
+        counts = query + " | keep type,kind"
+        totals = self.loki_metrics(f"sum by (type,kind) (count_over_time({counts}[{period}]))", **instant)
+        trapped = self.loki_metrics(
+            f'sum(sum_over_time({query} | kind="endlessh_close" | keep duration | unwrap duration | __error__="" [{period}]))',
+            **instant)
+        lifetime_trapped = self.prometheus_query('sum(attacks_endlessh_seconds_total{origin="external"})')
+        step = max(60, seconds // 120)
+        # Loki aligns range samples to the step grid. Query full buckets on that
+        # grid, then evaluate the current partial bucket without future timestamps.
+        end = int(now) // step * step
+        start = end - seconds + step
+        timeline = self.loki_metrics(f"sum(count_over_time({counts}[{step}s])) * 60 / {step}",
+                                     start=str(start * NANO), end=str(end * NANO), step=step)
         def value(row):
             result = float(row["value"][1])
             if not math.isfinite(result):
-                raise UpstreamError("Metrics contain an invalid value")
+                raise UpstreamError("Statistics contain an invalid value")
             return result
+        points = {int(float(at)): number for row in timeline for at, number in row["values"]}
+        timeline = [[at, points.get(at, "0")] for at in range(start, end + 1, step)]
+        partial = int(now) - end
+        if partial:
+            tail = self.loki_metrics(f"sum(count_over_time({counts}[{partial}s])) * 60 / {partial}", **instant)
+            timeline.append([int(now), str(value(tail[0])) if tail else "0"])
         return {"range": period, "totals": [{**row["metric"], "value": value(row)} for row in totals],
-                "trappedSeconds": value(trapped[0]) if trapped else None,
+                "trappedSeconds": value(trapped[0]) if trapped else 0,
                 "lifetimeTrappedSeconds": value(lifetime_trapped[0]) if lifetime_trapped else None,
-                "timeline": timeline[0]["values"] if timeline else [],
-                "available": bool(totals), "queriedAt": now}
+                "trapping": trapping,
+                "timeline": timeline,
+                "available": True, "queriedAt": now}
 
 
 def serve(host="127.0.0.1", port=8080):

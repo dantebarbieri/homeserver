@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
 import base64
+from contextlib import closing
 import hashlib
 import ipaddress
 import json
 from pathlib import Path
 import struct
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -13,10 +15,10 @@ from urllib.error import URLError
 
 import maxminddb
 
-from capture import packet
+from capture import interface_networks, packet
 from collector import Collector, Geo, Store, window
 from common import Client, UpstreamError
-from events import parse_authelia, parse_endlessh, parse_fail2ban, parse_flow, parse_npm, parse_ssh
+from events import home_networks, traffic_origin, parse_authelia, parse_endlessh, parse_fail2ban, parse_flow, parse_npm, parse_ssh
 from server import API, BadRequest, event_query, parameters
 from ssh_keys import SSHKeys
 from networks import FEEDS, Networks
@@ -106,6 +108,27 @@ def ethernet(ipv6=False, udp=False, port=36676, flags=2, fragment=False, extensi
 
 
 class CaptureTests(unittest.TestCase):
+    def test_own_networks_follow_only_usable_uplink_addresses(self):
+        content = (
+            "20014860000100000000000000000001 02 40 00 80 bond0\n"
+            "20014860000100000000000000000002 02 40 00 80 bond0\n"
+            "20014860000200000000000000000001 02 40 00 40 bond0\n"
+            "20014860000300000000000000000001 02 40 00 80 other0\n"
+            "fd000000000000000000000000000001 02 40 00 80 bond0\n"
+        )
+        networks = interface_networks(content, "bond0")
+        self.assertEqual(networks, ["2001:4860:1::/64"])
+        heartbeat = parse_flow(json.dumps({"schema": "attacks-flow-v1", "heartbeat": True,
+                                          "ownNetworks": networks}), 100)
+        self.assertEqual(heartbeat["ownNetworks"], networks)
+        for ip in ("192.168.50.2", "100.100.1.2", "127.0.0.1", "fd00::2", "2001:4860:1::abcd"):
+            self.assertEqual(traffic_origin(ip, networks), "own")
+        self.assertEqual(traffic_origin("2001:4860:2::1", networks), "external")
+        self.assertEqual(traffic_origin(IP, networks), "external")
+        for invalid in (["::/0"], ["2001:4860::/32"], ["10.0.0.0/8"], "2001:4860:1::/64"):
+            with self.assertRaises(ValueError):
+                home_networks(invalid)
+
     def test_ipv4_syn_and_ipv6_udp_headers_only(self):
         item = packet(bytearray(ethernet()))
         self.assertEqual(item["ip"], IP)
@@ -123,6 +146,7 @@ class StateTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
         self.store = Store(self.root / "state.sqlite")
+        self.store.set("capture", {"timestamp": time.time(), "ownNetworks": []})
         self.item = parse_endlessh(f"CLOSE host={IP} port=1000 time=4.5 bytes=64", time.time())
 
     def tearDown(self):
@@ -133,8 +157,8 @@ class StateTests(unittest.TestCase):
         self.assertTrue(self.store.enqueue(self.item, "endlessh", "stable"))
         self.assertFalse(self.store.enqueue(self.item, "endlessh", "stable"))
         metrics = self.store.metrics()
-        self.assertIn('kind="endlessh_close",type="endlessh",country="ZZ"} 1', metrics)
-        self.assertIn('attacks_endlessh_seconds_total{country="ZZ"} 4.5', metrics)
+        self.assertIn('kind="endlessh_close",type="endlessh",country="ZZ",origin="external"} 1', metrics)
+        self.assertIn('attacks_endlessh_seconds_total{country="ZZ",origin="external"} 4.5', metrics)
         self.assertNotIn(IP, metrics)
         self.assertNotIn("sourcePort", metrics)
         client = Mock()
@@ -146,6 +170,91 @@ class StateTests(unittest.TestCase):
         self.store.flush(client)
         self.assertIn("attacks_outbox_events 0", self.store.metrics())
         self.assertFalse(self.store.enqueue(self.item, "endlessh", "stable"))
+
+    def test_upgrade_preserves_legacy_counters_cursors_and_pending_events(self):
+        path = self.root / "legacy.sqlite"
+        with closing(sqlite3.connect(path)) as db:
+            db.executescript("""
+                CREATE TABLE counters (kind TEXT, category TEXT, country TEXT, count INTEGER, seconds REAL,
+                                       PRIMARY KEY(kind,category,country));
+                INSERT INTO counters VALUES ('endlessh_close','endlessh','ZZ',10,123.5);
+                CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                INSERT INTO meta VALUES ('started','100'), ('cursor:endlessh','12345');
+                CREATE TABLE outbox (id TEXT PRIMARY KEY, ns INTEGER, body TEXT NOT NULL);
+                INSERT INTO outbox VALUES ('pending',1000000000,'{}');
+            """)
+        store = Store(path, clock=lambda: 200)
+        try:
+            self.assertEqual(store.get("started"), 100)
+            self.assertEqual(store.get("cursor:endlessh"), 12345)
+            self.assertEqual(store.db.execute("SELECT * FROM outbox").fetchone(), ("pending", 1000000000, "{}"))
+            self.assertIn('attacks_endlessh_seconds_total{country="ZZ",origin="legacy"} 123.5', store.metrics())
+            self.assertIn('attacks_endlessh_seconds_total{country="ZZ",origin="external"} 0', store.metrics())
+        finally:
+            store.db.close()
+
+    def test_live_traps_publish_with_delivery_survive_restart_and_ignore_own(self):
+        now = [time.time() + 1]
+        self.store.clock = lambda: now[0]
+        opened = parse_endlessh(f"ACCEPT host={IP} port=1000 n=1/4096", now[0])
+        self.store.enqueue(opened, "endlessh", "open")
+        self.store.enqueue({**opened, "sourcePort": 1001, "origin": "own"}, "endlessh", "own-open")
+        self.assertEqual(self.store.trapping()["connections"], 0)
+        self.store.flush(Mock())
+        now[0] += 10
+        self.assertEqual(self.store.trapping()["seconds"], 10)
+        self.assertEqual(self.store.trapping()["connections"], 1)
+        path = self.root / "state.sqlite"
+        self.store.db.close()
+        self.store = Store(path, clock=lambda: now[0])
+        self.assertEqual(self.store.trapping()["seconds"], 10)
+        self.assertFalse(self.store.enqueue(opened, "endlessh", "open"))
+        closed = parse_endlessh(f"CLOSE host={IP} port=1000 time=10 bytes=64", now[0])
+        self.store.enqueue(closed, "endlessh", "close")
+        # An undelivered close cannot disappear from the published active snapshot.
+        before = self.store.trapping()
+        self.assertEqual(before["connections"], 1)
+        body = json.loads(self.store.db.execute("SELECT body FROM outbox").fetchone()[0])
+        self.assertGreater(body["observedAt"], before["through"])
+        failed = Mock()
+        failed.request.side_effect = UpstreamError("offline")
+        with self.assertRaises(UpstreamError):
+            self.store.flush(failed)
+        self.assertEqual(self.store.trapping()["through"], before["through"])
+        self.store.flush(Mock())
+        self.assertEqual(self.store.trapping()["connections"], 0)
+        self.assertIn('attacks_endlessh_seconds_total{country="ZZ",origin="external"} 10.0', self.store.metrics())
+        # Late/replayed opens cannot resurrect a closed tuple.
+        self.store.enqueue({**opened, "timestamp": now[0] - 5}, "endlessh", "late-open")
+        self.store.flush(Mock())
+        self.assertEqual(self.store.trapping()["connections"], 0)
+        now[0] += 1
+        self.store.enqueue({**opened, "timestamp": now[0]}, "endlessh", "new-open")
+        self.store.flush(Mock())
+        self.assertEqual(self.store.trapping()["connections"], 1)
+        restarted = parse_endlessh("I1124 main.go:98] Listening on [ipv4]:2222", now[0] + 1)
+        self.store.restart(restarted["timestamp"])
+        self.store.flush(Mock())
+        self.assertEqual(self.store.trapping()["connections"], 0)
+        self.assertIn('attacks_endlessh_seconds_total{country="ZZ",origin="external"} 10.0', self.store.metrics())
+        now[0] += 2
+        self.store.enqueue({**opened, "timestamp": now[0]}, "endlessh", "post-restart")
+        self.store.flush(Mock())
+        now[0] += 1
+        # A changed home prefix must not prevent a matching close from retiring an open.
+        self.store.enqueue({**closed, "timestamp": now[0], "origin": "own"}, "endlessh", "own-close")
+        self.store.flush(Mock())
+        self.assertEqual(self.store.trapping()["connections"], 0)
+
+    def test_missing_own_network_metadata_retains_source_checkpoint(self):
+        self.store.set("capture", {"timestamp": time.time()})
+        client = Mock()
+        client.query.return_value = [(time.time_ns(), f"ACCEPT host={IP} port=1000 n=1/4096", {})]
+        collector = Collector(self.store, client, Mock(), self.root)
+        with self.assertRaisesRegex(UpstreamError, "network metadata"):
+            collector.raw("endlessh", time.time())
+        self.assertIsNone(self.store.get("cursor:endlessh"))
+        self.assertEqual(self.store.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 0)
 
     def test_log_rotation_and_partial_lines(self):
         logdir = self.root / "logs"
@@ -314,7 +423,7 @@ class QueryTests(unittest.TestCase):
         query, _, _ = event_query({"user": 'x" | line_format "secret', "ip": IP}, time.time())
         self.assertIn('user="x\\" | line_format \\"secret"', query)
         for params in ({"type": "x"}, {"range": "all"}, {"ip": "not-an-ip"},
-                       {"before": "-1"}, {"query": "{}"}, {"before": "1", "after": "2"}):
+                       {"before": "-1"}, {"query": "{}"}, {"before": "1", "after": "2"}, {"own": "yes"}):
             with self.assertRaises(BadRequest):
                 event_query(params, time.time())
         with self.assertRaises(BadRequest):
@@ -334,27 +443,52 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(len(window(client, "{}", 1, 2500)), 2500)
 
     def test_api_deduplicates_crash_replay_and_bounds_pages(self):
-        item = {"id": "one", "type": "ssh", "kind": "ssh_probe"}
+        item = {"id": "one", "type": "ssh", "kind": "ssh_probe", "ip": "100.100.1.2"}
         loki = Mock()
         loki.request.return_value = {"status": "success", "data": {"resultType": "streams", "result": [
             {"stream": {}, "values": [["123", json.dumps(item)], ["123", json.dumps(item)]]}
         ]}}
-        api = API(loki, Mock(), Mock())
-        self.assertEqual(len(api.events({})["events"]), 1)
+        collector = Mock()
+        collector.request.return_value = {"ownTraffic": {"state": "ready", "networks": ["2001:4860:1::/64"]}}
+        api = API(loki, Mock(), collector)
+        events = api.events({"own": "1"})["events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["origin"], "own")
+        self.assertNotIn('origin!="own"', loki.request.call_args.args[1]["query"])
         self.assertEqual(loki.request.call_args.args[1]["limit"], 251)
+        api.events({})
+        query = loki.request.call_args.args[1]["query"]
+        self.assertIn('origin!="own"', query)
+        self.assertIn('ip != ip("100.64.0.0/10")', query)
+        self.assertIn('ip != ip("2001:4860:1::/64")', query)
 
     def test_endlessh_time_totals_include_range_and_lifetime(self):
         prometheus = Mock()
+        prometheus.request.return_value = {"status": "success", "data": {"result": [
+            {"metric": {}, "value": [100, "120.75"]}]}}
+        loki = Mock()
         def result(path, params):
             query = params["query"]
-            values = [] if "events_total" in query else [
-                {"metric": {}, "value": [100, "15.5" if "increase(" in query else "120.75"]}
-            ]
-            return {"status": "success", "data": {"result": values}}
-        prometheus.request.side_effect = result
-        stats = API(Mock(), prometheus, Mock()).stats({})
+            if "start" in params:
+                return {"status": "success", "data": {"resultType": "matrix", "result": [
+                    {"metric": {}, "values": [[int(params["end"]) // 1_000_000_000, "3"]]}]}}
+            values = [] if "sum by" in query else [{"metric": {}, "value": [100, "15.5" if "unwrap duration" in query else "3"]}]
+            return {"status": "success", "data": {"resultType": "vector", "result": values}}
+        loki.request.side_effect = result
+        collector = Mock()
+        collector.request.return_value = {"ownTraffic": {"state": "ready", "networks": []},
+            "trapping": {"through": 100, "seconds": 12, "connections": 2, "available": True, "since": 90}}
+        with patch("server.time.time", return_value=100000):
+            stats = API(loki, prometheus, collector).stats({})
         self.assertEqual(stats["trappedSeconds"], 15.5)
         self.assertEqual(stats["lifetimeTrappedSeconds"], 120.75)
+        self.assertEqual(stats["trapping"]["seconds"], 12)
+        self.assertTrue(stats["available"])  # A valid empty window is zero, not a scrape failure.
+        self.assertEqual(len(stats["timeline"]), 121)
+        self.assertEqual(stats["timeline"][0][1], "0")
+        self.assertEqual(float(stats["timeline"][-1][1]), 3)
+        self.assertIn('origin="external"', prometheus.request.call_args.args[1]["query"])
+        self.assertTrue(all("observedAt <= 100.000000" in call.args[1]["query"] for call in loki.request.call_args_list))
 
 
 if __name__ == "__main__":

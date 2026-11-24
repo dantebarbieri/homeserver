@@ -24,7 +24,7 @@ export function mapSettings(input) {
 }
 
 export function mapActivity(events, settings, now = Date.now() / 1000, history = false) {
-  const ordered = events.filter(item => located(item) && Number.isFinite(item.observedAt))
+  const ordered = events.filter(item => item.origin !== "own" && located(item) && Number.isFinite(item.observedAt))
     .toSorted((a, b) => b.observedAt - a.observedAt || a.id.localeCompare(b.id));
   const visible = [];
   let expired = 0;
@@ -80,6 +80,12 @@ export function duration(seconds) {
   if (seconds >= 3600) return `${(seconds / 3600).toFixed(1)} h`;
   if (seconds >= 60) return `${Math.round(seconds / 60)} min`;
   return `${Math.round(seconds)} s`;
+}
+
+export function liveTrapping(sample, elapsedMs) {
+  if (!sample?.available || !Number.isFinite(sample.seconds) || !Number.isFinite(sample.connections)
+    || elapsedMs > 90000) return null;
+  return {connections: sample.connections, seconds: sample.seconds + sample.connections * Math.max(0, elapsedMs / 1000)};
 }
 
 export function ago(timestamp, now = Date.now() / 1000) {
@@ -138,7 +144,7 @@ export function demoLiveEvent(sequence, now = Date.now(), random = Math.random) 
 function demoEvent(i, timestamp, id, ip, place) {
   const type = Object.keys(TYPES)[i % 8];
   const item = {id, cursor: String(BigInt(Math.floor(timestamp * 1000)) * 1000000n),
-    timestamp, observedAt: timestamp, type, kind: DEMO_KINDS[i % 8],
+    timestamp, observedAt: timestamp, origin: i === 9 ? "own" : "external", type, kind: DEMO_KINDS[i % 8],
     title: ["Stuck in Endlessh", "Targeted real SSH port", "Authelia sign-in failed", "Suspicious web request", "Service connection"][Math.min(i % 8, 4)],
     verdict: type === "authelia" ? "failure" : type === "web" ? "suspected" : type === "endlessh" ? "observed" : "unclassified",
     ip, port: [22, 28, 443, 443, 36676, 32400, 5205, 2222][i % 8],

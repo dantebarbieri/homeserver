@@ -1,4 +1,4 @@
-import {TYPES, mergeEvents, project, located, duration, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {TYPES, mergeEvents, project, located, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -14,6 +14,7 @@ const errors = new Map(), pulses = new Map();
 const demoLive = [];
 let demoSequence = 0;
 let sourceIssues = [];
+let trapSample = null, trapReceived = 0, completedTrapSeconds = null;
 let highlighted = null;
 let dotSettings = {...MAP_DEFAULTS}, catchingUp = false;
 const pointNodes = new Map();
@@ -126,6 +127,7 @@ function render() {
     const category = node("span", undefined, `badge type-${item.type}`);
     category.append(node("span", undefined, "legend-dot"), node("span", TYPES[item.type].label));
     badges.append(category, node("span", item.verdict, `badge verdict-${item.verdict}`));
+    if (item.origin === "own") badges.append(node("span", "Own", "badge origin-own"));
     if (item.keyStatus) badges.append(node("span", item.keyStatus === "recognized" ? "known key" : "unregistered key", `badge key-${item.keyStatus}`));
     classification.append(badges);
     const source = node("span", undefined, "event-cell");
@@ -155,7 +157,8 @@ function detail(item) {
   const fields = {
     "Event time": new Date(item.timestamp * 1000).toLocaleString(),
     "Collected": new Date(item.observedAt * 1000).toLocaleString(),
-    "Classification": item.verdict, "Source IP": item.ip, "Approx. location": item.location,
+    "Classification": item.verdict, "Traffic": item.origin === "own" ? "Own network (not proof of who is using it)" : "External",
+    "Source IP": item.ip, "Approx. location": item.location,
     "Evidence": item.reason,
     "Network owner": item.networkOrganization, "ASN": item.asn ? `AS${item.asn}` : undefined,
     "Cloud / provider": item.networkProvider, "Network evidence": item.networkEvidence,
@@ -194,7 +197,8 @@ $("health").onclick = () => { $("sources").hidden = !$("sources").hidden; };
 
 function matchesFilters(item) {
   return (!parameters.type || item.type === parameters.type) && (!parameters.outcome || item.verdict === parameters.outcome)
-    && (!parameters.ip || item.ip === parameters.ip) && (!parameters.user || item.user === parameters.user);
+    && (!parameters.ip || item.ip === parameters.ip) && (!parameters.user || item.user === parameters.user)
+    && (parameters.own === "1" || item.origin !== "own");
 }
 
 // A burst only flashes its newest events so the map stays readable.
@@ -224,6 +228,7 @@ async function load(reset = false, history = false) {
   busy = true;
   if (reset) {
     parameters = {range: $("range").value};
+    if ($("own").checked) parameters.own = "1";
     for (const name of ["type", "outcome", "ip", "user"]) if ($(name).value.trim()) parameters[name] = $(name).value.trim();
     events = []; latest = null; older = null; highlighted = null; catchingUp = false; pulses.clear();
   }
@@ -268,6 +273,7 @@ async function stats() {
   const period = $("range").value;
   try {
     const result = demo ? {available: true, totals: [{kind: "endlessh_open", value: 6821}, {kind: "ssh_failure", value: 143}, {kind: "auth_failure", value: 12}, {kind: "http_probe", value: 924}], trappedSeconds: 184800, lifetimeTrappedSeconds: 2064000,
+      trapping: {available: true, connections: 3, seconds: 340, since: Date.now() / 1000 - 3600},
       timeline: Array.from({length: 120}, (_, i) => [i, String(5 + (Math.sin(i * 1.9) + 1) * 7 + (i % 29 === 0 ? 30 : 0))])}
       : await request("/api/stats", {range: period});
     if (period !== $("range").value) return;
@@ -275,20 +281,32 @@ async function stats() {
     const failures = result.totals.filter(item => ["ssh_failure", "auth_failure"].includes(item.kind)).reduce((total, item) => total + item.value, 0);
     $("total").textContent = result.available ? Math.round(sum).toLocaleString() : "—";
     $("failures").textContent = result.available ? Math.round(failures).toLocaleString() : "—";
-    $("trapped").textContent = duration(result.trappedSeconds);
-    $("trapped-lifetime").textContent = `${duration(result.lifetimeTrappedSeconds)} since collection began`;
-    $("metric-status").textContent = demo ? "Synthetic preview" : result.available ? "Prometheus · estimates between scrapes" : "Waiting for two or more scrapes";
+    trapSample = result.trapping; trapReceived = performance.now(); completedTrapSeconds = result.trappedSeconds;
+    updateTrapping();
+    const since = new Date(trapSample.since * 1000).toLocaleString();
+    $("trapped-lifetime").textContent = `${duration(result.lifetimeTrappedSeconds)} completed external · since ${since}`;
+    $("metric-status").textContent = demo ? "Synthetic preview" : "Loki · logged events (own excluded)";
     spark(result.timeline);
     errors.delete("metrics");
   } catch (error) {
     if (period !== $("range").value) return;
     for (const id of ["total", "failures", "trapped"]) $(id).textContent = "—";
+    trapSample = null;
+    $("trapping-now").textContent = "Live trapping unavailable";
     $("trapped-lifetime").textContent = "Completed Endlessh connection time";
     $("metric-status").textContent = "Metrics unavailable";
     spark([]);
     errors.set("metrics", error.message);
   }
   notices();
+}
+
+function updateTrapping() {
+  if (!trapSample) return;
+  const active = liveTrapping(trapSample, performance.now() - trapReceived);
+  $("trapped").textContent = duration(completedTrapSeconds + (active?.seconds || 0));
+  $("trapping-now").textContent = active ? `${active.connections} trapped now · ${duration(active.seconds)} ongoing`
+    : "Completed only · live trapping unavailable";
 }
 
 async function health() {
@@ -298,7 +316,7 @@ async function health() {
     sourceIssues = [];
     const cards = [];
     const lookupSources = Object.fromEntries(Object.entries(result.networks?.feeds || {}).map(([name, value]) => [`network:${name}`, value]));
-    for (const [name, source] of Object.entries({...result.sources, geo: result.geo, sshKeys: result.sshKeys,
+    for (const [name, source] of Object.entries({...result.sources, geo: result.geo, sshKeys: result.sshKeys, ownTraffic: result.ownTraffic,
       ...(result.networks ? {asn: result.networks.asn} : {}), ...lookupSources})) {
       const message = source.message || (source.lagSeconds > 90 ? `Catching up: ${Math.round(source.lagSeconds)}s behind` : "Ready; a quiet source can have no matching events");
       const issue = source.state !== "ready" || source.lagSeconds > 90;
@@ -660,7 +678,7 @@ function mapPoints() {
   const activity = currentMapActivity();
   const ids = new Set(activity.points.map(({item}) => item.id));
   $("map-count").textContent = `${activity.points.length} dots · ${new Set(activity.points.map(({item}) => item.ip)).size} sources`;
-  mapCaption = `${activity.expired} faded · ${activity.omitted} outside dot limit · ${events.filter(item => !located(item)).length} unlocated`;
+  mapCaption = `${activity.expired} faded · ${activity.omitted} outside dot limit · ${events.filter(item => item.origin !== "own" && !located(item)).length} unlocated`;
   for (const [id, point] of pointNodes) {
     if (!ids.has(id)) {
       if ($("map-tooltip").dataset.eventId === id) hideTooltip();
@@ -743,6 +761,7 @@ for (const [key, value] of Object.entries(TYPES)) {
 
 function reload() { load(true); }
 $("filters").onsubmit = event => { event.preventDefault(); reload(); };
+$("own").onchange = reload;
 $("clear-filters").onclick = () => { $("filters").reset(); reload(); };
 $("range").onchange = () => { reload(); stats(); };
 $("older").onclick = () => load(false, true);
@@ -792,6 +811,6 @@ if (!navigator.onLine) errors.set("network", "Offline: live telemetry is unavail
 
 mapLand(); updateMapDetail(); load(true); stats(); health();
 if (demo && new URLSearchParams(location.search).get("simulate") !== "0") setTimeout(demoArrivals, 3000);
-setInterval(() => { if (!document.hidden) mapPoints(); }, 1000);
+setInterval(() => { if (!document.hidden) { mapPoints(); updateTrapping(); } }, 1000);
 setInterval(() => { if (!document.hidden && !demo) load(); }, 3000);
 setInterval(() => { if (!document.hidden) { stats(); health(); } }, 30000);

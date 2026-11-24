@@ -52,6 +52,10 @@
 @media(prefers-reduced-motion:reduce){.map-point.recent .map-flash,.map-point.recent .map-ring,.map-point.recent .map-dot{animation:none}.map-point.recent .map-dot{stroke:#fff;stroke-width:2}.map-dot{transition:none}}
 .filters{grid-template-columns:repeat(4,minmax(0,1fr)) auto}
 .filter-actions{display:flex;align-self:end;gap:8px}.filter-actions .button{flex:1;white-space:nowrap}
+.filters .own-toggle{grid-column:1/-1;flex-direction:row;align-items:center;min-height:44px;cursor:pointer}
+.filters .own-toggle input{width:18px;height:18px;min-height:18px;accent-color:var(--accent)}
+.origin-own{--color:#aab8ca}
+#trapping-now,#trapped-lifetime{display:block;line-height:1.5}
 .verdict-accepted,.key-recognized{--color:#94dfa5}
 .key-unregistered{--color:#efc477}
 .verdict-incomplete{--color:#aab8ca}

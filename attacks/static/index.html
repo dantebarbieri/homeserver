@@ -27,10 +27,10 @@
     </section>
     <div id="notice" role="status" class="notice" hidden></div>
     <section class="stats" aria-label="Aggregate metrics across all sources">
-      <article><span class="eyebrow">EVENTS OBSERVED</span><strong id="total">—</strong><small>All sources · selected window</small></article>
+      <article><span class="eyebrow">EVENTS OBSERVED</span><strong id="total">—</strong><small>External sources · selected window</small></article>
       <article><span class="eyebrow">FAILED SIGN-INS</span><strong id="failures">—</strong><small>Real SSH + Authelia</small></article>
-      <article title="Sum of completed Endlessh connection durations. Parallel connections count separately. This measures bot connection time, not human time."><span class="eyebrow">ATTACKER TIME WASTED</span><strong id="trapped">—</strong><small id="trapped-lifetime">Completed Endlessh connection time</small></article>
-      <article class="activity-card"><span class="eyebrow">EVENTS / MINUTE</span><canvas id="spark" aria-label="Event rate over the selected window" role="img"></canvas><small id="metric-status">Waiting for Prometheus</small></article>
+      <article title="Completed durations logged in the selected window plus elapsed time of currently observed external Endlessh sessions. Ongoing sessions contribute their full age, even if opened before the window. Parallel connections count separately: this is bot connection time, not human time."><span class="eyebrow">ATTACKER TIME WASTED</span><strong id="trapped">—</strong><small id="trapping-now">Waiting for live trapping</small><small id="trapped-lifetime">Completed external connection time</small></article>
+      <article class="activity-card"><span class="eyebrow">EVENTS / MINUTE</span><canvas id="spark" aria-label="Event rate over the selected window" role="img"></canvas><small id="metric-status">Waiting for Loki</small></article>
     </section>
     <section id="map-panel" class="map-panel" aria-label="Source IP locations">
       <div class="panel-top"><div><span class="live-dot" aria-hidden="true"></span><strong>GLOBAL ACTIVITY</strong><span id="map-count" class="muted"></span></div><div class="map-toolbar"><label class="projection-control">Projection<select id="projection"><option value="equal-earth">Equal Earth</option><option value="globe">Globe</option><option value="rectangular">Original rectangular</option></select></label><button id="fullscreen" class="button" aria-controls="map-panel" aria-pressed="false">Full screen</button></div></div>
@@ -69,6 +69,7 @@
         <label>Source IP<input id="ip" placeholder="IPv4 or IPv6" autocomplete="off" spellcheck="false"></label>
         <label>Attempted username<input id="user" placeholder="Exact username" autocomplete="off" maxlength="64" spellcheck="false"></label>
         <div class="filter-actions"><button class="button apply" type="submit">Apply filters <span aria-hidden="true">↗</span></button><button id="clear-filters" class="button" type="button">Clear filters</button></div>
+        <label class="own-toggle" title="Include LAN, Tailscale and home IPv6 audit events. Own traffic never appears on the map or in attack totals."><input id="own" type="checkbox"> Show own traffic</label>
       </form>
       <div class="feed-columns" aria-hidden="true"><span>TIME</span><span>EVENT / CLASSIFICATION</span><span>SOURCE</span><span>DETAIL</span><span></span></div>
       <div id="events" aria-live="off"></div>
