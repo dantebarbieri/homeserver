@@ -44,6 +44,8 @@
 #map-tooltip strong{font-size:12px;font-weight:600}
 #map-tooltip span{font-size:11px;color:#c1d0e0;overflow-wrap:anywhere}
 #map-tooltip small{font-size:9px;color:var(--muted)}
+#map-tooltip .tip-head{display:flex;justify-content:space-between;align-items:baseline;gap:14px}
+#map-tooltip .tip-ago{flex:none;font-size:10px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .event-row.highlighted{background:#193035;box-shadow:inset 3px 0 var(--accent)}
 @media(max-width:1000px){.map-controls{flex-wrap:wrap;justify-content:flex-start;padding:0 16px 14px;gap:0}.map-controls .legend{padding-left:0;padding-right:0;width:100%}.map-explainer{padding-left:16px;padding-right:16px}}
 @media(max-width:650px){.panel-top{flex-wrap:wrap;gap:12px}.projection-control{width:100%;justify-content:space-between}.map-explainer{font-size:9px}.map-controls .legend{gap:12px}.map-overlay{pointer-events:none}#map-tooltip strong{font-size:11px}#map-tooltip span{font-size:10px}}

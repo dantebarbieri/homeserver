@@ -82,6 +82,16 @@ export function duration(seconds) {
   return `${Math.round(seconds)} s`;
 }
 
+export function ago(timestamp, now = Date.now() / 1000) {
+  if (!Number.isFinite(timestamp)) return "";
+  // Clock skew can put an event slightly in the future.
+  const seconds = Math.max(0, Math.floor(now - timestamp));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
 // The flash is a short celebration of "just detected"; only genuinely fresh events earn it.
 export const FLASH = {seconds: 6, maxConcurrent: 12, liveWindow: 60, loadWindow: 30};
 

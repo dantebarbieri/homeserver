@@ -1,4 +1,4 @@
-import {TYPES, mergeEvents, project, located, duration, demoEvents, demoLiveEvent, FLASH, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {TYPES, mergeEvents, project, located, duration, ago, demoEvents, demoLiveEvent, FLASH, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
 import {createMapView} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -462,21 +462,32 @@ function positionCountryLabels() {
 
 function hideTooltip() { $("map-tooltip").hidden = true; }
 
+function refreshTooltipAge() {
+  const target = $("map-tooltip"), age = target.querySelector(".tip-ago");
+  if (!target.hidden && age) age.textContent = ago(Number(target.dataset.timestamp));
+}
+
 function tooltip(item, point) {
   const target = $("map-tooltip");
   target.dataset.eventId = item.id;
-  target.replaceChildren(node("strong", item.title),
+  target.dataset.timestamp = String(item.timestamp);
+  const head = node("div", undefined, "tip-head");
+  head.append(node("strong", item.title), node("time", ago(item.timestamp), "tip-ago"));
+  target.replaceChildren(head,
     node("span", item.ip), locationLabel(item), networkBadges(item),
     node("span", `${TYPES[item.type].label} · port ${item.port}${item.user ? ` · user ${item.user}` : ""}`),
-    node("small", `${new Date(item.timestamp * 1000).toLocaleString()} · Click to find in stream`));
+    node("small", `${new Date(item.timestamp * 1000).toLocaleString()} · ${opensDetail() ? "Click for details" : "Click to find in stream"}`));
   target.hidden = false;
   const box = point.getBoundingClientRect(), parent = $("map").parentElement.getBoundingClientRect();
   target.style.left = `${Math.max(8, Math.min(box.left - parent.left + 12, parent.width - target.offsetWidth - 8))}px`;
   target.style.top = `${Math.max(8, Math.min(box.top - parent.top - target.offsetHeight - 12, parent.height - target.offsetHeight - 8))}px`;
 }
 
+// Fullscreen and mobile open the details panel; the inline desktop map scrolls to the stream row instead.
+function opensDetail() { return mapView.expanded() || matchMedia("(max-width: 650px)").matches; }
+
 function reveal(item) {
-  if (mapView.expanded() || matchMedia("(max-width: 650px)").matches) { detail(item); return; }
+  if (opensDetail()) { detail(item); return; }
   highlighted = item.id;
   hideTooltip();
   for (const row of $("events").children) row.classList.toggle("highlighted", row.dataset.eventId === item.id);
@@ -570,6 +581,7 @@ function currentMapActivity() {
 }
 
 function mapPoints() {
+  refreshTooltipAge();
   const activity = currentMapActivity();
   const ids = new Set(activity.points.map(({item}) => item.id));
   $("map-count").textContent = `${activity.points.length} dots · ${new Set(activity.points.map(({item}) => item.ip)).size} sources`;
@@ -588,7 +600,7 @@ function mapPoints() {
       const {x, y, visible} = pointPosition(item);
       point = svg("g", {transform: `translate(${x} ${y})`, class: `map-point type-${item.type}${age < FLASH.seconds ? " recent" : ""}`,
         tabindex: "0", role: "button", "aria-describedby": "map-tooltip",
-        "aria-label": `${item.title}: ${item.ip}, ${item.location || "location unavailable"}. Show event in stream.`});
+        "aria-label": `${item.title}: ${item.ip}, ${item.location || "location unavailable"}. Select to open this event.`});
       point.dataset.eventId = item.id;
       point.append(svg("circle", {r: 12, class: "map-hit"}), svg("circle", {r: 5, class: "map-flash"}),
         svg("circle", {r: 5, class: "map-ring"}), svg("circle", {r: 5, class: "map-ring late"}), svg("circle", {r: 2.5, class: "map-dot"}));
@@ -626,7 +638,7 @@ $("projection").onchange = () => {
 function showMapSettings() {
   for (const [key, value] of Object.entries(dotSettings)) $(key).value = value;
   $("map-setting-summary").textContent = `Map settings · hold ${dotSettings.keep} · fade ${dotSettings.fadeMinutes}m · limit ${dotSettings.maxDots}`;
-  $("map-explainer").textContent = `The newest ${dotSettings.keep} located events stay bright. Older dots fade over ${dotSettings.fadeMinutes} minutes; at most ${dotSettings.maxDots} are shown. During bursts, oldest dots leave first. Hover for details; click to find an event. Detailed borders do not make approximate IP locations more precise.`;
+  $("map-explainer").textContent = `The newest ${dotSettings.keep} located events stay bright. Older dots fade over ${dotSettings.fadeMinutes} minutes; at most ${dotSettings.maxDots} are shown. During bursts, oldest dots leave first. Hover for a summary; click to open the event. Detailed borders do not make approximate IP locations more precise.`;
 }
 $("map-settings").onsubmit = event => {
   event.preventDefault();

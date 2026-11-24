@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, mergeEvents, located, project, duration, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
+import {TYPES, mergeEvents, located, project, duration, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
 import {constrainView, zoomView} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -31,6 +31,17 @@ test("missing and invalid locations never invent map coordinates", () => {
   assert.equal(located({latitude: 0, longitude: 0}), true);
   assert.deepEqual(project(0, 0, 760, 380), [380, 190]);
   assert.equal(duration(null), "—");
+});
+
+test("time ago reads in the largest whole unit and never goes negative", () => {
+  const now = 10_000_000;
+  assert.equal(ago(now - 5, now), "5s ago");
+  assert.equal(ago(now + 3, now), "0s ago");
+  assert.equal(ago(now - 59.9, now), "59s ago");
+  assert.equal(ago(now - 15 * 60, now), "15m ago");
+  assert.equal(ago(now - 3 * 3600 - 59, now), "3h ago");
+  assert.equal(ago(now - 2 * 86400, now), "2d ago");
+  assert.equal(ago(undefined, now), "");
 });
 
 const dots = count => Array.from({length: count}, (_, i) => ({
