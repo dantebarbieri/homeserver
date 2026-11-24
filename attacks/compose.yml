@@ -1,0 +1,88 @@
+# Like ChasEx: an explicit, independent deployment on the existing networks.
+# This file is NOT part of the nightly main Compose update.
+name: attacks
+services:
+  attacks:
+    extends:
+      file: ../docker/compose.common.yml
+      service: common-service
+    image: attacks:local
+    build:
+      context: .
+    container_name: attacks
+    init: true
+    networks:
+      - proxy
+      - monitoring
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    environment:
+      LOKI_URL: http://loki:3100
+      PROMETHEUS_URL: http://prometheus:9090
+      COLLECTOR_URL: http://attacks-collector:9108
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  attacks-collector:
+    extends:
+      file: ../docker/compose.common.yml
+      service: common-service
+    image: attacks:local
+    build:
+      context: .
+    container_name: attacks-collector
+    command: ["python", "collector.py"]
+    init: true
+    networks:
+      - monitoring
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 384m
+    environment:
+      LOKI_URL: http://loki:3100
+    volumes:
+      - type: bind
+        source: ${DATA:-/srv/docker/data}/attacks/state
+        target: /state
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /etc/attacks
+        target: /keys
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/lib/attacks-intelligence
+        target: /geo
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA:-/srv/docker/data}/nginxproxymanager/data/logs
+        target: /npm
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9108/healthz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+networks:
+  proxy:
+    external: true
+    name: compose_proxy
+  monitoring:
+    external: true
+    name: compose_monitoring

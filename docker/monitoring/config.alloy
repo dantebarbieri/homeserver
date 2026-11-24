@@ -44,6 +44,29 @@ loki.source.docker "containers" {
   forward_to = [loki.write.local.receiver]
 }
 
+// Do not use '+' here: Alloy's journal matches do not support journalctl OR.
+// The image runs as root, which can read the read-only journal mounts.
+loki.source.journal "attacks_ssh" {
+  matches    = "_SYSTEMD_UNIT=sshd.service"
+  max_age    = "1h"
+  labels     = {security_source = "ssh"}
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.source.journal "attacks_fail2ban" {
+  matches    = "_SYSTEMD_UNIT=fail2ban.service"
+  max_age    = "1h"
+  labels     = {security_source = "fail2ban"}
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.source.journal "attacks_connections" {
+  matches    = "_SYSTEMD_UNIT=attacks-connections.service"
+  max_age    = "1h"
+  labels     = {security_source = "connections"}
+  forward_to = [loki.write.local.receiver]
+}
+
 // Ship logs to Loki
 loki.write "local" {
   endpoint {

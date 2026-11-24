@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101012">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Attacks">
+  <title>Attacks · Calcifer</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+  <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <header class="appbar">
+    <a class="brand" href="/"><span class="brand-icon" aria-hidden="true">⌖</span><strong>ATTACKS<span> / CALCIFER</span></strong></a>
+    <div class="top-right"><span class="private">PRIVATE OBSERVATORY</span><button id="health" class="status" aria-controls="sources">Connecting</button></div>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">THE INTERNET AT YOUR DOOR</p><h1>A little light in the noise.</h1><p class="subtitle">Connections, traps, and failed sign-ins. Observed, not assumed.</p></div>
+      <label class="period">Observation window<select id="range"><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h" selected>Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label>
+    </section>
+    <div id="notice" role="status" class="notice" hidden></div>
+    <section class="stats" aria-label="Aggregate metrics across all sources">
+      <article><span class="eyebrow">EVENTS OBSERVED</span><strong id="total">—</strong><small>All sources · selected window</small></article>
+      <article><span class="eyebrow">FAILED SIGN-INS</span><strong id="failures">—</strong><small>Real SSH + Authelia</small></article>
+      <article title="Sum of completed Endlessh connection durations. Parallel connections count separately. This measures bot connection time, not human time."><span class="eyebrow">HONEYPOT TIME WASTED</span><strong id="trapped">—</strong><small id="trapped-lifetime">Completed Endlessh connection time</small></article>
+      <article class="activity-card"><span class="eyebrow">EVENTS / MINUTE</span><canvas id="spark" aria-label="Event rate over the selected window" role="img"></canvas><small id="metric-status">Waiting for Prometheus</small></article>
+    </section>
+    <section id="map-panel" class="map-panel" aria-label="Source IP locations">
+      <div class="panel-top"><div><span class="live-dot" aria-hidden="true"></span><strong>GLOBAL ACTIVITY</strong><span id="map-count" class="muted"></span></div><div class="map-toolbar"><label class="projection-control">Projection<select id="projection"><option value="equal-earth">Equal Earth</option><option value="globe">Globe</option><option value="rectangular">Original rectangular</option></select></label><button id="fullscreen" class="button" aria-controls="map-panel" aria-pressed="false">Full screen</button></div></div>
+      <div class="map-wrap">
+        <svg id="map" viewBox="0 0 1000 500" tabindex="0" aria-label="Interactive world map. Activate dots for events. Drag or use arrow keys to rotate the globe, or pan a fullscreen flat map. Pinch, scroll, or use plus/minus to zoom. Zero resets the view.">
+          <defs>
+            <radialGradient id="globe-water" cx="35%" cy="30%" r="75%"><stop stop-color="#303036"/><stop offset=".7" stop-color="#202025"/><stop offset="1" stop-color="#111115"/></radialGradient>
+            <radialGradient id="globe-shade" cx="40%" cy="35%" r="65%"><stop offset=".65" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></radialGradient>
+          </defs>
+          <path id="map-sphere" hidden aria-hidden="true"/>
+          <g id="map-grid" aria-hidden="true"></g><g id="map-land" aria-hidden="true"></g>
+          <path id="map-shading" hidden aria-hidden="true"/>
+          <g id="map-labels" aria-hidden="true"></g><g id="map-points"></g>
+        </svg>
+        <div id="map-tooltip" role="tooltip" hidden></div><div id="map-arrivals" aria-hidden="true"></div>
+        <div id="map-navigation" hidden><button id="map-zoom-in" class="button" aria-label="Zoom in">+</button><output id="map-zoom-level" aria-label="Zoom level">100%</output><button id="map-zoom-out" class="button" aria-label="Zoom out">−</button><button id="map-reset" class="button" title="Zoom out; on the globe, face the most activity with north up">Reset view</button></div>
+        <div class="map-overlay"><span>INBOUND SIGNAL</span><strong id="map-caption">Waiting for telemetry</strong></div>
+      </div>
+      <div class="map-status"><span id="map-gesture-hint" hidden></span><span id="map-detail-status"></span><span id="arrival-status"></span><span id="fullscreen-status" role="status"></span></div>
+      <div class="map-controls"><div class="legend" id="legend" aria-label="Map color key"></div><label class="history-toggle" title="Also show expired loaded events as faint dots, still respecting the map limit."><input id="history-dots" type="checkbox"> Show older history</label></div>
+      <details class="map-options"><summary id="map-setting-summary">Map settings</summary><form id="map-settings">
+        <label>Keep newest dots<input id="keep" type="number" min="0" max="1000" step="1" required></label>
+        <label>Fade over (minutes)<input id="fadeMinutes" type="number" min="1" max="1440" step="1" required></label>
+        <label>Maximum map dots<input id="maxDots" type="number" min="1" max="1000" step="1" required></label>
+        <button class="button" type="submit">Apply map settings</button>
+      </form><p>Saved in this browser. The limit affects only the map, never collection or stored events. Set Keep newest to 0 to let every dot fade.</p></details>
+      <p id="map-explainer" class="map-explainer"></p>
+      <dialog id="detail"><div class="sheet-grip" aria-hidden="true"></div><div class="dialog-heading"><p class="eyebrow">EVENT DETAILS</p><button id="close" class="button" aria-label="Close event details">✕</button></div><h2 id="detail-title"></h2><dl id="detail-fields"></dl><p class="detail-note">An IP can be a VPN, relay, shared address, or spoofed source. Location is approximate. No passwords, cookies, or request bodies are collected.</p><button id="filter-ip" class="button">Show this source's events</button></dialog>
+    </section>
+    <section id="sources" class="source-panel" hidden aria-label="Collector health"><h2>Collection health</h2><p>No events is not proof of no attacks. Quiet log queries do not prove that the originating service is logging correctly.</p><div id="source-list"></div></section>
+    <section class="feed-panel">
+      <div class="feed-heading"><div><p class="eyebrow">THE DETAIL BEHIND THE DOTS</p><h2>Event stream <span id="feed-count"></span></h2></div><button id="pause" class="button">Pause live</button></div>
+      <form id="filters" class="filters">
+        <label>Event type<select id="type"><option value="">All types</option><option value="endlessh">Endlessh</option><option value="ssh">Real SSH</option><option value="authelia">Authelia</option><option value="web">Web / NPM</option><option value="minecraft">Minecraft</option><option value="plex">Plex</option><option value="game">Other games</option><option value="git">Git SSH</option></select></label>
+        <label>Outcome<select id="outcome"><option value="">All outcomes</option><option value="accepted">Login accepted</option><option value="failure">Sign-in rejected</option><option value="incomplete">Pre-auth disconnect</option><option value="blocked">Blocked / banned</option><option value="suspected">Suspected probe</option><option value="observed">Honeypot observed</option><option value="unclassified">Unclassified connection</option></select></label>
+        <label>Source IP<input id="ip" placeholder="IPv4 or IPv6" autocomplete="off" spellcheck="false"></label>
+        <label>Attempted username<input id="user" placeholder="Exact username" autocomplete="off" maxlength="64" spellcheck="false"></label>
+        <div class="filter-actions"><button class="button apply" type="submit">Apply filters <span aria-hidden="true">↗</span></button><button id="clear-filters" class="button" type="button">Clear filters</button></div>
+      </form>
+      <div class="feed-columns" aria-hidden="true"><span>TIME</span><span>EVENT / CLASSIFICATION</span><span>SOURCE</span><span>DETAIL</span><span></span></div>
+      <div id="events" aria-live="off"></div>
+      <div id="empty" class="empty">Connecting to the event collector…</div>
+      <div class="feed-footer"><span id="feed-note">Updates every 3 seconds. Events are not unique attacks.</span><button id="older" class="button" hidden>Load older events</button></div>
+    </section>
+    <div class="app-install"><button id="install-app" class="button" hidden>Install app</button><span>On iPhone: Safari → Share → Add to Home Screen.</span><span id="pwa-status" role="status"></span></div>
+    <footer><span>Passive observation. No automatic blocking or payload recording.</span><span><a href="https://www.naturalearthdata.com/" rel="noreferrer">Natural Earth</a> · <a href="https://db-ip.com/" rel="noreferrer">IP Geolocation by DB-IP</a> · <a href="/flags-LICENSE.txt">Noto flag emoji</a> · <a href="/geo-vendor-LICENSE.txt">Map libraries</a></span></footer>
+  </main>
+</body>
+</html>

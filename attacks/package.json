@@ -1,0 +1,19 @@
+{
+  "name": "homeserver-attacks-map",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:map": "node build-map.mjs",
+    "build:atlas": "node build-atlas.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "d3-geo": "3.1.2",
+    "topojson-client": "3.1.0",
+    "versor": "0.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "topojson-server": "3.0.1"
+  }
+}

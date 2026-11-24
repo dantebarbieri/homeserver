@@ -429,6 +429,13 @@
             - { field: passkeys, label: Passkeys, format: text }
 
 - Monitoring:
+    - Attacks:
+        icon: mdi-radar
+        href: https://attacks.danteb.com
+        description: Passive Security Events & Live Source Map
+        siteMonitor: https://attacks.danteb.com
+        server: my-docker
+        container: attacks
     - ChasEx:
         icon: mdi-server
         href: https://chasex.danteb.com

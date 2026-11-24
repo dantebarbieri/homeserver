@@ -1,0 +1,12 @@
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!common.py
+!events.py
+!ssh_keys.py
+!networks.py
+!collector.py
+!server.py
+!static
+!static/**

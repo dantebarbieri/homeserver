@@ -70,6 +70,10 @@ services:
     volumes:
       - ./monitoring/config.alloy:/etc/alloy/config.alloy:ro
       - ${DATA}/alloy:/var/lib/alloy
+      # Fixed source filters below; no host API or writable journal access.
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
     networks:
       - monitoring
       - alloy-docker-api
