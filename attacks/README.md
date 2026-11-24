@@ -88,7 +88,13 @@ are explicit and retain the available map. This is regional cartography, not
 street-level OpenStreetMap or a claim that disputed borders are uncontested.
 More detailed borders do not improve the accuracy of IP geolocation.
 
-The newest **7 located events** in the loaded view stay bright. Older dots start
+**One dot represents one source IP**, not one request. The dot shows how many
+matching events from that IP are loaded. Its color and age follow the latest
+observation; its position uses the most recent available location for that IP.
+Different IPs at the same coordinates are still different sources. Every request
+remains a separate stream row and still counts toward event totals.
+
+The **7 most recently active located sources** in the loaded view stay bright. Older dots start
 fading when displaced from that group and disappear after **30 minutes**.
 The map has a hard **300-dot limit**, dropping oldest points first during bursts;
 this never deletes collected events. **Map settings** adjusts all three values
@@ -96,7 +102,7 @@ and saves them in the browser. Set the held count to 0 for a fully fading map.
 Fading uses collection time, not time since opening the page. **Show older
 history** optionally restores expired dots faintly, still within the limit.
 
-A new event **flashes** where it lands: a white-hot dot with two expanding
+A new event **flashes** its source's dot: a white-hot dot with two expanding
 rings that settles into its type colour within about six seconds, then joins the
 slow fade above. Only genuinely fresh events flash (arrived within 60 seconds,
 or 30 seconds on first load, by the server's clock), at most 12 at once, so
@@ -105,14 +111,15 @@ globe events cannot flash unless **Follow** turns to them, which replays their
 flash and summary on arrival. Reduced-motion replaces the animation with a static
 white outline for the same six seconds. Brief summary cards last 4.5 seconds.
 Desktop summaries track the dot center, not the expanding rings. Up to three are
-shown; when events share a location, cards keep their separate spots as older
+shown, one per IP; when different IPs share a location, cards keep their separate spots as older
 ones fade. With Follow on, an offscreen arrival's card appears only once its
 dot is in view. Phones show one bottom card, with overflow disclosed during bursts.
 Hover/focus always offers details: the hover
 card shows how long ago the event happened (top right, kept current while open)
 and a hint that matches what a click does. Normal
-desktop clicks highlight the corresponding stream row. In fullscreen, or on
-mobile, a dot directly opens full event details; phones use a scrollable bottom
+desktop clicks filter the stream to a multi-event source's IP (or highlight its
+row for a single event). In fullscreen or on mobile, a dot opens the latest
+event details with a link to the source's stream; phones use a scrollable bottom
 sheet, with 48-pixel invisible touch targets around visible dots.
 
 **Full screen** supports wheel/pinch zoom, drag-to-pan, zoom/reset buttons and

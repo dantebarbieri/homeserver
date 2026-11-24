@@ -1,4 +1,4 @@
-import {TYPES, mergeEvents, project, located, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {TYPES, mergeEvents, project, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -10,7 +10,7 @@ const demo = new URLSearchParams(location.search).get("demo") === "1";
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 let events = [], world = null, live = true, latest = null, older = null, hasOlder = false;
 let generation = 0, busy = false, selected = null, parameters = {range: "24h"};
-const errors = new Map(), pulses = new Map();
+const errors = new Map(), pulses = new Map(), freshIds = new Set();
 const demoLive = [];
 let demoSequence = 0;
 let sourceIssues = [];
@@ -23,7 +23,7 @@ const arrivals = new Map();
 let arrivalsOmitted = 0;
 let globeLand = [], mapCaption = "Waiting for telemetry";
 let activeDetail = null, wantedDetail = "110m", countryLabels = [];
-// Follow mode: fresh dots wait here (id -> {queued, unseen}) until the view is free to move to them.
+// Pending arrivals are keyed by source IP, like the markers and cards.
 const followQueue = new Map();
 let following = false, followZoom = FOLLOW.zoom, followHold = 0, followStatusTimer = 0;
 const atlas = new Map(), atlasPending = new Set(), atlasFailed = new Map();
@@ -177,7 +177,7 @@ function render() {
     row.append(time, classification, source, extra, node("span", "↗", "event-arrow"));
     fragment.append(row);
   }
-  const focusedId = document.activeElement?.dataset.eventId;
+  const focusedId = $("events").contains(document.activeElement) ? document.activeElement.dataset.eventId : null;
   [...fragment.children].forEach((row, i) => { row.dataset.eventId = events[i].id; });
   $("events").replaceChildren(fragment);
   if (focusedId) [...$("events").children].find(row => row.dataset.eventId === focusedId)?.focus({preventScroll: true});
@@ -188,11 +188,12 @@ function render() {
   mapPoints();
 }
 
-function detail(item) {
+function detail(item, sourceCount) {
   hideTooltip();
   selected = item;
   $("detail-title").textContent = item.title;
   const fields = {
+    "Source activity": sourceCount > 1 ? `${loadedEvents(sourceCount)}; showing the latest. View this source's events below.` : undefined,
     "Event time": new Date(item.timestamp * 1000).toLocaleString(),
     "Collected": new Date(item.observedAt * 1000).toLocaleString(),
     "Classification": item.verdict, "Traffic": item.origin === "own" ? "Own network (not proof of who is using it)" : "External",
@@ -226,22 +227,21 @@ function detail(item) {
 $("close").onclick = () => $("detail").close();
 $("detail").addEventListener("close", () => document.body.classList.remove("detail-open"));
 $("detail").addEventListener("click", event => { if (event.target === $("detail")) { const box = $("detail").getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) $("detail").close(); } });
-$("filter-ip").onclick = async () => {
-  $("ip").value = selected.ip; $("detail").close();
+async function showSource(ip) {
+  hideTooltip();
+  $("ip").value = ip;
   if (mapView.expanded()) await mapView.exit();
-  reload(); $("events").scrollIntoView({block: "start"});
-};
+  await load(true);
+  $("events").scrollIntoView({block: "start"});
+  $("events").firstElementChild?.focus({preventScroll: true});
+}
+$("filter-ip").onclick = () => { $("detail").close(); showSource(selected.ip); };
 $("health").onclick = () => { $("sources").hidden = !$("sources").hidden; };
 
 function matchesFilters(item) {
   return (!parameters.type || item.type === parameters.type) && (!parameters.outcome || item.verdict === parameters.outcome)
     && (!parameters.ip || item.ip === parameters.ip) && (!parameters.user || item.user === parameters.user)
     && (parameters.own === "1" || item.origin !== "own");
-}
-
-// A burst only flashes its newest events so the map stays readable.
-function pulse(item) {
-  if (pulses.size < FLASH.maxConcurrent) pulses.set(item.id, performance.now());
 }
 
 // Demo only: simulate scanners arriving every few seconds, with occasional bursts.
@@ -256,7 +256,7 @@ function demoArrivals() {
   const shown = fresh.filter(matchesFilters);
   if (!shown.length) return;
   events = mergeEvents(events, shown);
-  for (const item of shown.toReversed()) pulse(item);
+  for (const item of shown) freshIds.add(item.id);
   render();
 }
 
@@ -268,13 +268,16 @@ async function load(reset = false, history = false) {
     parameters = {range: $("range").value};
     if ($("own").checked) parameters.own = "1";
     for (const name of ["type", "outcome", "ip", "user"]) if ($(name).value.trim()) parameters[name] = $(name).value.trim();
-    events = []; latest = null; older = null; highlighted = null; catchingUp = false; pulses.clear();
+    events = []; latest = null; older = null; highlighted = null; catchingUp = false; pulses.clear(); freshIds.clear();
+    followQueue.clear();
+    for (const {node} of arrivals.values()) node.remove();
+    arrivals.clear(); arrivalsOmitted = 0;
   }
   try {
     if (demo) {
       events = mergeEvents(demoLive, demoEvents()).filter(matchesFilters);
       latest = "demo";
-      if (reset) for (const item of events) if (isFresh(item, FLASH.loadWindow)) pulse(item);
+      if (reset) for (const item of events) if (isFresh(item, FLASH.loadWindow)) freshIds.add(item.id);
     } else {
       const query = {...parameters};
       if (history && older) query.before = older;
@@ -285,7 +288,7 @@ async function load(reset = false, history = false) {
         const known = new Set(events.map(item => item.id));
         for (const item of result.events) {
           // Server time keeps freshness correct when this device's clock is off.
-          if (!known.has(item.id) && !history && isFresh(item, reset ? FLASH.loadWindow : FLASH.liveWindow, result.queriedAt)) pulse(item);
+          if (!known.has(item.id) && !history && isFresh(item, reset ? FLASH.loadWindow : FLASH.liveWindow, result.queriedAt)) freshIds.add(item.id);
         }
         events = mergeEvents(events, result.events);
         if (reset || history) { older = result.next; hasOlder = result.more; }
@@ -533,27 +536,36 @@ function refreshTooltipAge() {
   if (!target.hidden && age) age.textContent = ago(Number(target.dataset.timestamp));
 }
 
-function tooltip(item, point) {
+function loadedEvents(count) { return `${count} loaded event${count === 1 ? "" : "s"}`; }
+
+function clickHint(count) {
+  if (opensDetail()) return count > 1 ? "Click for source and latest event details" : "Click for details";
+  return count > 1 ? "Click to show this source's events" : "Click to find in stream";
+}
+
+function tooltip(point) {
+  const {latest: item, place, count} = pointData.get(point);
   const target = $("map-tooltip");
-  target.dataset.eventId = item.id;
+  target.dataset.sourceIp = item.ip;
   target.dataset.timestamp = String(item.timestamp);
   const head = node("div", undefined, "tip-head");
   head.append(node("strong", item.title), node("time", ago(item.timestamp), "tip-ago"));
   target.replaceChildren(head,
-    node("span", item.ip), locationLabel(item), networkBadges(item),
+    node("span", `${item.ip} · ${loadedEvents(count)}`), locationLabel(place), networkBadges(item),
     node("span", `${TYPES[item.type].label} · port ${item.port}${item.user ? ` · user ${item.user}` : ""}`),
-    node("small", `${new Date(item.timestamp * 1000).toLocaleString()} · ${opensDetail() ? "Click for details" : "Click to find in stream"}`));
+    node("small", `${new Date(item.timestamp * 1000).toLocaleString()} · ${clickHint(count)}`));
   target.hidden = false;
   const center = point.getScreenCTM(), parent = $("map").parentElement.getBoundingClientRect();
   target.style.left = `${Math.max(8, Math.min(center.e - parent.left + 12, parent.width - target.offsetWidth - 8))}px`;
   target.style.top = `${Math.max(8, Math.min(center.f - parent.top - target.offsetHeight - 12, parent.height - target.offsetHeight - 8))}px`;
 }
 
-// Fullscreen and mobile open the details panel; the inline desktop map scrolls to the stream row instead.
+// Mobile/fullscreen keep their detail sheet; the inline map goes straight to the stream.
 function opensDetail() { return mapView.expanded() || matchMedia("(max-width: 650px)").matches; }
 
-function reveal(item) {
-  if (opensDetail()) { detail(item); return; }
+function reveal({latest: item, count}) {
+  if (opensDetail()) { detail(item, count); return; }
+  if (count > 1) { showSource(item.ip); return; }
   highlighted = item.id;
   hideTooltip();
   for (const row of $("events").children) row.classList.toggle("highlighted", row.dataset.eventId === item.id);
@@ -588,20 +600,22 @@ function positionArrivals() {
   $("arrival-status").textContent = arrivalsOmitted ? `${arrivalsOmitted} more arrivals in this burst; hover or tap dots for details.` : "";
 }
 
-function arrival(item) {
-  arrivals.get(item.id)?.node.remove();
-  arrivals.delete(item.id);
+function arrival({latest: item, place, count}) {
+  const previous = arrivals.get(item.ip);
+  previous?.node.remove();
+  arrivals.delete(item.ip);
   const limit = matchMedia("(max-width: 650px)").matches ? 1 : 3;
   while (arrivals.size >= limit) {
     const oldest = arrivals.keys().next().value;
     arrivals.get(oldest).node.remove(); arrivals.delete(oldest); arrivalsOmitted++;
   }
   const card = node("div", undefined, `arrival-summary type-${item.type}`);
-  card.append(node("strong", item.title), node("span", item.ip, "mono"), locationLabel(item),
+  const label = node("span", `${item.ip} · ${loadedEvents(count)}`, "mono");
+  card.append(node("strong", item.title), label, locationLabel(place),
     node("small", `${TYPES[item.type].label} · ${item.verdict}${item.user ? ` · user ${item.user}` : item.path ? ` · ${item.path}` : ` · port ${item.port}`}`),
     networkBadges(item));
   $("map-arrivals").append(card);
-  arrivals.set(item.id, {node: card, expires: performance.now() + 4500});
+  arrivals.set(item.ip, {node: card, label, expires: performance.now() + 4500, spot: previous?.spot});
 }
 
 function sizeMapMarkers() {
@@ -648,14 +662,10 @@ function setFollowing(value, message = "") {
   notices();
 }
 
-// Dots that arrived out of sight flashed unseen; once the view reaches them they get their arrival back.
-function replayArrival(item) {
-  const point = pointNodes.get(item.id);
-  pulses.set(item.id, performance.now());
+function flash(point) {
   point.classList.remove("recent");
   point.getBoundingClientRect();
   point.classList.add("recent");
-  arrival(item);
 }
 
 function followTick() {
@@ -664,14 +674,21 @@ function followTick() {
   if (!following || !mapView.interactive()) { followQueue.clear(); return; }
   if (!followQueue.size || now < followHold || mapView.moving() || mapView.held() || document.hidden
     || !$("map-tooltip").hidden || $("detail").open) return;
-  const queued = new Map(followQueue);
-  const items = [...queued.keys()].map(id => pointData.get(pointNodes.get(id))).sort((a, b) => b.observedAt - a.observedAt);
+  const queued = new Map(followQueue), epoch = generation;
+  const sources = [...queued.keys()].map(ip => pointData.get(pointNodes.get(ip)))
+    .sort((a, b) => b.latest.observedAt - a.latest.observedAt);
+  const items = sources.map(source => source.place);
   followQueue.clear();
   function showMissed() {
     let room = FLASH.maxConcurrent - pulses.size;
-    const missed = items.filter(item => queued.get(item.id).unseen && pointNodes.has(item.id) && onScreen(item)
-      && (pulses.has(item.id) || room-- > 0));
-    for (const item of missed.toReversed()) replayArrival(item);
+    const missed = sources.filter(({ip, latest, place}) => queued.get(ip).unseen && pointNodes.has(ip)
+      && pointData.get(pointNodes.get(ip)).latest.id === latest.id && onScreen(place)
+      && (pulses.has(ip) || room-- > 0));
+    for (const {ip, latest} of missed.toReversed()) {
+      const point = pointNodes.get(ip);
+      pulses.set(ip, {id: latest.id, started: performance.now()});
+      flash(point); arrival(pointData.get(point));
+    }
     if (missed.length) positionArrivals();
   }
   let target;
@@ -686,6 +703,7 @@ function followTick() {
     target = {points, zoom: followZoom};
   }
   mapView.flyTo(target, landed => {
+    if (epoch !== generation || !following) return;
     followHold = performance.now() + FOLLOW.holdMs;
     // An interrupted move (zoom, projection change) keeps its dots queued for the next one.
     if (!landed) { for (const [id, entry] of queued) if (!followQueue.has(id)) followQueue.set(id, entry); return; }
@@ -696,12 +714,12 @@ function followTick() {
 function positionMapPoints() {
   let backside = 0;
   for (const point of pointNodes.values()) {
-    const item = pointData.get(point), {x, y, visible} = pointPosition(item);
+    const source = pointData.get(point), {x, y, visible} = pointPosition(source.place);
     point.setAttribute("transform", `translate(${x} ${y})`);
     point.toggleAttribute("hidden", !visible);
     if (!visible) {
       backside++;
-      if ($("map-tooltip").dataset.eventId === item.id) hideTooltip();
+      if ($("map-tooltip").dataset.sourceIp === source.ip) hideTooltip();
     }
   }
   $("map-caption").textContent = `${mapCaption}${isGlobe() ? ` · ${backside} on far side` : ""}`;
@@ -714,48 +732,64 @@ function currentMapActivity() {
 function mapPoints() {
   refreshTooltipAge();
   const activity = currentMapActivity();
-  const ids = new Set(activity.points.map(({item}) => item.id));
-  counter("map-count", `${activity.points.length} dots · ${new Set(activity.points.map(({item}) => item.ip)).size} sources`);
-  mapCaption = `${activity.expired} faded · ${activity.omitted} outside dot limit · ${events.filter(item => item.origin !== "own" && !located(item)).length} unlocated`;
-  for (const [id, point] of pointNodes) {
-    if (!ids.has(id)) {
-      if ($("map-tooltip").dataset.eventId === id) hideTooltip();
-      point.remove(); pointNodes.delete(id);
+  const ips = new Set(activity.points.map(source => source.ip));
+  const represented = activity.points.reduce((sum, source) => sum + source.count, 0);
+  counter("map-count", `${ips.size} source${ips.size === 1 ? "" : "s"} · ${loadedEvents(represented)}`);
+  mapCaption = `${activity.expired} faded · ${activity.omitted} outside dot limit · ${activity.unlocated} unlocated`;
+  for (const [ip, point] of pointNodes) {
+    if (!ips.has(ip)) {
+      if ($("map-tooltip").dataset.sourceIp === ip) hideTooltip();
+      point.remove(); pointNodes.delete(ip);
     }
   }
-  for (const [id, started] of pulses) if (!ids.has(id) || performance.now() - started >= FLASH.seconds * 1000) pulses.delete(id);
-  for (const {item, opacity} of activity.points.toReversed()) {
-    let point = pointNodes.get(item.id);
-    const age = (performance.now() - (pulses.get(item.id) ?? -Infinity)) / 1000;
+  const now = performance.now();
+  for (const [ip, {started}] of pulses) if (!ips.has(ip) || now - started >= FLASH.seconds * 1000) pulses.delete(ip);
+  for (const {ip, latest} of activity.points) {
+    if (freshIds.delete(latest.id) && (pulses.has(ip) || pulses.size < FLASH.maxConcurrent))
+      pulses.set(ip, {id: latest.id, started: now});
+  }
+  freshIds.clear();
+  for (const source of activity.points.toReversed()) {
+    const {ip, latest: item, place, count, opacity} = source;
+    let point = pointNodes.get(ip);
+    const previous = point && pointData.get(point);
     if (!point) {
-      const {x, y, visible} = pointPosition(item);
-      point = svg("g", {transform: `translate(${x} ${y})`, class: `map-point type-${item.type}${age < FLASH.seconds ? " recent" : ""}`,
-        tabindex: "0", role: "button", "aria-describedby": "map-tooltip",
-        "aria-label": `${item.title}: ${item.ip}, ${item.location || "location unavailable"}. Select to open this event.`});
-      point.dataset.eventId = item.id;
+      point = svg("g", {class: "map-point", tabindex: "0", role: "button", "aria-describedby": "map-tooltip"});
+      point.dataset.sourceIp = ip;
       point.append(svg("circle", {r: 12, class: "map-hit"}), svg("circle", {r: 5, class: "map-flash"}),
         svg("circle", {r: 5, class: "map-ring"}), svg("circle", {r: 5, class: "map-ring late"}), svg("circle", {r: 2.5, class: "map-dot"}));
-      point.addEventListener("pointerenter", event => { if (event.pointerType === "mouse") tooltip(item, point); });
+      point.addEventListener("pointerenter", event => { if (event.pointerType === "mouse") tooltip(point); });
       point.addEventListener("pointerleave", hideTooltip);
-      point.addEventListener("focus", () => { if (matchMedia("(hover: hover)").matches) tooltip(item, point); });
+      point.addEventListener("focus", () => { if (matchMedia("(hover: hover)").matches) tooltip(point); });
       point.addEventListener("blur", hideTooltip);
-      point.addEventListener("click", () => reveal(item));
+      point.addEventListener("click", () => reveal(pointData.get(point)));
       point.addEventListener("keydown", event => {
-        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); reveal(item); }
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); reveal(pointData.get(point)); }
         if (event.key === "Escape") hideTooltip();
       });
       $("map-points").append(point);
-      pointNodes.set(item.id, point);
-      if (age < 5) {
+      pointNodes.set(ip, point);
+    }
+    pointData.set(point, source);
+    if (!previous || previous.latest.id !== item.id || previous.count !== count || previous.place.id !== place.id) {
+      if (previous) point.classList.remove(`type-${previous.latest.type}`);
+      point.classList.add(`type-${item.type}`);
+      point.dataset.eventId = item.id;
+      const pos = pointPosition(place);
+      point.setAttribute("transform", `translate(${pos.x} ${pos.y})`);
+      point.setAttribute("aria-label", `${ip}, ${place.location}: ${loadedEvents(count)}. Latest: ${item.title}. ${clickHint(count)}.`);
+      if (!$("map-tooltip").hidden && $("map-tooltip").dataset.sourceIp === ip) tooltip(point);
+      if (arrivals.has(ip)) arrivals.get(ip).label.textContent = `${ip} · ${loadedEvents(count)}`;
+      if (previous?.latest.id !== item.id && pulses.get(ip)?.id === item.id) {
+        flash(point);
         const tracking = following && mapView.interactive();
-        const seen = tracking ? onScreen(item) : visible;
-        if (seen) arrival(item);
-        if (tracking) followQueue.set(item.id, {queued: performance.now(), unseen: !seen});
+        const seen = tracking ? onScreen(place) : pos.visible;
+        if (seen) arrival(source);
+        if (tracking) followQueue.set(ip, {queued: performance.now(), unseen: !seen});
       }
     }
-    pointData.set(point, item);
     point.style.setProperty("--opacity", String(opacity));
-    if (age >= FLASH.seconds) { point.classList.remove("recent"); pulses.delete(item.id); }
+    if (pulses.get(ip)?.id !== item.id) point.classList.remove("recent");
   }
   positionMapPoints(); sizeMapMarkers(); positionArrivals(); positionCountryLabels();
   updateMapDetail();
@@ -775,7 +809,7 @@ $("projection").onchange = () => {
 function showMapSettings() {
   for (const [key, value] of Object.entries(dotSettings)) $(key).value = value;
   $("map-setting-summary").textContent = `Map settings · hold ${dotSettings.keep} · fade ${dotSettings.fadeMinutes}m · limit ${dotSettings.maxDots}`;
-  $("map-explainer").textContent = `The newest ${dotSettings.keep} located events stay bright. Older dots fade over ${dotSettings.fadeMinutes} minutes; at most ${dotSettings.maxDots} are shown. During bursts, oldest dots leave first. Hover for a summary; click to open the event. On the globe or in full screen, Follow moves the view to new attacks, pausing a few seconds between moves so bursts are shown together; dragging or Reset view turns it off. Detailed borders do not make approximate IP locations more precise.`;
+  $("map-explainer").textContent = `One dot per source IP, colored by its latest matching event. Repeat requests refresh the same dot. The newest ${dotSettings.keep} sources stay bright; older dots fade over ${dotSettings.fadeMinutes} minutes. At most ${dotSettings.maxDots} are shown. Select a dot to explore its events. On the globe or in full screen, Follow moves to new activity; dragging or Reset view turns it off. IP locations are approximate.`;
 }
 $("map-settings").onsubmit = event => {
   event.preventDefault();
@@ -811,7 +845,7 @@ $("pause").onclick = () => {
 };
 const mapView = createMapView({
   panel: $("map-panel"), svg: $("map"), globe, isGlobe,
-  resetPoints: () => currentMapActivity().points.map(({item}) => item),
+  resetPoints: () => currentMapActivity().points.map(({place}) => place),
   changed: () => {
     hideTooltip();
     const previousDetail = activeDetail;
@@ -836,8 +870,8 @@ $("map-follow").onclick = () => {
   followZoom = !isGlobe() && mapView.zoom() > 1 ? mapView.zoom() : FOLLOW.zoom;
   followHold = 0;
   // Start by showing the newest dot; it is not fresh, so it does not replay an arrival.
-  const newest = currentMapActivity().points[0]?.item;
-  if (newest && pointNodes.has(newest.id)) followQueue.set(newest.id, {queued: performance.now(), unseen: false});
+  const newest = currentMapActivity().points[0];
+  if (newest && pointNodes.has(newest.ip)) followQueue.set(newest.ip, {queued: performance.now(), unseen: false});
   followTick();
 };
 window.addEventListener("offline", () => {

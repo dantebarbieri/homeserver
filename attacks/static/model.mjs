@@ -24,18 +24,36 @@ export function mapSettings(input) {
 }
 
 export function mapActivity(events, settings, now = Date.now() / 1000, history = false) {
-  const ordered = events.filter(item => item.origin !== "own" && located(item) && Number.isFinite(item.observedAt))
-    .toSorted((a, b) => b.observedAt - a.observedAt || a.id.localeCompare(b.id));
-  const visible = [];
-  let expired = 0;
-  for (const [index, item] of ordered.entries()) {
-    // The dot starts aging when displaced from the held group, not on page load.
-    const start = ordered[Math.max(0, index - settings.keep)].observedAt;
-    const opacity = index < settings.keep ? 1 : Math.max(0, Math.min(1, 1 - (now - start) / (settings.fadeMinutes * 60)));
-    if (opacity === 0) expired++;
-    if (opacity > 0 || history) visible.push({item, opacity: opacity || .12});
+  const sources = new Map(), held = new Set();
+  const ordered = events.filter(item => item.origin !== "own" && item.ip && Number.isFinite(item.observedAt))
+    .sort((a, b) => b.observedAt - a.observedAt);
+  // Replay oldest first so hits refresh their own IP, not a neighbor's fade timer.
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const item = ordered[i];
+    const source = sources.get(item.ip) ?? {ip: item.ip, place: null, count: 0};
+    sources.delete(item.ip);
+    sources.set(item.ip, source);
+    source.latest = item;
+    source.count++;
+    if (located(item)) source.place = item;
+    if (!source.place) continue;
+    held.delete(source);
+    held.add(source);
+    if (held.size > settings.keep) {
+      const displaced = held.values().next().value;
+      displaced.fadeStart = item.observedAt;
+      held.delete(displaced);
+    }
   }
-  return {points: visible.slice(0, settings.maxDots), expired, omitted: Math.max(0, visible.length - settings.maxDots)};
+  const visible = [];
+  let expired = 0, unlocated = 0;
+  for (const source of [...sources.values()].reverse()) {
+    if (!source.place) { unlocated++; continue; }
+    const opacity = held.has(source) ? 1 : Math.max(0, Math.min(1, 1 - (now - source.fadeStart) / (settings.fadeMinutes * 60)));
+    if (opacity === 0) expired++;
+    if (opacity > 0 || history) visible.push({...source, opacity: opacity || .12});
+  }
+  return {points: visible.slice(0, settings.maxDots), expired, omitted: Math.max(0, visible.length - settings.maxDots), unlocated};
 }
 
 export function countryFlag(code) {

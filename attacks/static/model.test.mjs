@@ -45,7 +45,7 @@ test("time ago reads in the largest whole unit and never goes negative", () => {
 });
 
 const dots = count => Array.from({length: count}, (_, i) => ({
-  id: `event-${i}`, latitude: 0, longitude: 0, observedAt: 1000 - i,
+  id: `event-${i}`, ip: `2001:db8::${(i + 1).toString(16)}`, latitude: 0, longitude: 0, observedAt: 1000 - i,
 }));
 
 test("seven dots hold; the eighth fades from displacement time and disappears after 30 minutes", () => {
@@ -72,7 +72,9 @@ test("bursts and optional history remain bounded without removing stream events"
 });
 
 test("unlocated events do not displace held dots and unknown countries never invent flags", () => {
-  assert.equal(mapActivity([{id: "missing", observedAt: 2000}, ...dots(7)], MAP_DEFAULTS, 10000).points.length, 7);
+  const activity = mapActivity([{id: "missing", ip: "192.0.2.1", observedAt: 2000}, ...dots(7)], MAP_DEFAULTS, 10000);
+  assert.equal(activity.points.length, 7);
+  assert.equal(activity.unlocated, 1);
   assert.equal(countryFlag("US"), "\u{1f1fa}\u{1f1f8}");
   for (const code of [undefined, "ZZ", "XX", "usa", "<script>"]) assert.equal(countryFlag(code), "");
 });
@@ -82,9 +84,30 @@ test("own traffic stays off the map even in history mode without displacing exte
   const own = {...dots(1)[0], id: "own", origin: "own", observedAt: 20000};
   for (const history of [true, false]) {
     const activity = mapActivity([own, ...external], MAP_DEFAULTS, 20000, history);
-    assert.deepEqual(activity.points.map(({item}) => item.id), external.map(item => item.id));
+    assert.deepEqual(activity.points.map(({latest}) => latest.id), external.map(item => item.id));
     assert.ok(activity.points.every(({opacity}) => opacity === 1));
   }
+});
+
+test("a flood refreshes one IP before applying source limits, without merging neighbors or changing the feed", () => {
+  const [first, neighbor, other] = dots(3);
+  const burst = Array.from({length: 100}, (_, i) => ({...first, id: `web-${i}`, type: "web", observedAt: 1001 + i}));
+  const latest = {...first, id: "ssh", type: "ssh", latitude: null, observedAt: 1101};
+  const events = [neighbor, ...burst, other, first, latest];
+  const settings = mapSettings({keep: 1, maxDots: 2, fadeMinutes: 1});
+  const activity = mapActivity(events, settings, 1131, true);
+  assert.deepEqual(activity.points.map(p => [p.ip, p.count, p.latest.type, p.latest.id, p.opacity]),
+    [[first.ip, 102, "ssh", "ssh", 1], [neighbor.ip, 1, undefined, neighbor.id, .12]]);
+  assert.equal(activity.points[0].place.id, "web-99");
+  assert.equal(activity.omitted, 1);
+  assert.equal(activity.expired, 2); // Neither neighbor is kept bright by repeat hits from the flood.
+  assert.deepEqual(mapActivity(events, settings, 1131).points.map(p => p.ip), [first.ip]);
+  const history = mapActivity(events, {...settings, maxDots: 3}, 1200, true);
+  assert.equal(history.points.length, 3);
+  assert.equal(history.points[0].count, 102);
+  assert.equal(events.length, 104);
+  const filtered = mapActivity(events.filter(e => e.type === "web"), settings, 1200);
+  assert.deepEqual(filtered.points.map(p => [p.count, p.latest.id]), [[100, "web-99"]]);
 });
 
 test("live trapping ticks between samples, switches on close, and stops on stale or failed telemetry", () => {

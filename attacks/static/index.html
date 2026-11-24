@@ -35,7 +35,7 @@
     <section id="map-panel" class="map-panel" aria-label="Source IP locations">
       <div class="panel-top"><div><span class="live-dot" aria-hidden="true"></span><strong>GLOBAL ACTIVITY</strong><span id="map-count" class="muted"></span></div><div class="map-toolbar"><label class="projection-control">Projection<select id="projection"><option value="equal-earth">Equal Earth</option><option value="globe">Globe</option><option value="rectangular">Original rectangular</option></select></label><button id="fullscreen" class="button" aria-controls="map-panel" aria-pressed="false">Full screen</button></div></div>
       <div class="map-wrap">
-        <svg id="map" viewBox="0 0 1000 500" tabindex="0" aria-label="Interactive world map. Activate dots for events. Drag or use arrow keys to rotate the globe, or pan a fullscreen flat map. Pinch, scroll, or use plus/minus to zoom. Zero resets the view.">
+        <svg id="map" viewBox="0 0 1000 500" tabindex="0" aria-label="Interactive world map. One dot per source IP; select a dot to explore its events. Drag or use arrow keys to rotate the globe, or pan a fullscreen flat map. Pinch, scroll, or use plus/minus to zoom. Zero resets the view.">
           <defs>
             <radialGradient id="globe-water" cx="35%" cy="30%" r="75%"><stop stop-color="#303036"/><stop offset=".7" stop-color="#202025"/><stop offset="1" stop-color="#111115"/></radialGradient>
             <radialGradient id="globe-shade" cx="40%" cy="35%" r="65%"><stop offset=".65" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></radialGradient>
@@ -50,7 +50,7 @@
         <div class="map-overlay"><span>INBOUND SIGNAL</span><strong id="map-caption">Waiting for telemetry</strong></div>
       </div>
       <div class="map-status"><span id="map-gesture-hint" hidden></span><span id="map-detail-status"></span><span id="arrival-status"></span><span id="follow-status" role="status"></span><span id="fullscreen-status" role="status"></span></div>
-      <div class="map-controls"><div class="legend" id="legend" aria-label="Map color key"></div><label class="history-toggle" title="Also show expired loaded events as faint dots, still respecting the map limit."><input id="history-dots" type="checkbox"> Show older history</label></div>
+      <div class="map-controls"><div class="legend" id="legend" aria-label="Map color key"></div><label class="history-toggle" title="Also show faded sources from the loaded events, still respecting the dot limit."><input id="history-dots" type="checkbox"> Show older history</label></div>
       <details class="map-options"><summary id="map-setting-summary">Map settings</summary><form id="map-settings">
         <label>Keep newest dots<input id="keep" type="number" min="0" max="1000" step="1" required></label>
         <label>Fade over (minutes)<input id="fadeMinutes" type="number" min="1" max="1440" step="1" required></label>
