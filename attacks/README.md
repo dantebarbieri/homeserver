@@ -50,6 +50,12 @@ are visible in collection health and never silently mark a key as recognized.
 
 ### Map and live stream
 
+Changing statistic, live-trapping, feed and map counters roll their changed digits
+upward over 420 ms. Unchanged digits and labels stay still. Initial values appear
+immediately, rapid updates replace stale transitions, and reduced motion disables
+the effect. The accessible/selected text always contains the current value once,
+not the animation's previous digits.
+
 The desktop default **Equal Earth** projection preserves relative land areas rather
 than exaggerating polar regions. A selector compares it with the original
 equirectangular map (which was not Mercator). Both country outlines and event

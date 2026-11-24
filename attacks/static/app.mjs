@@ -63,6 +63,44 @@ function node(tag, value, className) {
   return element;
 }
 
+function counter(id, value) {
+  const element = $(id), text = String(value), previous = element.dataset.counterText;
+  if (previous === text) return;
+  element.dataset.counterText = text;
+  const parts = text.split(/(\d[\d,.]*)/), before = (previous || "").split(/(\d[\d,.]*)/);
+  const content = parts.map((part, index) => {
+    if (index % 2 === 0) return document.createTextNode(part);
+    const token = node("span", undefined, "number-token");
+    // One real text value for selection and assistive technology; the reels are visual only.
+    token.append(node("span", part, "number-value"));
+    const old = before[index] || "";
+    for (const [position, character] of [...part].entries()) {
+      const digit = /\d/.test(character), from = old[position + old.length - part.length];
+      const glyph = node("span", undefined, digit ? "number-digit" : "number-separator");
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.dataset.digit = character;
+      if (digit && /\d/.test(from || "") && from !== character && !reduced.matches) {
+        glyph.dataset.from = from;
+        glyph.classList.add("rolling");
+        glyph.addEventListener("animationend", () => {
+          glyph.classList.remove("rolling");
+          delete glyph.dataset.from;
+        }, {once: true});
+      }
+      token.append(glyph);
+    }
+    return token;
+  });
+  element.replaceChildren(...content);
+}
+
+reduced.addEventListener("change", () => {
+  if (reduced.matches) for (const glyph of document.querySelectorAll(".number-digit.rolling")) {
+    glyph.classList.remove("rolling");
+    delete glyph.dataset.from;
+  }
+});
+
 if (demo) $("map-panel").querySelector(".panel-top>div").append(node("span", "Synthetic demo", "badge map-demo"));
 
 function notices() {
@@ -145,7 +183,7 @@ function render() {
   if (focusedId) [...$("events").children].find(row => row.dataset.eventId === focusedId)?.focus({preventScroll: true});
   $("empty").hidden = events.length > 0;
   $("empty").textContent = errors.has("feed") ? "Events unavailable. Check collection health above." : "No matching events in this observation window.";
-  $("feed-count").textContent = `${events.length} shown`;
+  counter("feed-count", `${events.length} shown`);
   $("older").hidden = !hasOlder || demo || events.length >= 1000;
   mapPoints();
 }
@@ -279,21 +317,21 @@ async function stats() {
     if (period !== $("range").value) return;
     const sum = result.totals.reduce((total, item) => total + item.value, 0);
     const failures = result.totals.filter(item => ["ssh_failure", "auth_failure"].includes(item.kind)).reduce((total, item) => total + item.value, 0);
-    $("total").textContent = result.available ? Math.round(sum).toLocaleString() : "—";
-    $("failures").textContent = result.available ? Math.round(failures).toLocaleString() : "—";
+    counter("total", result.available ? Math.round(sum).toLocaleString() : "—");
+    counter("failures", result.available ? Math.round(failures).toLocaleString() : "—");
     trapSample = result.trapping; trapReceived = performance.now(); completedTrapSeconds = result.trappedSeconds;
     updateTrapping();
     const since = new Date(trapSample.since * 1000).toLocaleString();
-    $("trapped-lifetime").textContent = `${duration(result.lifetimeTrappedSeconds)} completed external · since ${since}`;
+    counter("trapped-lifetime", `${duration(result.lifetimeTrappedSeconds)} completed external · since ${since}`);
     $("metric-status").textContent = demo ? "Synthetic preview" : "Loki · logged events (own excluded)";
     spark(result.timeline);
     errors.delete("metrics");
   } catch (error) {
     if (period !== $("range").value) return;
-    for (const id of ["total", "failures", "trapped"]) $(id).textContent = "—";
+    for (const id of ["total", "failures", "trapped"]) counter(id, "—");
     trapSample = null;
-    $("trapping-now").textContent = "Live trapping unavailable";
-    $("trapped-lifetime").textContent = "Completed Endlessh connection time";
+    counter("trapping-now", "Live trapping unavailable");
+    counter("trapped-lifetime", "Completed Endlessh connection time");
     $("metric-status").textContent = "Metrics unavailable";
     spark([]);
     errors.set("metrics", error.message);
@@ -304,9 +342,9 @@ async function stats() {
 function updateTrapping() {
   if (!trapSample) return;
   const active = liveTrapping(trapSample, performance.now() - trapReceived);
-  $("trapped").textContent = duration(completedTrapSeconds + (active?.seconds || 0));
-  $("trapping-now").textContent = active ? `${active.connections} trapped now · ${duration(active.seconds)} ongoing`
-    : "Completed only · live trapping unavailable";
+  counter("trapped", duration(completedTrapSeconds + (active?.seconds || 0)));
+  counter("trapping-now", active ? `${active.connections} trapped now · ${duration(active.seconds)} ongoing`
+    : "Completed only · live trapping unavailable");
 }
 
 async function health() {
@@ -677,7 +715,7 @@ function mapPoints() {
   refreshTooltipAge();
   const activity = currentMapActivity();
   const ids = new Set(activity.points.map(({item}) => item.id));
-  $("map-count").textContent = `${activity.points.length} dots · ${new Set(activity.points.map(({item}) => item.ip)).size} sources`;
+  counter("map-count", `${activity.points.length} dots · ${new Set(activity.points.map(({item}) => item.ip)).size} sources`);
   mapCaption = `${activity.expired} faded · ${activity.omitted} outside dot limit · ${events.filter(item => item.origin !== "own" && !located(item)).length} unlocated`;
   for (const [id, point] of pointNodes) {
     if (!ids.has(id)) {

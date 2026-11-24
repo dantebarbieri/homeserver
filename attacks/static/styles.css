@@ -56,6 +56,16 @@
 .filters .own-toggle input{width:18px;height:18px;min-height:18px;accent-color:var(--accent)}
 .origin-own{--color:#aab8ca}
 #trapping-now,#trapped-lifetime{display:block;line-height:1.5}
+.number-token{position:relative;display:inline-block;white-space:nowrap;font-variant-numeric:tabular-nums}
+.number-value{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.number-digit{position:relative;display:inline-block;overflow:hidden;width:1ch;height:1.15em;line-height:1.15em;vertical-align:-.12em}
+.number-digit::after,.number-separator::after{content:attr(data-digit)}
+.number-digit::after{display:block}
+.number-digit.rolling::before{content:attr(data-from);position:absolute;inset:0;animation:digit-out .42s cubic-bezier(.25,.8,.25,1) both}
+.number-digit.rolling::after{animation:digit-in .42s cubic-bezier(.25,.8,.25,1) both}
+@keyframes digit-out{from{transform:translateY(0)}to{transform:translateY(-100%)}}
+@keyframes digit-in{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.number-digit.rolling::before{display:none}.number-digit.rolling::after{animation:none}}
 .verdict-accepted,.key-recognized{--color:#94dfa5}
 .key-unregistered{--color:#efc477}
 .verdict-incomplete{--color:#aab8ca}
