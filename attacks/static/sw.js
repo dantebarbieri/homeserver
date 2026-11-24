@@ -1,4 +1,7 @@
-import {MAP_FILES} from "./atlas.mjs";
+/* Classic, not module: browsers fetch module service-worker scripts without cookies,
+   so Authelia would redirect them and registration fails. npm run build:atlas keeps
+   this copy of atlas.mjs's MAP_FILES current. */
+const MAP_FILES = {"110m":"/world-110m-308dfeb0b90b.json","50m":"/world-50m-c4ac46bd8d55.json","10m":"/world-10m-d597e8ffe7d8.json"};
 
 /* Public static assets only. Navigation authenticates; APIs never enter a cache. */
 const CACHE = "attacks-shell-v9";

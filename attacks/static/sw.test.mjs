@@ -22,7 +22,7 @@ async function worker(fetch, cachedMaps = []) {
     };
   };
   const context = {
-    URL, Set, Promise, Error, console, fetch, MAP_FILES,
+    URL, Set, Promise, Error, console, fetch,
     self: {location: {origin: "https://attacks.test"}, addEventListener: (name, handler) => { handlers[name] = handler; },
       skipWaiting: async () => {},
       clients: {claim: async () => {}, matchAll: async () => [{postMessage: value => messages.push(value)}]}},
@@ -30,7 +30,8 @@ async function worker(fetch, cachedMaps = []) {
       keys: async () => [...stores.keys()], delete: async name => stores.delete(name)},
   };
   const source = await readFile(new URL("./sw.js", import.meta.url), "utf8");
-  vm.runInNewContext(source.replace('import {MAP_FILES} from "./atlas.mjs";', ""), context);
+  // Runs as a classic script: an import statement would fail here, as in the browser.
+  const maps = vm.runInNewContext(`${source}\n;MAP_FILES`, context);
   async function request(path, method = "GET") {
     let response;
     const waits = [];
@@ -45,8 +46,17 @@ async function worker(fetch, cachedMaps = []) {
     handlers.install({waitUntil: promise => { result = promise; }});
     await result;
   }
-  return {request, puts, cached, messages, install};
+  return {request, puts, cached, messages, install, maps};
 }
+
+test("service worker registers as a classic script whose map list matches the atlas", async () => {
+  const sw = await worker(async () => {});
+  assert.deepEqual({...sw.maps}, {...MAP_FILES});
+  // Module worker scripts are fetched without cookies, so Authelia redirects them.
+  const pwa = await readFile(new URL("./pwa.mjs", import.meta.url), "utf8");
+  assert.match(pwa, /serviceWorker\.register\("\/sw\.js"/);
+  assert.doesNotMatch(pwa, /type:\s*"module"/);
+});
 
 test("service worker never handles API data, health responses, other origins or writes", async () => {
   let fetches = 0;

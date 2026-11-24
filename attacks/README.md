@@ -271,7 +271,9 @@ fabricated feed. A page left open offline can still show its previously loaded
 in-memory rows, with an explicit stale/offline warning. Network navigation
 preserves Authelia redirects and authentication failures; APIs remain
 authenticated network-only requests. The manifest includes credentials so its
-fetch works behind Authelia. Previously visited detail levels remain usable offline while browser storage is
+fetch works behind Authelia. The service worker is a classic script, not a
+module: browsers fetch module service-worker scripts without cookies, so
+Authelia would redirect them and registration would fail. Previously visited detail levels remain usable offline while browser storage is
 retained; never-downloaded detail reports an error and keeps the available
 coarser map. Browser storage can be evicted. Home-screen installation does not bypass 2FA and
 does not add push notifications or background attack polling.
@@ -413,7 +415,8 @@ verifies that the requested microstates/territory have real polygons. Globe
 rendering culls off-screen island polygons before projecting detailed coastlines.
 The page decodes detail on demand and yields during country indexing to keep
 gestures responsive. The atlas build also generates `static/atlas.mjs`, the shared
-filename manifest used by the page and module service worker.
+filename manifest used by the page, and rewrites the copy inlined in the classic
+service worker (`static/sw.js`); a test fails if the two differ.
 
 On a Linux Docker host, `uv run --project attacks python
 attacks/integration_check.py --image attacks:local` exercises real isolated

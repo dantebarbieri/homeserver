@@ -25,7 +25,7 @@ if ("serviceWorker" in navigator && isSecureContext) {
   navigator.serviceWorker.addEventListener("message", event => {
     if (event.data?.type === "attacks-cache-error") status.textContent = "Offline app assets could not be saved; live browsing still works.";
   });
-  navigator.serviceWorker.register("/sw.js", {type: "module", scope: "/", updateViaCache: "none"}).then(registration => {
+  navigator.serviceWorker.register("/sw.js", {scope: "/", updateViaCache: "none"}).then(registration => {
     const installing = registration.installing;
     installing?.addEventListener("statechange", () => {
       if (installing.state === "redundant" && !registration.active)
