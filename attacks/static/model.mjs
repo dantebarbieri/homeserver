@@ -95,6 +95,10 @@ export function ago(timestamp, now = Date.now() / 1000) {
 // The flash is a short celebration of "just detected"; only genuinely fresh events earn it.
 export const FLASH = {seconds: 6, maxConcurrent: 12, liveWindow: 60, loadWindow: 30};
 
+// Follow mode moves to fresh arrivals, then holds still so they can be read. Arrivals during the hold
+// are batched into the next move, so busy periods move about once per hold instead of on every event.
+export const FOLLOW = {holdMs: 4000, staleMs: 15000, zoom: 3, spread: .5, inner: .7, limbDegrees: 60, statusMs: 5000};
+
 export function isFresh(item, window, now = Date.now() / 1000) {
   return Number.isFinite(item.observedAt) && now - item.observedAt < window;
 }

@@ -1,6 +1,6 @@
-import {TYPES, mergeEvents, project, located, duration, ago, demoEvents, demoLiveEvent, FLASH, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
-import {createMapView} from "./map-view.mjs";
-import {createGlobe, globeGeometry, detailLevel} from "./globe.mjs";
+import {TYPES, mergeEvents, project, located, duration, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {createMapView, fitView} from "./map-view.mjs";
+import {createGlobe, globeGeometry, detailLevel, followCenter} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
 import {MAP_FILES} from "./atlas.mjs";
 import "./pwa.mjs";
@@ -22,6 +22,9 @@ const arrivals = new Map();
 let arrivalsOmitted = 0;
 let globeLand = [], mapCaption = "Waiting for telemetry";
 let activeDetail = null, wantedDetail = "110m", countryLabels = [];
+// Follow mode: fresh dots wait here (id -> {queued, unseen}) until the view is free to move to them.
+const followQueue = new Map();
+let following = false, followZoom = FOLLOW.zoom, followHold = 0, followStatusTimer = 0;
 const atlas = new Map(), atlasPending = new Set(), atlasFailed = new Map();
 const globe = createGlobe();
 const isGlobe = () => $("projection").value === "globe";
@@ -44,6 +47,13 @@ try {
 } catch (error) {
   errors.set("mapSettings", `Saved map settings could not be loaded; defaults are active. ${error.message}`);
 }
+
+try {
+  following = localStorage.getItem("attacks.map-follow") === "1";
+} catch (error) {
+  errors.set("follow", `Saved follow setting could not be loaded; follow starts off. ${error.message}`);
+}
+$("map-follow").setAttribute("aria-pressed", String(following));
 
 function node(tag, value, className) {
   const element = document.createElement(tag);
@@ -530,6 +540,8 @@ function positionArrivals() {
 }
 
 function arrival(item) {
+  arrivals.get(item.id)?.node.remove();
+  arrivals.delete(item.id);
   const limit = matchMedia("(max-width: 650px)").matches ? 1 : 3;
   while (arrivals.size >= limit) {
     const oldest = arrivals.keys().next().value;
@@ -560,6 +572,73 @@ function pointPosition(item) {
   if (isGlobe()) return globe.position(item.longitude, item.latitude);
   const [x, y] = mapProject(item.longitude, item.latitude);
   return {x, y, visible: true};
+}
+
+// Whether a dot sits within the central `fraction` of the viewport; on the globe, also clear of the squashed limb.
+function onScreen(item, fraction = 1) {
+  const {x, y, visible, angle} = pointPosition(item), view = mapView.viewport();
+  if (!visible || !view.width) return visible;
+  const limb = fraction < 1 ? FOLLOW.limbDegrees * Math.PI / 180 : Math.PI / 2;
+  return Math.abs(x - view.x) <= view.width * fraction / 2 && Math.abs(y - view.y) <= view.height * fraction / 2
+    && (!isGlobe() || angle <= limb);
+}
+
+function setFollowing(value, message = "") {
+  following = value;
+  followQueue.clear();
+  $("map-follow").setAttribute("aria-pressed", String(value));
+  clearTimeout(followStatusTimer);
+  $("follow-status").textContent = message;
+  if (message) followStatusTimer = setTimeout(() => { $("follow-status").textContent = ""; }, FOLLOW.statusMs);
+  try {
+    localStorage.setItem("attacks.map-follow", value ? "1" : "0");
+    errors.delete("follow");
+  } catch (error) {
+    errors.set("follow", `Follow applies only to this tab because it could not be saved. ${error.message}`);
+  }
+  notices();
+}
+
+// Dots that arrived out of sight flashed unseen; once the view reaches them they get their arrival back.
+function replayArrival(item) {
+  const point = pointNodes.get(item.id);
+  pulses.set(item.id, performance.now());
+  point.classList.remove("recent");
+  point.getBoundingClientRect();
+  point.classList.add("recent");
+  arrival(item);
+}
+
+function followTick() {
+  const now = performance.now();
+  for (const [id, entry] of followQueue) if (!pointNodes.has(id) || now - entry.queued > FOLLOW.staleMs) followQueue.delete(id);
+  if (!following || !mapView.interactive()) { followQueue.clear(); return; }
+  if (!followQueue.size || now < followHold || mapView.moving() || mapView.held() || document.hidden
+    || !$("map-tooltip").hidden || $("detail").open) return;
+  const queued = new Map(followQueue);
+  const items = [...queued.keys()].map(id => pointData.get(pointNodes.get(id))).sort((a, b) => b.observedAt - a.observedAt);
+  followQueue.clear();
+  let target;
+  if (isGlobe()) {
+    if (items.every(item => onScreen(item, FOLLOW.inner))) return;
+    const [longitude, latitude] = followCenter(items, FOLLOW.spread * globe.reach());
+    target = {longitude, latitude};
+  } else {
+    const points = items.map(item => { const [x, y] = mapProject(item.longitude, item.latitude); return {x, y}; });
+    const box = $("map").getBoundingClientRect(), goal = fitView(points, followZoom, box.width, box.height);
+    if (items.every(item => onScreen(item, FOLLOW.inner)) && mapView.zoom() >= goal.zoom * .8) return;
+    target = {points, zoom: followZoom};
+  }
+  mapView.flyTo(target, landed => {
+    followHold = performance.now() + FOLLOW.holdMs;
+    // An interrupted move (zoom, projection change) keeps its dots queued for the next one.
+    if (!landed) { for (const [id, entry] of queued) if (!followQueue.has(id)) followQueue.set(id, entry); return; }
+    let room = FLASH.maxConcurrent - pulses.size;
+    const missed = items.filter(item => queued.get(item.id).unseen && pointNodes.has(item.id) && onScreen(item)
+      && (pulses.has(item.id) || room-- > 0));
+    for (const item of missed.toReversed()) replayArrival(item);
+    if (missed.length) positionArrivals();
+  });
 }
 
 function positionMapPoints() {
@@ -616,6 +695,7 @@ function mapPoints() {
       $("map-points").append(point);
       pointNodes.set(item.id, point);
       if (age < 5 && visible) arrival(item);
+      if (age < 5 && following && mapView.interactive()) followQueue.set(item.id, {queued: performance.now(), unseen: !onScreen(item)});
     }
     pointData.set(point, item);
     point.style.setProperty("--opacity", String(opacity));
@@ -623,6 +703,7 @@ function mapPoints() {
   }
   positionMapPoints(); sizeMapMarkers(); positionArrivals(); positionCountryLabels();
   updateMapDetail();
+  followTick();
 }
 $("history-dots").onchange = () => { hideTooltip(); mapPoints(); };
 $("projection").onchange = () => {
@@ -638,7 +719,7 @@ $("projection").onchange = () => {
 function showMapSettings() {
   for (const [key, value] of Object.entries(dotSettings)) $(key).value = value;
   $("map-setting-summary").textContent = `Map settings · hold ${dotSettings.keep} · fade ${dotSettings.fadeMinutes}m · limit ${dotSettings.maxDots}`;
-  $("map-explainer").textContent = `The newest ${dotSettings.keep} located events stay bright. Older dots fade over ${dotSettings.fadeMinutes} minutes; at most ${dotSettings.maxDots} are shown. During bursts, oldest dots leave first. Hover for a summary; click to open the event. Detailed borders do not make approximate IP locations more precise.`;
+  $("map-explainer").textContent = `The newest ${dotSettings.keep} located events stay bright. Older dots fade over ${dotSettings.fadeMinutes} minutes; at most ${dotSettings.maxDots} are shown. During bursts, oldest dots leave first. Hover for a summary; click to open the event. On the globe or in full screen, Follow moves the view to new attacks, pausing a few seconds between moves so bursts are shown together; dragging or Reset view turns it off. Detailed borders do not make approximate IP locations more precise.`;
 }
 $("map-settings").onsubmit = event => {
   event.preventDefault();
@@ -684,7 +765,24 @@ const mapView = createMapView({
     $("map-gesture-hint").textContent = `Drag to ${isGlobe() ? "rotate" : "pan"} · ${matchMedia("(pointer: coarse)").matches ? "Pinch" : "Scroll"} to zoom`;
   },
   closed: hideTooltip,
+  // Zooming refines what is followed; taking the view elsewhere by hand ends following.
+  interacted: kind => {
+    followHold = performance.now() + FOLLOW.holdMs;
+    if (kind === "zoom") { if (!isGlobe()) followZoom = mapView.zoom(); }
+    else if (following) setFollowing(false, "Follow off: the map was moved by hand.");
+  },
 });
+$("map-follow").onclick = () => {
+  const value = !following;
+  setFollowing(value, value ? "Following new attacks." : "Follow off.");
+  if (!value) return;
+  followZoom = !isGlobe() && mapView.zoom() > 1 ? mapView.zoom() : FOLLOW.zoom;
+  followHold = 0;
+  // Start by showing the newest dot; it is not fresh, so it does not replay an arrival.
+  const newest = currentMapActivity().points[0]?.item;
+  if (newest && pointNodes.has(newest.id)) followQueue.set(newest.id, {queued: performance.now(), unseen: false});
+  followTick();
+};
 window.addEventListener("offline", () => {
   errors.set("network", "Offline: no fresh telemetry. Only previously loaded events may remain visible.");
   notices();

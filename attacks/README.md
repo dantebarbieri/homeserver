@@ -55,7 +55,7 @@ northern viewing angle it faces the most currently eligible dots, accounting for
 dot limit. Ties favor the widest centering range to keep dots away from the limb.
 With no displayable dots, it faces longitude 97.742164 W at the same northern
 latitude; this is also the starting orientation. Reset never changes
-filters or starts automatically chasing incoming events.
+filters, and it turns **Follow** off.
 Far-side dots are hidden, including their hit targets and tooltips,
 and their count is disclosed; all events remain available in the stream.
 
@@ -84,7 +84,8 @@ rings that settles into its type colour within about six seconds, then joins the
 slow fade above. Only genuinely fresh events flash (arrived within 60 seconds,
 or 30 seconds on first load, by the server's clock), at most 12 at once, so
 catching up after a paused or hidden tab never lights up the whole map. Far-side
-globe events cannot flash. Reduced-motion replaces the animation with a static
+globe events cannot flash unless **Follow** turns to them, which replays their
+flash and summary on arrival. Reduced-motion replaces the animation with a static
 white outline for the same six seconds. Brief summary cards last 4.5 seconds.
 Summaries are bounded to the latest three on desktop (nudged apart when events
 share a location) or one bottom card on phones, with
@@ -101,6 +102,20 @@ the world. Native fullscreen is used where available; an expanded viewport
 works on iPhone too. The globe supports the same gestures without fullscreen.
 Reduced-motion mode removes decorative animation. GeoIP is approximate and
 locates infrastructure, not a person.
+
+**Follow** (globe, or the full-screen flat map) moves the view to new attacks.
+It moves only when a new dot is off screen, behind the globe, near the edge or
+squashed against the limb, then holds still for **4 seconds** so it can be read.
+Arrivals during a move or hold are batched into the next move, so a busy stream
+moves about once every five seconds rather than on every event. The globe turns
+north-up at the current zoom, framing a burst together when it fits and
+otherwise facing the newest event. The flat map zooms out and back in along a
+smooth path (van Wijk and Nuij) to frame the new dots at the follow zoom (3x
+by default, or the zoom you set). Zooming keeps following; dragging, arrow keys or
+**Reset view** turn it off. It waits while a pointer is down, a hover card or
+event details are open, or the tab is hidden, and skips arrivals older than 15
+seconds. Reduced-motion jumps instead of animating. The choice is saved locally
+and starts off.
 
 The feed polls every three seconds, loads 250 rows per page and retains at most
 1,000 in the browser. Busy live polls catch up through at most eight pages per

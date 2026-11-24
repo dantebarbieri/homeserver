@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
-import {activityLongitude, createGlobe, globeGeometry, detailLevel} from "./globe.mjs";
+import {activityLongitude, createGlobe, globeGeometry, detailLevel, turnPath, followCenter} from "./globe.mjs";
 import {feature, geoArea, geoCentroid} from "./geo-vendor.mjs";
 import {MAP_FILES} from "./atlas.mjs";
 
@@ -93,6 +93,31 @@ test("reset maximizes visible dots at the northern tilt, including polar visibil
         + Math.cos(point.latitude * radians) * Math.cos(focus) * Math.cos((point.longitude - longitude) * radians) > Math.sin(1e-6)).length);
     assert.equal(count, best);
   }
+});
+
+test("follow turns the short way north-up and frames only bursts that fit", () => {
+  const wrap = degrees => ((degrees % 360) + 540) % 360 - 180;
+  const turn = turnPath([-170, -20, 35], [170, -40, 0]);
+  assert.deepEqual(turn.at(0), [-170, -20, 35]);
+  const [longitude, latitude, roll] = turn.at(1);
+  assert.equal(wrap(longitude), 170); assert.equal(latitude, -40); assert.equal(roll, 0);
+  assert.ok(Math.abs(wrap(turn.at(.5)[0])) === 180, "crosses the date line, not the long way round");
+  assert.ok(turn.angle > 20 && turn.angle < 30);
+
+  const cluster = [{longitude: 2, latitude: 49}, {longitude: 4, latitude: 51}, {longitude: 3, latitude: 50}];
+  const center = followCenter(cluster, .5);
+  assert.ok(Math.abs(center[0] - 3) < .1 && Math.abs(center[1] - 50) < .1);
+  assert.deepEqual(followCenter([{longitude: 139, latitude: 35}, {longitude: -74, latitude: 40}], .5), [139, 35]);
+  assert.deepEqual(followCenter([{longitude: -97.7, latitude: 30.3}], .5), [-97.7, 30.3]);
+
+  const globe = createGlobe();
+  globe.resize(1000, 500, 1);
+  assert.equal(globe.reach(), Math.PI / 2);
+  globe.resize(1000, 500, 4);
+  assert.ok(globe.reach() < .3);
+  globe.rotate([-3, -50, 0]);
+  assert.ok(globe.position(3, 50).angle < 1e-9);
+  assert.ok(Math.abs(globe.position(3, 20).angle - Math.PI / 6) < 1e-9);
 });
 
 test("progressive atlas adds real tiny territories and preserves them at close zoom", async () => {

@@ -46,10 +46,10 @@
           <g id="map-labels" aria-hidden="true"></g><g id="map-points"></g>
         </svg>
         <div id="map-tooltip" role="tooltip" hidden></div><div id="map-arrivals" aria-hidden="true"></div>
-        <div id="map-navigation" hidden><button id="map-zoom-in" class="button" aria-label="Zoom in">+</button><output id="map-zoom-level" aria-label="Zoom level">100%</output><button id="map-zoom-out" class="button" aria-label="Zoom out">−</button><button id="map-reset" class="button" title="Zoom out; on the globe, face the most activity with north up">Reset view</button></div>
+        <div id="map-navigation" hidden><button id="map-zoom-in" class="button" aria-label="Zoom in">+</button><output id="map-zoom-level" aria-label="Zoom level">100%</output><button id="map-zoom-out" class="button" aria-label="Zoom out">−</button><button id="map-follow" class="button" aria-pressed="false" title="Move the view to new attacks as they arrive. Dragging or Reset view turns it off; zooming keeps it on.">Follow</button><button id="map-reset" class="button" title="Zoom out; on the globe, face the most activity with north up">Reset view</button></div>
         <div class="map-overlay"><span>INBOUND SIGNAL</span><strong id="map-caption">Waiting for telemetry</strong></div>
       </div>
-      <div class="map-status"><span id="map-gesture-hint" hidden></span><span id="map-detail-status"></span><span id="arrival-status"></span><span id="fullscreen-status" role="status"></span></div>
+      <div class="map-status"><span id="map-gesture-hint" hidden></span><span id="map-detail-status"></span><span id="arrival-status"></span><span id="follow-status" role="status"></span><span id="fullscreen-status" role="status"></span></div>
       <div class="map-controls"><div class="legend" id="legend" aria-label="Map color key"></div><label class="history-toggle" title="Also show expired loaded events as faint dots, still respecting the map limit."><input id="history-dots" type="checkbox"> Show older history</label></div>
       <details class="map-options"><summary id="map-setting-summary">Map settings</summary><form id="map-settings">
         <label>Keep newest dots<input id="keep" type="number" min="0" max="1000" step="1" required></label>

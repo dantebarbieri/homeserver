@@ -40,6 +40,26 @@ export function activityLongitude(points) {
   return ((best.start + best.end) / 2 + 540) % 360 - 180;
 }
 
+const wrap = degrees => ((degrees % 360) + 540) % 360 - 180;
+
+// Turn between two views with north kept up: longitude takes the short way round and any roll unwinds.
+export function turnPath(from, to) {
+  const [longitude, latitude, roll = 0] = from, [targetLongitude, targetLatitude, targetRoll = 0] = to;
+  const spin = wrap(targetLongitude - longitude), unroll = wrap(targetRoll - roll);
+  const angle = geoDistance([-longitude, -latitude], [-targetLongitude, -targetLatitude]) * 180 / Math.PI;
+  return {angle, at: t => [longitude + spin * t, latitude + (targetLatitude - latitude) * t, roll + unroll * t]};
+}
+
+// Frame a burst together when it fits within `spread` radians; otherwise face the newest (first) point.
+export function followCenter(points, spread) {
+  const coordinates = points.map(({longitude, latitude}) => [longitude, latitude]);
+  if (coordinates.length > 1) {
+    const center = geoCentroid({type: "MultiPoint", coordinates});
+    if (center.every(Number.isFinite) && coordinates.every(point => geoDistance(center, point) <= spread)) return center;
+  }
+  return coordinates[0];
+}
+
 export function detailLevel(zoom) {
   return zoom >= 6 ? "10m" : zoom >= 2.5 ? "50m" : "110m";
 }
@@ -63,7 +83,7 @@ export function createGlobe() {
   const initial = [-FALLBACK_LONGITUDE, -VIEW_LATITUDE, 0];
   const projection = geoOrthographic().translate([500, 250]).scale(235).rotate(initial).clipAngle(90);
   const path = geoPath(projection), grid = geoGraticule10();
-  let visibleArc = Math.PI / 2;
+  let visibleArc = Math.PI / 2, reach = Math.PI / 2;
   function drag(from, to) {
     const a = projection.invert(from), b = projection.invert(to);
     if (![...a, ...b].every(Number.isFinite)) return;
@@ -75,11 +95,15 @@ export function createGlobe() {
     drag,
     reset: (points = []) => projection.rotate([-activityLongitude(points), -VIEW_LATITUDE, 0]),
     rotation: () => projection.rotate(),
+    rotate: rotation => { projection.rotate(rotation); },
+    // Angular radius of the largest globe cap the viewport shows in full.
+    reach: () => reach,
     resize: (width, height, zoom) => {
       projection.scale(Math.min(width, height) * .47).precision(.3 / zoom);
       projection.clipExtent([[500 - width / zoom / 2, 250 - height / zoom / 2],
         [500 + width / zoom / 2, 250 + height / zoom / 2]]);
       visibleArc = Math.asin(Math.min(1, Math.hypot(width, height) / 2 / zoom / projection.scale()));
+      reach = Math.asin(Math.min(1, Math.min(width, height) / 2 / zoom / projection.scale()));
     },
     path: geometry => {
       const center = projection.invert([500, 250]);
@@ -95,7 +119,8 @@ export function createGlobe() {
     },
     position: (longitude, latitude) => {
       const location = [longitude, latitude], [x, y] = projection(location);
-      return {x, y, visible: geoDistance(projection.invert([500, 250]), location) < HORIZON};
+      const angle = geoDistance(projection.invert([500, 250]), location);
+      return {x, y, angle, visible: angle < HORIZON};
     },
   };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {TYPES, mergeEvents, located, project, duration, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
-import {constrainView, zoomView} from "./map-view.mjs";
+import {constrainView, zoomView, flyPath, fitView, easeInOut} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
   const first = {id: "a", type: "ssh", cursor: "1795530000000000001"};
@@ -118,4 +118,27 @@ test("map zoom anchors the selected region and clamps panning at every viewport 
   const changed = zoomView(zoomed, 2, {x: 700, y: 300}, 1000, 500);
   assert.equal(zoomed.x + .2 * zoomed.width, changed.x + .2 * changed.width);
   assert.equal(zoomed.y + .1 * zoomed.height, changed.y + .1 * changed.height);
+});
+
+test("follow flights land exactly, pull back on long hops and frame new dots", () => {
+  const close = (a, b, tolerance = 1e-6) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
+  const from = {x: 100, y: 100, width: 100}, to = {x: 900, y: 400, width: 100};
+  const path = flyPath(from, to);
+  for (const key of ["x", "y", "width"]) { close(path.at(0)[key], from[key]); close(path.at(.999999)[key], to[key], 1e-3); }
+  assert.deepEqual(path.at(1), to);
+  assert.ok(path.at(.5).width > 3 * from.width);
+  const zoomIn = flyPath({x: 500, y: 250, width: 1000}, {x: 500, y: 250, width: 125});
+  const widths = [0, .25, .5, .75, 1].map(t => zoomIn.at(t).width);
+  assert.ok(widths.every((width, index) => !index || width < widths[index - 1]));
+  close(widths.at(-1), 125);
+  assert.equal(easeInOut(0), 0); assert.equal(easeInOut(.5), .5); assert.equal(easeInOut(1), 1);
+
+  const spread = fitView([{x: 200, y: 200}, {x: 300, y: 260}], 3, 1000, 500);
+  assert.deepEqual([spread.x, spread.y], [250, 230]);
+  assert.ok(spread.zoom <= 3 && spread.width >= 100 / .6 - 1e-9);
+  const single = fitView([{x: 820, y: 120}], 3, 1000, 500);
+  assert.equal(single.zoom, 3);
+  assert.deepEqual([single.x, single.y], [820, 120]);
+  const wide = fitView([{x: 10, y: 10}, {x: 990, y: 490}], 3, 1000, 500);
+  assert.equal(wide.zoom, 1);
 });
