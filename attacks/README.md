@@ -236,6 +236,11 @@ to decode headers; no packet files or application payloads are analyzed or
 retained. Public-source traffic only is considered for service connections,
 NPM and Endlessh; authentication audit events also include local/tailnet users.
 
+Endlessh uses a dedicated dual-stack Docker network. An IPv4-only bridge makes
+Docker proxy incoming IPv6 through its gateway, hiding the source address;
+those private-gateway log records cannot be geolocated or attributed. The
+dual-stack network preserves real clients without changing the published port.
+
 Ports are explicitly mapped in `events.py`: real SSH 28, Git SSH 2222, Plex
 32400/8324/32469, Minecraft 36676/36677, Hytale 5205 and Satisfactory 7778/8888.
 Unknown ports and traffic blocked upstream by the router are not visible.
@@ -307,8 +312,12 @@ The API binds loopback by default; Docker explicitly selects `0.0.0.0`.
 
 ## Deployment
 
-These are activation steps for an approved checkout containing this feature,
-not changes performed by the local preview. Like ChasEx, `compose.yml` is an
+First deployed on Calcifer on **2026-11-24**, with existing Loki/Prometheus and
+admins-only Authelia two-factor protection. History builds from collection;
+the demo remains an explicitly synthetic local/design mode.
+
+These are activation steps for an approved checkout containing this feature.
+Like ChasEx, `compose.yml` is an
 independent deployment using **existing** `compose_proxy` / `compose_monitoring`
 networks, not a new `docker_proxy` network or the nightly main Compose updater.
 
@@ -345,13 +354,18 @@ networks, not a new `docker_proxy` network or the nightly main Compose updater.
    to activate the journal mounts/filters. Check that the fixed sshd, fail2ban,
    and capture source streams reach Loki. Keep Alloy's existing Docker broker
    restrictions. Reload the validated Prometheus scrape configuration with
-   SIGHUP. The new target is unavailable until the collector is started.
+   SIGHUP if its mounted file matches the host file. Git can replace the inode
+   while the container keeps the old bind mount; in that case restart only
+   Prometheus to remount it, then verify the `attacks` scrape target. The new
+   target is unavailable until the collector is started. Recreate only
+   Endlessh through the main Compose entry point to apply its dual-stack
+   network; this interrupts existing honeypot sessions, not real SSH.
 5. From the repository root, validate/build/start the independent deployment:
 
    ```sh
-   docker compose -f attacks/compose.yml config --quiet
-   docker compose -f attacks/compose.yml build
-   docker compose -f attacks/compose.yml up -d
+   docker compose --env-file docker/.env -f attacks/compose.yml config --quiet
+   docker compose --env-file docker/.env -f attacks/compose.yml build
+   docker compose --env-file docker/.env -f attacks/compose.yml up -d
    ```
 
 6. In the existing Authelia configuration, add `attacks.danteb.com` to an

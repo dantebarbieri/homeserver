@@ -88,7 +88,7 @@ Some Docker Compose services build from repos outside this monorepo. Their paths
 - **Internal networks** — purpose-specific (e.g., `authelia`, `immich`, `starr`, `komics`). Web-facing services join both `proxy` + internal; pure backends (DBs, caches) join only internal.
 - **VPN namespace** — `vpn-netns` (pause container) → `gluetun` → `qbittorrent` share one network via `network_mode: "container:vpn-netns"`. The pause container joins `proxy` with alias `qbittorrent`. `slskd-netns` → `gluetun-slskd` → `slskd` is a second, identical stack (ProtonVPN forwards one port per tunnel).
 - **Game servers** — direct host port mapping, no networks defined.
-- **No-network services** (endlessh) — fall through to Docker's default bridge. Note: ddclient uses the dedicated `ddns` network for IPv6.
+- **Endlessh** — dedicated dual-stack `endlessh` network preserves source IPs for both families. An IPv4-only bridge makes Docker's IPv6 proxy hide clients behind its gateway, breaking source attribution.
 - Cross-stack communication uses shared internal networks (e.g., `flaresolverr`) rather than putting non-proxied services on `proxy`.
 
 ### Subdomain Naming Convention

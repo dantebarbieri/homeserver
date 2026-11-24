@@ -51,6 +51,8 @@ services:
     container_name: endlessh
     ports:
       - "22:2222"
+    networks:
+      - endlessh
     # -healthcheck_enabled is required: the image's HEALTHCHECK runs
     # `/endlessh -healthcheck`, which GETs 127.0.0.1:51000/health. That listener
     # only starts when this flag is passed. Overriding command: drops it from the
@@ -95,5 +97,13 @@ volumes:
 networks:
   ddns:
     enable_ipv6: true
+  # Without native IPv6, docker-proxy hides IPv6 clients behind the bridge gateway.
+  # Explicit pools avoid the exhausted default IPv4 pools on Calcifer.
+  endlessh:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 10.253.240.24/29
+        - subnet: fd2b:92df:1a5b:22::/64
   npm-internal:
   proxy:

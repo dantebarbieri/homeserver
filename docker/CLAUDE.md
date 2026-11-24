@@ -71,5 +71,6 @@ Docker's daemon has `ipv6 = true` with `fixed-cidr-v6 = "fd00::/80"` (ULA) and `
 
 - The `proxy` network has `enable_ipv6: true` — services on it can accept inbound IPv6 (via port mapping) and make outbound IPv6 connections.
 - The `ddns` network (in `compose.core.yml`) also has `enable_ipv6: true` — used by ddclient for IPv6 address detection.
+- Endlessh has its own dual-stack network with explicit pools (the default IPv4 pools are exhausted). Keep it IPv6-enabled: otherwise Docker's IPv6-to-IPv4 proxy hides the client's address in its logs.
 - Compose's auto-created `compose_default` network does **not** have IPv6. Services that need IPv6 must be on an explicitly IPv6-enabled network.
 - When adding a new service that needs IPv6 connectivity, either put it on an existing IPv6-enabled network or create a new one with `enable_ipv6: true`.
