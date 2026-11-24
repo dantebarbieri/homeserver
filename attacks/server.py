@@ -14,7 +14,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from common import UpstreamError, clients
-from events import OWN_NETWORKS, TYPES, VERDICTS, home_networks, traffic_origin
+from events import OWN_NETWORKS, SEVERITIES, SEVERITY, TYPES, VERDICTS, home_networks, kinds_at_least, traffic_origin
 
 
 ROOT = Path(__file__).parent / "static"
@@ -34,7 +34,7 @@ class BadRequest(Exception):
 
 def parameters(query):
     try:
-        raw = parse_qs(query, keep_blank_values=True, max_num_fields=8, strict_parsing=True)
+        raw = parse_qs(query, keep_blank_values=True, max_num_fields=16, strict_parsing=True)
         if any(len(values) != 1 for values in raw.values()):
             raise ValueError()
         return {key: values[0] for key, values in raw.items()}
@@ -42,8 +42,19 @@ def parameters(query):
         raise BadRequest("Invalid query parameters") from None
 
 
+def choices(value, allowed, label):
+    values = value.split(",")
+    if len(values) > len(allowed) or len(set(values)) != len(values) or not set(values) <= set(allowed):
+        raise BadRequest(f"Unknown {label}")
+    return values
+
+
+def alternatives(values):
+    return "|".join(re.escape(value) for value in values)
+
+
 def event_query(params, now, networks=()):
-    if set(params) - {"range", "type", "outcome", "ip", "user", "before", "after", "own"}:
+    if set(params) - {"range", "type", "outcome", "severity", "ip", "country", "asn", "before", "after", "own"}:
         raise BadRequest("Unknown filter")
     if params.get("own", "0") not in ("0", "1"):
         raise BadRequest("Unknown own-traffic setting")
@@ -51,28 +62,34 @@ def event_query(params, now, networks=()):
     if period not in RANGES:
         raise BadRequest("Unknown time range")
     selector = '{job="attacks"' + (',origin!="own"' if params.get("own") != "1" else "")
-    category = params.get("type", "")
-    if category:
-        if category not in TYPES:
-            raise BadRequest("Unknown event type")
-        selector += ",type=" + json.dumps(category)
+    if params.get("type"):
+        categories = choices(params["type"], TYPES, "event type")
+        selector += ",type=~" + json.dumps(alternatives(categories))
     selector += "} | json"
     if params.get("own") != "1":
         selector += exclude_own(networks)
     if params.get("outcome"):
-        if params["outcome"] not in VERDICTS:
-            raise BadRequest("Unknown outcome")
-        selector += " | verdict=" + json.dumps(params["outcome"])
+        outcomes = choices(params["outcome"], VERDICTS, "outcome")
+        selector += " | verdict=~" + json.dumps(alternatives(outcomes))
+    if params.get("severity"):
+        if params["severity"] not in SEVERITIES:
+            raise BadRequest("Unknown severity")
+        if params["severity"] != SEVERITIES[0]:
+            selector += " | kind=~" + json.dumps(alternatives(kinds_at_least(params["severity"])))
     if params.get("ip"):
         try:
             ip = str(ipaddress.ip_address(params["ip"]))
         except ValueError:
             raise BadRequest("Enter a complete IPv4 or IPv6 address") from None
         selector += " | ip=" + json.dumps(ip)
-    if params.get("user"):
-        if len(params["user"]) > 64 or any(ord(char) < 32 for char in params["user"]):
-            raise BadRequest("Invalid username")
-        selector += " | user=" + json.dumps(params["user"])
+    if params.get("country"):
+        if not re.fullmatch(r"[A-Z]{2}", params["country"]):
+            raise BadRequest("Invalid country code")
+        selector += " | countryCode=" + json.dumps(params["country"])
+    if params.get("asn"):
+        if not re.fullmatch(r"[1-9][0-9]{0,9}", params["asn"]):
+            raise BadRequest("Invalid network number")
+        selector += " | asn=" + json.dumps(params["asn"])
     start, end = int((now - RANGES[period]) * NANO), int(now * NANO)
     if "before" in params and "after" in params:
         raise BadRequest("Use one cursor direction")
@@ -118,7 +135,8 @@ class API:
                         or not isinstance(item.get("id"), str)):
                     raise UpstreamError("Invalid normalized event")
                 origin = "own" if item.get("origin") == "own" else traffic_origin(item["ip"], networks)
-                rows.append({**item, "origin": origin, "cursor": ns})
+                rows.append({**item, "origin": origin, "cursor": ns,
+                             "severity": SEVERITY.get(item.get("kind"), "low")})
         rows.sort(key=lambda item: int(item["cursor"]), reverse="after" not in params)
         more = len(rows) > LIMIT
         # Do not silently drop events sharing a pagination timestamp.
@@ -153,6 +171,30 @@ class API:
                 or data.get("data", {}).get("resultType") != ("matrix" if ranged else "vector")):
             raise UpstreamError("Invalid statistics response from Loki")
         return data["data"]["result"]
+
+    def sources(self, params):
+        period = params.get("range", "24h")
+        if set(params) - {"range", "own"} or period not in RANGES or params.get("own", "0") not in ("0", "1"):
+            raise BadRequest("Unknown source range")
+        networks = self.own_networks(self.collector.request("/status"))
+        base = '{job="attacks"' + (',origin!="own"' if params.get("own") != "1" else "") + "} | json"
+        if params.get("own") != "1":
+            base += exclude_own(networks)
+        instant = {"time": str(int(time.time() * NANO))}
+
+        def top(labels):
+            query = f'topk(12, sum by ({labels}) (count_over_time({base} | keep {labels} | __error__="" [{period}])))'
+            rows = []
+            for row in self.loki_metrics(query, **instant):
+                count = float(row["value"][1])
+                if not math.isfinite(count):
+                    raise UpstreamError("Source statistics contain an invalid value")
+                rows.append({**row["metric"], "count": count})
+            return sorted(rows, key=lambda row: -row["count"])
+
+        countries = [row for row in top("countryCode") if re.fullmatch(r"[A-Z]{2}", row.get("countryCode", ""))]
+        asns = [row for row in top("asn,networkOrganization") if re.fullmatch(r"[1-9][0-9]{0,9}", row.get("asn", ""))]
+        return {"range": period, "countries": countries, "networks": asns, "queriedAt": time.time()}
 
     def stats(self, params):
         period = params.get("range", "24h")
@@ -218,6 +260,8 @@ def serve(host="127.0.0.1", port=8080):
                             result = api.events(params)
                         elif url.path == "/api/stats":
                             result = api.stats(params)
+                        elif url.path == "/api/sources":
+                            result = api.sources(params)
                         elif url.path == "/api/status" and not params:
                             result = api.collector.request("/status")
                         else:

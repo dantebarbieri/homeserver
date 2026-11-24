@@ -1,6 +1,6 @@
 """Conservative source-specific parsers. Never retain raw messages or credentials."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import ipaddress
 import json
@@ -23,6 +23,21 @@ KINDS = {
     "http_probe": ("web", "Suspicious web request", "suspected"),
     "http_denied": ("web", "HTTP access denied", "unclassified"),
     "service_connection": ("service", "Service connection", "unclassified"),
+    "plex_client": ("plex", "Plex client request", "observed"),
+    "plex_reachability": ("plex", "Probable Plex remote-access check", "observed"),
+    "plex_public": ("plex", "Public Plex endpoint request", "observed"),
+    "plex_probe": ("plex", "Unauthenticated Plex request", "suspected"),
+    "hytale_rejected": ("game", "Hytale identity token rejected", "failure"),
+}
+# Evidence of hostile intent, lowest first. A pure function of the kind, so history is covered at read time.
+SEVERITIES = ("info", "low", "suspicious", "high", "critical")
+SEVERITY = {
+    "endlessh_open": "low", "endlessh_close": "low",
+    "ssh_failure": "high", "ssh_accepted": "info", "ssh_accepted_unknown": "critical",
+    "ssh_disconnect": "suspicious", "ssh_probe": "low", "ssh_ban": "high",
+    "auth_failure": "high", "http_probe": "high", "http_denied": "low", "service_connection": "low",
+    "plex_client": "info", "plex_reachability": "info", "plex_public": "low", "plex_probe": "suspicious",
+    "hytale_rejected": "suspicious",
 }
 REASONS = {
     "endlessh_open": "Endlessh logged ACCEPT on the decoy SSH service; this does not establish a human attacker's intent.",
@@ -37,6 +52,11 @@ REASONS = {
     "http_probe": "The requested path matches a common credential-file, exploit, or administration-endpoint probe pattern.",
     "http_denied": "NPM returned HTTP 401, 403, or 429. This can be legitimate unauthenticated traffic.",
     "service_connection": "An inbound TCP SYN or representative UDP datagram reached a configured service port; no payload was analyzed.",
+    "plex_client": "Plex logged a request carrying a Plex token (or an in-progress streaming session). Looks like a signed-in client; this does not identify the person.",
+    "plex_reachability": "Unauthenticated GET /identity from an AWS-published address range. Plex.tv checks remote access this way, but any AWS customer can send the same request, so this is an inference.",
+    "plex_public": "A request without a token for an endpoint Plex serves publicly (/identity, the web app, or a streaming session). These expose no library data.",
+    "plex_probe": "A request without a Plex token for a path that is not a public endpoint. Plex normally answers these 401 or 403; consistent with internet scanners, not evidence of access.",
+    "hytale_rejected": "Hytale refused the client's identity token (invalidIdentityToken). The client was not a signed-in player: it may be a server-list poller, a scanner speaking the game protocol, or an outdated client.",
 }
 PORTS = {
     28: ("ssh", "SSH"), 2222: ("git", "Forgejo SSH"),
@@ -127,17 +147,43 @@ def parse_endlessh(line, timestamp):
     return event("endlessh_open" if action == "ACCEPT" else "endlessh_close", ip, timestamp, **fields)
 
 
-def parse_ssh(line, timestamp):
+def kinds_at_least(level):
+    floor = SEVERITIES.index(level)
+    return sorted(kind for kind, value in SEVERITY.items() if SEVERITIES.index(value) >= floor)
+
+
+def retag(item, kind):
+    category, title, verdict = KINDS[kind]
+    return {**item, "kind": kind, "title": title, "verdict": verdict, "reason": REASONS[kind]}
+
+
+def refine(item):
+    """Reclassify using enrichment that the raw parser did not have."""
+    if (item["kind"] == "plex_public" and item.get("path") in ("/identity", "/identity/")
+            and "AWS" in str(item.get("networkProvider", "")).split(" / ")):
+        return retag(item, "plex_reachability")
+    return item
+
+
+SSH_LINE = re.compile(
+    r"(?:error: |fatal: )?(?:Accepted |Failed |Invalid user |User \S+ from \S+ not allowed because |"
+    r"Connection (?:closed|reset) by |Disconnected from |Timeout before authentication for connection from |"
+    r"Unable to negotiate with |maximum authentication attempts|banner exchange:|kex_exchange_identification:|"
+    r"ssh_dispatch_run_fatal: Connection from )")
+
+
+def parse_ssh(line, timestamp, service="SSH", port=28, category=None):
+    where = {"service": service, "port": port, **({"type": category} if category else {})}
     accepted = re.search(r"Accepted (\S+) for (.+?) from (\S+) port (\d+)", line)
     if accepted:
         fingerprint = re.search(r"\b(SHA256:[A-Za-z0-9+/=]+|MD5:[a-f0-9:]+)", line)
-        return event("ssh_accepted", accepted[3], timestamp, service="SSH", port=28,
+        return event("ssh_accepted", accepted[3], timestamp, **where,
                      user=text(accepted[2], 64), sourcePort=int(accepted[4]),
                      authMethod=text(accepted[1], 32),
                      keyFingerprint=fingerprint[1] if fingerprint else None)
     invalid = re.search(r"Invalid user (.+?) from (\S+) port (\d+)", line)
     if invalid:
-        return event("ssh_failure", invalid[2], timestamp, service="SSH", port=28,
+        return event("ssh_failure", invalid[2], timestamp, **where,
                      user=text(invalid[1], 64), sourcePort=int(invalid[3]),
                      rejectionReason="Username does not exist", authMethod="unknown")
     failed = re.search(r"Failed (\S+) for (invalid user )?(.+?) from (\S+) port (\d+)", line)
@@ -146,25 +192,90 @@ def parse_ssh(line, timestamp):
             "publickey": "Public key rejected", "password": "Password authentication rejected",
             "keyboard-interactive/pam": "Interactive authentication rejected",
         }.get(failed[1], "Authentication rejected")
-        return event("ssh_failure", failed[4], timestamp, service="SSH", port=28,
+        return event("ssh_failure", failed[4], timestamp, **where,
                      user=text(failed[3], 64), sourcePort=int(failed[5]),
                      authMethod=text(failed[1], 32), rejectionReason=reason)
     exceeded = re.search(r"maximum authentication attempts exceeded for (?:invalid user )?(.+?) from (\S+) port (\d+)", line)
     if exceeded:
-        return event("ssh_failure", exceeded[2], timestamp, service="SSH", port=28,
+        return event("ssh_failure", exceeded[2], timestamp, **where,
                      user=text(exceeded[1], 64), sourcePort=int(exceeded[3]),
                      rejectionReason="Maximum authentication attempts exceeded", authMethod="unknown")
+    not_allowed = re.search(r"User (.+?) from (\S+) not allowed because", line)
+    if not_allowed:
+        return event("ssh_failure", not_allowed[2], timestamp, **where,
+                     user=text(not_allowed[1], 64), authMethod="unknown",
+                     rejectionReason="Account is not permitted to log in over SSH")
     disconnected = re.search(r"(?:Connection (?:closed|reset) by|Disconnected from) (?:(?:invalid|authenticating) user (.+?) )?(\S+) port (\d+).*\[preauth\]", line)
     if disconnected:
-        return event("ssh_disconnect", disconnected[2], timestamp, service="SSH", port=28,
+        return event("ssh_disconnect", disconnected[2], timestamp, **where,
                      user=text(disconnected[1], 64) if disconnected[1] else None,
                      sourcePort=int(disconnected[3]), authMethod="unknown")
+    timeout = re.search(r"Timeout before authentication for connection from (\S+) to ", line)
+    if timeout:
+        return event("ssh_disconnect", timeout[1], timestamp, **where, authMethod="unknown")
     # Generic established-session disconnects and PQ warnings are not failures.
     match = re.search(r"(?:banner exchange|kex_exchange_identification):.*(?:from|with) (\S+) port (\d+)", line)
+    match = match or re.search(r"(?:Unable to negotiate with|ssh_dispatch_run_fatal: Connection from) (\S+) port (\d+)", line)
     if match:
-        return event("ssh_probe", match[1], timestamp, port=28, service="SSH",
-                     sourcePort=int(match[2]))
+        return event("ssh_probe", match[1], timestamp, **where, sourcePort=int(match[2]))
     return None
+
+
+def parse_forgejo_ssh(line, timestamp):
+    # The container also logs application lines that can echo request text; only accept bare sshd messages.
+    if not SSH_LINE.match(line):
+        return None
+    return parse_ssh(line, timestamp, "Forgejo SSH", 2222, "git")
+
+
+HYTALE = re.compile(
+    r"Disconnecting QuicConnectionAddress\{connId=[0-9a-f]*\} \(/(?P<ip>\[[0-9a-fA-F:.]+\]|[0-9.]+):(?P<port>\d+)"
+    r"(?:, streamId=\d+)?\)(?: \(SNI: (?P<sni>[^)]*)\))? with the message: (?P<message>[\w.]+)")
+
+
+def parse_hytale(line, timestamp):
+    match = HYTALE.search(line)
+    if not match or match["message"] != "client.general.disconnect.invalidIdentityToken":
+        return None
+    ip = address(match["ip"])
+    if not ip or not public(ip):
+        return None
+    return event("hytale_rejected", ip, timestamp, service="Hytale", port=5205, protocol="udp",
+                 sourcePort=int(match["port"]), rejectionReason="Identity token rejected",
+                 **({"sni": text(match["sni"], 253)} if match["sni"] else {}))
+
+
+PLEX = re.compile(
+    r"^(?P<time>[A-Z][a-z]{2} \d{1,2}, \d{4} \d{2}:\d{2}:\d{2}\.\d{3}) \[\d+\] DEBUG - "
+    r"Request: \[(?P<ip>\S+?):(?P<port>\d+) \(WAN\)\] (?P<method>[A-Z*]+) (?P<target>\S+) \(\d+ live\) #\w+(?P<flags>.*)$")
+PLEX_SESSION = "/video/:/transcode/universal/session/"
+
+
+def parse_plex(line, zone=timezone.utc):
+    """One Plex WAN request. Tokens, query strings and account names are never retained."""
+    match = PLEX.match(line)
+    if not match:
+        return None
+    ip = address(match["ip"])
+    if not ip or not public(ip):
+        return None
+    timestamp = datetime.strptime(match["time"], "%b %d, %Y %H:%M:%S.%f").replace(tzinfo=zone).timestamp()
+    path = unquote(unquote(match["target"].split("?", 1)[0].split("#", 1)[0]))
+    if path.startswith(PLEX_SESSION):
+        path = PLEX_SESSION + "[session]"
+    path = text(re.sub(r"[A-Za-z0-9_=-]{40,}", "[redacted]", path), 240)
+    method = text(match["method"], 16)
+    if re.search(r"\bToken \(", match["flags"]):
+        kind, bucket, window = "plex_client", ip, 1800
+    elif path in ("/identity", "/identity/") or path == "/web" or path.startswith(("/web/", PLEX_SESSION)):
+        kind, bucket, window = "plex_public", f"{ip} {path}", 1800
+    else:
+        kind, bucket, window = "plex_probe", f"{ip} {method} {path}", 300
+    fields = {} if kind == "plex_client" else {"method": method, "path": path}
+    item = event(kind, ip, timestamp, service="Plex", port=32400, protocol="tcp",
+                 sourcePort=int(match["port"]), **fields)
+    # Busy clients and scanners are summarised: one event per source and request class per window.
+    return {**item, "throttle": f"{kind}:{bucket}:{int(timestamp // window)}"} if item else None
 
 
 def parse_fail2ban(line, timestamp):
@@ -236,7 +347,8 @@ def parse_flow(line, timestamp):
 
 
 PARSERS = {"endlessh": parse_endlessh, "authelia": parse_authelia,
-           "ssh": parse_ssh, "fail2ban": parse_fail2ban, "connections": parse_flow}
+           "ssh": parse_ssh, "fail2ban": parse_fail2ban, "connections": parse_flow,
+           "forgejo": parse_forgejo_ssh, "hytale": parse_hytale}
 
 
 def identity(source, key):

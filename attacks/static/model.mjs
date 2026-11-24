@@ -9,6 +9,44 @@ export const TYPES = {
   git: {label: "Git SSH", color: "#82a8ff"},
 };
 
+export const OUTCOMES = [
+  ["accepted", "Login accepted"], ["failure", "Sign-in rejected"], ["incomplete", "Pre-auth disconnect"],
+  ["blocked", "Blocked / banned"], ["suspected", "Suspected probe"], ["observed", "Observed"],
+  ["unclassified", "Unclassified connection"],
+];
+
+// Evidence of hostile intent, lowest first. Mirrors attacks/events.py; rows from the API carry their own level.
+export const SEVERITIES = [
+  ["info", "Info", "Looks routine: a signed-in session or an ordinary service check."],
+  ["low", "Low", "Reached a port or public endpoint; unremarkable on its own."],
+  ["suspicious", "Suspicious", "Unusual or unauthenticated, but nothing was rejected or exploited."],
+  ["high", "High", "A rejected login, ban, or a request matching a known exploit pattern."],
+  ["critical", "Critical", "A login succeeded with a credential this dashboard does not recognize."],
+];
+const SEVERITY_BY_KIND = {
+  endlessh_open: "low", endlessh_close: "low", ssh_failure: "high", ssh_accepted: "info", ssh_accepted_unknown: "critical",
+  ssh_disconnect: "suspicious", ssh_probe: "low", ssh_ban: "high", auth_failure: "high", http_probe: "high",
+  http_denied: "low", service_connection: "low", plex_client: "info", plex_reachability: "info", plex_public: "low",
+  plex_probe: "suspicious", hytale_rejected: "suspicious",
+};
+
+export function severityOf(item) {
+  return SEVERITIES.some(([level]) => level === item.severity) ? item.severity : SEVERITY_BY_KIND[item.kind] || "low";
+}
+
+const list = value => (value ? String(value).split(",") : []);
+
+// Mirrors the server's event query so synthetic and just-arrived events obey the same filters.
+export function matchesFilters(item, parameters) {
+  const levels = SEVERITIES.map(([level]) => level);
+  const types = list(parameters.type), outcomes = list(parameters.outcome);
+  return (!types.length || types.includes(item.type)) && (!outcomes.length || outcomes.includes(item.verdict))
+    && (!parameters.severity || levels.indexOf(severityOf(item)) >= levels.indexOf(parameters.severity))
+    && (!parameters.ip || item.ip === parameters.ip) && (!parameters.country || item.countryCode === parameters.country)
+    && (!parameters.asn || String(item.asn) === parameters.asn)
+    && (parameters.own === "1" || item.origin !== "own");
+}
+
 export const MAP_DEFAULTS = {keep: 7, fadeMinutes: 30, maxDots: 300};
 
 export function mapSettings(input) {
@@ -144,6 +182,13 @@ const DEMO_KINDS = ["endlessh_open", "ssh_probe", "auth_failure", "http_probe", 
 // Weighted like real traffic: most scanners hit Endlessh or the web.
 const DEMO_MIX = [0, 0, 0, 0, 3, 3, 3, 1, 1, 2, 4, 5, 6, 7];
 
+// Titles and outcomes for the kinds that demoEvent varies by variant.
+const DEMO_TITLES = {
+  plex_client: ["Plex client request", "observed"], plex_probe: ["Unauthenticated Plex request", "suspected"],
+  plex_reachability: ["Probable Plex remote-access check", "observed"], plex_public: ["Public Plex endpoint request", "observed"],
+  hytale_rejected: ["Hytale identity token rejected", "failure"], ssh_failure: ["SSH authentication failed", "failure"],
+  ssh_disconnect: ["SSH disconnected before login", "incomplete"], ssh_probe: ["Targeted real SSH port", "unclassified"],
+};
 export function demoEvents(now = Date.now()) {
   return Array.from({length: 32}, (_, i) => demoEvent(i, (now - i * 17000) / 1000, `demo-${i}`, `192.0.2.${i + 1}`, DEMO_PLACES[(i * 3) % 8]));
 }
@@ -151,7 +196,8 @@ export function demoEvents(now = Date.now()) {
 // One synthetic arrival for the simulated live stream. Addresses stay inside the RFC 5737 documentation ranges.
 export function demoLiveEvent(sequence, now = Date.now(), random = Math.random) {
   const type = DEMO_MIX[Math.floor(random() * DEMO_MIX.length)];
-  const variant = type === 1 ? [0, 0, 0, 0, 1, 2, 3][Math.floor(random() * 7)] : 0;
+  const variants = {1: [0, 0, 0, 0, 1, 2, 3], 5: [0, 1, 1, 2, 3, 4], 6: [0, 0, 1, 1], 7: [0, 1, 1, 2, 3]}[type];
+  const variant = variants ? variants[Math.floor(random() * variants.length)] : 0;
   const place = DEMO_PLACES[Math.floor(random() * DEMO_PLACES.length)];
   const prefix = ["192.0.2", "198.51.100", "203.0.113"][Math.floor(random() * 3)];
   const item = demoEvent(type + 8 * variant, now / 1000, `demo-live-${sequence}`, `${prefix}.${1 + Math.floor(random() * 254)}`, place);
@@ -184,6 +230,17 @@ function demoEvent(i, timestamp, id, ip, place) {
       authMethod: "publickey", keyStatus: variant === 1 ? "recognized" : "unregistered",
       keyLabel: variant === 1 ? "Example desktop (synthetic)" : undefined, keyFingerprint: "SHA256:synthetic-demo-fingerprint"});
     else Object.assign(item, {kind: "ssh_disconnect", title: "SSH disconnected before login", verdict: "incomplete", authMethod: "unknown"});
+  }
+  const variant = Math.floor(i / 8);
+  const set = (kind, extra = {}) => Object.assign(item, {kind, title: DEMO_TITLES[kind][0], verdict: DEMO_TITLES[kind][1], ...extra});
+  if (type === "plex" && variant > 0) {
+    const kind = ["plex_client", "plex_probe", "plex_reachability", "plex_public"][(variant - 1) % 4];
+    set(kind, {method: "GET", status: kind === "plex_probe" ? 403 : 200, path: {plex_client: undefined, plex_probe: "/robots.txt", plex_reachability: "/identity", plex_public: "/web/index.html"}[kind]});
+  } else if (type === "game" && variant % 2) {
+    set("hytale_rejected", {service: "Hytale", protocol: "udp", port: 5205});
+  } else if (type === "git" && variant > 0) {
+    const kind = ["ssh_failure", "ssh_disconnect", "ssh_probe"][(variant - 1) % 3];
+    set(kind, {service: "Forgejo SSH", port: 2222, user: kind === "ssh_failure" ? "root" : undefined, protocol: "tcp"});
   }
   return item;
 }

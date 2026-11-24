@@ -50,7 +50,8 @@ class SSHKeys:
             self.status = {"state": "unavailable", "message": f"Public-key registry unavailable ({type(error).__name__})"}
 
     def annotate(self, item):
-        if item["kind"] != "ssh_accepted":
+        # Forgejo manages its own SSH keys, so the host registry says nothing about them.
+        if item["kind"] != "ssh_accepted" or item.get("service") != "SSH":
             return item
         label = self.keys.get((item.get("user"), item.get("keyFingerprint")))
         if label and item.get("authMethod") == "publickey":

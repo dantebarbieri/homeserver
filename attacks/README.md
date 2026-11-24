@@ -1,8 +1,9 @@
 # Attacks
 
 Private, read-only security-event observatory for **attacks.danteb.com**.
-A charcoal UI with an SVG world map, live event stream, exact IP/username
-and outcome filters, inspectable evidence badges, Loki window statistics, and
+A charcoal UI with an SVG world map, live event stream, severity, multi-select
+type/outcome and source (IP, country, network) filters, inspectable evidence
+badges, Loki window statistics, and
 Prometheus lifetime counters and live gauges.
 There is no classifier queue for a human to work through, and no AI dependency.
 
@@ -16,12 +17,50 @@ There is no classifier queue for a human to work through, and no AI dependency.
 | fail2ban | sshd jail's actual ban record | Blocked |
 | Authelia | Explicit unsuccessful authentication record, user, factor, IP | Failed sign-in; not ordinary 401 login-page redirects |
 | NPM | Common probe paths or 401/403/429; method, host, client IP | Suspected probe or unclassified access denial |
-| Game/Plex/Git ports | Inbound TCP SYN or representative UDP datagram | Unclassified connection, not automatically an attack |
+| Forgejo SSH (2222) | Bare sshd messages from Forgejo's own SSH server, parsed like real SSH: user, reason, auth method | Same outcomes as real SSH, badged **Git SSH** |
+| Plex | WAN request lines from Plex's own log: method, path (no query), source | Signed-in client, public endpoint, probable remote-access check, or unauthenticated request; see below |
+| Hytale | Container log line for a refused identity token | Failed game login; intent unknown |
+| Other game/service ports | Inbound TCP SYN or representative UDP datagram | Unclassified connection, not automatically an attack |
+
+Plex requests are split by what the request itself shows. A request carrying a
+Plex token is a **client request** (informational). Tokenless `/identity`, the web
+app or a streaming session path is a **public endpoint** request: these expose no
+library data. A tokenless `/identity` from an AWS-published range is relabeled a
+**probable Plex remote-access check**, because plex.tv checks reachability that way,
+but any AWS customer can send the same request, so this is an inference. A
+tokenless request for any other path is an **unauthenticated request**: what an
+internet scanner sends, not evidence that anything was accessed. Tokens, query
+strings and account names are never read into events. Busy clients and scanners
+are summarised to one event per source and request class per window.
+
+Hytale refuses clients whose identity token is invalid
+(`invalidIdentityToken`). That means the client was not a signed-in player; it
+could be a server-list poller, a scanner speaking the game protocol or an outdated
+client. Player names from the same log are never stored.
 
 Every event includes a plain-language evidence explanation. A failed sign-in
 can be a legitimate typo; a port connection can be a real player, viewer or
 health check. Successful SSH logins are audit events, **not attack counts**.
 The aggregate is deliberately called **events observed**, not attackers.
+
+### Severity
+
+Each event kind has a severity, read from its kind at query time, so it also
+applies to history collected before it existed:
+
+| Severity | Kinds |
+|---|---|
+| Info | Accepted SSH login, Plex client request, probable Plex remote-access check |
+| Low | Endlessh connection, real-SSH port probe, HTTP 401/403/429, service-port connection, public Plex endpoint |
+| Suspicious | SSH disconnect before login, unauthenticated Plex request, rejected Hytale identity token |
+| High | Failed SSH login, fail2ban ban, failed Authelia sign-in, suspicious web request |
+| Critical | SSH login with a credential missing from the key registry |
+
+Severity ranks how much attention an event deserves, not whether it was an
+attack, and it never uses source reputation. A "Suspicious or higher" filter keeps
+Suspicious, High and Critical. Plex, Hytale and Forgejo SSH events exist only from
+the day those log sources were added; the severity scale and filters cover
+everything collected.
 
 **Own** means the source belongs to LAN/private, loopback, link-local, Tailscale
 address space, or the home's public IPv6 /64. The host capture heartbeat reports
@@ -149,8 +188,17 @@ cycle and show a catching-up indicator while more remain. Filters are applied
 server-side, not just to the visible
 rows. The map and source count describe the loaded rows, not every event in the
 selected period. Top-level metrics cover **all sources** in the selected window.
-**Clear filters** clears event type, outcome, IP and username and immediately
-reloads the unfiltered stream, preserving the observation window and pause state.
+**Filters** combine as AND across groups. **Severity** is a five-step "at least" control
+(Any, Low, Suspicious, High, Critical). **Type** and **Outcome** are multi-select
+pickers (several values in a group combine as OR). **Source** chooses an exact IP,
+a country or a network (ASN); its country and network lists show the top twelve by
+event count in the selected window (own traffic follows the toggle), fetched when the
+picker opens. An event's details also offer **Only this source IP / country / network**.
+Active filters appear as removable chips. They are applied server-side: `/api/events`
+accepts `severity`, comma-separated `type` and `outcome`, `ip`, `country` and `asn`, and
+`/api/sources` returns the Source picker's lists. There is no attempted-username filter; the
+username is still shown on events. **Clear filters** clears all of these and **Show own traffic**
+and immediately reloads the unfiltered stream, preserving the observation window and pause state.
 
 ### Network ownership, flags and VPN evidence
 
@@ -255,13 +303,13 @@ high-cardinality fields are removed before aggregation.
 ## Data flow and limits
 
 ```text
-Endlessh / Authelia stdout ─ existing Alloy Docker collection ─┐
+Endlessh / Authelia / Forgejo / Hytale stdout ─ Alloy Docker ─┐
 sshd / fail2ban journal ─── Alloy fixed journal filters ──────┤
 bond0 headers ─ capture.py ─ journal ─ Alloy ─────────────────┤
                                                             v
                                                      existing Loki
                                                             |
-NPM access files (read-only) ─────────────────────── attacks-collector
+NPM access + Plex request logs (read-only) ──────── attacks-collector
                                                             |
                            durable bounded outbox ──────────┤
                                                             v
@@ -295,6 +343,13 @@ dual-stack network preserves real clients without changing the published port.
 Ports are explicitly mapped in `events.py`: real SSH 28, Git SSH 2222, Plex
 32400/8324/32469, Minecraft 36676/36677, Hytale 5205 and Satisfactory 7778/8888.
 Unknown ports and traffic blocked upstream by the router are not visible.
+Forgejo's and Hytale's container logs reach the collector through the same Loki
+path as Endlessh. Plex's own `Plex Media Server*.log*` files are mounted read-only at
+`/plex-logs` (from `${DATA}/plex/config/.../Logs`); Plex writes them in the server's
+local time, so `PLEX_LOG_TZ` (from `TZ`) converts them. Only WAN request lines are
+read, and only those from public addresses. Plex debug logging must be on for
+those lines to exist. The Forgejo accepted-login line format has not yet been
+observed in production, so successful Git logins may not appear until it is.
 Long IPv6 extension chains exceeding the 160-byte header snapshot, encrypted
 payloads and application-level game/Plex authentication are not interpreted.
 TCP SYN retransmissions are coalesced per tuple for 60 seconds; UDP is one

@@ -1,6 +1,7 @@
 """Private normalizer: existing Loki + NPM files -> durable outbox -> Loki/Prometheus."""
 
 from collections import Counter
+from datetime import timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
@@ -9,22 +10,27 @@ from pathlib import Path
 import sqlite3
 import threading
 import time
-
+from zoneinfo import ZoneInfo
 import maxminddb
 
 from common import Client, UpstreamError
-from events import KINDS, PARSERS, home_networks, identity, parse_flow, parse_npm, public, text, traffic_origin
+from events import KINDS, PARSERS, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, text, traffic_origin
 from networks import Networks
 from ssh_keys import SSHKeys
 
 
 LOG = logging.getLogger("attacks")
+SSH_MESSAGES = ("Invalid user |Failed |Accepted .* for |not allowed because|maximum authentication attempts|"
+                "Connection (closed|reset) by|Disconnected from|Timeout before authentication|"
+                "Unable to negotiate|banner exchange:|kex_exchange_identification:|ssh_dispatch_run_fatal:")
 SELECTORS = {
     "connections": '{security_source="connections"} |= "attacks-flow-v1"',
     "endlessh": '{container="endlessh"} |~ "(^| )(ACCEPT|CLOSE) host=|Listening on"',
     "authelia": '{container="authelia"} |= "Unsuccessful" |= "authentication attempt"',
-    "ssh": '{security_source="ssh"} |~ "Invalid user |Failed |Accepted .* for |maximum authentication attempts|Connection (closed|reset) by|Disconnected from|banner exchange:|kex_exchange_identification:"',
+    "ssh": '{security_source="ssh"} |~ "' + SSH_MESSAGES + '"',
     "fail2ban": '{security_source="fail2ban"} |= " Ban "',
+    "forgejo": '{container="forgejo"} |~ "' + SSH_MESSAGES + '"',
+    "hytale": '{container="hytale-server"} |= "Disconnecting QuicConnectionAddress" |= "invalidIdentityToken"',
 }
 NANO = 1_000_000_000
 
@@ -84,6 +90,10 @@ class Store:
     def set(self, key, value):
         with self.lock, self.db:
             self.db.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (key, json.dumps(value)))
+
+    def known(self, source, key):
+        with self.lock:
+            return self.db.execute("SELECT 1 FROM seen WHERE id=?", (identity(source, key),)).fetchone() is not None
 
     def enqueue(self, item, source, key):
         with self.lock, self.db:
@@ -247,9 +257,11 @@ class Geo:
 
 
 class Collector:
-    def __init__(self, store, loki, geo, npm, keys=None, networks=None):
+    def __init__(self, store, loki, geo, npm, keys=None, networks=None, plex="/plex-logs", plex_zone=None):
         self.store, self.loki, self.geo, self.npm = store, loki, geo, Path(npm)
-        self.status = {name: {"state": "waiting"} for name in (*SELECTORS, "npm", "delivery")}
+        zone = os.environ.get("PLEX_LOG_TZ", "UTC")
+        self.plex, self.plex_zone = Path(plex), plex_zone or (timezone.utc if zone == "UTC" else ZoneInfo(zone))
+        self.status = {name: {"state": "waiting"} for name in (*SELECTORS, "npm", "plex", "delivery")}
         self.last_tick = 0
         self.last_geo = 0
         self.capture = store.get("capture", {})
@@ -260,7 +272,7 @@ class Collector:
         own = self.own_traffic()
         if own["state"] != "ready":
             raise UpstreamError(own["message"])
-        return {**self.keys.annotate(self.networks.enrich(self.geo.enrich(item))),
+        return {**refine(self.keys.annotate(self.networks.enrich(self.geo.enrich(item)))),
                 "origin": traffic_origin(item["ip"], own["networks"])}
 
     def own_traffic(self):
@@ -304,17 +316,24 @@ class Collector:
         return {"lagSeconds": max(0, now - end / NANO)}
 
     def files(self, now):
-        if not self.npm.is_dir():
-            raise UpstreamError("NPM log directory is unavailable")
-        paths = sorted(self.npm.glob("*_access.log*"))
+        return self.tail(now, "npm", self.npm, "*_access.log*", parse_npm, "NPM access")
+
+    def plex_logs(self, now):
+        parse = lambda line: parse_plex(line, self.plex_zone)
+        return self.tail(now, "plex", self.plex, "Plex Media Server*.log*", parse, "Plex")
+
+    def tail(self, now, name, directory, pattern, parse, label):
+        if not directory.is_dir():
+            raise UpstreamError(f"{label} log directory is unavailable")
+        paths = sorted(directory.glob(pattern))
         paths = [path for path in paths if not path.name.endswith(".gz") and not path.is_symlink()]
         if not paths:
-            raise UpstreamError("No readable NPM access logs found")
+            raise UpstreamError(f"No readable {label} logs found")
         if len(paths) > 1024:
-            raise UpstreamError("Unexpected number of NPM log files")
-        positions = self.store.get("npm_positions", {})
+            raise UpstreamError(f"Unexpected number of {label} log files")
+        positions = self.store.get(f"{name}_positions", {})
         bootstrap = self.store.get("started") - 600
-        skipped = self.store.get("npm_bootstrap_bytes", 0)
+        skipped = self.store.get(f"{name}_bootstrap_bytes", 0)
         for path in paths:
             with path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
@@ -338,15 +357,23 @@ class Collector:
                     if not line.endswith(b"\n"):
                         stream.seek(offset)
                         if len(line) > 65536:
-                            raise UpstreamError("NPM line exceeds limit; checkpoint retained")
+                            raise UpstreamError(f"{label} line exceeds limit; checkpoint retained")
                         break
-                    item = parse_npm(line.decode("utf-8", errors="replace"))
-                    if item and item["timestamp"] >= bootstrap:
-                        self.store.enqueue(self.enrich(item), "npm", f"{key}:{offset}:{line!r}")
+                    item = parse(line.decode("utf-8", errors="replace"))
+                    if not item or item["timestamp"] < bootstrap:
+                        continue
+                    event_key = f"{key}:{offset}:{line!r}"
+                    throttle = item.pop("throttle", None)
+                    if throttle:
+                        # Summarised classes share one key per window, so repeats skip enrichment entirely.
+                        event_key = throttle
+                        if self.store.known(name, event_key):
+                            continue
+                    self.store.enqueue(self.enrich(item), name, event_key)
                 positions[key] = {"offset": stream.tell(), "seen": now}
         positions = {key: value for key, value in positions.items() if value["seen"] >= now - 7 * 86400}
-        self.store.set("npm_positions", positions)
-        self.store.set("npm_bootstrap_bytes", skipped)
+        self.store.set(f"{name}_positions", positions)
+        self.store.set(f"{name}_bootstrap_bytes", skipped)
         return {"bootstrapSkippedBytes": skipped}
 
     def tick(self):
@@ -360,12 +387,14 @@ class Collector:
             self.keys.reload()
             self.networks.reload()
             self.last_geo = now
-        for name in (*SELECTORS, "npm", "delivery"):
+        for name in (*SELECTORS, "npm", "plex", "delivery"):
             try:
                 if name in SELECTORS:
                     detail = self.raw(name, now)
                 elif name == "npm":
                     detail = self.files(now)
+                elif name == "plex":
+                    detail = self.plex_logs(now)
                 else:
                     self.store.flush(self.loki)
                     detail = {}
@@ -400,7 +429,7 @@ def main():
     store = Store(state / "collector.sqlite")
     collector = Collector(store, Client(os.environ.get("LOKI_URL", "http://loki:3100")),
                           Geo(os.environ.get("GEOIP_PATH", "/geo/GeoIP.mmdb")),
-                          os.environ.get("NPM_LOG_DIR", "/npm"))
+                          os.environ.get("NPM_LOG_DIR", "/npm"), plex=os.environ.get("PLEX_LOG_DIR", "/plex-logs"))
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):

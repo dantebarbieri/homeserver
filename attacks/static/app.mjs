@@ -1,4 +1,4 @@
-import {TYPES, mergeEvents, project, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, project, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -150,6 +150,13 @@ async function request(path, params = {}) {
   return response.json();
 }
 
+function severityBadge(item) {
+  const level = severityOf(item), [, label, hint] = SEVERITIES.find(([value]) => value === level);
+  const badge = node("span", label, `badge severity severity-${level}`);
+  badge.title = `Severity ${label}: ${hint}`;
+  return badge;
+}
+
 function render() {
   const fragment = document.createDocumentFragment();
   for (const item of events) {
@@ -164,7 +171,7 @@ function render() {
     const badges = node("span", undefined, "badges");
     const category = node("span", undefined, `badge type-${item.type}`);
     category.append(node("span", undefined, "legend-dot"), node("span", TYPES[item.type].label));
-    badges.append(category, node("span", item.verdict, `badge verdict-${item.verdict}`));
+    badges.append(severityBadge(item), category, node("span", item.verdict, `badge verdict-${item.verdict}`));
     if (item.origin === "own") badges.append(node("span", "Own", "badge origin-own"));
     if (item.keyStatus) badges.append(node("span", item.keyStatus === "recognized" ? "known key" : "unregistered key", `badge key-${item.keyStatus}`));
     classification.append(badges);
@@ -196,7 +203,8 @@ function detail(item, sourceCount) {
     "Source activity": sourceCount > 1 ? `${loadedEvents(sourceCount)}; showing the latest. View this source's events below.` : undefined,
     "Event time": new Date(item.timestamp * 1000).toLocaleString(),
     "Collected": new Date(item.observedAt * 1000).toLocaleString(),
-    "Classification": item.verdict, "Traffic": item.origin === "own" ? "Own network (not proof of who is using it)" : "External",
+    "Classification": item.verdict, "Severity": `${severityBadge(item).textContent}: ${SEVERITIES.find(([value]) => value === severityOf(item))[2]}`,
+    "Traffic": item.origin === "own" ? "Own network (not proof of who is using it)" : "External",
     "Source IP": item.ip, "Approx. location": item.location,
     "Evidence": item.reason,
     "Network owner": item.networkOrganization, "ASN": item.asn ? `AS${item.asn}` : undefined,
@@ -219,6 +227,10 @@ function detail(item, sourceCount) {
   };
   $("detail-fields").replaceChildren(...Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== "")
     .flatMap(([key, value]) => [node("dt", key), node("dd", String(value))]));
+  $("filter-country").hidden = !item.countryCode;
+  $("filter-country").textContent = `Only ${item.countryCode ? countryName(item.countryCode) : "this country"}`;
+  $("filter-network").hidden = !item.asn;
+  $("filter-network").textContent = `Only AS${item.asn}`;
   if (!$("detail").open) {
     document.body.classList.add("detail-open");
     $("detail").showModal();
@@ -227,22 +239,196 @@ function detail(item, sourceCount) {
 $("close").onclick = () => $("detail").close();
 $("detail").addEventListener("close", () => document.body.classList.remove("detail-open"));
 $("detail").addEventListener("click", event => { if (event.target === $("detail")) { const box = $("detail").getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) $("detail").close(); } });
-async function showSource(ip) {
+async function showEvents(change) {
   hideTooltip();
-  $("ip").value = ip;
+  for (const picker of document.querySelectorAll(".picker[open]")) picker.open = false;
   if (mapView.expanded()) await mapView.exit();
-  await load(true);
+  await applyFilters(change);
   $("events").scrollIntoView({block: "start"});
   $("events").firstElementChild?.focus({preventScroll: true});
 }
+const showSource = ip => showEvents({ip});
 $("filter-ip").onclick = () => { $("detail").close(); showSource(selected.ip); };
+$("filter-country").onclick = () => { $("detail").close(); showEvents({country: selected.countryCode}); };
+$("filter-network").onclick = () => {
+  $("detail").close();
+  if (selected.networkOrganization) networkNames.set(String(selected.asn), selected.networkOrganization);
+  showEvents({asn: String(selected.asn)});
+};
 $("health").onclick = () => { $("sources").hidden = !$("sources").hidden; };
 
-function matchesFilters(item) {
-  return (!parameters.type || item.type === parameters.type) && (!parameters.outcome || item.verdict === parameters.outcome)
-    && (!parameters.ip || item.ip === parameters.ip) && (!parameters.user || item.user === parameters.user)
-    && (parameters.own === "1" || item.origin !== "own");
+// Filters live here, not in the form, so the detail dialog and map can set them too.
+const filters = {severity: "", type: new Set(), outcome: new Set(), ip: "", country: "", asn: ""};
+const networkNames = new Map();
+let sourcesKey = "", sourcesAt = 0;
+const regionNames = typeof Intl.DisplayNames === "function" ? new Intl.DisplayNames(undefined, {type: "region"}) : null;
+
+function countryName(code) {
+  try { return regionNames?.of(code) || code; } catch { return code; }
 }
+
+function filterParameters() {
+  const result = {};
+  if (filters.severity) result.severity = filters.severity;
+  for (const name of ["type", "outcome"]) if (filters[name].size) result[name] = [...filters[name]].join(",");
+  for (const name of ["ip", "country", "asn"]) if (filters[name]) result[name] = filters[name];
+  return result;
+}
+
+function activeFilters() {
+  const label = (options, values) => options.filter(([value]) => values.has(value)).map(([, text]) => text).join(", ");
+  const types = Object.entries(TYPES).map(([value, {label: text}]) => [value, text]);
+  const level = SEVERITIES.find(([value]) => value === filters.severity);
+  return [
+    level && [["severity"], `Severity: ${level[1]} or higher`],
+    filters.type.size && [["type"], `Type: ${label(types, filters.type)}`],
+    filters.outcome.size && [["outcome"], `Outcome: ${label(OUTCOMES, filters.outcome)}`],
+    filters.ip && [["ip"], `IP: ${filters.ip}`],
+    filters.country && [["country"], `Country: ${countryName(filters.country)}`],
+    filters.asn && [["asn"], `Network: ${networkNames.get(filters.asn) || `AS${filters.asn}`}`],
+    $("own").checked && [["own"], "Including own traffic"],
+  ].filter(Boolean);
+}
+
+function fillSources(select, any, rows, current, currentLabel) {
+  const options = [["", any], ...rows];
+  if (current && !rows.some(([value]) => value === current)) options.push([current, currentLabel]);
+  select.replaceChildren(...options.map(([value, text]) => {
+    const option = node("option", text);
+    option.value = value;
+    return option;
+  }));
+  select.value = current;
+}
+
+function syncFilters() {
+  for (const input of $("severity").querySelectorAll("input")) input.checked = input.value === filters.severity;
+  for (const name of ["type", "outcome"]) for (const input of $(name).querySelectorAll("input")) input.checked = filters[name].has(input.value);
+  $("ip").value = filters.ip;
+  for (const [id, any, current, label] of [["country", "Any country", filters.country, countryName(filters.country)],
+    ["asn", "Any network", filters.asn, networkNames.get(filters.asn) || `AS${filters.asn}`]]) {
+    const rows = [...$(id).options].slice(1).map(option => [option.value, option.textContent]);
+    fillSources($(id), any, rows, current, label);
+  }
+  const counts = {"type-picker": filters.type.size, "outcome-picker": filters.outcome.size,
+    "source-picker": [filters.ip, filters.country, filters.asn].filter(Boolean).length};
+  for (const [id, count] of Object.entries(counts)) {
+    const badge = $(id).querySelector("summary b");
+    badge.textContent = count || "";
+    $(id).classList.toggle("active", count > 0);
+  }
+  const active = activeFilters();
+  $("clear-filters").disabled = !active.length;
+  $("active-filters").hidden = !active.length;
+  $("active-filters").replaceChildren(...active.map(([[name], text]) => {
+    const chip = node("button", text, "chip");
+    chip.type = "button";
+    chip.append(node("span", "✕", "chip-remove"));
+    chip.querySelector(".chip-remove").setAttribute("aria-hidden", "true");
+    chip.setAttribute("aria-label", `Remove filter ${text}`);
+    chip.onclick = () => name === "own" ? ($("own").checked = false, applyFilters())
+      : applyFilters({[name]: name === "type" || name === "outcome" ? new Set() : ""});
+    return chip;
+  }));
+}
+
+function applyFilters(change = {}) {
+  Object.assign(filters, change);
+  syncFilters();
+  return load(true);
+}
+
+function clearFilters() {
+  $("own").checked = false;
+  sourcesKey = "";
+  return applyFilters({severity: "", type: new Set(), outcome: new Set(), ip: "", country: "", asn: ""});
+}
+
+function buildFilters() {
+  const segments = [["", "Any", "Every event, including routine ones."], ...SEVERITIES.slice(1)];
+  for (const [value, label, hint] of segments) {
+    const choice = node("label", undefined, `segment severity-${value || "any"}`);
+    const input = node("input");
+    Object.assign(input, {type: "radio", name: "severity", value});
+    choice.title = hint;
+    choice.append(input, node("span", label));
+    $("severity").append(choice);
+  }
+  const groups = {type: Object.entries(TYPES).map(([value, {label}]) => [value, label]), outcome: OUTCOMES};
+  for (const [name, options] of Object.entries(groups)) for (const [value, label] of options) {
+    const choice = node("label", undefined, "choice");
+    const input = node("input");
+    Object.assign(input, {type: "checkbox", value});
+    choice.append(input);
+    if (name === "type") choice.append(node("span", undefined, `legend-dot type-${value}`));
+    choice.append(node("span", label));
+    $(name).append(choice);
+  }
+}
+
+function demoSources() {
+  const count = (key, extra) => [...Map.groupBy(mergeEvents(demoLive, demoEvents()).filter(item => item.origin !== "own" && item[key]), item => item[key])]
+    .map(([value, rows]) => ({[key]: String(value), ...extra?.(rows[0]), count: rows.length})).sort((a, b) => b.count - a.count).slice(0, 12);
+  return {countries: count("countryCode"), networks: count("asn", item => ({networkOrganization: item.networkOrganization}))};
+}
+
+async function loadSources() {
+  const range = $("range").value, own = $("own").checked;
+  const key = `${range}|${own}`;
+  if (sourcesKey === key && performance.now() - sourcesAt < 60000) return;
+  sourcesKey = key; sourcesAt = performance.now();
+  try {
+    const result = demo ? demoSources() : await request("/api/sources", own ? {range, own: "1"} : {range});
+    if (key !== `${$("range").value}|${$("own").checked}`) return;
+    for (const row of result.networks) networkNames.set(row.asn, row.networkOrganization || `AS${row.asn}`);
+    const amount = row => ` · ${Math.round(row.count).toLocaleString()}`;
+    fillSources($("country"), "Any country", result.countries.map(row => [row.countryCode, countryName(row.countryCode) + amount(row)]),
+      filters.country, countryName(filters.country));
+    fillSources($("asn"), "Any network", result.networks.map(row => [row.asn, `${row.networkOrganization || "Unknown"} (AS${row.asn})${amount(row)}`]),
+      filters.asn, networkNames.get(filters.asn) || `AS${filters.asn}`);
+    $("source-note").textContent = "Top countries and networks by event count in the selected period.";
+  } catch (error) {
+    sourcesKey = "";
+    $("source-note").textContent = `Country and network lists are unavailable: ${error.message}`;
+  }
+}
+
+function commitIp() {
+  const value = $("ip").value.trim();
+  if (value !== filters.ip) applyFilters({ip: value});
+}
+
+buildFilters();
+$("severity").onchange = event => applyFilters({severity: event.target.value});
+for (const name of ["type", "outcome"]) $(name).onchange = event => {
+  const next = new Set(filters[name]);
+  event.target.checked ? next.add(event.target.value) : next.delete(event.target.value);
+  applyFilters({[name]: next});
+};
+$("country").onchange = event => applyFilters({country: event.target.value});
+$("asn").onchange = event => {
+  const option = event.target.selectedOptions[0];
+  if (option?.value) networkNames.set(option.value, option.textContent.replace(/ \(AS\d+\).*$/, ""));
+  applyFilters({asn: event.target.value});
+};
+$("ip").onchange = commitIp;
+$("filters").onsubmit = event => { event.preventDefault(); commitIp(); };
+$("clear-filters").onclick = clearFilters;
+// One menu at a time; click-away and Escape close it.
+for (const picker of document.querySelectorAll(".picker")) picker.addEventListener("toggle", () => {
+  if (!picker.open) return;
+  for (const other of document.querySelectorAll(".picker[open]")) if (other !== picker) other.open = false;
+  if (picker.id === "source-picker") loadSources();
+});
+document.addEventListener("pointerdown", event => {
+  for (const picker of document.querySelectorAll(".picker[open]")) if (!picker.contains(event.target)) picker.open = false;
+});
+$("filters").addEventListener("keydown", event => {
+  const open = event.key === "Escape" && document.querySelector(".picker[open]");
+  if (!open) return;
+  open.open = false;
+  open.querySelector("summary").focus();
+});
 
 // Demo only: simulate scanners arriving every few seconds, with occasional bursts.
 function demoArrivals() {
@@ -253,7 +439,7 @@ function demoArrivals() {
   for (let i = 0; i < count; i++) fresh.push(demoLiveEvent(++demoSequence, now + i));
   demoLive.unshift(...fresh.toReversed());
   demoLive.length = Math.min(demoLive.length, 200);
-  const shown = fresh.filter(matchesFilters);
+  const shown = fresh.filter(item => matchesFilters(item, parameters));
   if (!shown.length) return;
   events = mergeEvents(events, shown);
   for (const item of shown) freshIds.add(item.id);
@@ -265,9 +451,8 @@ async function load(reset = false, history = false) {
   const epoch = reset ? ++generation : generation;
   busy = true;
   if (reset) {
-    parameters = {range: $("range").value};
+    parameters = {range: $("range").value, ...filterParameters()};
     if ($("own").checked) parameters.own = "1";
-    for (const name of ["type", "outcome", "ip", "user"]) if ($(name).value.trim()) parameters[name] = $(name).value.trim();
     events = []; latest = null; older = null; highlighted = null; catchingUp = false; pulses.clear(); freshIds.clear();
     followQueue.clear();
     for (const {node} of arrivals.values()) node.remove();
@@ -275,7 +460,7 @@ async function load(reset = false, history = false) {
   }
   try {
     if (demo) {
-      events = mergeEvents(demoLive, demoEvents()).filter(matchesFilters);
+      events = mergeEvents(demoLive, demoEvents()).filter(item => matchesFilters(item, parameters));
       latest = "demo";
       if (reset) for (const item of events) if (isFresh(item, FLASH.loadWindow)) freshIds.add(item.id);
     } else {
@@ -831,11 +1016,8 @@ for (const [key, value] of Object.entries(TYPES)) {
   $("legend").append(item);
 }
 
-function reload() { load(true); }
-$("filters").onsubmit = event => { event.preventDefault(); reload(); };
-$("own").onchange = reload;
-$("clear-filters").onclick = () => { $("filters").reset(); reload(); };
-$("range").onchange = () => { reload(); stats(); };
+$("own").onchange = () => applyFilters();
+$("range").onchange = () => { load(true); stats(); };
 $("older").onclick = () => load(false, true);
 $("pause").onclick = () => {
   live = !live;
@@ -881,7 +1063,7 @@ window.addEventListener("offline", () => {
 window.addEventListener("online", () => { errors.delete("network"); atlasFailed.clear(); updateMapDetail(); notices(); load(); stats(); health(); });
 if (!navigator.onLine) errors.set("network", "Offline: live telemetry is unavailable. Event data is never cached.");
 
-mapLand(); updateMapDetail(); load(true); stats(); health();
+mapLand(); updateMapDetail(); applyFilters(); stats(); health();
 if (demo && new URLSearchParams(location.search).get("simulate") !== "0") setTimeout(demoArrivals, 3000);
 setInterval(() => { if (!document.hidden) { mapPoints(); updateTrapping(); } }, 1000);
 setInterval(() => { if (!document.hidden && !demo) load(); }, 3000);

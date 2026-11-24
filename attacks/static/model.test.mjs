@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, mergeEvents, located, project, duration, liveTrapping, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, located, project, duration, liveTrapping, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -135,6 +135,33 @@ test("simulated arrivals are unique, located, documentation-range addresses that
   const merged = mergeEvents(demoEvents(now), arrivals);
   assert.equal(merged[0].id, "demo-live-60");
   assert.equal(merged.length, 92);
+});
+
+test("severity is read from the row or derived from its kind, and filters mirror the server", () => {
+  assert.deepEqual(SEVERITIES.map(([level]) => level), ["info", "low", "suspicious", "high", "critical"]);
+  assert.equal(severityOf({severity: "critical", kind: "endlessh_open"}), "critical");
+  assert.equal(severityOf({kind: "plex_probe"}), "suspicious");
+  assert.equal(severityOf({kind: "something_new"}), "low");
+  const events = demoEvents(Date.parse("2026-01-01T00:00:00Z"));
+  const kinds = new Set(events.map(item => item.kind));
+  for (const kind of ["plex_client", "plex_probe", "plex_reachability", "hytale_rejected"]) assert.equal(kinds.has(kind), true, kind);
+  assert.equal(events.some(item => item.service === "Forgejo SSH"), true);
+  const external = events.filter(item => item.origin !== "own");
+  const atLeast = level => external.filter(item => matchesFilters(item, {severity: level}));
+  assert.equal(atLeast("info").length, external.length);
+  assert.equal(atLeast("suspicious").every(item => ["suspicious", "high", "critical"].includes(severityOf(item))), true);
+  assert.equal(atLeast("suspicious").some(item => item.kind === "plex_probe"), true);
+  assert.equal(atLeast("suspicious").some(item => item.kind === "plex_client"), false);
+  assert.equal(atLeast("critical").every(item => item.kind === "ssh_accepted_unknown"), true);
+  const [first] = external;
+  assert.equal(matchesFilters(first, {type: `nope,${first.type}`, outcome: `${first.verdict},accepted`}), true);
+  assert.equal(matchesFilters(first, {type: "nope"}), false);
+  assert.equal(matchesFilters(first, {country: first.countryCode, asn: String(first.asn)}), true);
+  assert.equal(matchesFilters(first, {country: "ZZ"}), false);
+  const own = {...first, origin: "own"};
+  assert.equal(matchesFilters(own, {}), false);
+  assert.equal(matchesFilters(own, {own: "1"}), true);
+  assert.equal(OUTCOMES.some(([value]) => value === first.verdict), true);
 });
 
 test("only genuinely fresh events flash", () => {

@@ -139,8 +139,8 @@ def run(image, subnet=None):
             assert all(item["networkProvider"] == "AWS" for item in rows)
             assert all(item["privacyServices"][0]["name"] == "Mullvad" for item in rows)
             assert next(item for item in rows if item["kind"] == "ssh_accepted")["keyLabel"] == "fixture-key"
-            filtered = http(addresses["web"], "/api/events?" + urlencode({"outcome": "accepted", "user": "fixture-user"}))
-            assert len(filtered["events"]) == 1
+            filtered = http(addresses["web"], "/api/events?" + urlencode({"outcome": "accepted,failure", "severity": "critical"}))
+            assert [item["kind"] for item in filtered["events"]] == ["ssh_accepted_unknown"]
             own = http(addresses["web"], "/api/events?own=1")["events"]
             assert len(own) == 11 and sum(item["origin"] == "own" for item in own) == 2
             stats = eventually(lambda: (result if (result := http(addresses["web"], "/api/stats"))["lifetimeTrappedSeconds"] == 120.5 else None))

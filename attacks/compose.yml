@@ -48,10 +48,17 @@ services:
     mem_limit: 384m
     environment:
       LOKI_URL: http://loki:3100
+      PLEX_LOG_TZ: ${TZ:-UTC}
     volumes:
       - type: bind
         source: ${DATA:-/srv/docker/data}/attacks/state
         target: /state
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA:-/srv/docker/data}/plex/config/Library/Application Support/Plex Media Server/Logs
+        target: /plex-logs
+        read_only: true
         bind:
           create_host_path: false
       - type: bind

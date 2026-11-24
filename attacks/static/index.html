@@ -58,19 +58,29 @@
         <button class="button" type="submit">Apply map settings</button>
       </form><p>Saved in this browser. The limit affects only the map, never collection or stored events. Set Keep newest to 0 to let every dot fade.</p></details>
       <p id="map-explainer" class="map-explainer"></p>
-      <dialog id="detail"><div class="sheet-grip" aria-hidden="true"></div><div class="dialog-heading"><p class="eyebrow">EVENT DETAILS</p><button id="close" class="button" aria-label="Close event details">✕</button></div><h2 id="detail-title"></h2><dl id="detail-fields"></dl><p class="detail-note">An IP can be a VPN, relay, shared address, or spoofed source. Location is approximate. No passwords, cookies, or request bodies are collected.</p><button id="filter-ip" class="button">Show this source's events</button></dialog>
+      <dialog id="detail"><div class="sheet-grip" aria-hidden="true"></div><div class="dialog-heading"><p class="eyebrow">EVENT DETAILS</p><button id="close" class="button" aria-label="Close event details">✕</button></div><h2 id="detail-title"></h2><dl id="detail-fields"></dl><p class="detail-note">An IP can be a VPN, relay, shared address, or spoofed source. Location is approximate. No passwords, cookies, or request bodies are collected.</p><div class="dialog-actions"><button id="filter-ip" class="button">Only this source IP</button><button id="filter-country" class="button">Only this country</button><button id="filter-network" class="button">Only this network</button></div></dialog>
     </section>
     <section id="sources" class="source-panel" hidden aria-label="Collector health"><h2>Collection health</h2><p>No events is not proof of no attacks. Quiet log queries do not prove that the originating service is logging correctly.</p><div id="source-list"></div></section>
     <section class="feed-panel">
       <div class="feed-heading"><div><p class="eyebrow">THE DETAIL BEHIND THE DOTS</p><h2>Event stream <span id="feed-count"></span></h2></div><button id="pause" class="button">Pause live</button></div>
-      <form id="filters" class="filters">
-        <label>Event type<select id="type"><option value="">All types</option><option value="endlessh">Endlessh</option><option value="ssh">Real SSH</option><option value="authelia">Authelia</option><option value="web">Web / NPM</option><option value="minecraft">Minecraft</option><option value="plex">Plex</option><option value="game">Other games</option><option value="git">Git SSH</option></select></label>
-        <label>Outcome<select id="outcome"><option value="">All outcomes</option><option value="accepted">Login accepted</option><option value="failure">Sign-in rejected</option><option value="incomplete">Pre-auth disconnect</option><option value="blocked">Blocked / banned</option><option value="suspected">Suspected probe</option><option value="observed">Endlessh observed</option><option value="unclassified">Unclassified connection</option></select></label>
-        <label>Source IP<input id="ip" placeholder="IPv4 or IPv6" autocomplete="off" spellcheck="false"></label>
-        <label>Attempted username<input id="user" placeholder="Exact username" autocomplete="off" maxlength="64" spellcheck="false"></label>
-        <div class="filter-actions"><button class="button apply" type="submit">Apply filters <span aria-hidden="true">↗</span></button><button id="clear-filters" class="button" type="button">Clear filters</button></div>
-        <label class="own-toggle" title="Include LAN, Tailscale and home IPv6 audit events. Own traffic never appears on the map or in attack totals."><input id="own" type="checkbox"> Show own traffic</label>
+      <form id="filters" class="filters" autocomplete="off">
+        <fieldset class="severity-filter"><legend>Severity, at least</legend><div id="severity" class="segments"></div></fieldset>
+        <details id="type-picker" class="picker"><summary><span>Type</span><b></b></summary><div id="type" class="picker-menu" role="group" aria-label="Event type"></div></details>
+        <details id="outcome-picker" class="picker"><summary><span>Outcome</span><b></b></summary><div id="outcome" class="picker-menu" role="group" aria-label="Outcome"></div></details>
+        <details id="source-picker" class="picker"><summary><span>Source</span><b></b></summary>
+          <div class="picker-menu source-menu">
+            <label>IP address<input id="ip" placeholder="IPv4 or IPv6" autocomplete="off" spellcheck="false" inputmode="text"></label>
+            <label>Country<select id="country"><option value="">Any country</option></select></label>
+            <label>Network<select id="asn"><option value="">Any network</option></select></label>
+            <small id="source-note">Top sources in the selected period.</small>
+          </div>
+        </details>
+        <div class="filter-end">
+          <label class="own-toggle" title="Include LAN, Tailscale and home IPv6 audit events. Own traffic never appears on the map or in attack totals."><input id="own" type="checkbox"> Show own traffic</label>
+          <button id="clear-filters" class="button" type="button" disabled>Clear filters</button>
+        </div>
       </form>
+      <div id="active-filters" class="active-filters" aria-label="Active filters" hidden></div>
       <div class="feed-columns" aria-hidden="true"><span>TIME</span><span>EVENT / CLASSIFICATION</span><span>SOURCE</span><span>DETAIL</span><span></span></div>
       <div id="events" aria-live="off"></div>
       <div id="empty" class="empty">Connecting to the event collector…</div>

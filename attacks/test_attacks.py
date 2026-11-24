@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import base64
 from contextlib import closing
 import hashlib
@@ -18,7 +18,9 @@ import maxminddb
 from capture import interface_networks, packet
 from collector import Collector, Geo, Store, window
 from common import Client, UpstreamError
-from events import home_networks, traffic_origin, parse_authelia, parse_endlessh, parse_fail2ban, parse_flow, parse_npm, parse_ssh
+from events import (KINDS, SEVERITIES, SEVERITY, home_networks, kinds_at_least, parse_authelia, parse_endlessh,
+                    parse_fail2ban, parse_flow, parse_forgejo_ssh, parse_hytale, parse_npm, parse_plex, parse_ssh,
+                    refine, traffic_origin)
 from server import API, BadRequest, event_query, parameters
 from ssh_keys import SSHKeys
 from networks import FEEDS, Networks
@@ -90,6 +92,69 @@ class ParserTests(unittest.TestCase):
                                      "sourcePort": 1234, "protocol": "tcp"}), 100)
         self.assertEqual((item["type"], item["verdict"]), ("minecraft", "unclassified"))
         self.assertIsNone(parse_flow('{"schema":"attacks-flow-v1","ip":"127.0.0.1","port":36676}', 100))
+
+    def test_forgejo_ssh_reuses_ssh_kinds_but_only_for_bare_sshd_lines(self):
+        denied = parse_forgejo_ssh(f"User root from {IP} not allowed because not listed in AllowUsers", 100)
+        self.assertEqual((denied["kind"], denied["service"], denied["port"], denied["type"]),
+                         ("ssh_failure", "Forgejo SSH", 2222, "git"))
+        self.assertEqual(parse_forgejo_ssh(f"Timeout before authentication for connection from {IP} to 192.168.128.52, pid = 9", 100)["kind"],
+                         "ssh_disconnect")
+        self.assertEqual(parse_forgejo_ssh(f"Unable to negotiate with {IP} port 5000: no matching key exchange method found.", 100)["kind"],
+                         "ssh_probe")
+        self.assertEqual(parse_forgejo_ssh(f"Connection reset by {IP} port 54741 [preauth]", 100)["kind"], "ssh_disconnect")
+        # Application log lines can echo attacker-chosen text, and post-auth closes are routine.
+        self.assertIsNone(parse_forgejo_ssh(f"2026/11/24 router: Failed login from {IP} port 22", 100))
+        self.assertIsNone(parse_forgejo_ssh(f"Connection closed by {IP} port 5000", 100))
+        host = parse_ssh(f"User root from {IP} not allowed because none of user's groups are listed in AllowGroups", 100)
+        self.assertEqual((host["service"], host["port"], host["kind"]), ("SSH", 28, "ssh_failure"))
+
+    def test_hytale_rejection_keeps_only_network_facts(self):
+        line = ("[2026/11/24 21:45:51   INFO] [Hytale] Disconnecting QuicConnectionAddress{connId=1a2b} "
+                f"(/{IP}:50000, streamId=0) (SNI: danteb.com) with the message: client.general.disconnect.invalidIdentityToken")
+        item = parse_hytale(line, 100)
+        self.assertEqual((item["kind"], item["service"], item["port"], item["protocol"], item["sni"]),
+                         ("hytale_rejected", "Hytale", 5205, "udp", "danteb.com"))
+        self.assertEqual(item["sourcePort"], 50000)
+        self.assertIsNone(parse_hytale(line.replace("invalidIdentityToken", "other"), 100))
+        self.assertIsNone(parse_hytale(line.replace(IP, "172.20.0.1"), 100))
+        self.assertIsNone(parse_hytale("Playing(player=Alice) null (null, streamId=0)", 100))
+
+    def test_plex_requests_are_classified_without_tokens_queries_or_accounts(self):
+        def plex(request, flags=""):
+            return parse_plex(f"Nov 24, 2026 09:56:57.701 [134702459300664] DEBUG - Request: [{IP}:55314 (WAN)] "
+                              f"{request} (6 live) #74fa2 TLS GZIP{flags}")
+        client = plex("GET /library/sections?X-Plex-Token=secret", " Signed-in Token (alice)")
+        self.assertEqual(client["kind"], "plex_client")
+        self.assertNotIn("alice", json.dumps(client))
+        self.assertNotIn("secret", json.dumps(client))
+        self.assertNotIn("path", client)
+        self.assertEqual(plex("GET /identity")["kind"], "plex_public")
+        stream = plex("GET /video/:/transcode/universal/session/0a1b2c3d-1111-2222-3333-444455556666/base/12.ts")
+        self.assertEqual((stream["kind"], stream["path"]), ("plex_public", "/video/:/transcode/universal/session/[session]"))
+        for request in ("GET /", "HEAD /", "GET /mcp", "GET /robots.txt", "PRI *"):
+            self.assertEqual(plex(request)["kind"], "plex_probe", request)
+        self.assertEqual(plex("GET /.env?x=secret")["path"], "/.env")
+        for source in ("LAN", "Loopback"):
+            self.assertIsNone(parse_plex(f"Nov 24, 2026 09:56:57.701 [1] DEBUG - Request: [{IP}:1 ({source})] GET / (6 live) #a"))
+        self.assertIsNone(parse_plex("Nov 24, 2026 09:56:57.701 [1] DEBUG - Request: [192.168.1.5:1 (WAN)] GET / (6 live) #a"))
+        # Local log time is converted using the configured zone.
+        chicago = parse_plex("Jun 01, 2026 12:00:00.000 [1] DEBUG - Request: [8.8.8.8:1 (WAN)] GET / (1 live) #a",
+                             timezone(timedelta(hours=-5)))
+        self.assertEqual(chicago["timestamp"], datetime(2026, 6, 1, 17, tzinfo=timezone.utc).timestamp())
+
+    def test_aws_identity_checks_are_retagged_as_probable_reachability(self):
+        item = parse_plex(f"Nov 24, 2026 09:56:57.701 [1] DEBUG - Request: [{IP}:1 (WAN)] GET /identity (1 live) #a")
+        self.assertEqual(refine({**item, "networkProvider": "AWS"})["kind"], "plex_reachability")
+        self.assertEqual(refine({**item, "networkProvider": "Google Cloud"})["kind"], "plex_public")
+        self.assertEqual(refine(item)["kind"], "plex_public")
+
+    def test_severity_is_total_and_ordered(self):
+        self.assertEqual(set(SEVERITY), set(KINDS))
+        self.assertTrue(set(SEVERITY.values()) <= set(SEVERITIES))
+        self.assertIn("ssh_failure", kinds_at_least("high"))
+        self.assertNotIn("plex_probe", kinds_at_least("high"))
+        self.assertEqual(kinds_at_least("critical"), ["ssh_accepted_unknown"])
+        self.assertIn("plex_probe", kinds_at_least("suspicious"))
 
 
 def ethernet(ipv6=False, udp=False, port=36676, flags=2, fragment=False, extension=False):
@@ -304,10 +369,34 @@ class StateTests(unittest.TestCase):
         self.assertEqual(keys.annotate(item)["keyStatus"], "recognized")
         self.assertEqual(keys.annotate(item)["keyLabel"], "DOMAIN\\test")
         self.assertEqual(keys.annotate({**item, "user": "other"})["kind"], "ssh_accepted_unknown")
+        forgejo = parse_forgejo_ssh(f"Accepted publickey for git from {IP} port 1234 ssh2: ED25519 {fingerprint}", 100)
+        self.assertEqual(keys.annotate({**forgejo, "user": "other"})["kind"], "ssh_accepted")
         path.write_text("invalid")
         keys.reload()
         self.assertEqual(keys.status["state"], "unavailable")
         self.assertEqual(keys.annotate(item)["keyStatus"], "unregistered")
+
+    def test_plex_requests_are_summarised_per_source_and_window(self):
+        logdir = self.root / "plex"
+        logdir.mkdir()
+        stamp = datetime.now(timezone.utc).strftime("%b %d, %Y %H:%M:%S.%f")[:-3]
+        def request(ip, target, flags=""):
+            return (f"{stamp} [1] DEBUG - Request: [{ip}:5000 (WAN)] {target} (1 live) #a TLS GZIP{flags}\n")
+        (logdir / "Plex Media Server.log").write_text(
+            request(IP, "GET /") * 5 + request(IP, "GET /robots.txt") + request(IP, "GET /library", " Token (a)") * 4
+            + request("8.8.4.4", "GET /"), encoding="utf-8")
+        geo = Mock()
+        geo.enrich.side_effect = lambda value: value
+        collector = Collector(self.store, Mock(), geo, self.root, plex=logdir)
+        collector.keys, collector.networks = Mock(), Mock()
+        collector.keys.annotate.side_effect = collector.networks.enrich.side_effect = lambda value: value
+        self.store.set("capture", {"timestamp": time.time(), "ownNetworks": []})
+        collector.plex_logs(time.time())
+        metrics = self.store.metrics()
+        self.assertIn('kind="plex_probe",type="plex",country="ZZ",origin="external"} 3', metrics)
+        self.assertIn('kind="plex_client",type="plex",country="ZZ",origin="external"} 1', metrics)
+        collector.plex_logs(time.time())
+        self.assertEqual(metrics, self.store.metrics())
 
 
 class NetworkTests(unittest.TestCase):
@@ -419,9 +508,20 @@ class NetworkTests(unittest.TestCase):
 
 
 class QueryTests(unittest.TestCase):
-    def test_escaped_filters_and_invalid_cursors(self):
-        query, _, _ = event_query({"user": 'x" | line_format "secret', "ip": IP}, time.time())
-        self.assertIn('user="x\\" | line_format \\"secret"', query)
+    def test_multi_value_severity_and_source_filters(self):
+        query, _, _ = event_query({"type": "ssh,plex", "outcome": "failure,suspected", "severity": "high",
+                                   "country": "NL", "asn": "14061", "ip": IP}, time.time())
+        self.assertIn('type=~"ssh|plex"', query)
+        self.assertIn('| verdict=~"failure|suspected"', query)
+        self.assertIn('| kind=~"auth_failure|http_probe|ssh_accepted_unknown|ssh_ban|ssh_failure"', query)
+        self.assertIn('| countryCode="NL" | asn="14061"', query)
+        self.assertNotIn("kind=~", event_query({"severity": "info"}, time.time())[0])
+        for params in ({"type": "ssh,ssh"}, {"type": "ssh,nope"}, {"outcome": "failure,"}, {"severity": "severe"},
+                       {"country": "nl"}, {"country": 'N"'}, {"asn": "0"}, {"asn": "AS1"}, {"user": "root"}):
+            with self.assertRaises(BadRequest, msg=params):
+                event_query(params, time.time())
+
+    def test_invalid_cursors_and_parameters(self):
         for params in ({"type": "x"}, {"range": "all"}, {"ip": "not-an-ip"},
                        {"before": "-1"}, {"query": "{}"}, {"before": "1", "after": "2"}, {"own": "yes"}):
             with self.assertRaises(BadRequest):
@@ -430,6 +530,26 @@ class QueryTests(unittest.TestCase):
             parameters("ip=a&ip=b")
         with self.assertRaises(ValueError):
             Client("https://user:secret@example.test/")
+
+    def test_events_carry_severity_and_sources_are_bounded_facets(self):
+        item = {"id": "one", "type": "plex", "kind": "plex_probe", "ip": IP}
+        loki = Mock()
+        loki.request.side_effect = lambda path, params: (
+            {"status": "success", "data": {"resultType": "streams", "result": [
+                {"stream": {}, "values": [["123", json.dumps(item)]]}]}} if "query_range" in path else
+            {"status": "success", "data": {"resultType": "vector", "result": [
+                {"metric": {"countryCode": "NL", "asn": "14061", "networkOrganization": "DigitalOcean"}, "value": [1, "7"]},
+                {"metric": {"countryCode": "", "asn": ""}, "value": [1, "99"]}]}})
+        collector = Mock()
+        collector.request.return_value = {"ownTraffic": {"state": "ready", "networks": []}}
+        api = API(loki, Mock(), collector)
+        self.assertEqual(api.events({})["events"][0]["severity"], "suspicious")
+        sources = api.sources({"range": "7d"})
+        self.assertEqual(sources["countries"], [{"countryCode": "NL", "asn": "14061",
+                                                 "networkOrganization": "DigitalOcean", "count": 7.0}])
+        self.assertEqual(sources["networks"][0]["asn"], "14061")
+        with self.assertRaises(BadRequest):
+            api.sources({"range": "7d", "type": "ssh"})
 
     def test_saturated_timestamp_fails_instead_of_skipping(self):
         client = Mock()
