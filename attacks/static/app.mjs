@@ -1,4 +1,4 @@
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, project, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, project, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -155,6 +155,34 @@ function severityBadge(item) {
   const badge = node("span", label, `badge severity severity-${level}`);
   badge.title = `Severity ${label}: ${hint}`;
   return badge;
+}
+
+const SEVERITY_LABELS = Object.fromEntries(SEVERITIES.map(([level, label]) => [level, label]));
+
+// A source's kinds and severities, listed in the same clockwise order as its dot slices and ring arcs.
+function sourceMix(source) {
+  const kinds = slices(source.types, TYPE_ORDER), levels = slices(source.severities, SEVERITY_ORDER);
+  return kinds.length > 1 || levels.length > 1 ? {kinds, levels} : null;
+}
+
+function mixBadges(source) {
+  const mix = sourceMix(source);
+  if (!mix) return [];
+  const kinds = node("span", undefined, "badges mix"), levels = node("span", undefined, "badges mix");
+  for (const {key, count} of mix.kinds) {
+    const badge = node("span", undefined, `badge type-${key}`);
+    badge.append(node("span", undefined, "legend-dot"), `${count} ${TYPES[key].label}`);
+    kinds.append(badge);
+  }
+  for (const {key, count} of mix.levels) levels.append(node("span", `${count} ${SEVERITY_LABELS[key]}`, `badge severity severity-${key}`));
+  return [kinds, levels];
+}
+
+function mixText(source) {
+  const mix = sourceMix(source);
+  if (!mix) return "";
+  const list = (parts, label) => parts.map(({key, count}) => `${count} ${label(key)}`).join(", ");
+  return ` Mix: ${list(mix.kinds, key => TYPES[key].label)}. Severity: ${list(mix.levels, key => SEVERITY_LABELS[key])}.`;
 }
 
 function render() {
@@ -729,15 +757,15 @@ function clickHint(count) {
 }
 
 function tooltip(point) {
-  const {latest: item, place, count} = pointData.get(point);
+  const source = pointData.get(point), {latest: item, place, count} = source;
   const target = $("map-tooltip");
   target.dataset.sourceIp = item.ip;
   target.dataset.timestamp = String(item.timestamp);
   const head = node("div", undefined, "tip-head");
   head.append(node("strong", item.title), node("time", ago(item.timestamp), "tip-ago"));
   target.replaceChildren(head,
-    node("span", `${item.ip} · ${loadedEvents(count)}`), locationLabel(place), networkBadges(item),
-    node("span", `${TYPES[item.type].label} · port ${item.port}${item.user ? ` · user ${item.user}` : ""}`),
+    node("span", `${item.ip} · ${loadedEvents(count)}`), ...mixBadges(source), locationLabel(place), networkBadges(item),
+    node("span", `${count > 1 ? "Latest: " : ""}${TYPES[item.type].label} · port ${item.port}${item.user ? ` · user ${item.user}` : ""}`),
     node("small", `${new Date(item.timestamp * 1000).toLocaleString()} · ${clickHint(count)}`));
   target.hidden = false;
   const center = point.getScreenCTM(), parent = $("map").parentElement.getBoundingClientRect();
@@ -785,7 +813,8 @@ function positionArrivals() {
   $("arrival-status").textContent = arrivalsOmitted ? `${arrivalsOmitted} more arrivals in this burst; hover or tap dots for details.` : "";
 }
 
-function arrival({latest: item, place, count}) {
+function arrival(source) {
+  const {latest: item, place, count} = source;
   const previous = arrivals.get(item.ip);
   previous?.node.remove();
   arrivals.delete(item.ip);
@@ -795,12 +824,21 @@ function arrival({latest: item, place, count}) {
     arrivals.get(oldest).node.remove(); arrivals.delete(oldest); arrivalsOmitted++;
   }
   const card = node("div", undefined, `arrival-summary type-${item.type}`);
-  const label = node("span", `${item.ip} · ${loadedEvents(count)}`, "mono");
+  const label = node("span", undefined, "mono"), entry = {node: card, label, mix: [], expires: performance.now() + 4500, spot: previous?.spot};
   card.append(node("strong", item.title), label, locationLabel(place),
     node("small", `${TYPES[item.type].label} · ${item.verdict}${item.user ? ` · user ${item.user}` : item.path ? ` · ${item.path}` : ` · port ${item.port}`}`),
     networkBadges(item));
+  refreshArrival(entry, source);
   $("map-arrivals").append(card);
-  arrivals.set(item.ip, {node: card, label, expires: performance.now() + 4500, spot: previous?.spot});
+  arrivals.set(item.ip, entry);
+}
+
+// Keeps an open card's count and mix current when more of its source's events load.
+function refreshArrival(entry, source) {
+  entry.label.textContent = `${source.ip} · ${loadedEvents(source.count)}`;
+  for (const old of entry.mix) old.remove();
+  entry.mix = mixBadges(source);
+  entry.label.after(...entry.mix);
 }
 
 function sizeMapMarkers() {
@@ -811,9 +849,47 @@ function sizeMapMarkers() {
   const touch = matchMedia("(pointer: coarse)").matches || matchMedia("(max-width: 650px)").matches;
   for (const point of pointNodes.values()) {
     point.querySelector(".map-hit").setAttribute("r", String((touch ? 24 : 12) / scale));
-    point.querySelector(".map-dot").setAttribute("r", String((touch ? 4.5 : 3) / scale));
-    for (const ring of point.querySelectorAll(".map-ring, .map-flash")) ring.setAttribute("r", String(7 / scale));
+    point.querySelector(".map-flash").setAttribute("r", String(7 / scale));
+    // Slices and arcs are unit-radius paths, sized by their wrapper so they never need redrawing on zoom.
+    point.querySelector(".map-dot > g").setAttribute("transform", `scale(${(touch ? 4.5 : 3) / scale})`);
+    for (const ring of point.querySelectorAll(".map-ring > g")) ring.setAttribute("transform", `scale(${7 / scale})`);
   }
+}
+
+const RING_GAP = .04;
+
+// Updates parts in place by key, so a count change never restarts a running arrival animation.
+function drawParts(group, parts, ring) {
+  const stale = new Map([...group.children].map(child => [child.dataset.key, child]));
+  const gap = ring && parts.length > 1 ? RING_GAP / 2 : 0;
+  for (const part of parts) {
+    let element = stale.get(part.key);
+    stale.delete(part.key);
+    if (!element) {
+      element = svg("path", {class: ring ? `severity-${part.key}` : `type-${part.key}`});
+      element.dataset.key = part.key;
+      group.append(element);
+    }
+    element.setAttribute("d", slicePath({start: part.start + gap, end: part.end - gap}, ring));
+  }
+  for (const element of stale.values()) element.remove();
+}
+
+function drawMix(point, source) {
+  drawParts(point.querySelector(".map-slices"), slices(source.types, TYPE_ORDER), false);
+  const levels = slices(source.severities, SEVERITY_ORDER);
+  for (const ring of point.querySelectorAll(".map-ring > g")) drawParts(ring, levels, true);
+}
+
+function marker(className, ...children) {
+  const outer = svg("g", {class: className}), inner = svg("g");
+  inner.append(...children);
+  outer.append(inner);
+  return outer;
+}
+
+function mixSignature({types, severities}) {
+  return [...TYPE_ORDER.map(key => types[key] ?? 0), ...SEVERITY_ORDER.map(key => severities[key] ?? 0)].join(",");
 }
 
 function pointPosition(item) {
@@ -941,8 +1017,9 @@ function mapPoints() {
     if (!point) {
       point = svg("g", {class: "map-point", tabindex: "0", role: "button", "aria-describedby": "map-tooltip"});
       point.dataset.sourceIp = ip;
+      const slicesGroup = svg("g", {class: "map-slices"});
       point.append(svg("circle", {r: 12, class: "map-hit"}), svg("circle", {r: 5, class: "map-flash"}),
-        svg("circle", {r: 5, class: "map-ring"}), svg("circle", {r: 5, class: "map-ring late"}), svg("circle", {r: 2.5, class: "map-dot"}));
+        marker("map-ring"), marker("map-ring late"), marker("map-dot", slicesGroup, svg("circle", {r: 1, class: "map-dot-edge"})));
       point.addEventListener("pointerenter", event => { if (event.pointerType === "mouse") tooltip(point); });
       point.addEventListener("pointerleave", hideTooltip);
       point.addEventListener("focus", () => { if (matchMedia("(hover: hover)").matches) tooltip(point); });
@@ -956,15 +1033,19 @@ function mapPoints() {
       pointNodes.set(ip, point);
     }
     pointData.set(point, source);
-    if (!previous || previous.latest.id !== item.id || previous.count !== count || previous.place.id !== place.id) {
+    const mix = mixSignature(source);
+    if (!previous || previous.latest.id !== item.id || previous.count !== count || previous.place.id !== place.id
+      || mixSignature(previous) !== mix) {
       if (previous) point.classList.remove(`type-${previous.latest.type}`);
       point.classList.add(`type-${item.type}`);
       point.dataset.eventId = item.id;
+      point.dataset.mix = mix;
+      drawMix(point, source);
       const pos = pointPosition(place);
       point.setAttribute("transform", `translate(${pos.x} ${pos.y})`);
-      point.setAttribute("aria-label", `${ip}, ${place.location}: ${loadedEvents(count)}. Latest: ${item.title}. ${clickHint(count)}.`);
+      point.setAttribute("aria-label", `${ip}, ${place.location}: ${loadedEvents(count)}.${mixText(source)} Latest: ${item.title}. ${clickHint(count)}.`);
       if (!$("map-tooltip").hidden && $("map-tooltip").dataset.sourceIp === ip) tooltip(point);
-      if (arrivals.has(ip)) arrivals.get(ip).label.textContent = `${ip} · ${loadedEvents(count)}`;
+      if (arrivals.has(ip)) refreshArrival(arrivals.get(ip), source);
       if (previous?.latest.id !== item.id && pulses.get(ip)?.id === item.id) {
         flash(point);
         const tracking = following && mapView.interactive();
@@ -994,7 +1075,7 @@ $("projection").onchange = () => {
 function showMapSettings() {
   for (const [key, value] of Object.entries(dotSettings)) $(key).value = value;
   $("map-setting-summary").textContent = `Map settings · hold ${dotSettings.keep} · fade ${dotSettings.fadeMinutes}m · limit ${dotSettings.maxDots}`;
-  $("map-explainer").textContent = `One dot per source IP, colored by its latest matching event. Repeat requests refresh the same dot. The newest ${dotSettings.keep} sources stay bright; older dots fade over ${dotSettings.fadeMinutes} minutes. At most ${dotSettings.maxDots} are shown. Select a dot to explore its events. On the globe or in full screen, Follow moves to new activity; dragging or Reset view turns it off. IP locations are approximate.`;
+  $("map-explainer").textContent = `One dot per source IP. Repeat requests refresh the same dot. A source with several kinds of events becomes a pie: one slice per kind, sized by count and ordered clockwise from the top as in the key, with every kind kept visible. New events flash in their kind's color, and the rings that follow are split by severity, highest first; hover or focus a dot to see its ring. The newest ${dotSettings.keep} sources stay bright; older dots fade over ${dotSettings.fadeMinutes} minutes. At most ${dotSettings.maxDots} are shown. Select a dot to explore its events. On the globe or in full screen, Follow moves to new activity; dragging or Reset view turns it off. IP locations are approximate.`;
 }
 $("map-settings").onsubmit = event => {
   event.preventDefault();
@@ -1013,6 +1094,14 @@ showMapSettings();
 for (const [key, value] of Object.entries(TYPES)) {
   const item = node("span", undefined, `legend-item type-${key}`);
   item.append(node("span", undefined, "legend-dot"), node("span", value.label));
+  $("legend").append(item);
+}
+{
+  const rings = node("span", undefined, "legend-rings");
+  for (const [level] of SEVERITIES) rings.append(node("span", undefined, `legend-ring severity-${level}`));
+  const item = node("span", undefined, "legend-item legend-severity");
+  item.title = `Ring colors by severity, lowest to highest: ${SEVERITIES.map(([, label]) => label).join(", ")}`;
+  item.append(rings, node("span", "Ring: severity"));
   $("legend").append(item);
 }
 

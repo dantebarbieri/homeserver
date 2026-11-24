@@ -68,11 +68,14 @@ export function mapActivity(events, settings, now = Date.now() / 1000, history =
   // Replay oldest first so hits refresh their own IP, not a neighbor's fade timer.
   for (let i = ordered.length - 1; i >= 0; i--) {
     const item = ordered[i];
-    const source = sources.get(item.ip) ?? {ip: item.ip, place: null, count: 0};
+    const source = sources.get(item.ip) ?? {ip: item.ip, place: null, count: 0, types: {}, severities: {}};
     sources.delete(item.ip);
     sources.set(item.ip, source);
     source.latest = item;
     source.count++;
+    source.types[item.type] = (source.types[item.type] || 0) + 1;
+    const severity = severityOf(item);
+    source.severities[severity] = (source.severities[severity] || 0) + 1;
     if (located(item)) source.place = item;
     if (!source.place) continue;
     held.delete(source);
@@ -92,6 +95,37 @@ export function mapActivity(events, settings, now = Date.now() / 1000, history =
     if (opacity > 0 || history) visible.push({...source, opacity: opacity || .12});
   }
   return {points: visible.slice(0, settings.maxDots), expired, omitted: Math.max(0, visible.length - settings.maxDots), unlocated};
+}
+
+export const TYPE_ORDER = Object.keys(TYPES);
+export const SEVERITY_ORDER = SEVERITIES.map(([level]) => level).reverse();
+
+// Splits a turn among counted keys in a fixed order, clockwise from the top. Each key gets one
+// contiguous part, so like colors are always joined and a key never moves as counts change.
+// Every present key keeps at least `minimum` of the turn so a single odd event stays visible.
+export function slices(counts, order, minimum = .1) {
+  const present = order.filter(key => counts[key] > 0);
+  const total = present.reduce((sum, key) => sum + counts[key], 0);
+  const floor = Math.min(minimum, 1 / present.length);
+  let start = 0;
+  return present.map((key, index) => {
+    const end = index === present.length - 1 ? 1 : start + floor + (1 - floor * present.length) * counts[key] / total;
+    const part = {key, count: counts[key], start, end};
+    start = end;
+    return part;
+  });
+}
+
+const turnPoint = turn => {
+  const angle = 2 * Math.PI * turn - Math.PI / 2;
+  return `${Number(Math.cos(angle).toFixed(4))} ${Number(Math.sin(angle).toFixed(4))}`;
+};
+
+// Unit-radius SVG path for a part: a pie sector, or with `ring` an open arc for stroking.
+export function slicePath({start, end}, ring = false) {
+  if (end - start >= 1) return `M0 -1A1 1 0 1 1 0 1A1 1 0 1 1 0 -1${ring ? "" : "Z"}`;
+  const arc = `A1 1 0 ${end - start > .5 ? 1 : 0} 1 ${turnPoint(end)}`;
+  return ring ? `M${turnPoint(start)}${arc}` : `M0 0L${turnPoint(start)}${arc}Z`;
 }
 
 export function countryFlag(code) {
@@ -189,8 +223,13 @@ const DEMO_TITLES = {
   hytale_rejected: ["Hytale identity token rejected", "failure"], ssh_failure: ["SSH authentication failed", "failure"],
   ssh_disconnect: ["SSH disconnected before login", "incomplete"], ssh_probe: ["Targeted real SSH port", "unclassified"],
 };
+// Demo events that repeat an earlier event's source (same IP, place and network), so mixed dots show on load.
+const DEMO_SHARED = {10: 0, 31: 0, 11: 3, 19: 3, 21: 3};
 export function demoEvents(now = Date.now()) {
-  return Array.from({length: 32}, (_, i) => demoEvent(i, (now - i * 17000) / 1000, `demo-${i}`, `192.0.2.${i + 1}`, DEMO_PLACES[(i * 3) % 8]));
+  return Array.from({length: 32}, (_, i) => {
+    const host = DEMO_SHARED[i] ?? i;
+    return demoEvent(i, (now - i * 17000) / 1000, `demo-${i}`, `192.0.2.${host + 1}`, DEMO_PLACES[(host * 3) % 8], host);
+  });
 }
 
 // One synthetic arrival for the simulated live stream. Addresses stay inside the RFC 5737 documentation ranges.
@@ -205,8 +244,8 @@ export function demoLiveEvent(sequence, now = Date.now(), random = Math.random) 
   return item;
 }
 
-function demoEvent(i, timestamp, id, ip, place) {
-  const type = Object.keys(TYPES)[i % 8];
+function demoEvent(i, timestamp, id, ip, place, network = i) {
+  const type = Object.keys(TYPES)[i % 8], n = network % 8;
   const item = {id, cursor: String(BigInt(Math.floor(timestamp * 1000)) * 1000000n),
     timestamp, observedAt: timestamp, origin: i === 9 ? "own" : "external", type, kind: DEMO_KINDS[i % 8],
     title: ["Stuck in Endlessh", "Targeted real SSH port", "Authelia sign-in failed", "Suspicious web request", "Service connection"][Math.min(i % 8, 4)],
@@ -215,10 +254,10 @@ function demoEvent(i, timestamp, id, ip, place) {
     service: TYPES[type].label, source: "synthetic", user: type === "authelia" ? "example-user" : undefined,
     path: type === "web" ? "/.env" : undefined,
     longitude: place[0], latitude: place[1], location: place[2], countryCode: place[3],
-    networkLookup: "ready", networkProvider: DEMO_PROVIDERS[i % 8], asn: 64512 + i % 8,
+    networkLookup: "ready", networkProvider: DEMO_PROVIDERS[n], asn: 64512 + n,
     networkOrganization: "Synthetic example network (private-use ASN)", networkEvidence: "Synthetic preview association, not a real IP lookup",
-    privacyServices: i % 8 > 0 && i % 8 < 4 ? [{
-      name: ["", "Mullvad", "NordVPN", "Tor"][i % 8], kind: i % 8 === 3 ? "tor_exit" : "vpn_server",
+    privacyServices: n > 0 && n < 4 ? [{
+      name: ["", "Mullvad", "NordVPN", "Tor"][n], kind: n === 3 ? "tor_exit" : "vpn_server",
       evidence: "Synthetic association for preview only; not a real VPN or Tor lookup", updatedAt: timestamp,
     }] : []};
   if (type === "ssh") {

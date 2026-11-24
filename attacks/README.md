@@ -128,10 +128,22 @@ street-level OpenStreetMap or a claim that disputed borders are uncontested.
 More detailed borders do not improve the accuracy of IP geolocation.
 
 **One dot represents one source IP**, not one request. The dot shows how many
-matching events from that IP are loaded. Its color and age follow the latest
-observation; its position uses the most recent available location for that IP.
+matching events from that IP are loaded. Its age follows the latest observation;
+its position uses the most recent available location for that IP.
 Different IPs at the same coordinates are still different sources. Every request
 remains a separate stream row and still counts toward event totals.
+
+A source with several event kinds is drawn as a **pie**: one slice per kind, in
+the legend's fixed order, sized by its share of the loaded matching events. Each
+kind gets one contiguous slice, which is already the fewest arcs possible, and
+the fixed order keeps colours from jumping as counts change. Every slice gets at
+least 10% of the circle so a single odd event stays visible, so slice sizes are
+approximate. A source with one kind is a plain dot. The ring around a dot shows
+**severity** (grey info, blue low, amber suspicious, orange high, red critical),
+split into arcs with small gaps when the source's events differ, highest first.
+The ring appears when a dot flashes and while it is hovered or focused; hovering
+also enlarges the dot. The hover card, arrival card and screen-reader label list
+the counts per kind and per severity.
 
 The **7 most recently active located sources** in the loaded view stay bright. Older dots start
 fading when displaced from that group and disappear after **30 minutes**.
@@ -141,14 +153,14 @@ and saves them in the browser. Set the held count to 0 for a fully fading map.
 Fading uses collection time, not time since opening the page. **Show older
 history** optionally restores expired dots faintly, still within the limit.
 
-A new event **flashes** its source's dot: a white-hot dot with two expanding
-rings that settles into its type colour within about six seconds, then joins the
-slow fade above. Only genuinely fresh events flash (arrived within 60 seconds,
+A new event **flashes** its source's dot: a burst in the new event's kind colour,
+a white-hot dot and two expanding severity rings, settling back into the pie
+within about six seconds before joining the slow fade above. Only genuinely fresh events flash (arrived within 60 seconds,
 or 30 seconds on first load, by the server's clock), at most 12 at once, so
 catching up after a paused or hidden tab never lights up the whole map. Far-side
 globe events cannot flash unless **Follow** turns to them, which replays their
 flash and summary on arrival. Reduced-motion replaces the animation with a static
-white outline for the same six seconds. Brief summary cards last 4.5 seconds.
+white outline and severity ring for the same six seconds. Brief summary cards last 4.5 seconds.
 Desktop summaries track the dot center, not the expanding rings. Up to three are
 shown, one per IP; when different IPs share a location, cards keep their separate spots as older
 ones fade. With Follow on, an offscreen arrival's card appears only once its

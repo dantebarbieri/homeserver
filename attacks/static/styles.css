@@ -20,18 +20,23 @@
 .globe-view .map-overlay strong{line-height:1.6}
 @media(max-width:650px){.globe-view:not(.map-expanded) .map-wrap{aspect-ratio:1}.globe-view .map-overlay{left:16px}}
 .map-hit{fill:transparent;stroke:none}
-.map-dot{fill:var(--color);opacity:var(--opacity,1);stroke:var(--bg);stroke-width:.7;vector-effect:non-scaling-stroke;transition:opacity 1s linear;transform-box:fill-box;transform-origin:center}
+.map-dot{opacity:var(--opacity,1);transition:opacity 1s linear,transform .15s ease-out;transform-box:fill-box;transform-origin:center}
+.map-slices path{fill:var(--color)}
+.map-dot-edge{fill:none;stroke:var(--bg);stroke-width:.7;vector-effect:non-scaling-stroke}
 .map-flash{fill:var(--color);opacity:0;pointer-events:none;transform-box:fill-box;transform-origin:center}
-.map-ring{fill:none;stroke:var(--color);stroke-width:1.5;opacity:0;pointer-events:none;vector-effect:non-scaling-stroke;transform-box:fill-box;transform-origin:center}
+.map-ring{opacity:0;pointer-events:none;transform-box:fill-box;transform-origin:center}
+.map-ring path{fill:none;stroke:var(--color);stroke-width:1.5;vector-effect:non-scaling-stroke}
 .map-point.recent .map-flash{animation:flash-burst 1.5s cubic-bezier(.1,.7,.3,1) forwards}
 .map-point.recent .map-ring{animation:ring-out 2.4s ease-out 2 forwards}
 .map-point.recent .map-ring.late{animation-delay:.8s}
 .map-point.recent .map-dot{animation:dot-settle 3s ease-out both}
-.map-point:hover .map-dot,.map-point:focus .map-dot{opacity:1!important;stroke:var(--color);stroke-width:2}
-.map-point:focus .map-ring{opacity:1;animation:none}
-.map-point:focus .map-ring.late{opacity:0}
+.map-point.recent .map-slices path{animation:slice-settle 3s ease-out both}
+.map-point:hover .map-dot,.map-point:focus .map-dot{opacity:1!important;transform:scale(1.4)}
+.map-point:hover .map-ring,.map-point:focus .map-ring{opacity:1;animation:none}
+.map-point:hover .map-ring.late,.map-point:focus .map-ring.late{opacity:0}
 @keyframes flash-burst{0%{opacity:.95;transform:scale(.3)}35%{opacity:.55}100%{opacity:0;transform:scale(5)}}
-@keyframes dot-settle{0%{fill:#fff;transform:scale(4)}15%{fill:#fff;transform:scale(3)}100%{fill:var(--color);transform:scale(1)}}
+@keyframes dot-settle{0%{transform:scale(4)}15%{transform:scale(3)}100%{transform:scale(1)}}
+@keyframes slice-settle{0%,15%{fill:#fff}100%{fill:var(--color)}}
 @keyframes ring-out{0%{opacity:.75;transform:scale(.6)}100%{opacity:0;transform:scale(4.2)}}
 .map-controls{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #1b2635;gap:12px;padding-right:24px}
 .map-controls .legend{border:0;gap:16px}
@@ -49,7 +54,9 @@
 .event-row.highlighted{background:#193035;box-shadow:inset 3px 0 var(--accent)}
 @media(max-width:1000px){.map-controls{flex-wrap:wrap;justify-content:flex-start;padding:0 16px 14px;gap:0}.map-controls .legend{padding-left:0;padding-right:0;width:100%}.map-explainer{padding-left:16px;padding-right:16px}}
 @media(max-width:650px){.panel-top{flex-wrap:wrap;gap:12px}.projection-control{width:100%;justify-content:space-between}.map-explainer{font-size:9px}.map-controls .legend{gap:12px}.map-overlay{pointer-events:none}#map-tooltip strong{font-size:11px}#map-tooltip span{font-size:10px}}
-@media(prefers-reduced-motion:reduce){.map-point.recent .map-flash,.map-point.recent .map-ring,.map-point.recent .map-dot{animation:none}.map-point.recent .map-dot{stroke:#fff;stroke-width:2}.map-dot{transition:none}}
+@media(prefers-reduced-motion:reduce){.map-point.recent .map-flash,.map-point.recent .map-ring,.map-point.recent .map-dot,.map-point.recent .map-slices path{animation:none}.map-point.recent .map-dot-edge{stroke:#fff;stroke-width:1.2}.map-point.recent .map-ring:not(.late){opacity:1}.map-dot{transition:none}}
+.legend-rings{display:flex;gap:3px}.legend-ring{width:8px;height:8px;border-radius:100%;border:1.5px solid var(--color)}
+#map-tooltip .mix .badge,.arrival-summary .mix .badge{color:var(--color)}
 .filters .own-toggle{flex-direction:row;align-items:center;min-height:40px;cursor:pointer}
 .filters .own-toggle input{width:18px;height:18px;min-height:18px;accent-color:var(--accent)}
 .origin-own{--color:#aab8ca}

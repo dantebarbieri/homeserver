@@ -1,7 +1,7 @@
 import {MAP_FILES} from "./atlas.mjs";
 
 /* Public static assets only. Navigation authenticates; APIs never enter a cache. */
-const CACHE = "attacks-shell-v8";
+const CACHE = "attacks-shell-v9";
 const MAP_CACHE = "attacks-maps-v1";
 const ASSETS = ["/", "/styles.css", "/app.mjs", "/model.mjs", "/map-view.mjs", "/globe.mjs",
   "/atlas.mjs", "/geo-vendor.mjs", "/geo-vendor-LICENSE.txt", "/pwa.mjs",

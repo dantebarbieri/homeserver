@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, located, project, duration, liveTrapping, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, located, project, duration, liveTrapping, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -108,6 +108,43 @@ test("a flood refreshes one IP before applying source limits, without merging ne
   assert.equal(events.length, 104);
   const filtered = mapActivity(events.filter(e => e.type === "web"), settings, 1200);
   assert.deepEqual(filtered.points.map(p => [p.count, p.latest.id]), [[100, "web-99"]]);
+});
+
+test("a source counts its matching events by kind and severity for its pie and ring", () => {
+  const base = {ip: "192.0.2.4", latitude: 52, longitude: 13};
+  const events = [
+    ...[1, 2, 3].map(i => ({...base, id: `web-${i}`, type: "web", severity: "high", observedAt: i})),
+    {...base, id: "plex", type: "plex", severity: "suspicious", observedAt: 4},
+  ];
+  const [source] = mapActivity(events, MAP_DEFAULTS, 5).points;
+  assert.deepEqual(source.types, {web: 3, plex: 1});
+  assert.deepEqual(source.severities, {high: 3, suspicious: 1});
+  const mixed = mapActivity(demoEvents(1000), MAP_DEFAULTS, 1000, true).points.find(p => p.ip === "192.0.2.4");
+  assert.deepEqual(mixed.types, {web: 3, plex: 1});
+  assert.ok(Object.keys(mixed.severities).length > 1);
+});
+
+test("slices keep one part per key in canonical order, sized by count with a visible minimum", () => {
+  const order = ["web", "plex", "ssh"];
+  const parts = slices({ssh: 2, web: 6, plex: 0}, order);
+  assert.deepEqual(parts.map(({key, count}) => [key, count]), [["web", 6], ["ssh", 2]]);
+  assert.equal(parts[0].start, 0);
+  assert.equal(parts.at(-1).end, 1);
+  assert.equal(parts[1].start, parts[0].end);
+  assert.ok(Math.abs(parts[0].end - (.1 + .8 * 6 / 8)) < 1e-9);
+  const tiny = slices({web: 999, ssh: 1}, order);
+  assert.ok(tiny[1].end - tiny[1].start >= .1);
+  assert.deepEqual(slices({plex: 5}, order).map(({start, end}) => [start, end]), [[0, 1]]);
+  assert.deepEqual(slices({}, order), []);
+  assert.deepEqual(SEVERITY_ORDER, ["critical", "high", "suspicious", "low", "info"]);
+  assert.deepEqual(TYPE_ORDER, Object.keys(TYPES));
+});
+
+test("slice paths draw unit sectors and arcs clockwise from the top", () => {
+  assert.equal(slicePath({start: 0, end: 1}), "M0 -1A1 1 0 1 1 0 1A1 1 0 1 1 0 -1Z");
+  assert.equal(slicePath({start: 0, end: 1}, true), "M0 -1A1 1 0 1 1 0 1A1 1 0 1 1 0 -1");
+  assert.equal(slicePath({start: 0, end: .25}), "M0 0L0 -1A1 1 0 0 1 1 0Z");
+  assert.equal(slicePath({start: .25, end: .9}, true), `M1 0A1 1 0 1 1 ${Number(Math.cos(2 * Math.PI * .9 - Math.PI / 2).toFixed(4))} ${Number(Math.sin(2 * Math.PI * .9 - Math.PI / 2).toFixed(4))}`);
 });
 
 test("live trapping ticks between samples, switches on close, and stops on stale or failed telemetry", () => {
