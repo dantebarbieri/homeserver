@@ -9,7 +9,7 @@ There is no classifier queue for a human to work through, and no AI dependency.
 
 | Source | Evidence retained | Classification |
 |---|---|---|
-| Endlessh | Accept/close, IP, source port, completed duration | Honeypot observation, not proof of human intent |
+| Endlessh | Accept/close, IP, source port, completed duration | Observation of a bot stuck in Endlessh, not proof of human intent |
 | Real SSH | Attempted user, explicit rejection reason, auth method when logged | Rejected authentication or incomplete pre-auth disconnect |
 | Real SSH success | User, auth method, public-key fingerprint | Accepted; recognized vs unregistered credential |
 | fail2ban | sshd jail's actual ban record | Blocked |
@@ -79,8 +79,15 @@ and saves them in the browser. Set the held count to 0 for a fully fading map.
 Fading uses collection time, not time since opening the page. **Show older
 history** optionally restores expired dots faintly, still within the limit.
 
-Arrival rings last 15 seconds; brief summary cards last 4.5 seconds. Summaries
-are bounded to the latest three on desktop or one bottom card on phones, with
+A new event **flashes** where it lands: a white-hot dot with two expanding
+rings that settles into its type colour within about six seconds, then joins the
+slow fade above. Only genuinely fresh events flash (arrived within 60 seconds,
+or 30 seconds on first load, by the server's clock), at most 12 at once, so
+catching up after a paused or hidden tab never lights up the whole map. Far-side
+globe events cannot flash. Reduced-motion replaces the animation with a static
+white outline for the same six seconds. Brief summary cards last 4.5 seconds.
+Summaries are bounded to the latest three on desktop (nudged apart when events
+share a location) or one bottom card on phones, with
 overflow disclosed during bursts. Hover/focus always offers details. Normal
 desktop clicks highlight the corresponding stream row. In fullscreen, or on
 mobile, a dot directly opens full event details; phones use a scrollable bottom
@@ -166,9 +173,9 @@ retained; never-downloaded detail reports an error and keeps the available
 coarser map. Browser storage can be evicted. Home-screen installation does not bypass 2FA and
 does not add push notifications or background attack polling.
 
-### Honeypot time wasted
+### Attacker time wasted
 
-`attacks_tarpit_seconds_total` sums the durations in completed Endlessh `CLOSE`
+`attacks_endlessh_seconds_total` sums the durations in completed Endlessh `CLOSE`
 records, once per source event. The card shows the selected-period increase and
 the cumulative total since this collector started. Concurrent connections each
 contribute their duration: these are **bot connection-hours, not human hours**.
@@ -272,7 +279,11 @@ If Docker's default address pools are exhausted, supply `--subnet` with an
 explicit test subnet verified not to overlap existing networks or routes.
 
 Visit `http://127.0.0.1:8786/?demo=1` for the explicitly synthetic design preview.
-Without that flag, unavailable backends show errors, never fabricated events.
+It starts with 32 fabricated events and then simulates a live stream of arrivals
+(occasional bursts included) so the flash and fade can be judged without real
+traffic; add `&simulate=0` for a static, deterministic page. Every address is
+inside an RFC 5737 documentation range. Without `demo=1`, unavailable backends
+show errors, never fabricated events.
 The API binds loopback by default; Docker explicitly selects `0.0.0.0`.
 
 ## Deployment

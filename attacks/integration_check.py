@@ -129,7 +129,7 @@ def run(image, subnet=None):
             events = eventually(lambda: (result if len((result := http(addresses["web"], "/api/events"))["events"]) == 9 else None))
             rows = events["events"]
             assert {item["kind"] for item in rows} == {
-                "tarpit_open", "tarpit_close", "auth_failure", "ssh_failure",
+                "endlessh_open", "endlessh_close", "auth_failure", "ssh_failure",
                 "ssh_accepted", "ssh_accepted_unknown", "ssh_ban", "service_connection", "http_probe",
             }
             assert "DO-NOT-STORE" not in json.dumps(rows)

@@ -11,8 +11,8 @@ from urllib.parse import unquote
 
 
 KINDS = {
-    "tarpit_open": ("endlessh", "Entered tarpit", "observed"),
-    "tarpit_close": ("endlessh", "Left tarpit", "observed"),
+    "endlessh_open": ("endlessh", "Stuck in Endlessh", "observed"),
+    "endlessh_close": ("endlessh", "Left Endlessh", "observed"),
     "ssh_failure": ("ssh", "SSH authentication failed", "failure"),
     "ssh_accepted": ("ssh", "SSH login accepted", "accepted"),
     "ssh_accepted_unknown": ("ssh", "SSH accepted: unregistered credential", "accepted"),
@@ -25,8 +25,8 @@ KINDS = {
     "service_connection": ("service", "Service connection", "unclassified"),
 }
 REASONS = {
-    "tarpit_open": "Endlessh logged ACCEPT on the decoy SSH service; this does not establish a human attacker's intent.",
-    "tarpit_close": "Endlessh logged CLOSE and the completed connection duration.",
+    "endlessh_open": "Endlessh logged ACCEPT on the decoy SSH service; this does not establish a human attacker's intent.",
+    "endlessh_close": "Endlessh logged CLOSE and the completed connection duration.",
     "ssh_failure": "sshd reported an invalid username or a rejected authentication attempt.",
     "ssh_accepted": "sshd accepted this credential. A recognized public key identifies the credential, not the person using it.",
     "ssh_accepted_unknown": "sshd accepted a credential absent from this dashboard's Nix-managed key registry. Runtime authorized_keys files or certificates may legitimately authorize it; investigate rather than assuming compromise.",
@@ -103,7 +103,7 @@ def parse_endlessh(line, timestamp):
             value = float(duration[1])
             if math.isfinite(value) and value >= 0:
                 fields["duration"] = value
-    return event("tarpit_open" if action == "ACCEPT" else "tarpit_close", ip, timestamp, **fields)
+    return event("endlessh_open" if action == "ACCEPT" else "endlessh_close", ip, timestamp, **fields)
 
 
 def parse_ssh(line, timestamp):

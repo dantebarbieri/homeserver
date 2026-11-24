@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Attacks · Calcifer",
+  "name": "Attacks",
   "short_name": "Attacks",
-  "description": "Private security-event monitoring for Calcifer.",
+  "description": "Private security-event monitoring.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

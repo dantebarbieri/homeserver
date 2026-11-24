@@ -113,7 +113,7 @@ class Store:
         with self.lock:
             rows = self.db.execute("SELECT kind,category,country,count,seconds FROM counters").fetchall()
             queued = self.db.execute("SELECT count(*) FROM outbox").fetchone()[0]
-        result = ["# TYPE attacks_events_total counter", "# TYPE attacks_tarpit_seconds_total counter",
+        result = ["# TYPE attacks_events_total counter", "# TYPE attacks_endlessh_seconds_total counter",
                   f"attacks_outbox_events {queued}", f"attacks_started_seconds {self.get('started')}"]
         present = {row[0] for row in rows}
         for kind, (category, _, _) in KINDS.items():
@@ -122,8 +122,8 @@ class Store:
         for kind, category, country, count, seconds in rows:
             labels = f'kind="{kind}",type="{category}",country="{country}"'
             result.append(f"attacks_events_total{{{labels}}} {count}")
-            if kind == "tarpit_close":
-                result.append(f"attacks_tarpit_seconds_total{{country=\"{country}\"}} {seconds}")
+            if kind == "endlessh_close":
+                result.append(f"attacks_endlessh_seconds_total{{country=\"{country}\"}} {seconds}")
         return "\n".join(result) + "\n"
 
 

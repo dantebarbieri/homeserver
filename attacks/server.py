@@ -133,8 +133,8 @@ class API:
             raise BadRequest("Unknown statistics range")
         now, seconds = time.time(), RANGES[period]
         totals = self.prometheus_query(f"sum by (type,kind) (increase(attacks_events_total[{period}]))")
-        trapped = self.prometheus_query(f"sum(increase(attacks_tarpit_seconds_total[{period}]))")
-        lifetime_trapped = self.prometheus_query("sum(attacks_tarpit_seconds_total)")
+        trapped = self.prometheus_query(f"sum(increase(attacks_endlessh_seconds_total[{period}]))")
+        lifetime_trapped = self.prometheus_query("sum(attacks_endlessh_seconds_total)")
         timeline = self.prometheus_query("sum(rate(attacks_events_total[5m])) * 60",
                                          start=int(now - seconds), end=int(now), step=max(60, seconds // 120))
         def value(row):

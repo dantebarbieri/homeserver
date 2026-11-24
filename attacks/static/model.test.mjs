@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {mergeEvents, located, project, duration, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {TYPES, mergeEvents, located, project, duration, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH} from "./model.mjs";
 import {constrainView, zoomView} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -64,6 +64,31 @@ test("unlocated events do not displace held dots and unknown countries never inv
   assert.equal(mapActivity([{id: "missing", observedAt: 2000}, ...dots(7)], MAP_DEFAULTS, 10000).points.length, 7);
   assert.equal(countryFlag("US"), "\u{1f1fa}\u{1f1f8}");
   for (const code of [undefined, "ZZ", "XX", "usa", "<script>"]) assert.equal(countryFlag(code), "");
+});
+
+test("simulated arrivals are unique, located, documentation-range addresses that merge newest first", () => {
+  const now = Date.parse("2026-01-01T00:00:00Z");
+  let seed = 7;
+  const random = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
+  const arrivals = Array.from({length: 60}, (_, i) => demoLiveEvent(i + 1, now + i, random));
+  assert.equal(new Set(arrivals.map(item => item.id)).size, 60);
+  assert.equal(new Set(arrivals.map(item => item.type)).size > 3, true);
+  for (const item of arrivals) {
+    assert.equal(located(item), true);
+    assert.match(item.ip, /^(192\.0\.2|198\.51\.100|203\.0\.113)\.\d+$/);
+    assert.equal(Boolean(TYPES[item.type]), true);
+    assert.equal(item.source, "synthetic");
+  }
+  const merged = mergeEvents(demoEvents(now), arrivals);
+  assert.equal(merged[0].id, "demo-live-60");
+  assert.equal(merged.length, 92);
+});
+
+test("only genuinely fresh events flash", () => {
+  assert.equal(isFresh({observedAt: 990}, 60, 1000), true);
+  assert.equal(isFresh({observedAt: 900}, 60, 1000), false);
+  assert.equal(isFresh({}, 60, 1000), false);
+  assert.equal(FLASH.seconds < 10 && FLASH.maxConcurrent > 0, true);
 });
 
 test("map zoom anchors the selected region and clamps panning at every viewport shape", () => {

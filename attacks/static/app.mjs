@@ -1,4 +1,4 @@
-import {TYPES, mergeEvents, project, located, duration, demoEvents, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
+import {TYPES, mergeEvents, project, located, duration, demoEvents, demoLiveEvent, FLASH, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity} from "./model.mjs";
 import {createMapView} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -11,6 +11,8 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 let events = [], world = null, live = true, latest = null, older = null, hasOlder = false;
 let generation = 0, busy = false, selected = null, parameters = {range: "24h"};
 const errors = new Map(), pulses = new Map();
+const demoLive = [];
+let demoSequence = 0;
 let sourceIssues = [];
 let highlighted = null;
 let dotSettings = {...MAP_DEFAULTS}, catchingUp = false;
@@ -160,7 +162,7 @@ function detail(item) {
     "Auth method": item.authMethod, "Rejection reason": item.rejectionReason,
     "Key status": item.keyStatus, "Key label": item.keyLabel, "Key fingerprint": item.keyFingerprint,
     "Host": item.host, "Request path": item.path, "Method": item.method, "HTTP status": item.status,
-    "Tarpit duration": item.duration === undefined ? undefined : duration(item.duration),
+    "Time stuck": item.duration === undefined ? undefined : duration(item.duration),
     "Log source": item.source, "Event ID": item.id,
   };
   $("detail-fields").replaceChildren(...Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== "")
@@ -180,6 +182,32 @@ $("filter-ip").onclick = async () => {
 };
 $("health").onclick = () => { $("sources").hidden = !$("sources").hidden; };
 
+function matchesFilters(item) {
+  return (!parameters.type || item.type === parameters.type) && (!parameters.outcome || item.verdict === parameters.outcome)
+    && (!parameters.ip || item.ip === parameters.ip) && (!parameters.user || item.user === parameters.user);
+}
+
+// A burst only flashes its newest events so the map stays readable.
+function pulse(item) {
+  if (pulses.size < FLASH.maxConcurrent) pulses.set(item.id, performance.now());
+}
+
+// Demo only: simulate scanners arriving every few seconds, with occasional bursts.
+function demoArrivals() {
+  setTimeout(demoArrivals, 2500 + Math.random() * 3500);
+  if (document.hidden || !live || busy) return;
+  const count = Math.random() < 0.12 ? 3 + Math.floor(Math.random() * 4) : 1;
+  const now = Date.now(), fresh = [];
+  for (let i = 0; i < count; i++) fresh.push(demoLiveEvent(++demoSequence, now + i));
+  demoLive.unshift(...fresh.toReversed());
+  demoLive.length = Math.min(demoLive.length, 200);
+  const shown = fresh.filter(matchesFilters);
+  if (!shown.length) return;
+  events = mergeEvents(events, shown);
+  for (const item of shown.toReversed()) pulse(item);
+  render();
+}
+
 async function load(reset = false, history = false) {
   if ((busy && !reset) || (!live && !reset && !history)) return;
   const epoch = reset ? ++generation : generation;
@@ -191,11 +219,9 @@ async function load(reset = false, history = false) {
   }
   try {
     if (demo) {
-      events = demoEvents().filter(item => (!parameters.type || item.type === parameters.type)
-        && (!parameters.outcome || item.verdict === parameters.outcome)
-        && (!parameters.ip || item.ip === parameters.ip) && (!parameters.user || item.user === parameters.user));
+      events = mergeEvents(demoLive, demoEvents()).filter(matchesFilters);
       latest = "demo";
-      for (const item of events.slice(0, 8)) pulses.set(item.id, performance.now());
+      if (reset) for (const item of events) if (isFresh(item, FLASH.loadWindow)) pulse(item);
     } else {
       const query = {...parameters};
       if (history && older) query.before = older;
@@ -205,7 +231,8 @@ async function load(reset = false, history = false) {
         if (epoch !== generation) return;
         const known = new Set(events.map(item => item.id));
         for (const item of result.events) {
-          if (!known.has(item.id) && !history && (!reset || Date.now() / 1000 - item.observedAt < 30)) pulses.set(item.id, performance.now());
+          // Server time keeps freshness correct when this device's clock is off.
+          if (!known.has(item.id) && !history && isFresh(item, reset ? FLASH.loadWindow : FLASH.liveWindow, result.queriedAt)) pulse(item);
         }
         events = mergeEvents(events, result.events);
         if (reset || history) { older = result.next; hasOlder = result.more; }
@@ -230,7 +257,7 @@ async function load(reset = false, history = false) {
 async function stats() {
   const period = $("range").value;
   try {
-    const result = demo ? {available: true, totals: [{kind: "tarpit_open", value: 6821}, {kind: "ssh_failure", value: 143}, {kind: "auth_failure", value: 12}, {kind: "http_probe", value: 924}], trappedSeconds: 184800, lifetimeTrappedSeconds: 2064000,
+    const result = demo ? {available: true, totals: [{kind: "endlessh_open", value: 6821}, {kind: "ssh_failure", value: 143}, {kind: "auth_failure", value: 12}, {kind: "http_probe", value: 924}], trappedSeconds: 184800, lifetimeTrappedSeconds: 2064000,
       timeline: Array.from({length: 120}, (_, i) => [i, String(5 + (Math.sin(i * 1.9) + 1) * 7 + (i % 29 === 0 ? 30 : 0))])}
       : await request("/api/stats", {range: period});
     if (period !== $("range").value) return;
@@ -461,6 +488,8 @@ function reveal(item) {
 function positionArrivals() {
   const parent = $("map").parentElement.getBoundingClientRect();
   const mobile = matchMedia("(max-width: 650px)").matches;
+  const placed = [];
+  const overlaps = (a, b) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
   for (const [id, entry] of arrivals) {
     const point = pointNodes.get(id);
     if (!point || point.hasAttribute("hidden") || performance.now() >= entry.expires) {
@@ -471,8 +500,18 @@ function positionArrivals() {
       entry.node.style.left = "10px"; entry.node.style.top = "auto"; entry.node.style.bottom = "12px";
     } else {
       entry.node.style.bottom = "auto";
-      entry.node.style.left = `${Math.max(8, Math.min(box.left - parent.left + 12, parent.width - entry.node.offsetWidth - 8))}px`;
-      entry.node.style.top = `${Math.max(8, Math.min(box.top - parent.top - entry.node.offsetHeight - 14, parent.height - entry.node.offsetHeight - 8))}px`;
+      const width = entry.node.offsetWidth, height = entry.node.offsetHeight;
+      const fit = (left, top) => ({left: Math.max(8, Math.min(left, parent.width - width - 8)), top: Math.max(8, Math.min(top, parent.height - height - 8)), width, height});
+      let spot = fit(box.left - parent.left + 12, box.top - parent.top - height - 14);
+      // Cards for dots in the same city would stack exactly; slide each clear of the ones already placed.
+      for (let attempt = 0; attempt < placed.length; attempt++) {
+        const hit = placed.find(other => overlaps(spot, other));
+        if (!hit) break;
+        const options = [fit(spot.left, hit.top + hit.height + 8), fit(spot.left, hit.top - height - 8), fit(hit.left + hit.width + 8, spot.top)];
+        spot = options.find(option => !placed.some(other => overlaps(option, other))) ?? options[0];
+      }
+      placed.push(spot);
+      entry.node.style.left = `${spot.left}px`; entry.node.style.top = `${spot.top}px`;
     }
   }
   if (!arrivals.size) arrivalsOmitted = 0;
@@ -502,7 +541,7 @@ function sizeMapMarkers() {
   for (const point of pointNodes.values()) {
     point.querySelector(".map-hit").setAttribute("r", String((touch ? 24 : 12) / scale));
     point.querySelector(".map-dot").setAttribute("r", String((touch ? 4.5 : 3) / scale));
-    point.querySelector(".map-ring").setAttribute("r", String(7 / scale));
+    for (const ring of point.querySelectorAll(".map-ring, .map-flash")) ring.setAttribute("r", String(7 / scale));
   }
 }
 
@@ -541,17 +580,18 @@ function mapPoints() {
       point.remove(); pointNodes.delete(id);
     }
   }
-  for (const [id, started] of pulses) if (!ids.has(id) || performance.now() - started >= 15000) pulses.delete(id);
+  for (const [id, started] of pulses) if (!ids.has(id) || performance.now() - started >= FLASH.seconds * 1000) pulses.delete(id);
   for (const {item, opacity} of activity.points.toReversed()) {
     let point = pointNodes.get(item.id);
     const age = (performance.now() - (pulses.get(item.id) ?? -Infinity)) / 1000;
     if (!point) {
       const {x, y, visible} = pointPosition(item);
-      point = svg("g", {transform: `translate(${x} ${y})`, class: `map-point type-${item.type}${age < 15 ? " recent" : ""}`,
+      point = svg("g", {transform: `translate(${x} ${y})`, class: `map-point type-${item.type}${age < FLASH.seconds ? " recent" : ""}`,
         tabindex: "0", role: "button", "aria-describedby": "map-tooltip",
         "aria-label": `${item.title}: ${item.ip}, ${item.location || "location unavailable"}. Show event in stream.`});
       point.dataset.eventId = item.id;
-      point.append(svg("circle", {r: 12, class: "map-hit"}), svg("circle", {r: 5, class: "map-ring"}), svg("circle", {r: 2.5, class: "map-dot"}));
+      point.append(svg("circle", {r: 12, class: "map-hit"}), svg("circle", {r: 5, class: "map-flash"}),
+        svg("circle", {r: 5, class: "map-ring"}), svg("circle", {r: 5, class: "map-ring late"}), svg("circle", {r: 2.5, class: "map-dot"}));
       point.addEventListener("pointerenter", event => { if (event.pointerType === "mouse") tooltip(item, point); });
       point.addEventListener("pointerleave", hideTooltip);
       point.addEventListener("focus", () => { if (matchMedia("(hover: hover)").matches) tooltip(item, point); });
@@ -567,7 +607,7 @@ function mapPoints() {
     }
     pointData.set(point, item);
     point.style.setProperty("--opacity", String(opacity));
-    if (age >= 15) { point.classList.remove("recent"); pulses.delete(item.id); }
+    if (age >= FLASH.seconds) { point.classList.remove("recent"); pulses.delete(item.id); }
   }
   positionMapPoints(); sizeMapMarkers(); positionArrivals(); positionCountryLabels();
   updateMapDetail();
@@ -641,6 +681,7 @@ window.addEventListener("online", () => { errors.delete("network"); atlasFailed.
 if (!navigator.onLine) errors.set("network", "Offline: live telemetry is unavailable. Event data is never cached.");
 
 mapLand(); updateMapDetail(); load(true); stats(); health();
+if (demo && new URLSearchParams(location.search).get("simulate") !== "0") setTimeout(demoArrivals, 3000);
 setInterval(() => { if (!document.hidden) mapPoints(); }, 1000);
 setInterval(() => { if (!document.hidden && !demo) load(); }, 3000);
 setInterval(() => { if (!document.hidden) { stats(); health(); } }, 30000);

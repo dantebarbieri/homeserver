@@ -133,8 +133,8 @@ class StateTests(unittest.TestCase):
         self.assertTrue(self.store.enqueue(self.item, "endlessh", "stable"))
         self.assertFalse(self.store.enqueue(self.item, "endlessh", "stable"))
         metrics = self.store.metrics()
-        self.assertIn('kind="tarpit_close",type="endlessh",country="ZZ"} 1', metrics)
-        self.assertIn('attacks_tarpit_seconds_total{country="ZZ"} 4.5', metrics)
+        self.assertIn('kind="endlessh_close",type="endlessh",country="ZZ"} 1', metrics)
+        self.assertIn('attacks_endlessh_seconds_total{country="ZZ"} 4.5', metrics)
         self.assertNotIn(IP, metrics)
         self.assertNotIn("sourcePort", metrics)
         client = Mock()
@@ -343,7 +343,7 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(len(api.events({})["events"]), 1)
         self.assertEqual(loki.request.call_args.args[1]["limit"], 251)
 
-    def test_honeypot_totals_include_range_and_lifetime(self):
+    def test_endlessh_time_totals_include_range_and_lifetime(self):
         prometheus = Mock()
         def result(path, params):
             query = params["query"]
