@@ -33,6 +33,12 @@ RULES = {
 # A source that has signed in successfully is trusted, and is never reported.
 TRUSTED = frozenset({"ssh_accepted", "ssh_accepted_unknown", "plex_client"})
 TRUST_FOR = 30 * 86400
+# Filter grades; the first three partition checked addresses and match the badge colours.
+GRADES = ("high", "medium", "clean", "unchecked", "reported")
+
+
+def grade(score):
+    return "high" if score >= 50 else "medium" if score > 0 else "clean"
 
 
 class AbuseIPDB:
@@ -114,6 +120,18 @@ class AbuseIPDB:
                 sent = self.db.execute("SELECT at FROM reported WHERE ip=?", (ip,)).fetchone()
                 if row or sent:
                     result[ip] = {**(json.loads(row[0]) if row else {}), **({"reportedAt": sent[0]} if sent else {})}
+        return result
+
+    def grades(self, since=0):
+        """Addresses by grade, for filtering. Any event after `since` had its source checked
+        no earlier than a day before it, so older answers cannot match those events."""
+        result = {"high": [], "medium": [], "clean": []}
+        with self.lock:
+            for ip, score in self.db.execute(
+                    "SELECT ip, coalesce(json_extract(body, '$.score'), 0) FROM reputation WHERE checked>?",
+                    (since - FRESH,)):
+                result[grade(score)].append(ip)
+            result["reported"] = [ip for (ip,) in self.db.execute("SELECT ip FROM reported")]
         return result
 
     def budget(self, kind):

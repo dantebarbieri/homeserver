@@ -25,9 +25,15 @@ class Client:
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
     def request(self, path, params=None, payload=None):
-        url = self.base + path + ("?" + urlencode(params) if params else "")
-        data = None if payload is None else json.dumps(payload, allow_nan=False).encode()
-        request = Request(url, data=data, headers={"Content-Type": "application/json"})
+        query = urlencode(params) if params else ""
+        if payload is None and len(query) > 4096:
+            # Long queries (reputation IP filters) go in a form body; Loki accepts both.
+            request = Request(self.base + path, data=query.encode(),
+                              headers={"Content-Type": "application/x-www-form-urlencoded"})
+        else:
+            url = self.base + path + ("?" + query if query else "")
+            data = None if payload is None else json.dumps(payload, allow_nan=False).encode()
+            request = Request(url, data=data, headers={"Content-Type": "application/json"})
         try:
             with self.opener.open(request, timeout=10) as response:
                 body = response.read(8 * 1024 * 1024 + 1)

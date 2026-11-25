@@ -36,6 +36,22 @@ export function severityOf(item) {
 
 const list = value => (value ? String(value).split(",") : []);
 
+// AbuseIPDB grades for the filter, matching the badge colours. "reported" overlaps the others.
+export const REPUTATIONS = [
+  ["high", "High risk (50–100%)", "#ff6b6b"], ["medium", "Some reports (1–49%)", "#f2b84b"],
+  ["clean", "No reports (0%)", "#9aa0ab"], ["unchecked", "Not checked yet", "#5d6370"],
+  ["reported", "Reported by this server", "#7fd1ff"],
+];
+
+export function reputationGrade(item) {
+  const score = item.reputation?.score;
+  return score === undefined ? "unchecked" : score >= 50 ? "high" : score > 0 ? "medium" : "clean";
+}
+
+function reputationOk(grade, reported, selected) {
+  return !selected.length || selected.includes(grade) || (reported && selected.includes("reported"));
+}
+
 // Mirrors the server's event query so synthetic and just-arrived events obey the same filters.
 export function matchesFilters(item, parameters) {
   const levels = SEVERITIES.map(([level]) => level);
@@ -44,23 +60,30 @@ export function matchesFilters(item, parameters) {
     && (!parameters.severity || levels.indexOf(severityOf(item)) >= levels.indexOf(parameters.severity))
     && (!parameters.ip || item.ip === parameters.ip) && (!parameters.country || item.countryCode === parameters.country)
     && (!parameters.asn || String(item.asn) === parameters.asn)
+    && reputationOk(reputationGrade(item), !!item.reputation?.reportedAt, list(parameters.reputation))
     && (parameters.own === "1" || item.origin !== "own");
 }
 
-// Faceted option counts: each picker counts against the other two pickers' current choices,
+// Faceted option counts: each picker counts against the other pickers' current choices,
 // so a number always says how many events selecting that option (alone) would add or show.
-// Severity is cumulative because its filter means "at least".
+// Severity is cumulative because its filter means "at least". Rows without a reputation
+// grade (no AbuseIPDB key) only count while no reputation filter is set.
 export function facetCounts(rows, parameters) {
   const levels = SEVERITIES.map(([level]) => level);
-  const types = list(parameters.type), outcomes = list(parameters.outcome);
+  const types = list(parameters.type), outcomes = list(parameters.outcome), grades = list(parameters.reputation);
   const floor = Math.max(0, levels.indexOf(parameters.severity || levels[0]));
-  const result = {type: {}, outcome: {}, severity: Object.fromEntries(levels.map(level => [level, 0]))};
-  for (const {type, outcome, severity, count} of rows) {
+  const result = {type: {}, outcome: {}, reputation: {}, severity: Object.fromEntries(levels.map(level => [level, 0]))};
+  for (const {type, outcome, severity, reputation, reported, count} of rows) {
     const typeOk = !types.length || types.includes(type), outcomeOk = !outcomes.length || outcomes.includes(outcome);
+    const gradeOk = reputationOk(reputation, reported, grades);
     const level = Math.max(0, levels.indexOf(severity));
-    if (outcomeOk && level >= floor) result.type[type] = (result.type[type] || 0) + count;
-    if (typeOk && level >= floor) result.outcome[outcome] = (result.outcome[outcome] || 0) + count;
-    if (typeOk && outcomeOk) for (let i = 0; i <= level; i++) result.severity[levels[i]] += count;
+    if (outcomeOk && gradeOk && level >= floor) result.type[type] = (result.type[type] || 0) + count;
+    if (typeOk && gradeOk && level >= floor) result.outcome[outcome] = (result.outcome[outcome] || 0) + count;
+    if (typeOk && outcomeOk && gradeOk) for (let i = 0; i <= level; i++) result.severity[levels[i]] += count;
+    if (typeOk && outcomeOk && level >= floor && reputation) {
+      result.reputation[reputation] = (result.reputation[reputation] || 0) + count;
+      if (reported) result.reputation.reported = (result.reputation.reported || 0) + count;
+    }
   }
   return result;
 }

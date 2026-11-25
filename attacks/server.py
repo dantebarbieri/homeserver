@@ -1,6 +1,7 @@
 """Read-only, same-origin UI API. No arbitrary LogQL/PromQL or upstream URLs."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
@@ -13,6 +14,7 @@ import threading
 import time
 from urllib.parse import parse_qs, urlsplit
 
+from abuseipdb import GRADES
 from common import UpstreamError, clients
 from events import OWN_NETWORKS, SEVERITIES, SEVERITY, TYPES, VERDICTS, home_networks, kinds_at_least, traffic_origin
 
@@ -55,8 +57,25 @@ def alternatives(values):
     return "|".join(re.escape(value) for value in values)
 
 
-def event_query(params, now, networks=()):
-    if set(params) - {"range", "type", "outcome", "severity", "ip", "country", "asn", "before", "after", "own"}:
+def ip_filter(include=None, exclude=()):
+    """Exact-address filter for reputation grades; `include=[]` matches nothing."""
+    if include is not None:
+        return " | ip=~" + json.dumps(alternatives(sorted(include))) if include else ' | ip="!"'
+    return " | ip!~" + json.dumps(alternatives(sorted(exclude))) if exclude else ""
+
+
+def reputation_filter(selected, grades):
+    if grades is None:
+        raise BadRequest("Reputation filtering needs an AbuseIPDB key")
+    include = set().union(*(grades.get(grade, ()) for grade in selected if grade != "unchecked"))
+    if "unchecked" not in selected:
+        return ip_filter(include)
+    checked = set().union(*(grades.get(grade, ()) for grade in GRADES if grade != "unchecked"))
+    return ip_filter(exclude=checked - include)
+
+
+def event_query(params, now, networks=(), grades=None):
+    if set(params) - {"range", "type", "outcome", "severity", "ip", "country", "asn", "reputation", "before", "after", "own"}:
         raise BadRequest("Unknown filter")
     if params.get("own", "0") not in ("0", "1"):
         raise BadRequest("Unknown own-traffic setting")
@@ -92,6 +111,8 @@ def event_query(params, now, networks=()):
         if not re.fullmatch(r"[1-9][0-9]{0,9}", params["asn"]):
             raise BadRequest("Invalid network number")
         selector += " | asn=" + json.dumps(params["asn"])
+    if params.get("reputation"):
+        selector += reputation_filter(choices(params["reputation"], GRADES, "reputation grade"), grades)
     start, end = int((now - RANGES[period]) * NANO), int(now * NANO)
     if "before" in params and "after" in params:
         raise BadRequest("Use one cursor direction")
@@ -120,9 +141,16 @@ class API:
         self.loki, self.prometheus, self.collector = loki, prometheus, collector
         self.slots = threading.BoundedSemaphore(6)
 
+    def grades(self, params):
+        """Reputation grades for the range, or None without an AbuseIPDB key."""
+        since = time.time() - RANGES.get(params.get("range", "24h"), 0)
+        data = self.collector.request("/reputation/grades", {"since": f"{since:.0f}"})
+        return data.get("grades") if data.get("enabled") else None
+
     def events(self, params):
         networks = self.own_networks(self.collector.request("/status"))
-        query, start, end = event_query(params, time.time(), networks)
+        grades = self.grades(params) if params.get("reputation") else None
+        query, start, end = event_query(params, time.time(), networks, grades)
         data = self.loki.request("/loki/api/v1/query_range", {
             "query": query, "start": start, "end": end,
             "direction": "forward" if "after" in params else "backward", "limit": LIMIT + 1,
@@ -207,28 +235,54 @@ class API:
         return {"range": period, "countries": countries, "networks": asns, "queriedAt": time.time()}
 
     def facets(self, params):
-        # Type, outcome and severity filters are applied by the browser, so each picker
-        # can count its options against the other two without another round trip.
+        # Type, outcome, severity and reputation filters are applied by the browser, so each
+        # picker can count its options against the others without another round trip.
         if set(params) - {"range", "ip", "country", "asn", "own"}:
             raise BadRequest("Unknown facet filter")
         networks = self.own_networks(self.collector.request("/status"))
         query, _, _ = event_query(params, time.time(), networks)
         period = params.get("range", "24h")
-        rows = self.loki_metrics(
-            f"sum by (type,verdict,kind) (count_over_time({query} | keep type,verdict,kind [{period}]))",
-            time=str(int(time.time() * NANO)))
-        merged = {}
-        for row in rows:
-            count = float(row["value"][1])
-            if not math.isfinite(count):
-                raise UpstreamError("Facet counts contain an invalid value")
-            metric = row["metric"]
-            if metric.get("type") not in TYPES or metric.get("verdict") not in VERDICTS:
-                continue
-            key = (metric["type"], metric["verdict"], SEVERITY.get(metric.get("kind"), "low"))
-            merged[key] = merged.get(key, 0) + count
-        return {"range": period, "queriedAt": time.time(),
-                "counts": [{"type": t, "outcome": v, "severity": s, "count": c} for (t, v, s), c in merged.items()]}
+        try:
+            grades = self.grades(params)
+        except UpstreamError:
+            grades = None
+        # Without a key there is one unfiltered part; with one, the four grades each split
+        # by whether this server reported the address, so overlapping choices stay exact.
+        parts = [({}, "")]
+        if grades is not None:
+            reported = set(grades.get("reported", ()))
+            checked = set().union(*(grades.get(g, ()) for g in ("high", "medium", "clean")))
+            parts = []
+            for grade in ("high", "medium", "clean"):
+                ips = set(grades.get(grade, ()))
+                parts += [({"reputation": grade, "reported": False}, ips - reported),
+                          ({"reputation": grade, "reported": True}, ips & reported)]
+            parts = [(labels, ip_filter(ips)) for labels, ips in parts if ips]
+            if reported - checked:
+                parts.append(({"reputation": "unchecked", "reported": True}, ip_filter(reported - checked)))
+            parts.append(({"reputation": "unchecked", "reported": False}, ip_filter(exclude=checked | reported)))
+
+        def count(part):
+            labels, extra = part
+            filtered = query.removesuffix(' | __error__=""') + extra + ' | __error__=""'
+            rows = self.loki_metrics(
+                f"sum by (type,verdict,kind) (count_over_time({filtered} | keep type,verdict,kind [{period}]))",
+                time=str(int(time.time() * NANO)))
+            merged = {}
+            for row in rows:
+                value = float(row["value"][1])
+                if not math.isfinite(value):
+                    raise UpstreamError("Facet counts contain an invalid value")
+                metric = row["metric"]
+                if metric.get("type") not in TYPES or metric.get("verdict") not in VERDICTS:
+                    continue
+                key = (metric["type"], metric["verdict"], SEVERITY.get(metric.get("kind"), "low"))
+                merged[key] = merged.get(key, 0) + value
+            return [{"type": t, "outcome": v, "severity": s, "count": c, **labels} for (t, v, s), c in merged.items()]
+
+        with ThreadPoolExecutor(len(parts)) as pool:
+            counts = [row for rows in pool.map(count, parts) for row in rows]
+        return {"range": period, "queriedAt": time.time(), "reputation": grades is not None, "counts": counts}
 
     def stats(self, params):
         period = params.get("range", "24h")

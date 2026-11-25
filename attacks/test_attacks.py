@@ -618,6 +618,38 @@ class QueryTests(unittest.TestCase):
             with self.assertRaises(BadRequest, msg=params):
                 API(loki, Mock(), collector).facets(params)
 
+    def test_reputation_filter_matches_grades_and_needs_a_key(self):
+        grades = {"high": ["1.2.3.4"], "medium": ["5.6.7.8"], "clean": ["2001:db8::1"], "reported": ["9.9.9.9", "1.2.3.4"]}
+        query = lambda value: event_query({"reputation": value}, time.time(), grades=grades)[0]
+        self.assertIn(r'| ip=~"1\\.2\\.3\\.4|9\\.9\\.9\\.9"', query("high,reported"))
+        self.assertIn(r'| ip!~"1\\.2\\.3\\.4|2001:db8::1|5\\.6\\.7\\.8|9\\.9\\.9\\.9"', query("unchecked"))
+        self.assertIn(r'| ip!~"2001:db8::1|5\\.6\\.7\\.8"', query("unchecked,high,reported"))
+        self.assertIn('| ip="!"', event_query({"reputation": "high"}, time.time(), grades={})[0])
+        for value, known in (("high", None), ("severe", grades), ("high,high", grades)):
+            with self.assertRaises(BadRequest, msg=value):
+                event_query({"reputation": value}, time.time(), grades=known)
+
+    def test_facets_split_counts_by_reputation_only_with_a_key(self):
+        loki = Mock()
+        loki.request.return_value = {"status": "success", "data": {"resultType": "vector", "result": [
+            {"metric": {"type": "ssh", "verdict": "failure", "kind": "ssh_failure"}, "value": [1, "2"]}]}}
+        collector = Mock()
+        grades = {"enabled": True, "grades": {"high": ["1.2.3.4"], "medium": [], "clean": ["5.6.7.8"], "reported": ["1.2.3.4"]}}
+        collector.request.side_effect = lambda path, params=None: grades if path == "/reputation/grades" else {
+            "ownTraffic": {"state": "ready", "networks": []}}
+        result = API(loki, Mock(), collector).facets({"range": "24h"})
+        self.assertTrue(result["reputation"])
+        self.assertCountEqual([(row["reputation"], row["reported"]) for row in result["counts"]],
+                              [("high", True), ("clean", False), ("unchecked", False)])
+        queries = [call[0][1]["query"] for call in loki.request.call_args_list]
+        self.assertTrue(any(r'| ip!~"1\\.2\\.3\\.4|5\\.6\\.7\\.8" | __error__=""' in query for query in queries))
+        grades = {"enabled": False}
+        loki.request.reset_mock()
+        result = API(loki, Mock(), collector).facets({"range": "24h"})
+        self.assertFalse(result["reputation"])
+        self.assertEqual(loki.request.call_count, 1)
+        self.assertNotIn("reputation", result["counts"][0])
+
     def test_saturated_timestamp_fails_instead_of_skipping(self):
         client = Mock()
         client.query.return_value = [(1, "line", {})] * 1000
@@ -759,6 +791,12 @@ class AbuseIPDBTests(unittest.TestCase):
         self.now += 86401
         self.abuse.lookup([self.IP]); self.drain()
         self.assertEqual(len(self.http.calls), 2)
+
+    def test_grades_group_checked_and_reported_addresses(self):
+        self.http.replies.append((200, {"data": {"abuseConfidenceScore": 87, "totalReports": 4, "numDistinctUsers": 2}}, {}))
+        self.abuse.lookup([self.IP]); self.drain()
+        self.assertEqual(self.abuse.grades(self.now)["high"], [self.IP])
+        self.assertEqual(self.abuse.grades(self.now + 2 * 86400)["high"], [], "a stale answer cannot match newer events")
 
     def test_rate_limit_pauses_calls(self):
         self.http.replies.append((429, {}, {"Retry-After": "600"}))

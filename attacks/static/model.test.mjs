@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -311,14 +311,18 @@ test("severity is read from the row or derived from its kind, and filters mirror
 
 test("facet counts equal what selecting each option would show", () => {
   const external = demoEvents(Date.parse("2026-01-01T00:00:00Z")).filter(item => item.origin !== "own");
-  const rows = external.map(item => ({type: item.type, outcome: item.verdict, severity: severityOf(item), count: 1}));
-  for (const current of [{}, {type: "ssh,plex"}, {outcome: "failure"}, {severity: "suspicious", type: "web"}]) {
+  const rows = external.map(item => ({type: item.type, outcome: item.verdict, severity: severityOf(item),
+    reputation: reputationGrade(item), reported: !!item.reputation?.reportedAt, count: 1}));
+  for (const current of [{}, {type: "ssh,plex"}, {outcome: "failure"}, {severity: "suspicious", type: "web"}, {reputation: "high,reported"}, {reputation: "clean", type: "ssh"}]) {
     const counts = facetCounts(rows, current);
     const shown = change => external.filter(item => matchesFilters(item, {...current, ...change})).length;
     for (const type of Object.keys(TYPES)) assert.equal(counts.type[type] || 0, shown({type}), `${JSON.stringify(current)} ${type}`);
     for (const [outcome] of OUTCOMES) assert.equal(counts.outcome[outcome] || 0, shown({outcome}), `${JSON.stringify(current)} ${outcome}`);
     for (const [severity] of SEVERITIES) assert.equal(counts.severity[severity], shown({severity}), `${JSON.stringify(current)} ${severity}`);
+    for (const [reputation] of REPUTATIONS) assert.equal(counts.reputation[reputation] || 0, shown({reputation}), `${JSON.stringify(current)} ${reputation}`);
   }
+  assert.equal(new Set(rows.map(row => row.reputation)).size, 3, "the demo covers high, medium and clean");
+  assert.equal(rows.some(row => row.reported), true);
 });
 
 test("only genuinely fresh events flash", () => {

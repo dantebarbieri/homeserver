@@ -86,7 +86,7 @@ select,input,.button{background:#202024;border-color:#39393f;color:var(--text)}
 .badge{--color:#a7a7b3}.type-endlessh{--color:var(--endlessh)}.type-ssh{--color:var(--ssh)}.type-authelia{--color:var(--authelia)}.type-web{--color:var(--web)}.type-minecraft{--color:var(--minecraft)}.type-plex{--color:var(--plex)}.type-game{--color:var(--game)}.type-git{--color:var(--git)}
 .verdict-failure{--color:#f397ad}.verdict-suspected,.key-unregistered{--color:#efc477}.verdict-blocked{--color:#bd9bed}.verdict-accepted,.key-recognized{--color:#94dfa5}
 .network-owner{--color:#c5c5ce;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
-.privacy-service{--color:#c7afe9}.reputation-clean{--color:#9aa0ab}.reputation-medium{--color:#f2b84b}.reputation-high{--color:#ff6b6b}.reputation-reported{--color:#7fd1ff}.network-badges{max-width:100%}
+.privacy-service{--color:#c7afe9}.reputation-clean{--color:#9aa0ab}.reputation-medium{--color:#f2b84b}.reputation-high{--color:#ff6b6b}.reputation-reported{--color:#7fd1ff}.reputation-unchecked{--color:#5d6370}.network-badges{max-width:100%}
 .location-line{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%}
 .country-flag{font-family:"Country Flags","Apple Color Emoji","Segoe UI Emoji",sans-serif;font-size:16px;line-height:1.2;flex-shrink:0}
 #map-tooltip .country-flag{font-size:16px}#map-tooltip .badge{font-size:9px}
@@ -209,7 +209,7 @@ select,input,.button{background:#202024;border-color:#39393f;color:var(--text)}
 @media(max-width:650px){
   .filters{position:relative}.severity-filter{width:100%}.segments{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%}
   .segment span{justify-content:center;min-height:44px;padding:0 2px;font-size:11px}.segment span::before{display:none}.segment-text{align-items:center}
-  .filters .picker{flex:1 1 calc(33% - 10px);min-width:0}.picker[open]{flex-basis:100%}.picker summary{min-height:44px}
+  .filters .picker{flex:1 1 calc(33% - 10px);min-width:0}.filters:has(#reputation-picker:not([hidden])) .picker{flex-basis:calc(50% - 6px)}.picker[open]{flex-basis:100%}.picker summary{min-height:44px}
   .picker-menu,.source-menu{position:static;width:100%;max-width:none;max-height:none;margin-top:6px;box-shadow:none}
   .filters .picker-menu .choice{min-height:44px}.filter-end{width:100%;margin-left:0;justify-content:space-between}
   .active-filters{padding:0 16px 14px}.chip{min-height:36px;padding-right:9px}

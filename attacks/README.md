@@ -290,6 +290,10 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   reporting users, last report, usage type and Tor/whitelist flags. Own-network
   and private addresses are never sent. Reputation is context only; it never
   changes an event's classification or severity.
+- **Filters** the stream, map and facets by a **Reputation** picker (shown only
+  while a key is configured): High (50-100%), Some reports (1-49%), No reports
+  (0%), Not checked yet, and Reported by this server. Choices combine with OR,
+  and each shows its matching count.
 - **Reports** (`ABUSEIPDB_REPORTING=strict`, the default; `off` disables it)
   only high-confidence abuse from external sources within one hour:
 

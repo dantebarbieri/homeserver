@@ -1,4 +1,4 @@
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter, prepareLand, prepareGrid} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -431,7 +431,8 @@ $("filter-network").onclick = () => {
 $("health").onclick = () => { $("sources").hidden = !$("sources").hidden; };
 
 // Filters live here, not in the form, so the detail dialog and map can set them too.
-const filters = {severity: "", type: new Set(), outcome: new Set(), ip: "", country: "", asn: ""};
+const filters = {severity: "", type: new Set(), outcome: new Set(), reputation: new Set(), ip: "", country: "", asn: ""};
+const SETS = ["type", "outcome", "reputation"];
 const networkNames = new Map();
 let sourcesKey = "", sourcesAt = 0;
 const regionNames = typeof Intl.DisplayNames === "function" ? new Intl.DisplayNames(undefined, {type: "region"}) : null;
@@ -443,7 +444,7 @@ function countryName(code) {
 function filterParameters() {
   const result = {};
   if (filters.severity) result.severity = filters.severity;
-  for (const name of ["type", "outcome"]) if (filters[name].size) result[name] = [...filters[name]].join(",");
+  for (const name of SETS) if (filters[name].size) result[name] = [...filters[name]].join(",");
   for (const name of ["ip", "country", "asn"]) if (filters[name]) result[name] = filters[name];
   return result;
 }
@@ -456,6 +457,7 @@ function activeFilters() {
     level && [["severity"], `Severity: ${level[1]} or higher`],
     filters.type.size && [["type"], `Type: ${label(types, filters.type)}`],
     filters.outcome.size && [["outcome"], `Outcome: ${label(OUTCOMES, filters.outcome)}`],
+    filters.reputation.size && [["reputation"], `AbuseIPDB: ${label(REPUTATIONS, filters.reputation)}`],
     filters.ip && [["ip"], `IP: ${filters.ip}`],
     filters.country && [["country"], `Country: ${countryName(filters.country)}`],
     filters.asn && [["asn"], `Network: ${networkNames.get(filters.asn) || `AS${filters.asn}`}`],
@@ -476,14 +478,14 @@ function fillSources(select, any, rows, current, currentLabel) {
 
 function syncFilters() {
   for (const input of $("severity").querySelectorAll("input")) input.checked = input.value === filters.severity;
-  for (const name of ["type", "outcome"]) for (const input of $(name).querySelectorAll("input")) input.checked = filters[name].has(input.value);
+  for (const name of SETS) for (const input of $(name).querySelectorAll("input")) input.checked = filters[name].has(input.value);
   $("ip").value = filters.ip;
   for (const [id, any, current, label] of [["country", "Any country", filters.country, countryName(filters.country)],
     ["asn", "Any network", filters.asn, networkNames.get(filters.asn) || `AS${filters.asn}`]]) {
     const rows = [...$(id).options].slice(1).map(option => [option.value, option.textContent]);
     fillSources($(id), any, rows, current, label);
   }
-  const counts = {"type-picker": filters.type.size, "outcome-picker": filters.outcome.size,
+  const counts = {"type-picker": filters.type.size, "outcome-picker": filters.outcome.size, "reputation-picker": filters.reputation.size,
     "source-picker": [filters.ip, filters.country, filters.asn].filter(Boolean).length};
   for (const [id, count] of Object.entries(counts)) {
     const badge = $(id).querySelector("summary b");
@@ -500,7 +502,7 @@ function syncFilters() {
     chip.querySelector(".chip-remove").setAttribute("aria-hidden", "true");
     chip.setAttribute("aria-label", `Remove filter ${text}`);
     chip.onclick = () => name === "own" ? ($("own").checked = false, applyFilters())
-      : applyFilters({[name]: name === "type" || name === "outcome" ? new Set() : ""});
+      : applyFilters({[name]: SETS.includes(name) ? new Set() : ""});
     return chip;
   }));
   renderFacets();
@@ -516,7 +518,7 @@ function applyFilters(change = {}) {
 function clearFilters() {
   $("own").checked = false;
   sourcesKey = "";
-  return applyFilters({severity: "", type: new Set(), outcome: new Set(), ip: "", country: "", asn: ""});
+  return applyFilters({severity: "", type: new Set(), outcome: new Set(), reputation: new Set(), ip: "", country: "", asn: ""});
 }
 
 function buildFilters() {
@@ -532,13 +534,14 @@ function buildFilters() {
     choice.querySelector("span").append(text);
     $("severity").append(choice);
   }
-  const groups = {type: Object.entries(TYPES).map(([value, {label}]) => [value, label]), outcome: OUTCOMES};
+  const groups = {type: Object.entries(TYPES).map(([value, {label}]) => [value, label]), outcome: OUTCOMES, reputation: REPUTATIONS};
   for (const [name, options] of Object.entries(groups)) for (const [value, label] of options) {
     const choice = node("label", undefined, "choice");
     const input = node("input");
     Object.assign(input, {type: "checkbox", value});
     choice.append(input);
     if (name === "type") choice.append(node("span", undefined, `legend-dot type-${value}`));
+    if (name === "reputation") choice.append(node("span", undefined, `legend-dot reputation-${value}`));
     choice.append(node("span", label), node("small", undefined, "count"));
     $(name).append(choice);
   }
@@ -557,16 +560,17 @@ function renderFacets() {
     choice.classList.toggle("zero", !!counts && !count);
   };
   for (const input of $("severity").querySelectorAll("input")) show(input.closest("label"), counts?.severity[input.value || SEVERITIES[0][0]]);
-  for (const name of ["type", "outcome"]) for (const input of $(name).querySelectorAll("input")) show(input.closest("label"), counts?.[name][input.value]);
+  for (const name of SETS) for (const input of $(name).querySelectorAll("input")) show(input.closest("label"), counts?.[name][input.value]);
 }
 
 function demoFacets(scope) {
   const rows = new Map();
   for (const item of demoFeed().filter(item => matchesFilters(item, scope))) {
-    const key = `${item.type}|${item.verdict}|${severityOf(item)}`;
-    rows.set(key, {type: item.type, outcome: item.verdict, severity: severityOf(item), count: (rows.get(key)?.count || 0) + 1});
+    const row = {type: item.type, outcome: item.verdict, severity: severityOf(item), reputation: reputationGrade(item), reported: !!item.reputation?.reportedAt};
+    const key = Object.values(row).join("|");
+    rows.set(key, {...row, count: (rows.get(key)?.count || 0) + 1});
   }
-  return {counts: [...rows.values()]};
+  return {reputation: true, counts: [...rows.values()]};
 }
 
 async function loadFacets() {
@@ -581,11 +585,18 @@ async function loadFacets() {
     const result = demo ? demoFacets(scope) : await request("/api/facets", scope);
     if (key !== facetsKey) return;
     facetRows = result.counts;
+    reputationAvailable(result.reputation === true);
   } catch {
     if (key !== facetsKey) return;
     facetRows = null; facetsAt = 0;
   }
   renderFacets();
+}
+
+// The AbuseIPDB filter only exists while the server can apply it (a key is configured).
+function reputationAvailable(available) {
+  $("reputation-picker").hidden = !available;
+  if (!available && filters.reputation.size) applyFilters({reputation: new Set()});
 }
 
 function demoSources() {
@@ -622,7 +633,7 @@ function commitIp() {
 
 buildFilters();
 $("severity").onchange = event => applyFilters({severity: event.target.value});
-for (const name of ["type", "outcome"]) $(name).onchange = event => {
+for (const name of SETS) $(name).onchange = event => {
   const next = new Set(filters[name]);
   event.target.checked ? next.add(event.target.value) : next.delete(event.target.value);
   applyFilters({[name]: next});
