@@ -218,3 +218,9 @@ select,input,.button{background:#202024;border-color:#39393f;color:var(--text)}
   .active-filters{padding:0 16px 14px}.chip{min-height:36px;padding-right:9px}
 }
 @media(prefers-reduced-motion:reduce){.segment span{transition:none}.badge.trap.live .legend-dot{animation:none}}
+
+.feed-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}#group[aria-pressed=true]{color:var(--accent);border-color:#3f6f6b}
+.source-group{border-bottom:1px solid #303035}.source-summary{list-style:none;cursor:pointer;position:relative;border-bottom:0}.source-summary::-webkit-details-marker{display:none}
+.source-summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}.group-chevron{transition:transform .15s;display:inline-block}.source-group[open]>.source-summary .group-chevron{transform:rotate(90deg)}
+.source-group[open]>.source-summary{background:#1d1d21}.source-events{border-top:1px solid #303035;box-shadow:inset 3px 0 #45454d}.source-events .event-row:last-child{border-bottom:0}
+@media(max-width:650px){.source-summary .group-chevron{display:block;position:absolute;top:16px;right:14px}.source-summary{padding-right:34px}.feed-heading{gap:10px;flex-wrap:wrap}}

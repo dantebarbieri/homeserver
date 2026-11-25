@@ -78,7 +78,7 @@
     </section>
     <section id="sources" class="source-panel" hidden aria-label="Collector health"><h2>Collection health</h2><p>No events is not proof of no attacks. Quiet log queries do not prove that the originating service is logging correctly.</p><div id="source-list"></div></section>
     <section class="feed-panel">
-      <div class="feed-heading"><h2>Event stream <span id="feed-count"></span></h2><button id="pause" class="button">Pause live</button></div>
+      <div class="feed-heading"><h2>Event stream <span id="feed-count"></span></h2><div class="feed-actions"><button id="group" class="button" type="button" aria-pressed="false">Group by source</button><button id="pause" class="button">Pause live</button></div></div>
       <form id="filters" class="filters" autocomplete="off">
         <fieldset class="severity-filter"><legend>Severity, at least</legend><div id="severity" class="segments"></div></fieldset>
         <details id="type-picker" class="picker"><summary><span>Type</span><b></b></summary><div id="type" class="picker-menu" role="group" aria-label="Event type"></div></details>

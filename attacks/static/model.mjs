@@ -138,6 +138,24 @@ export function mapActivity(events, settings, now = Date.now() / 1000, history =
   return {points: visible.slice(0, settings.maxDots), expired, omitted: Math.max(0, visible.length - settings.maxDots), unlocated};
 }
 
+// Loaded events bundled per source IP, newest source first; each group keeps its events newest first.
+export function groupBySource(events) {
+  const groups = new Map();
+  for (const item of events) {
+    const key = item.ip || "";
+    let group = groups.get(key);
+    if (!group) groups.set(key, group = {ip: key, events: [], types: {}, severities: {}});
+    group.events.push(item);
+    group.types[item.type] = (group.types[item.type] || 0) + 1;
+    const severity = severityOf(item);
+    group.severities[severity] = (group.severities[severity] || 0) + 1;
+  }
+  return [...groups.values()].map(group => {
+    group.events.sort((a, b) => b.timestamp - a.timestamp);
+    return {...group, latest: group.events[0], first: group.events.at(-1), count: group.events.length};
+  }).sort((a, b) => b.latest.timestamp - a.latest.timestamp);
+}
+
 // The sources the map leaves out and why. Silent when it draws everything it has.
 export function notDrawn({faded = 0, farSide = 0, unlocated = 0, omitted = 0}) {
   const parts = [[faded, "faded"], [farSide, "on far side"], [unlocated, "unlocated"], [omitted, "over the dot limit"]]

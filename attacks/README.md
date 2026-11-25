@@ -3,7 +3,8 @@
 Private, read-only security-event observatory for **attacks.danteb.com**.
 A charcoal UI with an SVG world map, live event stream, severity, multi-select
 type/outcome and source (IP, country, network) filters, inspectable evidence
-badges, Loki window statistics, and
+badges, an optional **Group by source** view (one expandable row per IP with its
+event count and type/severity mix; the choice is remembered), Loki window statistics, and
 Prometheus lifetime counters and live gauges.
 There is no classifier queue for a human to work through, and no AI dependency.
 
@@ -289,7 +290,8 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   **AbuseIPDB N%** badge (grey 0, amber 1-49, red 50+) plus details: reports,
   reporting users, last report, usage type and Tor/whitelist flags. Own-network
   and private addresses are never sent. Reputation is context only; it never
-  changes an event's classification or severity.
+  changes an event's classification or severity. Sources this server reported get a
+  separate **Reported by us** badge.
 - **Filters** the stream, map and facets by a **Reputation** picker (shown only
   while a key is configured): High risk (50-100%), Some reports (1-49%), No reports
   (0%), Not checked yet, and Reported by this server. Choices combine with OR,

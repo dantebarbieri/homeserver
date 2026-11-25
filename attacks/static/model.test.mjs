@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath, groupBySource} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -390,4 +390,13 @@ test("follow flights land exactly, pull back on long hops and frame new dots", (
   assert.deepEqual([single.x, single.y], [820, 120]);
   const wide = fitView([{x: 10, y: 10}, {x: 990, y: 490}], 3, 1000, 500);
   assert.equal(wide.zoom, 1);
+});
+
+test("groupBySource bundles events per IP, newest source first, with type and severity counts", () => {
+  const event = (id, ip, timestamp, type = "ssh", kind = "ssh_failure") => ({id, ip, timestamp, type, kind});
+  const groups = groupBySource([event("a", "1.1.1.1", 10), event("b", "2.2.2.2", 30, "endlessh", "endlessh_open"), event("c", "1.1.1.1", 20), event("d", "2.2.2.2", 5)]);
+  assert.deepEqual(groups.map(group => [group.ip, group.count, group.latest.id, group.first.id]), [["2.2.2.2", 2, "b", "d"], ["1.1.1.1", 2, "c", "a"]]);
+  assert.deepEqual(groups[0].types, {endlessh: 1, ssh: 1});
+  assert.deepEqual(groups[1].severities, {high: 2});
+  assert.deepEqual(groups[1].events.map(item => item.id), ["c", "a"]);
 });

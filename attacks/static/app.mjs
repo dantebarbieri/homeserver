@@ -1,4 +1,4 @@
-import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath, groupBySource} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter, prepareLand, prepareGrid} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -142,6 +142,11 @@ function networkBadges(item) {
   if (item.asn && owner) badges.append(node("span", `AS${item.asn}`, "badge"));
   const reputation = reputationBadge(item);
   if (reputation) badges.append(reputation);
+  if (item.reputation?.reportedAt) {
+    const reported = node("span", "Reported by us", "badge reputation-reported");
+    reported.title = `Reported to AbuseIPDB by this server ${new Date(item.reputation.reportedAt * 1000).toLocaleString()}`;
+    badges.append(reported);
+  }
   for (const service of item.privacyServices || []) {
     const badge = node("span", service.kind === "tor_exit" ? "Tor exit" : `VPN server · ${service.name}`, "badge privacy-service");
     badge.title = service.evidence;
@@ -152,10 +157,10 @@ function networkBadges(item) {
 
 function reputationBadge(item) {
   const value = item.reputation;
-  if (!value || value.score === undefined) return value?.reportedAt ? node("span", "Reported", "badge reputation reputation-reported") : null;
+  if (!value || value.score === undefined) return null;
   const level = value.score >= 50 ? "high" : value.score > 0 ? "medium" : "clean";
   const badge = node("span", `AbuseIPDB ${value.score}%`, `badge reputation reputation-${level}`);
-  badge.title = `AbuseIPDB confidence ${value.score}%: ${value.reports.toLocaleString()} reports from ${value.users.toLocaleString()} users in 90 days${value.reportedAt ? "; reported by this server" : ""}`;
+  badge.title = `AbuseIPDB confidence ${value.score}%: ${value.reports.toLocaleString()} reports from ${value.users.toLocaleString()} users in 90 days`;
   return badge;
 }
 
@@ -329,22 +334,101 @@ function syncRows(container, rows) {
   }
 }
 
-function render() {
-  renderedTrap = trapKey();
-  const container = $("events");
-  const rows = events.map(item => {
+// Grouped mode bundles the stream per source; open groups and their elements survive redraws.
+let grouped = localStorage.getItem("attacks.group-sources") === "1";
+const openGroups = new Set(), groupCache = new Map();
+
+function countBadges(group) {
+  const kinds = node("span", undefined, "badges"), levels = node("span", undefined, "badges");
+  for (const {key, count} of slices(group.types, TYPE_ORDER)) {
+    const badge = node("span", undefined, `badge type-${key}`);
+    badge.append(node("span", undefined, "legend-dot"), `${count} ${TYPES[key].label}`);
+    kinds.append(badge);
+  }
+  for (const {key, count} of slices(group.severities, SEVERITY_ORDER)) levels.append(node("span", `${count} ${SEVERITY_LABELS[key]}`, `badge severity severity-${key}`));
+  return [kinds, levels];
+}
+
+function groupRow(group) {
+  const key = `${group.count}|${group.latest.id}|${group.first.id}|${JSON.stringify(group.latest.reputation || null)}`;
+  let cached = groupCache.get(group.ip);
+  if (!cached) {
+    const element = node("details", undefined, "source-group");
+    element.dataset.sourceIp = group.ip;
+    element.open = openGroups.has(group.ip);
+    const summary = node("summary", undefined, "event-row source-summary"), body = node("div", undefined, "source-events");
+    element.append(summary, body);
+    element.addEventListener("toggle", () => {
+      if (element.open) openGroups.add(group.ip); else openGroups.delete(group.ip);
+      fillGroup(cached);
+    });
+    groupCache.set(group.ip, cached = {element, summary, body});
+  }
+  cached.group = group;
+  if (cached.key !== key) {
+    cached.key = key;
+    const item = group.latest, at = new Date(item.timestamp * 1000);
+    const time = node("time", at.toLocaleTimeString([], {hour12: false}));
+    time.dateTime = at.toISOString();
+    time.title = `Latest ${at.toLocaleString()}`;
+    const counts = node("span", undefined, "event-cell");
+    counts.append(node("span", `${group.count.toLocaleString()} ${group.count === 1 ? "event" : "events"}`, "event-primary"), ...countBadges(group));
+    const source = node("span", undefined, "event-cell");
+    source.append(node("span", group.ip || "Unknown source", "event-primary mono"), locationLabel(item), networkBadges(item));
+    const extra = node("span", undefined, "event-cell event-detail");
+    const targets = new Set(group.events.map(event => event.user ? `user: ${event.user}` : event.path || event.service));
+    extra.append(node("span", targets.size > 1 ? `${targets.size} targets` : [...targets][0] || "", "event-primary mono"),
+      node("span", group.count > 1 ? `since ${new Date(group.first.timestamp * 1000).toLocaleString([], {hour12: false})}` : item.host || `port ${item.port}`, "event-secondary"));
+    cached.summary.replaceChildren(time, counts, source, extra, node("span", "›", "event-arrow group-chevron"));
+  }
+  fillGroup(cached);
+  return cached.element;
+}
+
+// A group's own rows are only built while it is open.
+function fillGroup(cached) {
+  if (!cached.element.open) { cached.body.replaceChildren(); return; }
+  syncRows(cached.body, cached.group.events.map(item => {
     const row = eventRow(item);
     row.classList.toggle("highlighted", item.id === highlighted);
     return row;
-  });
+  }));
+}
+
+function render() {
+  renderedTrap = trapKey();
+  const container = $("events");
+  container.classList.toggle("grouped", grouped);
   const focusedId = container.contains(document.activeElement) ? document.activeElement.dataset.eventId : null;
-  syncRows(container, rows);
-  if (focusedId) rows.find(row => row.dataset.eventId === focusedId)?.focus({preventScroll: true});
+  let groups = [];
+  if (grouped) {
+    groups = groupBySource(events);
+    const present = new Set(groups.map(group => group.ip));
+    for (const ip of groupCache.keys()) if (!present.has(ip)) { groupCache.delete(ip); openGroups.delete(ip); }
+    if (groups.length === 1 && !groupCache.has(groups[0].ip)) openGroups.add(groups[0].ip);
+    syncRows(container, groups.map(groupRow));
+  } else {
+    groupCache.clear();
+    syncRows(container, events.map(item => {
+      const row = eventRow(item);
+      row.classList.toggle("highlighted", item.id === highlighted);
+      return row;
+    }));
+  }
+  if (focusedId) container.querySelector(`[data-event-id="${CSS.escape(focusedId)}"]`)?.focus({preventScroll: true});
   $("empty").hidden = events.length > 0;
   $("empty").textContent = errors.has("feed") ? "Events unavailable. Check collection health above." : "No matching events in this observation window.";
-  counter("feed-count", `${events.length} shown`);
+  counter("feed-count", grouped ? `${groups.length} ${groups.length === 1 ? "source" : "sources"} · ${events.length} events` : `${events.length} shown`);
   $("older").hidden = !hasOlder || demo || events.length >= 1000;
   mapPoints();
+}
+
+function setGrouped(value, draw = true) {
+  grouped = value;
+  localStorage.setItem("attacks.group-sources", value ? "1" : "0");
+  $("group").setAttribute("aria-pressed", String(value));
+  $("group").textContent = value ? "Show all events" : "Group by source";
+  if (draw) render();
 }
 
 function trapField(item) {
@@ -418,7 +502,7 @@ async function showEvents(change) {
   if (mapView.expanded()) await mapView.exit();
   await applyFilters(change);
   $("events").scrollIntoView({block: "start"});
-  $("events").firstElementChild?.focus({preventScroll: true});
+  $("events").querySelector(".event-row")?.focus({preventScroll: true});
 }
 const showSource = ip => showEvents({ip});
 $("filter-ip").onclick = () => { $("detail").close(); showSource(selected.ip); };
@@ -1071,8 +1155,9 @@ function reveal({latest: item, count}) {
   if (count > 1) { showSource(item.ip); return; }
   highlighted = item.id;
   hideTooltip();
-  for (const row of $("events").children) row.classList.toggle("highlighted", row.dataset.eventId === item.id);
-  const row = [...$("events").children].find(value => value.dataset.eventId === item.id);
+  if (grouped && !openGroups.has(item.ip)) { openGroups.add(item.ip); const group = groupCache.get(item.ip); if (group) group.element.open = true; render(); }
+  for (const row of $("events").querySelectorAll(".event-row[data-event-id]")) row.classList.toggle("highlighted", row.dataset.eventId === item.id);
+  const row = $("events").querySelector(`[data-event-id="${CSS.escape(item.id)}"]`);
   row?.scrollIntoView({block: "center", behavior: reduced.matches ? "instant" : "smooth"});
   row?.focus({preventScroll: true});
 }
@@ -1453,6 +1538,8 @@ for (const [key, value] of Object.entries(TYPES)) {
 $("own").onchange = () => applyFilters();
 $("range").onchange = () => { load(true); stats(); loadFacets(); };
 $("older").onclick = () => load(false, true);
+$("group").onclick = () => setGrouped(!grouped);
+setGrouped(grouped, false);
 $("pause").onclick = () => {
   live = !live;
   $("pause").textContent = live ? "Pause live" : "Resume live";
