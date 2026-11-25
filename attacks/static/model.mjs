@@ -139,6 +139,18 @@ export function mapActivity(events, settings, now = Date.now() / 1000, history =
 }
 
 // Loaded events bundled per source IP, newest source first; each group keeps its events newest first.
+// Peak, mean and median of an events/minute timeline of [time, value] pairs. A trailing
+// partial bucket is skipped: one event in a few seconds would read as a false peak.
+export function rateSummary(timeline) {
+  let rows = timeline.map(([at, value]) => [Number(at), Number(value)]).filter(([, value]) => Number.isFinite(value));
+  if (rows.length > 2 && rows.at(-1)[0] - rows.at(-2)[0] < rows[1][0] - rows[0][0]) rows = rows.slice(0, -1);
+  if (!rows.length) return null;
+  const values = rows.map(([, value]) => value).sort((a, b) => a - b), middle = values.length >> 1;
+  const peak = rows.reduce((best, row) => row[1] > best[1] ? row : best);
+  return {peak: peak[1], peakAt: peak[0], mean: values.reduce((a, b) => a + b, 0) / values.length,
+          median: values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2};
+}
+
 export function groupBySource(events) {
   const groups = new Map();
   for (const item of events) {

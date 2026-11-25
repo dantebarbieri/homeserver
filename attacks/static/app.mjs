@@ -1,4 +1,4 @@
-import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath, groupBySource} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath, groupBySource, rateSummary} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter, prepareLand, prepareGrid} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -833,10 +833,34 @@ async function load(reset = false, history = false) {
   }
 }
 
+// With an AbuseIPDB key the card counts our reports; without one it falls back to failed sign-ins.
+function reportCard(result, failures) {
+  const abuse = result.abuse;
+  if (!abuse?.enabled) {
+    $("report-label").textContent = "FAILED SIGN-INS";
+    $("report-card").title = "";
+    counter("failures", result.available ? Math.round(failures).toLocaleString() : "—");
+    counter("report-detail", "Real SSH + Authelia");
+    return;
+  }
+  $("report-label").textContent = "REPORTED TO ABUSEIPDB";
+  $("report-card").title = "Abuse reports this server submitted to AbuseIPDB in the selected window, and the share of external sources seen in the window that they covered. An address is reported at most once a day.";
+  if (abuse.error) {
+    counter("failures", "—");
+    counter("report-detail", abuse.error);
+    return;
+  }
+  counter("failures", abuse.reports.toLocaleString());
+  const seen = result.sources || 0, share = seen ? Math.min(100, abuse.sources / seen * 100) : 0;
+  const percent = !abuse.sources ? "0%" : share < 1 ? "<1%" : `${Math.round(share)}%`;
+  counter("report-detail", `${percent} of ${seen.toLocaleString()} ${seen === 1 ? "source" : "sources"} seen`);
+}
+
 async function stats() {
   const period = $("range").value;
   try {
     const result = demo ? {available: true, totals: [{kind: "endlessh_open", value: 6821}, {kind: "ssh_failure", value: 143}, {kind: "auth_failure", value: 12}, {kind: "http_probe", value: 924}], trappedSeconds: 184800, lifetimeTrappedSeconds: 2064000,
+      sources: 412, abuse: {enabled: true, reports: 57, sources: 49},
       trapping: demoTrapping(demoFeed(), Date.now() / 1000),
       timeline: Array.from({length: 120}, (_, i) => [i, String(5 + (Math.sin(i * 1.9) + 1) * 7 + (i % 29 === 0 ? 30 : 0))])}
       : await request("/api/stats", {range: period});
@@ -844,13 +868,14 @@ async function stats() {
     const sum = result.totals.reduce((total, item) => total + item.value, 0);
     const failures = result.totals.filter(item => ["ssh_failure", "auth_failure"].includes(item.kind)).reduce((total, item) => total + item.value, 0);
     counter("total", result.available ? Math.round(sum).toLocaleString() : "—");
-    counter("failures", result.available ? Math.round(failures).toLocaleString() : "—");
+    reportCard(result, failures);
     trapSample = result.trapping; trapReceived = performance.now(); completedTrapSeconds = result.trappedSeconds;
     updateTrapping();
     syncTrap();
     const since = new Date(trapSample.since * 1000).toLocaleString();
     counter("trapped-lifetime", `${duration(result.lifetimeTrappedSeconds)} completed external · since ${since}`);
-    $("metric-status").textContent = demo ? "Synthetic preview" : "Loki · logged events (own excluded)";
+    $("metric-status").textContent = rateLabel(result.timeline, period);
+    $("metric-status").title = demo ? "Synthetic preview" : "Loki · logged events per minute, own traffic excluded";
     spark(result.timeline);
     errors.delete("metrics");
   } catch (error) {
@@ -912,6 +937,15 @@ function size(canvas) {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, box.width, box.height);
   return {ctx, width: box.width, height: box.height};
+}
+
+function rateLabel(timeline, period) {
+  const summary = rateSummary(timeline);
+  if (!summary) return "No events in window";
+  const rate = value => value < 10 ? value.toFixed(1) : Math.round(value).toLocaleString();
+  const long = period === "7d" || period === "30d";
+  const at = new Date(summary.peakAt * 1000).toLocaleString([], long ? {month: "short", day: "numeric", hour: "numeric"} : {hour: "numeric", minute: "2-digit"});
+  return `Peak ${rate(summary.peak)} at ${at} · mean ${rate(summary.mean)} · median ${rate(summary.median)}`;
 }
 
 function spark(values) {

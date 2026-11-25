@@ -303,7 +303,6 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   |---|---|---|
   | SSH login with a username that does not exist or may not log in, such as root or admin (real port or Forgejo) | 1 | SSH, Brute-Force |
   | Other failed SSH authentication (real port or Forgejo) | 3 | SSH, Brute-Force |
-  | Other failed SSH authentication (real port or Forgejo) | 3 | SSH, Brute-Force |
   | Connection to the real SSH port, or SSH handshake abandoned before login | 3 | Port Scan, SSH |
   | Failed Authelia sign-in | 5 | Brute-Force, Web App Attack |
   | Rejected (401/403/429) POST to a login, sign-in or session path | 10 | Brute-Force, Web App Attack |
@@ -317,7 +316,15 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   client (such addresses stay exempt for 30 days); an address is reported at
   most once a day and never when AbuseIPDB whitelists it; events older than a
   day (backfill) are ignored. Reports carry a fixed public comment per rule, so
-  usernames, hostnames and paths are never published.
+  usernames, hostnames and paths are never published. Every report is kept in a
+  history table, and the top **Reported to AbuseIPDB** card shows the reports
+  sent in the selected range and the share of distinct external sources seen
+  in that range that we reported (without a key the card shows failed real-SSH
+  and Authelia sign-ins instead).
+
+The events-per-minute sparkline is labelled with its peak (and when), mean and
+median rate; a trailing partial bucket is left out so one late event is not a
+false peak.
 
 Calls are capped locally at 900 checks and 900 reports per rolling day; an
 HTTP 429 pauses that kind of call until `Retry-After`. State lives in

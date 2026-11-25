@@ -301,6 +301,11 @@ class API:
             f'sum(sum_over_time({query} | kind="endlessh_close" | keep duration | unwrap duration | __error__="" [{period}]))',
             **instant)
         lifetime_trapped = self.prometheus_query('sum(attacks_endlessh_seconds_total{origin="external"})')
+        sources = self.loki_metrics(f'count(sum by (ip) (count_over_time({query} | keep ip [{period}])))', **instant)
+        try:
+            abuse = self.collector.request("/reputation/summary", {"since": f"{now - seconds:.0f}"})
+        except UpstreamError:
+            abuse = {"enabled": True, "error": "Report history unavailable"}
         step = max(60, seconds // 120)
         # Loki aligns range samples to the step grid. Query full buckets on that
         # grid, then evaluate the current partial bucket without future timestamps.
@@ -323,6 +328,7 @@ class API:
                 "trappedSeconds": value(trapped[0]) if trapped else 0,
                 "lifetimeTrappedSeconds": value(lifetime_trapped[0]) if lifetime_trapped else None,
                 "trapping": trapping,
+                "sources": int(value(sources[0])) if sources else 0, "abuse": abuse,
                 "timeline": timeline,
                 "available": True, "queriedAt": now}
 

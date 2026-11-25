@@ -24,7 +24,7 @@
     <div id="notice" role="status" class="notice" hidden></div>
     <section class="stats" aria-label="Aggregate metrics across all sources">
       <article><span class="eyebrow">EVENTS OBSERVED</span><strong id="total">—</strong><small>External sources · selected window</small></article>
-      <article><span class="eyebrow">FAILED SIGN-INS</span><strong id="failures">—</strong><small>Real SSH + Authelia</small></article>
+      <article id="report-card"><span class="eyebrow" id="report-label">REPORTED TO ABUSEIPDB</span><strong id="failures">—</strong><small id="report-detail">Sources reported by this server</small></article>
       <article title="Completed durations logged in the selected window plus elapsed time of currently observed external Endlessh sessions. Ongoing sessions contribute their full age, even if opened before the window. Parallel connections count separately: this is bot connection time, not human time."><span class="eyebrow">ATTACKER TIME WASTED</span><strong id="trapped">—</strong><small id="trapping-now">Waiting for live trapping</small><small id="trapped-lifetime">Completed external connection time</small></article>
       <article class="activity-card"><span class="eyebrow">EVENTS / MINUTE</span><canvas id="spark" aria-label="Event rate over the selected window" role="img"></canvas><small id="metric-status">Waiting for Loki</small></article>
     </section>

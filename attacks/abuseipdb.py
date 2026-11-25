@@ -81,9 +81,15 @@ class AbuseIPDB:
             CREATE TABLE IF NOT EXISTS trusted (ip TEXT PRIMARY KEY, at REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS queue (ip TEXT PRIMARY KEY, kind TEXT NOT NULL, at REAL NOT NULL, queued REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS reported (ip TEXT PRIMARY KEY, at REAL NOT NULL, kind TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS reports (ip TEXT NOT NULL, at REAL NOT NULL, kind TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS reports_at ON reports(at);
             CREATE TABLE IF NOT EXISTS calls (kind TEXT, at REAL);
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         """)
+        with self.db:
+            # `reported` keeps only the latest report per address; seed the history from it once.
+            if not self.db.execute("SELECT 1 FROM reports LIMIT 1").fetchone():
+                self.db.execute("INSERT INTO reports SELECT ip, at, kind FROM reported")
         self.error, self.retry_at = None, 0
 
     @property
@@ -157,6 +163,13 @@ class AbuseIPDB:
                 result[grade(score)].append(ip)
             result["reported"] = [ip for (ip,) in self.db.execute("SELECT ip FROM reported")]
         return result
+
+    def summary(self, since=0):
+        """Reports submitted since `since`, and the distinct addresses they covered."""
+        with self.lock:
+            reports, sources = self.db.execute("SELECT count(*), count(DISTINCT ip) FROM reports WHERE at>?",
+                                               (since,)).fetchone()
+        return {"reports": reports, "sources": sources}
 
     def budget(self, kind):
         with self.lock, self.db:
@@ -237,6 +250,7 @@ class AbuseIPDB:
             raise OSError(f"AbuseIPDB report failed (HTTP {status})")
         with self.lock, self.db:
             self.db.execute("INSERT OR REPLACE INTO reported VALUES (?,?,?)", (ip, self.clock(), kind))
+            self.db.execute("INSERT INTO reports VALUES (?,?,?)", (ip, self.clock(), kind))
             self.db.execute("DELETE FROM queue WHERE ip=?", (ip,))
         return True
 

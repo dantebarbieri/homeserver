@@ -703,6 +703,8 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(stats["lifetimeTrappedSeconds"], 120.75)
         self.assertEqual(stats["trapping"]["seconds"], 12)
         self.assertTrue(stats["available"])  # A valid empty window is zero, not a scrape failure.
+        self.assertEqual(stats["sources"], 0)
+        self.assertEqual(collector.request.call_args_list[-1].args, ("/reputation/summary", {"since": "13600"}))
         self.assertEqual(len(stats["timeline"]), 121)
         self.assertEqual(stats["timeline"][0][1], "0")
         self.assertEqual(float(stats["timeline"][-1][1]), 3)
@@ -821,6 +823,12 @@ class AbuseIPDBTests(unittest.TestCase):
         (_, _, form), = self.reports()
         self.assertIn(b"ip=8.8.4.4", form)
         self.assertIn(b"categories=14%2C22", form)
+        start = self.now
+        self.now += 86401
+        self.event("endlessh_open")
+        self.now += REPORT_DELAY; self.drain()
+        self.assertEqual(self.abuse.summary(start - 3600), {"reports": 2, "sources": 1})
+        self.assertEqual(self.abuse.summary(start + 3600), {"reports": 1, "sources": 1})
 
     def test_lookups_are_cached_for_a_day(self):
         self.http.replies.append((200, {"data": {"abuseConfidenceScore": 87, "totalReports": 4, "numDistinctUsers": 2}}, {}))

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath, groupBySource} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath, groupBySource, rateSummary} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -399,4 +399,9 @@ test("groupBySource bundles events per IP, newest source first, with type and se
   assert.deepEqual(groups[0].types, {endlessh: 1, ssh: 1});
   assert.deepEqual(groups[1].severities, {high: 2});
   assert.deepEqual(groups[1].events.map(item => item.id), ["c", "a"]);
+});
+test("rate summary skips a trailing partial bucket so a single late event is not a peak", () => {
+  const summary = rateSummary([[0, "1"], [60, "4"], [120, "2"], [180, "3"], [185, "12"]]);
+  assert.deepEqual(summary, {peak: 4, peakAt: 60, mean: 2.5, median: 2.5});
+  assert.equal(rateSummary([]), null);
 });

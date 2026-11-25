@@ -476,11 +476,13 @@ def main():
                 ips = [ip for ip in parse_qs(url.query).get("ip", [])[:300] if address(ip) == ip]
                 body = json.dumps(reputation.lookup(ips))
                 content_type, code = "application/json", 200
-            elif url.path == "/reputation/grades":
+            elif url.path in ("/reputation/grades", "/reputation/summary"):
                 since = parse_qs(url.query).get("since", ["0"])[0]
                 since = float(since) if re.fullmatch(r"\d{1,12}(\.\d+)?", since) else 0
-                body = json.dumps({"enabled": True, "grades": reputation.grades(since)} if reputation.enabled
-                                  else {"enabled": False})
+                summary = url.path.endswith("summary")
+                body = json.dumps(({"enabled": True, **reputation.summary(since)} if summary
+                                   else {"enabled": True, "grades": reputation.grades(since)})
+                                  if reputation.enabled else {"enabled": False})
                 content_type, code = "application/json", 200
             elif self.path == "/metrics":
                 status = collector.snapshot()
