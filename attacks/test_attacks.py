@@ -87,6 +87,13 @@ class ParserTests(unittest.TestCase):
         self.assertIsNone(parse_npm(npm_line("/ordinary-page", 404)))
         self.assertIsNone(parse_npm(npm_line("/ordinary-page", 200)))
         self.assertEqual(parse_npm(npm_line("/%252e%252e/etc/passwd"))["kind"], "http_probe")
+        for path in ("/.aws/credentials", "/staging/phpinfo.php", "/_profiler/phpinfo", "/wp-config.php.bak",
+                     "/.docker/config.json", "/backup.sql.gz", "/vendor/composer/installed.json", "/.ssh/id_rsa"):
+            self.assertEqual(parse_npm(npm_line(path, 404))["kind"], "http_probe", path)
+        # Forgejo serves repository files, and the wiki and Nextcloud are PHP.
+        for path in ("/danteb/homeserver/raw/commit/abc/pi/sqlite-migrations/0001_init.sql", "/index.php",
+                     "/index.php/core/preview", "/docker/.dockerignore"):
+            self.assertIsNone(parse_npm(npm_line(path, 200)), path)
         self.assertIsNone(parse_npm(npm_line().replace(IP, "192.168.1.1")))
 
     def test_flow_is_not_called_an_attack(self):

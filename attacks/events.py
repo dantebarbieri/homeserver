@@ -82,8 +82,12 @@ NPM = re.compile(
     r'\[Client (?P<ip>[^]]+)\]'
 )
 PROBE = re.compile(
-    r"(?i)(?:^|/)(?:\.env(?:[./]|$)|\.git(?:/|$)|wp-login\.php|xmlrpc\.php|"
-    r"phpmyadmin(?:/|$)|vendor/phpunit|cgi-bin/(?:.*)|actuator(?:/|$))|"
+    r"(?i)(?:^|/)(?:\.env(?:[./]|$)|\.(?:git|svn|aws|ssh|docker)(?:/|$)|wp-login\.php|xmlrpc\.php|"
+    r"phpmyadmin(?:/|$)|vendor/(?:phpunit|composer/installed\.json)|cgi-bin/(?:.*)|actuator(?:/|$)|"
+    # Secret and debug-output hunting; none of these exist on any site here, including the PHP ones.
+    r"(?:php)?info\.php$|_profiler/|wp-config\.php|wp-content/debug\.log$)|"
+    # Database dumps at a site root; Forgejo legitimately serves .sql files deeper in repositories.
+    r"^/[^/]+\.sql(?:\.gz|\.zip)?$|"
     r"(?:\.\./|/etc/passwd|/proc/self/)"
 )
 

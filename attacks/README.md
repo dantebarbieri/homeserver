@@ -315,12 +315,14 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   | Connection to the real SSH port, or SSH handshake abandoned before login | 3 | Port Scan, SSH |
   | Failed Authelia sign-in | 5 | Brute-Force, Web App Attack |
   | Rejected (401/403/429) POST to a login, sign-in or session path | 10 | Brute-Force, Web App Attack |
-  | Exploit, credential-file or admin-path web probe | 2 | Web App Attack |
+  | Exploit, credential-file or admin-path web probe (`.env`, `.git`, `.aws`, `.ssh`, `phpinfo.php`, `wp-config.php`, root `*.sql` dumps…) | 2 | Web App Attack |
   | Endlessh visit (port 22 serves no SSH) | 1 | Port Scan, SSH |
 
   Game-port scans (server-status sites probe those), other 401/403 responses
-  (expired sessions, token refreshes),
-  Plex, Hytale and other service connections are never reported. Safeguards: a report waits five minutes and is dropped if
+  (expired sessions, token refreshes), plain 404s (mostly real app traffic),
+  Plex, Hytale and other service connections are never reported. Requests to
+  Cloudflare-proxied sites (mirklurk.wiki) log a Cloudflare edge address, which
+  AbuseIPDB whitelists, so those are never reported either. Safeguards: a report waits five minutes and is dropped if
   the address has since signed in successfully over SSH or used Plex as a
   client (such addresses stay exempt for 30 days); an address is reported at
   most once a day and never when AbuseIPDB whitelists it; events older than a
