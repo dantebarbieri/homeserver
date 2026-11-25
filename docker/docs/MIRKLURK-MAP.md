@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `61884a78e8df8a19f6230463acba50defb8e2cfa`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45215406323) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/71) has no open issues |
-| Web | `mirklurk-map:61884a7`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:61884a7`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `44a8c4c9b66d13945c9058c91d869f992f984198`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45623166232) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/72) has no open issues, with private-audit/real-1.0-fixture limitations retained |
+| Web | `mirklurk-map:44a8c4c`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:44a8c4c`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -301,7 +301,46 @@ the separately accepted BMC recreation and current wiki post-snapshot runtime;
 do not reuse an old failed updater or legacy mount override. This pin is not
 a live-deployment claim.
 
-Expected final beta-wiki Deno 2.9.7 build identifiers (compare the actual image and live bytes,
+### Public 1.0 core pin
+
+The reviewed public-release core promotes **Latest/default to 1.0.0.0** and
+removes the active Beta channel. Historical 0.9.6.5 and 0.9.9.7 rules remain
+selectable; saved state stays authoritative. It introduces the audited
+release-only area-13 underground exposure rule, not a save migration or
+game simulation. Review records that the public reviewer could not inspect
+the private binary audit and no real 1.0 save fixture was available; synthetic
+checks are not real-release gameplay evidence.
+
+Catalog 550 and its November 23 verification date remain unchanged pending
+the separate accepted 1.0 wiki publication/catalog refresh. All 404 PNGs
+(330 wiki, 74 game) retain their preceding bytes. No new File import is
+needed for this core. API, server, Docker and sharing contracts are unchanged,
+but build both pinned targets because uploads copies the changed `src`.
+
+Acceptance uses `1000-core-bundle.json`, SHA-256
+`e4cbeb6cbc62f1c94e2dd7cd7e9bb7af3c64b3427f1f1e6b06673dfe4da38822`:
+418 distribution files plus unchanged nginx `50x.html` (419 physical files),
+417 precache entries and cache `25702a6135`.
+
+| Asset | SHA-256 |
+|---|---|
+| `app.be7f603f22.js` | `be7f603f225e09751e589cdd9a07be323242090bd31bc4aa08d0aec1a2b850b1` |
+| `edit.07c9d94c50.js` | `07c9d94c50352e5999350bef20a640c7f2d101fb622eb2a8b36e3c628c5d10d1` |
+| `sw.js` | `95566648e48b8a2b2f244d7d58cb7247a9676808d6baa0d8a9a4bea9f1d4876e` |
+
+This pin is not a live-deployment claim or a health waiver. Resolve current
+exact-source review/CI clearance and any unresolved service-health guard
+before activation; do not repair unrelated services as part of this release.
+Recheck current canonical/origin cleanliness, exclusive NPM trust, full
+mounts/hardening, runtime identities, timers, locks and rollback. Preserve
+the accepted 61884a78 predecessor and all earlier failure records.
+Use a separate normal uploads-then-web window with full IPv4/IPv6
+size/SHA checks, one new sharing/identity lifecycle and independent acceptance.
+Wiki publication and the final catalog refresh remain separate operations.
+
+### Historical beta-wiki acceptance identifiers
+
+Expected predecessor beta-wiki Deno 2.9.7 build identifiers (compare the actual image and live bytes,
 not just HTTP status):
 
 | Asset | SHA-256 |
