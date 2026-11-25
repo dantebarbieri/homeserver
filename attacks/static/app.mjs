@@ -374,6 +374,9 @@ function detail(item, sourceCount) {
   $("filter-country").textContent = `Only ${item.countryCode ? countryName(item.countryCode) : "this country"}`;
   $("filter-network").hidden = !item.asn;
   $("filter-network").textContent = `Only AS${item.asn}`;
+  // Opens only on click, so no address leaves the page unless asked.
+  $("abuse-check").hidden = !item.ip || item.origin === "own" || item.networkLookup === "not-public";
+  $("abuse-check").href = `https://www.abuseipdb.com/check/${encodeURIComponent(item.ip || "")}`;
   if (!$("detail").open) {
     document.body.classList.add("detail-open");
     $("detail").showModal();
