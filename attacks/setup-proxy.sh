@@ -22,8 +22,20 @@ request() {
     -H 'Content-Type: application/json' ${3:+--data-binary} ${3:+"$3"}
 }
 hosts=$(request GET /nginx/proxy-hosts)
+previous='include /snippets/authelia-location.conf;
+location = /metrics { return 404; }
+location / {
+    include /snippets/proxy.conf;
+    include /snippets/authelia-authrequest.conf;
+    proxy_pass $forward_scheme://$server:$port;
+}'
+# Home-screen icons are fetched without the SSO cookie, so only these public images skip Authelia.
 config='include /snippets/authelia-location.conf;
 location = /metrics { return 404; }
+location ~ ^/(apple-touch-icon(-precomposed)?|icon-192|icon-512)\.png$ {
+    include /snippets/proxy.conf;
+    proxy_pass $forward_scheme://$server:$port;
+}
 location / {
     include /snippets/proxy.conf;
     include /snippets/authelia-authrequest.conf;
@@ -31,14 +43,24 @@ location / {
 }'
 existing=$(printf '%s' "$hosts" | jq -c '[.[]|select(.domain_names|index("attacks.danteb.com"))]')
 if [ "$(printf '%s' "$existing" | jq length)" != 0 ]; then
-  printf '%s' "$existing" | jq -e --arg config "$config" '
-    length == 1 and (.[0] | .domain_names == ["attacks.danteb.com"] and
+  expected='length == 1 and (.[0] | .domain_names == ["attacks.danteb.com"] and
     .forward_host == "attacks" and .forward_port == 8080 and
-    .advanced_config == $config and .enabled and .ssl_forced)' >/dev/null || {
+    .advanced_config == $config and .enabled and .ssl_forced)'
+  if printf '%s' "$existing" | jq -e --arg config "$config" "$expected" >/dev/null; then
+    echo "Attacks proxy already configured."
+    exit 0
+  fi
+  printf '%s' "$existing" | jq -e --arg config "$previous" "$expected" >/dev/null || {
     echo "Unexpected existing attacks proxy; refusing to overwrite." >&2
     exit 1
   }
-  echo "Attacks proxy already configured."
+  id=$(printf '%s' "$existing" | jq -er '.[0].id')
+  request PUT "/nginx/proxy-hosts/$id" "$(jq -cn --arg config "$config" '{advanced_config:$config}')" |
+    jq -e --arg config "$config" '.advanced_config == $config' >/dev/null || {
+    echo "NPM did not confirm the icon exemption; inspect the host before proceeding." >&2
+    exit 1
+  }
+  echo "Attacks proxy updated: home-screen icons no longer require sign-in."
   exit 0
 fi
 certificates=$(request GET /nginx/certificates)

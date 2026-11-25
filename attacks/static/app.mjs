@@ -75,7 +75,7 @@ function counter(id, value) {
   const element = $(id), text = String(value), previous = element.dataset.counterText;
   if (previous === text) return;
   element.dataset.counterText = text;
-  const parts = text.split(/(\d[\d,.]*)/), before = (previous || "").split(/(\d[\d,.]*)/);
+  const parts = text.split(/(\d[\d,.:/]*)/), before = (previous || "").split(/(\d[\d,.:/]*)/);
   const content = parts.map((part, index) => {
     if (index % 2 === 0) return document.createTextNode(part);
     const token = node("span", undefined, "number-token");
@@ -1353,7 +1353,7 @@ $("projection").onchange = () => {
 };
 function showMapSettings() {
   for (const [key, value] of Object.entries(dotSettings)) $(key).value = value;
-  $("map-explainer").textContent = `One dot per source IP. Repeat requests refresh the same dot. A source with several kinds of events becomes a pie: one slice per kind, sized by count and ordered clockwise from the top as in the key, with every kind kept visible. New events flash in their kind's color, and the rings that follow are split by severity, highest first; hover or focus a dot to see its ring. The newest ${dotSettings.keep} sources stay bright; older dots fade over ${dotSettings.fadeMinutes} minutes. At most ${dotSettings.maxDots} are shown. Select a dot to explore its events. On the globe or in full screen, the crosshair button follows new activity; dragging the map or the reset button turns it off. The gear holds the projection and these dot settings. IP locations are approximate.`;
+  $("map-explainer").textContent = `One dot per source IP, split into slices by event kind; rings show severity. The newest ${dotSettings.keep} sources stay bright, older ones fade over ${dotSettings.fadeMinutes} minutes, and at most ${dotSettings.maxDots} are shown. Locations are approximate.`;
 }
 $("map-settings").onsubmit = event => {
   event.preventDefault();

@@ -18,13 +18,9 @@
 <body>
   <header class="appbar">
     <a class="brand" href="/"><img class="brand-icon" src="/favicon.svg" alt="" width="36" height="36"><strong>ATTACKS</strong></a>
-    <div class="top-right"><span class="private">PRIVATE OBSERVATORY</span><button id="health" class="status" aria-controls="sources">Connecting</button></div>
+    <div class="top-right"><label class="period"><span>Observation window</span><select id="range"><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h" selected>Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label><button id="health" class="status" aria-controls="sources">Connecting</button></div>
   </header>
   <main>
-    <section class="intro">
-      <div><p class="eyebrow">THE INTERNET AT YOUR DOOR</p><h1>A little light in the noise.</h1><p class="subtitle">Connections, traps, and failed sign-ins. Observed, not assumed.</p></div>
-      <label class="period">Observation window<select id="range"><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h" selected>Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label>
-    </section>
     <div id="notice" role="status" class="notice" hidden></div>
     <section class="stats" aria-label="Aggregate metrics across all sources">
       <article><span class="eyebrow">EVENTS OBSERVED</span><strong id="total">—</strong><small>External sources · selected window</small></article>
@@ -82,7 +78,7 @@
     </section>
     <section id="sources" class="source-panel" hidden aria-label="Collector health"><h2>Collection health</h2><p>No events is not proof of no attacks. Quiet log queries do not prove that the originating service is logging correctly.</p><div id="source-list"></div></section>
     <section class="feed-panel">
-      <div class="feed-heading"><div><p class="eyebrow">THE DETAIL BEHIND THE DOTS</p><h2>Event stream <span id="feed-count"></span></h2></div><button id="pause" class="button">Pause live</button></div>
+      <div class="feed-heading"><h2>Event stream <span id="feed-count"></span></h2><button id="pause" class="button">Pause live</button></div>
       <form id="filters" class="filters" autocomplete="off">
         <fieldset class="severity-filter"><legend>Severity, at least</legend><div id="severity" class="segments"></div></fieldset>
         <details id="type-picker" class="picker"><summary><span>Type</span><b></b></summary><div id="type" class="picker-menu" role="group" aria-label="Event type"></div></details>

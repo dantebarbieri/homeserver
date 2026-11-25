@@ -24,6 +24,7 @@ STATIC = {"index.html", "styles.css", "app.mjs", "model.mjs", "map-view.mjs", "p
           "atlas.mjs", "favicon.svg", "flags.woff2", "flags-LICENSE.txt", "manifest.webmanifest",
           "apple-touch-icon.png", "icon-192.png", "icon-512.png", "globe.mjs", "globe-draw.mjs", "geo-vendor.mjs",
           "geo-vendor-LICENSE.txt"} | MAP_ASSETS
+ALIASES = {"apple-touch-icon-precomposed.png": "apple-touch-icon.png"}
 RANGES = {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800, "30d": 2592000}
 LIMIT = 250
 NANO = 1_000_000_000
@@ -300,6 +301,8 @@ def serve(host="127.0.0.1", port=8080):
                     body = b'{"status":"ok"}'
                 else:
                     name = "index.html" if url.path == "/" else url.path.removeprefix("/")
+                    # iOS also probes the legacy precomposed name before reading the page's link.
+                    name = ALIASES.get(name, name)
                     if name not in STATIC:
                         status, body = 404, b'{"error":"Not found"}'
                     else:

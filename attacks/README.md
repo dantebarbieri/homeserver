@@ -548,7 +548,9 @@ networks, not a new `docker_proxy` network or the nightly main Compose updater.
    NPM host using a certificate covering this hostname, and refuses to overwrite
    an unexpected existing host. It reuses the established Authelia snippets and
    NPM credentials already available in `bmc-ip-monitor`; none are copied into
-   this app. No DNS/router changes are needed.
+   this app. No DNS/router changes are needed. Only the PNG home-screen icons
+   bypass Authelia, because iOS fetches them without the SSO cookie. Rerunning
+   the script upgrades a host still on the previous config.
 8. Verify anonymous API requests cannot retrieve telemetry, non-admin users
    are denied, and an admin with 2FA can use the UI. Check all collection health
    rows, Prometheus's target, map geolocation, one harmless Endlessh connection,
