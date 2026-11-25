@@ -146,6 +146,14 @@ class API:
             raise UpstreamError("Event timestamp exceeds page capacity; narrow the filters")
         rows = rows[:LIMIT]
         unique = {item["id"]: item for item in rows}
+        ips = sorted({item["ip"] for item in unique.values() if item["origin"] == "external"})
+        try:
+            reputation = self.collector.request("/reputation", [("ip", ip) for ip in ips]) if ips else {}
+        except UpstreamError:
+            reputation = {}
+        for item in unique.values():
+            if isinstance(reputation.get(item["ip"]), dict) and item["origin"] == "external":
+                item["reputation"] = reputation[item["ip"]]
         return {"events": sorted(unique.values(), key=lambda item: int(item["cursor"]), reverse=True),
                 "more": more, "next": rows[-1]["cursor"] if rows else None,
                 "latest": str(max((int(item["cursor"]) for item in rows), default=end)),

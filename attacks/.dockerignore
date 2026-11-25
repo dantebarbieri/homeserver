@@ -2,6 +2,7 @@
 !Dockerfile
 !pyproject.toml
 !uv.lock
+!abuseipdb.py
 !common.py
 !events.py
 !ssh_keys.py

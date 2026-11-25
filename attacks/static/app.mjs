@@ -140,12 +140,38 @@ function networkBadges(item) {
   provider.title = item.networkOrganization || "No network attribution available";
   badges.append(provider);
   if (item.asn && owner) badges.append(node("span", `AS${item.asn}`, "badge"));
+  const reputation = reputationBadge(item);
+  if (reputation) badges.append(reputation);
   for (const service of item.privacyServices || []) {
     const badge = node("span", service.kind === "tor_exit" ? "Tor exit" : `VPN server · ${service.name}`, "badge privacy-service");
     badge.title = service.evidence;
     badges.append(badge);
   }
   return badges;
+}
+
+function reputationBadge(item) {
+  const value = item.reputation;
+  if (!value || value.score === undefined) return value?.reportedAt ? node("span", "Reported", "badge reputation reputation-reported") : null;
+  const level = value.score >= 50 ? "high" : value.score > 0 ? "medium" : "clean";
+  const badge = node("span", `AbuseIPDB ${value.score}%`, `badge reputation reputation-${level}`);
+  badge.title = `AbuseIPDB confidence ${value.score}%: ${value.reports.toLocaleString()} reports from ${value.users.toLocaleString()} users in 90 days${value.reportedAt ? "; reported by this server" : ""}`;
+  return badge;
+}
+
+function reputationField(value) {
+  if (!value) return undefined;
+  const lines = [];
+  if (value.score !== undefined) {
+    lines.push(`${value.score}% abuse confidence; ${value.reports.toLocaleString()} reports from ${value.users.toLocaleString()} users in 90 days`);
+    if (value.lastReportedAt) lines.push(`Last reported ${new Date(value.lastReportedAt).toLocaleString()}`);
+    if (value.usage) lines.push(`Usage: ${value.usage}`);
+    if (value.tor) lines.push("Tor exit node");
+    if (value.whitelisted) lines.push("Whitelisted by AbuseIPDB");
+    lines.push(`Checked ${new Date(value.checkedAt * 1000).toLocaleString()}`);
+  }
+  if (value.reportedAt) lines.push(`Reported by this server ${new Date(value.reportedAt * 1000).toLocaleString()}`);
+  return lines.join("\n");
 }
 
 async function request(path, params = {}) {
@@ -355,6 +381,7 @@ function detail(item, sourceCount) {
       : item.privacyServices?.length ? item.privacyServices.map(service =>
         `${service.name}: ${service.evidence}\nDataset checked: ${new Date(service.updatedAt * 1000).toLocaleString()}${service.source ? `\n${service.source}` : ""}`).join("\n\n")
       : "Unknown. No listed service matched; this does not establish that the address is not a VPN.",
+    "AbuseIPDB": reputationField(item.reputation),
     "Lookup coverage": item.networkLookup || "Not enriched (older event)",
     "Service": item.service, "Destination port": item.port, "Source port": item.sourcePort,
     "Protocol": item.protocol, "Attempted user": item.user, "Auth factor": item.factor,
@@ -761,10 +788,11 @@ async function health() {
     const cards = [];
     const lookupSources = Object.fromEntries(Object.entries(result.networks?.feeds || {}).map(([name, value]) => [`network:${name}`, value]));
     for (const [name, source] of Object.entries({...result.sources, geo: result.geo, sshKeys: result.sshKeys, ownTraffic: result.ownTraffic,
+      ...(result.abuseipdb ? {abuseipdb: result.abuseipdb} : {}),
       ...(result.networks ? {asn: result.networks.asn} : {}), ...lookupSources})) {
       const message = source.message || (source.lagSeconds > 90 ? `Catching up: ${Math.round(source.lagSeconds)}s behind` : "Ready; a quiet source can have no matching events");
-      const issue = source.state !== "ready" || source.lagSeconds > 90;
-      const card = node("div", `${name} · ${issue ? source.state === "ready" ? "catching up" : source.state : "ready"}`, `source-card${issue ? " error" : ""}`);
+      const issue = !["ready", "disabled"].includes(source.state) || source.lagSeconds > 90;
+      const card = node("div", `${name} · ${issue ? source.state === "ready" ? "catching up" : source.state : source.state === "disabled" ? "off" : "ready"}`, `source-card${issue ? " error" : ""}`);
       card.append(node("small", message));
       cards.push(card);
       if (issue) sourceIssues.push(`${name}: ${message}`);

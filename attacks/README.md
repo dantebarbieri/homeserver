@@ -238,7 +238,8 @@ and immediately reloads the unfiltered stream, preserving the observation window
 
 Every source can include a country flag, ASN and organization, plus cloud and
 relay badges. These are **offline lookups**, not WHOIS/API queries containing
-observed IPs. Network ownership never upgrades the attack classification.
+observed IPs. Network ownership never upgrades the attack classification. The
+one exception is the optional AbuseIPDB integration below.
 
 - DB-IP Lite City and ASN provide approximate location and routed-network ownership.
 - Official AWS, Azure Public Cloud, Google Cloud and Oracle Cloud prefix lists
@@ -268,6 +269,40 @@ ASN/City databases warn 62 days after their embedded build time, not download
 time. Corrupt lookup records are reported as unavailable without stopping event
 collection or independent prefix matching. Existing event enrichment is a historical
 snapshot; refreshes do not rewrite old events.
+
+### AbuseIPDB reputation and reports
+
+Event details link to the source's public AbuseIPDB page; the link sends
+nothing until clicked. With `ABUSEIPDB_API_KEY` set in `docker/.env` (a free
+account allows 1,000 checks and 1,000 reports a day), the collector also:
+
+- **Looks up** each external public source once a day and shows an
+  **AbuseIPDB N%** badge (grey 0, amber 1-49, red 50+) plus details: reports,
+  reporting users, last report, usage type and Tor/whitelist flags. Own-network
+  and private addresses are never sent. Reputation is context only; it never
+  changes an event's classification or severity.
+- **Reports** (`ABUSEIPDB_REPORTING=strict`, the default; `off` disables it)
+  only high-confidence abuse from external sources within one hour:
+
+  | Evidence | Threshold | Categories |
+  |---|---|---|
+  | Failed SSH authentication (real port or Forgejo) | 3 | SSH, Brute-Force |
+  | Failed Authelia sign-in | 5 | Brute-Force, Web App Attack |
+  | Exploit, credential-file or admin-path web probe | 2 | Web App Attack |
+
+  Endlessh visits, port touches, Plex, Hytale and other service connections
+  are never reported. Safeguards: a report waits five minutes and is dropped if
+  the address has since signed in successfully over SSH or used Plex as a
+  client (such addresses stay exempt for 30 days); an address is reported at
+  most once a day and never when AbuseIPDB whitelists it; events older than a
+  day (backfill) are ignored. Reports carry a fixed public comment per rule, so
+  usernames, hostnames and paths are never published.
+
+Calls are capped locally at 900 checks and 900 reports per rolling day; an
+HTTP 429 pauses that kind of call until `Retry-After`. State lives in
+`/state/abuseipdb.sqlite`. The collector health card shows **abuseipdb · off**
+without a key, otherwise its daily counts. Apply a new key with
+`docker compose --env-file docker/.env -f attacks/compose.yml up -d attacks-collector`.
 
 ### Home-screen app
 

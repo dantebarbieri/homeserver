@@ -11,10 +11,12 @@ import tempfile
 import time
 import unittest
 from unittest.mock import Mock, patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import maxminddb
 
+import io
+from abuseipdb import REPORT_DELAY, AbuseIPDB
 from capture import interface_networks, packet
 from collector import Collector, Geo, Store, window
 from common import Client, UpstreamError
@@ -665,6 +667,113 @@ class QueryTests(unittest.TestCase):
         self.assertIn('origin="external"', prometheus.request.call_args.args[1]["query"])
         self.assertTrue(all("observedAt <= 100.000000" in call.args[1]["query"] for call in loki.request.call_args_list))
 
+
+class FakeAbuseIPDB:
+    def __init__(self):
+        self.calls, self.replies = [], []
+
+    def open(self, request, timeout):
+        self.calls.append((request.get_method(), request.full_url, request.data))
+        status, body, headers = self.replies.pop(0) if self.replies else (200, {"data": {"abuseConfidenceScore": 0}}, {})
+        if status >= 400:
+            raise HTTPError(request.full_url, status, "error", headers, io.BytesIO(json.dumps(body).encode()))
+        response = Mock(status=status)
+        response.read.return_value = json.dumps(body).encode()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        return response
+
+
+class AbuseIPDBTests(unittest.TestCase):
+    IP = "8.8.4.4"
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.now = 1_800_000_000.0
+        self.http = FakeAbuseIPDB()
+        self.abuse = AbuseIPDB(Path(self.dir.name) / "a.sqlite", "key", clock=lambda: self.now, opener=self.http)
+        self.addCleanup(self.dir.cleanup)
+        self.addCleanup(self.abuse.db.close)
+
+    def event(self, kind, ip=IP, origin="external", age=0):
+        self.abuse.observe({"ip": ip, "kind": kind, "origin": origin, "timestamp": self.now - age})
+
+    def drain(self):
+        while self.abuse.work():
+            pass
+
+    def reports(self):
+        return [call for call in self.http.calls if call[0] == "POST"]
+
+    def test_threshold_and_delay_gate_a_fixed_comment_report(self):
+        self.event("ssh_failure"); self.event("ssh_failure")
+        self.now += REPORT_DELAY; self.drain()
+        self.assertEqual(self.reports(), [])
+        self.event("ssh_failure")
+        self.drain()
+        self.assertEqual(self.reports(), [], "a report waits for REPORT_DELAY")
+        self.now += REPORT_DELAY; self.drain()
+        (_, url, form), = self.reports()
+        self.assertTrue(url.endswith("/report"))
+        self.assertIn(b"categories=18%2C22", form)
+        self.assertEqual(self.abuse.lookup([self.IP])[self.IP]["reportedAt"], self.now)
+        for _ in range(3):
+            self.event("ssh_failure")
+        self.now += REPORT_DELAY; self.drain()
+        self.assertEqual(len(self.reports()), 1, "at most one report a day per address")
+
+    def test_successful_sign_in_cancels_a_queued_report(self):
+        for _ in range(3):
+            self.event("ssh_failure")
+        self.event("ssh_accepted")
+        self.now += REPORT_DELAY; self.drain()
+        self.assertEqual(self.reports(), [])
+
+    def test_own_private_old_and_unruled_events_are_not_reported(self):
+        for _ in range(5):
+            self.event("ssh_failure", origin="own")
+            self.event("ssh_failure", ip="192.168.1.5")
+            self.event("ssh_failure", ip="9.9.9.9", age=2 * 86400)
+            self.event("endlessh_open", ip="1.0.0.1")
+        self.now += REPORT_DELAY; self.drain()
+        self.assertEqual(self.reports(), [])
+        checked = {url.split("ipAddress=")[1].split("&")[0] for _, url, _ in self.http.calls}
+        self.assertEqual(checked, {"9.9.9.9", "1.0.0.1"})
+
+    def test_lookups_are_cached_for_a_day(self):
+        self.http.replies.append((200, {"data": {"abuseConfidenceScore": 87, "totalReports": 4, "numDistinctUsers": 2}}, {}))
+        self.abuse.lookup([self.IP]); self.drain()
+        self.assertEqual(self.abuse.lookup([self.IP])[self.IP]["score"], 87)
+        self.drain()
+        self.assertEqual(len(self.http.calls), 1)
+        self.now += 86401
+        self.abuse.lookup([self.IP]); self.drain()
+        self.assertEqual(len(self.http.calls), 2)
+
+    def test_rate_limit_pauses_calls(self):
+        self.http.replies.append((429, {}, {"Retry-After": "600"}))
+        self.abuse.lookup([self.IP]); self.drain()
+        self.assertEqual(self.abuse.status()["state"], "error")
+        self.now += 300; self.drain()
+        self.assertEqual(len(self.http.calls), 1)
+        self.now += 301; self.drain()
+        self.assertEqual(len(self.http.calls), 2)
+        self.assertEqual(self.abuse.status()["state"], "ready")
+
+    def test_duplicate_report_rejection_counts_as_reported(self):
+        self.abuse.lookup([self.IP]); self.drain()
+        for _ in range(2):
+            self.event("http_probe")
+        self.http.replies.append((422, {"errors": [{"detail": "already reported"}]}, {}))
+        self.now += REPORT_DELAY; self.drain()
+        self.assertIn("reportedAt", self.abuse.lookup([self.IP])[self.IP])
+
+    def test_disabled_without_key(self):
+        abuse = AbuseIPDB(Path(self.dir.name) / "b.sqlite", "", opener=self.http)
+        self.addCleanup(abuse.db.close)
+        abuse.observe({"ip": self.IP, "kind": "ssh_failure", "origin": "external", "timestamp": time.time()})
+        self.assertEqual((abuse.lookup([self.IP]), abuse.work(), abuse.status()["state"]), ({}, False, "disabled"))
+        self.assertEqual(self.http.calls, [])
 
 if __name__ == "__main__":
     unittest.main()

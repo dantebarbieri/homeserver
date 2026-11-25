@@ -383,6 +383,9 @@ function demoEvent(i, timestamp, id, ip, place, network = i) {
     longitude: place[0], latitude: place[1], location: place[2], countryCode: place[3],
     networkLookup: "ready", networkProvider: DEMO_PROVIDERS[n], asn: 64512 + n,
     networkOrganization: "Synthetic example network (private-use ASN)", networkEvidence: "Synthetic preview association, not a real IP lookup",
+    reputation: i === 9 ? undefined : {score: [100, 0, 37, 88, 0, 12, 100, 64][n], reports: [412, 0, 6, 91, 0, 2, 1503, 30][n],
+      users: [180, 0, 4, 52, 0, 1, 611, 19][n], usage: "Synthetic preview", lastReportedAt: n % 4 === 1 ? null : new Date((timestamp - 3600) * 1000).toISOString(),
+      tor: n === 3, whitelisted: false, checkedAt: timestamp, ...(n === 6 ? {reportedAt: timestamp} : {})},
     privacyServices: n > 0 && n < 4 ? [{
       name: ["", "Mullvad", "NordVPN", "Tor"][n], kind: n === 3 ? "tor_exit" : "vpn_server",
       evidence: "Synthetic association for preview only; not a real VPN or Tor lookup", updatedAt: timestamp,

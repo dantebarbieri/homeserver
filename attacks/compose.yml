@@ -49,6 +49,9 @@ services:
     environment:
       LOKI_URL: http://loki:3100
       PLEX_LOG_TZ: ${TZ:-UTC}
+      # Optional. Without a key, nothing is sent to AbuseIPDB.
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      ABUSEIPDB_REPORTING: ${ABUSEIPDB_REPORTING:-strict}
     volumes:
       - type: bind
         source: ${DATA:-/srv/docker/data}/attacks/state

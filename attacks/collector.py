@@ -10,11 +10,13 @@ from pathlib import Path
 import sqlite3
 import threading
 import time
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 import maxminddb
 
+from abuseipdb import AbuseIPDB
 from common import Client, UpstreamError
-from events import KINDS, PARSERS, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, text, traffic_origin
+from events import KINDS, PARSERS, address, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, text, traffic_origin
 from networks import Networks
 from ssh_keys import SSHKeys
 
@@ -264,8 +266,9 @@ class Geo:
 
 
 class Collector:
-    def __init__(self, store, loki, geo, npm, keys=None, networks=None, plex="/plex-logs", plex_zone=None):
+    def __init__(self, store, loki, geo, npm, keys=None, networks=None, plex="/plex-logs", plex_zone=None, reputation=None):
         self.store, self.loki, self.geo, self.npm = store, loki, geo, Path(npm)
+        self.reputation = reputation
         zone = os.environ.get("PLEX_LOG_TZ", "UTC")
         self.plex, self.plex_zone = Path(plex), plex_zone or (timezone.utc if zone == "UTC" else ZoneInfo(zone))
         self.status = {name: {"state": "waiting"} for name in (*SELECTORS, "npm", "plex", "delivery")}
@@ -281,6 +284,13 @@ class Collector:
             raise UpstreamError(own["message"])
         return {**refine(self.keys.annotate(self.networks.enrich(self.geo.enrich(item)))),
                 "origin": traffic_origin(item["ip"], own["networks"])}
+
+    def collect(self, item, source, key):
+        if self.store.enqueue(item, source, key) and self.reputation:
+            try:
+                self.reputation.observe(item)
+            except sqlite3.Error as error:
+                LOG.error("abuseipdb: %s", type(error).__name__)
 
     def own_traffic(self):
         ready = "ownNetworks" in self.capture and time.time() - self.capture.get("timestamp", 0) <= 90
@@ -318,7 +328,7 @@ class Collector:
                 continue
             key = json.dumps([ns, labels, line], sort_keys=True)
             counts[key] += 1
-            self.store.enqueue(self.enrich(item), source, f"{key}:{counts[key]}")
+            self.collect(self.enrich(item), source, f"{key}:{counts[key]}")
         self.store.set("cursor:" + source, end)
         return {"lagSeconds": max(0, now - end / NANO)}
 
@@ -376,7 +386,7 @@ class Collector:
                         event_key = throttle
                         if self.store.known(name, event_key):
                             continue
-                    self.store.enqueue(self.enrich(item), name, event_key)
+                    self.collect(self.enrich(item), name, event_key)
                 positions[key] = {"offset": stream.tell(), "seen": now}
         positions = {key: value for key, value in positions.items() if value["seen"] >= now - 7 * 86400}
         self.store.set(f"{name}_positions", positions)
@@ -423,7 +433,8 @@ class Collector:
         trapping = {**self.store.trapping(), "available": own["state"] == "ready" and all(
             sources[name]["state"] == "ready" and sources[name].get("lagSeconds", 0) <= 90
             and time.time() - sources[name].get("lastSuccess", 0) <= 90 for name in ("endlessh", "delivery"))}
-        return {"sources": sources, "geo": self.geo.status, "sshKeys": self.keys.status, "networks": self.networks.status,
+        return {"sources": sources, "geo": self.geo.status,
+                **({"abuseipdb": self.reputation.status()} if self.reputation else {}), "sshKeys": self.keys.status, "networks": self.networks.status,
                 "ownTraffic": own, "trapping": trapping,
                 "lastTick": self.last_tick, "capture": self.capture,
                 "startedAt": self.store.get("started")}
@@ -434,13 +445,21 @@ def main():
     state = Path(os.environ.get("STATE_DIR", "/state"))
     state.mkdir(parents=True, exist_ok=True)
     store = Store(state / "collector.sqlite")
+    reputation = AbuseIPDB(state / "abuseipdb.sqlite", os.environ.get("ABUSEIPDB_API_KEY", "").strip(),
+                           os.environ.get("ABUSEIPDB_REPORTING", "strict").strip().lower())
     collector = Collector(store, Client(os.environ.get("LOKI_URL", "http://loki:3100")),
                           Geo(os.environ.get("GEOIP_PATH", "/geo/GeoIP.mmdb")),
-                          os.environ.get("NPM_LOG_DIR", "/npm"), plex=os.environ.get("PLEX_LOG_DIR", "/plex-logs"))
+                          os.environ.get("NPM_LOG_DIR", "/npm"), plex=os.environ.get("PLEX_LOG_DIR", "/plex-logs"),
+                          reputation=reputation)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path == "/metrics":
+            url = urlsplit(self.path)
+            if url.path == "/reputation":
+                ips = [ip for ip in parse_qs(url.query).get("ip", [])[:300] if address(ip) == ip]
+                body = json.dumps(reputation.lookup(ips))
+                content_type, code = "application/json", 200
+            elif self.path == "/metrics":
                 status = collector.snapshot()
                 body = store.metrics()
                 for name, value in status["sources"].items():
@@ -469,6 +488,11 @@ def main():
 
     http = ThreadingHTTPServer(("0.0.0.0", 9108), Handler)
     threading.Thread(target=http.serve_forever, daemon=True).start()
+
+    def reputation_worker():
+        while True:
+            time.sleep(0.2 if reputation.work() else 2)
+    threading.Thread(target=reputation_worker, daemon=True).start()
     while True:
         collector.tick()
         time.sleep(2)
