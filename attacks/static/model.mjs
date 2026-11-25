@@ -47,6 +47,24 @@ export function matchesFilters(item, parameters) {
     && (parameters.own === "1" || item.origin !== "own");
 }
 
+// Faceted option counts: each picker counts against the other two pickers' current choices,
+// so a number always says how many events selecting that option (alone) would add or show.
+// Severity is cumulative because its filter means "at least".
+export function facetCounts(rows, parameters) {
+  const levels = SEVERITIES.map(([level]) => level);
+  const types = list(parameters.type), outcomes = list(parameters.outcome);
+  const floor = Math.max(0, levels.indexOf(parameters.severity || levels[0]));
+  const result = {type: {}, outcome: {}, severity: Object.fromEntries(levels.map(level => [level, 0]))};
+  for (const {type, outcome, severity, count} of rows) {
+    const typeOk = !types.length || types.includes(type), outcomeOk = !outcomes.length || outcomes.includes(outcome);
+    const level = Math.max(0, levels.indexOf(severity));
+    if (outcomeOk && level >= floor) result.type[type] = (result.type[type] || 0) + count;
+    if (typeOk && level >= floor) result.outcome[outcome] = (result.outcome[outcome] || 0) + count;
+    if (typeOk && outcomeOk) for (let i = 0; i <= level; i++) result.severity[levels[i]] += count;
+  }
+  return result;
+}
+
 export const MAP_DEFAULTS = {keep: 7, fadeMinutes: 30, maxDots: 300};
 
 export function mapSettings(input) {

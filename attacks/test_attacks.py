@@ -585,6 +585,27 @@ class QueryTests(unittest.TestCase):
         with self.assertRaises(BadRequest):
             api.sources({"range": "7d", "type": "ssh"})
 
+    def test_facets_merge_kinds_into_severity_and_reject_picker_filters(self):
+        loki = Mock()
+        loki.request.return_value = {"status": "success", "data": {"resultType": "vector", "result": [
+            {"metric": {"type": "plex", "verdict": "observed", "kind": "plex_client"}, "value": [1, "4"]},
+            {"metric": {"type": "plex", "verdict": "observed", "kind": "plex_reachability"}, "value": [1, "2"]},
+            {"metric": {"type": "plex", "verdict": "observed", "kind": "plex_public"}, "value": [1, "3"]},
+            {"metric": {"type": "nope", "verdict": "observed", "kind": "x"}, "value": [1, "9"]}]}}
+        collector = Mock()
+        collector.request.return_value = {"ownTraffic": {"state": "ready", "networks": []}}
+        result = API(loki, Mock(), collector).facets({"range": "7d", "country": "NL"})
+        self.assertCountEqual(result["counts"], [
+            {"type": "plex", "outcome": "observed", "severity": "info", "count": 6.0},
+            {"type": "plex", "outcome": "observed", "severity": "low", "count": 3.0}])
+        query = loki.request.call_args[0][1]["query"]
+        self.assertIn('| countryCode="NL"', query)
+        self.assertIn("keep type,verdict,kind [7d]", query)
+        self.assertIn('origin!="own"', query)
+        for params in ({"type": "ssh"}, {"severity": "high"}, {"outcome": "failure"}, {"after": "1"}):
+            with self.assertRaises(BadRequest, msg=params):
+                API(loki, Mock(), collector).facets(params)
+
     def test_saturated_timestamp_fails_instead_of_skipping(self):
         client = Mock()
         client.query.return_value = [(1, "line", {})] * 1000

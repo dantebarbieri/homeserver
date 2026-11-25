@@ -219,7 +219,12 @@ rows. The map and source count describe the loaded rows, not every event in the
 selected period. Top-level metrics cover **all sources** in the selected window.
 **Filters** combine as AND across groups. **Severity** is a five-step "at least" control
 (Any, Low, Suspicious, High, Critical). **Type** and **Outcome** are multi-select
-pickers (several values in a group combine as OR). **Source** chooses an exact IP,
+pickers (several values in a group combine as OR). Each Severity step, Type and Outcome
+option shows how many events in the selected window it would show, counted against the
+other two groups' current choices and the Source filters (Severity counts are cumulative,
+since a step means "at least"); options with none are dimmed but still selectable.
+`/api/facets` returns those counts grouped by type, outcome and severity, so changing a
+picker recounts instantly; they refresh every 30 seconds. **Source** chooses an exact IP,
 a country or a network (ASN); its country and network lists show the top twelve by
 event count in the selected window (own traffic follows the toggle), fetched when the
 picker opens. An event's details also offer **Only this source IP / country / network**.

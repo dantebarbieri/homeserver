@@ -197,6 +197,30 @@ class API:
         asns = [row for row in top("asn,networkOrganization") if re.fullmatch(r"[1-9][0-9]{0,9}", row.get("asn", ""))]
         return {"range": period, "countries": countries, "networks": asns, "queriedAt": time.time()}
 
+    def facets(self, params):
+        # Type, outcome and severity filters are applied by the browser, so each picker
+        # can count its options against the other two without another round trip.
+        if set(params) - {"range", "ip", "country", "asn", "own"}:
+            raise BadRequest("Unknown facet filter")
+        networks = self.own_networks(self.collector.request("/status"))
+        query, _, _ = event_query(params, time.time(), networks)
+        period = params.get("range", "24h")
+        rows = self.loki_metrics(
+            f"sum by (type,verdict,kind) (count_over_time({query} | keep type,verdict,kind [{period}]))",
+            time=str(int(time.time() * NANO)))
+        merged = {}
+        for row in rows:
+            count = float(row["value"][1])
+            if not math.isfinite(count):
+                raise UpstreamError("Facet counts contain an invalid value")
+            metric = row["metric"]
+            if metric.get("type") not in TYPES or metric.get("verdict") not in VERDICTS:
+                continue
+            key = (metric["type"], metric["verdict"], SEVERITY.get(metric.get("kind"), "low"))
+            merged[key] = merged.get(key, 0) + count
+        return {"range": period, "queriedAt": time.time(),
+                "counts": [{"type": t, "outcome": v, "severity": s, "count": c} for (t, v, s), c in merged.items()]}
+
     def stats(self, params):
         period = params.get("range", "24h")
         if set(params) - {"range"} or period not in RANGES:
@@ -263,6 +287,8 @@ def serve(host="127.0.0.1", port=8080):
                             result = api.stats(params)
                         elif url.path == "/api/sources":
                             result = api.sources(params)
+                        elif url.path == "/api/facets":
+                            result = api.facets(params)
                         elif url.path == "/api/status" and not params:
                             result = api.collector.request("/status")
                         else:

@@ -1,4 +1,4 @@
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter, prepareLand, prepareGrid} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -473,6 +473,8 @@ function syncFilters() {
       : applyFilters({[name]: name === "type" || name === "outcome" ? new Set() : ""});
     return chip;
   }));
+  renderFacets();
+  loadFacets();
 }
 
 function applyFilters(change = {}) {
@@ -494,7 +496,10 @@ function buildFilters() {
     const input = node("input");
     Object.assign(input, {type: "radio", name: "severity", value});
     choice.title = hint;
-    choice.append(input, node("span", label));
+    const text = node("i", undefined, "segment-text");
+    text.append(node("b", label), node("small", undefined, "count"));
+    choice.append(input, node("span"));
+    choice.querySelector("span").append(text);
     $("severity").append(choice);
   }
   const groups = {type: Object.entries(TYPES).map(([value, {label}]) => [value, label]), outcome: OUTCOMES};
@@ -504,9 +509,53 @@ function buildFilters() {
     Object.assign(input, {type: "checkbox", value});
     choice.append(input);
     if (name === "type") choice.append(node("span", undefined, `legend-dot type-${value}`));
-    choice.append(node("span", label));
+    choice.append(node("span", label), node("small", undefined, "count"));
     $(name).append(choice);
   }
+}
+
+// Counts for every picker option, grouped server-side by type, outcome and severity for the
+// current range and source filters; the pickers themselves are faceted locally (facetCounts).
+let facetRows = null, facetsKey = "", facetsAt = 0;
+const compact = new Intl.NumberFormat(undefined, {notation: "compact", maximumFractionDigits: 1});
+
+function renderFacets() {
+  const counts = facetRows && facetCounts(facetRows, filterParameters());
+  const show = (choice, value) => {
+    const count = Math.round(value || 0);
+    choice.querySelector(".count").textContent = counts ? (count < 10000 ? count.toLocaleString() : compact.format(count)) : "";
+    choice.classList.toggle("zero", !!counts && !count);
+  };
+  for (const input of $("severity").querySelectorAll("input")) show(input.closest("label"), counts?.severity[input.value || SEVERITIES[0][0]]);
+  for (const name of ["type", "outcome"]) for (const input of $(name).querySelectorAll("input")) show(input.closest("label"), counts?.[name][input.value]);
+}
+
+function demoFacets(scope) {
+  const rows = new Map();
+  for (const item of demoFeed().filter(item => matchesFilters(item, scope))) {
+    const key = `${item.type}|${item.verdict}|${severityOf(item)}`;
+    rows.set(key, {type: item.type, outcome: item.verdict, severity: severityOf(item), count: (rows.get(key)?.count || 0) + 1});
+  }
+  return {counts: [...rows.values()]};
+}
+
+async function loadFacets() {
+  const scope = {range: $("range").value};
+  for (const name of ["ip", "country", "asn"]) if (filters[name]) scope[name] = filters[name];
+  if ($("own").checked) scope.own = "1";
+  const key = JSON.stringify(scope);
+  if (facetsKey === key && performance.now() - facetsAt < 25000) return;
+  if (facetsKey !== key) { facetRows = null; renderFacets(); }
+  facetsKey = key; facetsAt = performance.now();
+  try {
+    const result = demo ? demoFacets(scope) : await request("/api/facets", scope);
+    if (key !== facetsKey) return;
+    facetRows = result.counts;
+  } catch {
+    if (key !== facetsKey) return;
+    facetRows = null; facetsAt = 0;
+  }
+  renderFacets();
 }
 
 function demoSources() {
@@ -1360,7 +1409,7 @@ for (const [key, value] of Object.entries(TYPES)) {
 }
 
 $("own").onchange = () => applyFilters();
-$("range").onchange = () => { load(true); stats(); };
+$("range").onchange = () => { load(true); stats(); loadFacets(); };
 $("older").onclick = () => load(false, true);
 $("pause").onclick = () => {
   live = !live;
@@ -1411,6 +1460,6 @@ mapLand(); updateMapDetail(); applyFilters(); stats(); health();
 if (demo && new URLSearchParams(location.search).get("simulate") !== "0") setTimeout(demoArrivals, 3000);
 setInterval(() => { if (!document.hidden) { mapPoints(); updateTrapping(); tickTrapping(); } }, 1000);
 setInterval(() => { if (!document.hidden && !demo) load(); }, 3000);
-setInterval(() => { if (!document.hidden) { stats(); health(); } }, 30000);
+setInterval(() => { if (!document.hidden) { stats(); health(); loadFacets(); } }, 30000);
 // Timers pause in a hidden tab, so telemetry is refreshed on return before its running times can mislead.
 document.addEventListener("visibilitychange", () => { if (!document.hidden) stats(); });
