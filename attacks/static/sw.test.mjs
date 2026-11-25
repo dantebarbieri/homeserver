@@ -8,7 +8,7 @@ async function worker(fetch, cachedMaps = []) {
   const handlers = {}, puts = [], messages = [];
   const cached = {body: "public static shell"};
   const stores = new Map([
-    ["attacks-shell-v21", new Map(["/", "/globe.mjs", "/globe-draw.mjs", "/geo-vendor.mjs"].map(path => [path, cached]))],
+    ["attacks-shell-v22", new Map(["/", "/globe.mjs", "/globe-draw.mjs", "/geo-vendor.mjs"].map(path => [path, cached]))],
     ["attacks-maps-v1", new Map(cachedMaps.map(path => [path, cached]))],
   ]);
   const open = async name => {

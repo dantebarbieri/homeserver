@@ -248,6 +248,17 @@ export function createMapView({panel, svg, globe, isGlobe, resetPoints, changed,
     else return;
     event.preventDefault();
   });
+  // WebKit ignores touch-action on SVG children, so iOS took a drag starting on the globe as a page scroll and
+  // cancelled it after a few pixels. Claim touches that start on anything marked touch-action:none; others still scroll.
+  let claimTouch = false;
+  const claims = target => {
+    for (let element = target; element && element !== svg.parentElement; element = element.parentElement) {
+      if (getComputedStyle(element).touchAction === "none") return true;
+    }
+    return false;
+  };
+  svg.addEventListener("touchstart", event => { claimTouch = interactive() && claims(event.target); }, {passive: true});
+  svg.addEventListener("touchmove", event => { if (claimTouch && event.cancelable) event.preventDefault(); }, {passive: false});
   svg.addEventListener("pointerdown", event => {
     if (!interactive() || event.button !== 0 || pointers.size >= 2) return;
     pointers.set(event.pointerId, {x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY});
