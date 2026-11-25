@@ -707,7 +707,10 @@ Safety and limitations:
   `/srv/docker/data/music-cover-fallback/state.json`. `report.json` lists writes,
   unresolved matches and errors. New unresolved cases alert through ntfy;
   unchanged cases remind weekly. Failed runs alert; an overdue successful run
-  makes the container unhealthy.
+  makes the container unhealthy. Failed daemon runs retry after 15 minutes
+  (or the configured interval, if shorter), so a Lidarr restart during the
+  nightly update cannot defer recovery for a full day. Successful runs keep
+  the daily interval; `ONCE=1` still exits immediately on failure.
 - A Plex partial scan and missing-art metadata refresh follow each new cover.
   Existing/locked Plex posters are not replaced, including the six manual fixes.
   Failed refreshes are retried without downloading or rewriting the cover again.

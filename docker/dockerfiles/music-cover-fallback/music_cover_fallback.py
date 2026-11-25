@@ -477,6 +477,7 @@ def main():
         lock = (STATE / "run.lock").open("a")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     while True:
+        delay = INTERVAL
         try:
             run()
             if not DRY:
@@ -490,10 +491,12 @@ def main():
                     LOG.exception("failure notification could not be delivered")
             if ONCE:
                 return 1
+            delay = min(INTERVAL, 900)
+            LOG.warning("retrying failed cover fallback run in %s seconds", delay)
         else:
             if ONCE:
                 return 0
-        time.sleep(INTERVAL)
+        time.sleep(delay)
 
 
 if __name__ == "__main__":
