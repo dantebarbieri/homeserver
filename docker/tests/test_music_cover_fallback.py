@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -370,6 +371,54 @@ class FileAndRunTests(unittest.TestCase):
                 self.assertEqual(app.healthcheck(), 0)
             with patch.object(app.time, "time", return_value=100 + 2 * app.INTERVAL + 900):
                 self.assertEqual(app.healthcheck(), 1)
+
+    def test_failed_daemon_run_retries_then_resumes_daily_after_success(self):
+        fcntl = SimpleNamespace(flock=Mock(side_effect=lambda file, flags: self.addCleanup(file.close)),
+                                LOCK_EX=2, LOCK_NB=4)
+        with patch.multiple(app, ENABLED=True, ONCE=False), \
+                patch.dict(os.environ, {"NTFY_URL": "", "NTFY_TOPIC": ""}), \
+                patch.dict(sys.modules, {"fcntl": fcntl}), \
+                patch.object(app.signal, "signal"), \
+                patch.object(app, "run", side_effect=[RuntimeError("Lidarr restarting"), [], KeyboardInterrupt]), \
+                patch.object(app.time, "sleep") as sleep, \
+                patch.object(app, "save_state", wraps=app.save_state) as save, \
+                self.assertLogs(app.LOG, level="WARNING") as logs:
+            with self.assertRaises(KeyboardInterrupt):
+                app.main()
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [900, app.INTERVAL])
+        self.assertTrue(any("retrying failed" in line for line in logs.output))
+        self.assertEqual(save.call_count, 1)
+        self.assertEqual(save.call_args.args[0], "last_ok.json")
+        with patch.object(app, "ENABLED", True):
+            self.assertEqual(app.healthcheck(), 0)
+        self.notify.assert_called_once()
+
+    def test_repeated_failures_retry_without_recording_success(self):
+        fcntl = SimpleNamespace(flock=Mock(side_effect=lambda file, flags: self.addCleanup(file.close)),
+                                LOCK_EX=2, LOCK_NB=4)
+        with patch.multiple(app, ENABLED=True, ONCE=False, INTERVAL=60), \
+                patch.dict(os.environ, {"NTFY_URL": "", "NTFY_TOPIC": ""}), \
+                patch.dict(sys.modules, {"fcntl": fcntl}), \
+                patch.object(app.signal, "signal"), \
+                patch.object(app, "run", side_effect=[RuntimeError("offline"), RuntimeError("offline"),
+                                                     KeyboardInterrupt]), \
+                patch.object(app.time, "sleep") as sleep, \
+                self.assertLogs(app.LOG, level="WARNING"):
+            with self.assertRaises(KeyboardInterrupt):
+                app.main()
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [60, 60])
+        self.assertFalse((self.state / "last_ok.json").exists())
+
+    def test_once_failure_exits_without_retry_or_writing_success(self):
+        with patch.multiple(app, ENABLED=True, ONCE=True, DRY=True), \
+                patch.object(app.signal, "signal"), \
+                patch.object(app, "run", side_effect=RuntimeError("offline")), \
+                patch.object(app.time, "sleep") as sleep, \
+                self.assertLogs(app.LOG, level="ERROR"):
+            self.assertEqual(app.main(), 1)
+        sleep.assert_not_called()
+        self.assertEqual(list(self.state.iterdir()), [])
+        self.notify.assert_not_called()
 
 
 class PlexTests(unittest.TestCase):
