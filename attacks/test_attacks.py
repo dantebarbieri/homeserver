@@ -777,6 +777,7 @@ class AbuseIPDBTests(unittest.TestCase):
             self.event("ssh_failure", ip="192.168.1.5")
             self.event("ssh_failure", ip="9.9.9.9", age=2 * 86400)
             self.event("service_connection", ip="1.0.0.1")
+            self.event("port_scan", ip="1.0.0.2")
         self.now += REPORT_DELAY; self.drain()
         self.assertEqual(self.reports(), [])
         checked = {url.split("ipAddress=")[1].split("&")[0] for _, url, _ in self.http.calls}

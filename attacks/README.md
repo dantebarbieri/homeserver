@@ -303,10 +303,9 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   | Failed Authelia sign-in | 5 | Brute-Force, Web App Attack |
   | Exploit, credential-file or admin-path web probe | 2 | Web App Attack |
   | Endlessh visit (port 22 serves no SSH) | 1 | Port Scan, SSH |
-  | Game-port scan (secondary port hit without the game port) | 1 | Port Scan |
 
-  Real-SSH-port touches, Plex, Hytale and other service connections
-  are never reported. Safeguards: a report waits five minutes and is dropped if
+  Real-SSH-port touches, game-port scans (server-status sites probe those),
+  Plex, Hytale and other service connections are never reported. Safeguards: a report waits five minutes and is dropped if
   the address has since signed in successfully over SSH or used Plex as a
   client (such addresses stay exempt for 30 days); an address is reported at
   most once a day and never when AbuseIPDB whitelists it; events older than a
