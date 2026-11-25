@@ -4,10 +4,10 @@
 const MAP_FILES = {"110m":"/world-110m-308dfeb0b90b.json","50m":"/world-50m-c4ac46bd8d55.json","10m":"/world-10m-d597e8ffe7d8.json"};
 
 /* Public static assets only. Navigation authenticates; APIs never enter a cache. */
-const CACHE = "attacks-shell-v23";
+const CACHE = "attacks-shell-v24";
 const MAP_CACHE = "attacks-maps-v1";
 const ASSETS = ["/", "/styles.css", "/app.mjs", "/model.mjs", "/map-view.mjs", "/globe.mjs", "/globe-draw.mjs",
-  "/atlas.mjs", "/geo-vendor.mjs", "/geo-vendor-LICENSE.txt", "/pwa.mjs",
+  "/atlas.mjs", "/atlas-worker.mjs", "/geo-vendor.mjs", "/geo-vendor-LICENSE.txt", "/pwa.mjs",
   "/flags.woff2", "/flags-LICENSE.txt", "/favicon.svg", "/apple-touch-icon.png",
   "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 const allowed = new Set(ASSETS);
@@ -49,6 +49,21 @@ self.addEventListener("activate", event => {
     const atlas = await caches.open(MAP_CACHE);
     for (const request of await atlas.keys()) if (!maps.has(new URL(request.url).pathname)) await atlas.delete(request);
     await self.clients.claim();
+  })());
+});
+// Finer borders download once in the background (about 5 MB) so zooming in and offline use never wait on them.
+// The page asks after it loads; doing this during activate would hold its requests until the download finished.
+self.addEventListener("message", event => {
+  if (event.data?.type !== "attacks-prefetch-maps") return;
+  event.waitUntil((async () => {
+    const atlas = await caches.open(MAP_CACHE);
+    for (const path of [MAP_FILES["50m"], MAP_FILES["10m"]]) {
+      try {
+        if (await atlas.match(path)) continue;
+        const response = await fetch(path, {credentials: "same-origin", cache: "force-cache", redirect: "error"});
+        if (cacheable(response)) await atlas.put(path, response);
+      } catch (error) { console.warn("Attacks border prefetch failed:", error); }
+    }
   })());
 });
 self.addEventListener("fetch", event => {

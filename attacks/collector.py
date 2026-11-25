@@ -37,6 +37,17 @@ SELECTORS = {
 }
 NANO = 1_000_000_000
 ACTIVE_SESSIONS_SHOWN = 200
+US_STATES = {
+    "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA", "Colorado": "CO",
+    "Connecticut": "CT", "Delaware": "DE", "Florida": "FL", "Georgia": "GA", "Hawaii": "HI", "Idaho": "ID",
+    "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA",
+    "Maine": "ME", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN", "Mississippi": "MS",
+    "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nevada": "NV", "New Hampshire": "NH", "New Jersey": "NJ",
+    "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND", "Ohio": "OH",
+    "Oklahoma": "OK", "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC",
+    "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT", "Virginia": "VA",
+    "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY", "District of Columbia": "DC",
+}
 
 
 def window(client, query, start, end, budget=None):
@@ -258,6 +269,11 @@ class Geo:
             country = "ZZ"
         place = record.get("city", {}).get("names", {}).get("en")
         nation = record.get("country", {}).get("names", {}).get("en", country)
+        # US city names repeat across states, so US places read "City, ST". DB-IP carries the state's name but no code;
+        # territories such as Puerto Rico are countries of their own there and already read unambiguously.
+        if country == "US" and place:
+            state = (record.get("subdivisions") or [{}])[0].get("names", {}).get("en")
+            place = ", ".join(filter(None, (place, US_STATES.get(state, state))))
         result = {**item, "countryCode": country, "location": text(", ".join(filter(None, (place, nation))))}
         location = record.get("location", {})
         lat, lon = location.get("latitude"), location.get("longitude")

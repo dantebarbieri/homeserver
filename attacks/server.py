@@ -25,7 +25,7 @@ MAP_ASSETS = {path.name for path in ROOT.glob("world-*.json")
 STATIC = {"index.html", "styles.css", "app.mjs", "model.mjs", "map-view.mjs", "pwa.mjs", "sw.js",
           "atlas.mjs", "favicon.svg", "flags.woff2", "flags-LICENSE.txt", "manifest.webmanifest",
           "apple-touch-icon.png", "icon-192.png", "icon-512.png", "globe.mjs", "globe-draw.mjs", "geo-vendor.mjs",
-          "geo-vendor-LICENSE.txt"} | MAP_ASSETS
+          "geo-vendor-LICENSE.txt", "atlas-worker.mjs"} | MAP_ASSETS
 ALIASES = {"apple-touch-icon-precomposed.png": "apple-touch-icon.png"}
 RANGES = {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800, "30d": 2592000}
 LIMIT = 250

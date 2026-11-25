@@ -1,7 +1,6 @@
 import {TYPES, OUTCOMES, SEVERITIES, REPUTATIONS, reputationGrade, severityOf, matchesFilters, facetCounts, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath, groupBySource, rateSummary} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
-import {createGlobe, globeGeometry, detailLevel, followCenter, prepareLand, prepareGrid} from "./globe.mjs";
-import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
+import {createGlobe, detailLevel, followCenter, prepareGrid} from "./globe.mjs";
 import {MAP_FILES} from "./atlas.mjs";
 import "./pwa.mjs";
 
@@ -494,6 +493,52 @@ function detail(item, sourceCount) {
   }
 }
 $("close").onclick = () => $("detail").close();
+// On phones both bottom sheets close with a downward swipe, as native sheets do. A swipe only starts when the sheet
+// is scrolled to its top, so scrolling long content still works; a short or slow pull springs back.
+function swipeToDismiss(sheet, dismiss) {
+  let start = null, offset = 0, moved = false;
+  const motion = () => !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reset = () => { sheet.style.transition = sheet.style.transform = ""; };
+  sheet.addEventListener("touchstart", event => {
+    moved = false;
+    if (!narrow.matches || event.touches.length !== 1) { start = null; return; }
+    start = {y: event.touches[0].clientY, x: event.touches[0].clientX, time: performance.now(), top: sheet.scrollTop <= 0};
+    offset = 0;
+  }, {passive: true});
+  sheet.addEventListener("touchmove", event => {
+    if (!start) return;
+    const dy = event.touches[0].clientY - start.y, dx = event.touches[0].clientX - start.x;
+    if (!moved) {
+      if (Math.hypot(dx, dy) < 8) return;
+      // Sideways moves (a slider) and upward or mid-content drags stay with the content.
+      if (!start.top || sheet.scrollTop > 0 || dy <= 0 || Math.abs(dx) > dy || event.target.closest?.("input[type=range]")) { start = null; return; }
+      moved = true; start.y += 8; sheet.style.transition = "none";
+    }
+    event.preventDefault();
+    offset = Math.max(0, event.touches[0].clientY - start.y);
+    sheet.style.transform = `translateY(${offset}px)`;
+  }, {passive: false});
+  const end = () => {
+    if (!start || !moved) { start = null; return; }
+    const speed = offset / Math.max(1, performance.now() - start.time);
+    start = null;
+    if (offset > Math.min(120, sheet.offsetHeight / 3) || (offset > 30 && speed > .5)) {
+      if (!motion()) { reset(); dismiss(); return; }
+      sheet.style.transition = "transform .18s ease-in";
+      sheet.style.transform = "translateY(100%)";
+      setTimeout(() => { dismiss(); reset(); }, 180);
+    } else {
+      sheet.style.transition = motion() ? "transform .2s ease-out" : "none";
+      sheet.style.transform = "";
+      setTimeout(() => { if (!start) reset(); }, 200);
+    }
+  };
+  sheet.addEventListener("touchend", end);
+  sheet.addEventListener("touchcancel", end);
+  // A swipe that ends over a button must not also press it.
+  sheet.addEventListener("click", event => { if (moved) { moved = false; event.preventDefault(); event.stopPropagation(); } }, true);
+}
+swipeToDismiss($("detail"), () => $("detail").close());
 $("detail").addEventListener("close", () => document.body.classList.remove("detail-open"));
 $("detail").addEventListener("click", event => { if (event.target === $("detail")) { const box = $("detail").getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) $("detail").close(); } });
 async function showEvents(change) {
@@ -995,17 +1040,9 @@ function setTransform(element, value) {
   else if (element.getAttribute("transform") !== value) element.setAttribute("transform", value);
 }
 
-// Flat maps move by changing the viewBox, so each country's path only needs building once per detail and projection.
+// Flat maps move by changing the viewBox, so the atlas worker builds each projection's country paths once per detail.
 function flatPaths(data, name) {
-  if (data.flat?.name !== name) {
-    data.flat = {name, paths: data.world.features.map(feature => {
-      const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
-      let path = "";
-      for (const polygon of polygons) for (const ring of polygon) path += `${linePath(ring, name)}Z`;
-      return path;
-    })};
-  }
-  return data.flat.paths;
+  return data.flat[name];
 }
 
 // The globe is repainted for every rotation and zoom step, so it comes from the painter, clipped to the viewport.
@@ -1060,46 +1097,45 @@ function activateAtlas(level) {
   mapLand(); positionCountryLabels();
 }
 
-async function updateMapDetail() {
-  const level = detailLevel(mapView.zoom());
-  wantedDetail = level;
-  if (atlas.has(level)) {
-    activateAtlas(level);
-    const message = `Borders · 1:${level} · ${world.features.length} country/territory shapes`;
-    if ($("map-detail-status").textContent !== message) $("map-detail-status").textContent = message;
-    if (errors.delete("map")) notices();
-    return;
+const DETAILS = ["110m", "50m", "10m"];
+let atlasWorker = null;
+const atlasWaiting = new Map();
+
+function prepareInWorker(level) {
+  if (!atlasWorker) {
+    atlasWorker = new Worker(new URL("./atlas-worker.mjs", import.meta.url), {type: "module"});
+    atlasWorker.onmessage = ({data: {level, data, error}}) => {
+      const waiting = atlasWaiting.get(level);
+      atlasWaiting.delete(level);
+      if (error) waiting?.reject(new Error(error)); else waiting?.resolve(data);
+    };
+    atlasWorker.onerror = event => {
+      event.preventDefault?.();
+      for (const waiting of atlasWaiting.values()) waiting.reject(new Error("Border worker failed"));
+      atlasWaiting.clear(); atlasWorker = null;
+    };
   }
-  if (atlasPending.has(level) || performance.now() - (atlasFailed.get(level) ?? -Infinity) < 30000) return;
+  return new Promise((resolve, reject) => {
+    atlasWaiting.set(level, {resolve, reject});
+    atlasWorker.postMessage({url: MAP_FILES[level], level});
+  });
+}
+
+// Prepare the next finer level while the user looks at this one, so zooming in rarely waits for it.
+function prepareAhead(level) {
+  const next = DETAILS[DETAILS.indexOf(level) + 1];
+  if (next && !atlas.has(next)) setTimeout(() => loadAtlas(next), 1500);
+}
+
+async function loadAtlas(level) {
+  if (atlas.has(level) || atlasPending.has(level) || performance.now() - (atlasFailed.get(level) ?? -Infinity) < 30000) return;
   atlasPending.add(level);
-  $("map-detail-status").textContent = `Loading 1:${level} borders${activeDetail ? `; showing 1:${activeDetail}` : ""}…`;
   try {
-    const response = await fetch(MAP_FILES[level], {cache: "force-cache", redirect: "error", signal: AbortSignal.timeout(30000)});
-    if (!response.ok) throw new Error(`Border data unavailable (${response.status})`);
-    const topology = await response.json();
-    if (topology.type !== "Topology" || !topology.objects?.countries) throw new Error("Invalid border data");
-    const world = decodeTopology(topology, topology.objects.countries), prepared = [];
-    let slice = performance.now();
-    for (const item of world.features) {
-      const geometry = globeGeometry(item.geometry), area = geoArea(geometry) * 6371 ** 2;
-      prepared.push({item, geometry, area, shape: prepareLand(geometry, level)});
-      if (performance.now() - slice > 8) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-        slice = performance.now();
-      }
-    }
+    const data = await prepareInWorker(level);
     prepareGrid(level);
-    // Tiny enclaves draw last so a larger neighbour cannot cover their borders.
-    prepared.sort((a, b) => b.area - a.area);
-    world.features = prepared.map(value => value.item);
-    const shapes = prepared.map(value => value.shape);
-    const labels = prepared.filter(value => value.area <= 3000).toReversed().map(({item, geometry, area}) => {
-      const [longitude, latitude] = geoCentroid(geometry);
-      return {id: item.id, name: item.properties.name, longitude, latitude, area};
-    });
-    atlas.set(level, {world, shapes, labels});
+    atlas.set(level, data);
     atlasFailed.delete(level);
-    if (wantedDetail === level) { activateAtlas(level); await updateMapDetail(); }
+    if (wantedDetail === level) await updateMapDetail();
   } catch (error) {
     atlasFailed.set(level, performance.now());
     if (wantedDetail === level) {
@@ -1108,6 +1144,22 @@ async function updateMapDetail() {
       notices();
     }
   } finally { atlasPending.delete(level); }
+}
+
+async function updateMapDetail() {
+  const level = detailLevel(mapView.zoom());
+  wantedDetail = level;
+  if (atlas.has(level)) {
+    activateAtlas(level);
+    const message = `Borders · 1:${level} · ${world.features.length} country/territory shapes`;
+    if ($("map-detail-status").textContent !== message) $("map-detail-status").textContent = message;
+    if (errors.delete("map")) notices();
+    prepareAhead(level);
+    return;
+  }
+  if (atlasPending.has(level) || performance.now() - (atlasFailed.get(level) ?? -Infinity) < 30000) return;
+  $("map-detail-status").textContent = `Loading 1:${level} borders${activeDetail ? `; showing 1:${activeDetail}` : ""}…`;
+  await loadAtlas(level);
 }
 
 // Labels are reused between frames: only moved when their position or the zoom changed.
@@ -1545,6 +1597,7 @@ function setMapSettingsOpen(open, restoreFocus = false) {
 }
 settingsToggle.onclick = () => setMapSettingsOpen(settingsPopover.hidden);
 $("map-popover-close").onclick = () => setMapSettingsOpen(false, true);
+swipeToDismiss(settingsPopover, () => setMapSettingsOpen(false, true));
 document.addEventListener("pointerdown", event => {
   if (!settingsPopover.hidden && !event.target.closest?.("#map-popover, #map-settings-toggle")) setMapSettingsOpen(false);
 });

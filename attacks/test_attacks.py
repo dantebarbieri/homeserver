@@ -403,6 +403,20 @@ class StateTests(unittest.TestCase):
         self.assertEqual(geo.status["state"], "unavailable")
         self.assertNotIn("latitude", geo.enrich(self.item))
 
+    def test_us_locations_name_the_state(self):
+        geo = Geo(self.root / "missing.mmdb")
+        geo.reader = Mock()
+        def record(country, nation, city, state):
+            return {"country": {"iso_code": country, "names": {"en": nation}}, "city": {"names": {"en": city}},
+                    "subdivisions": [{"names": {"en": state}}]}
+        cases = [(record("US", "United States", "Cedar Park", "Texas"), "Cedar Park, TX, United States"),
+                 (record("US", "United States", "Springfield", "Unlisted"), "Springfield, Unlisted, United States"),
+                 (record("PR", "Puerto Rico", "San Juan", "San Juan"), "San Juan, Puerto Rico"),
+                 (record("NL", "Netherlands", "Amsterdam", "North Holland"), "Amsterdam, Netherlands")]
+        for value, expected in cases:
+            geo.reader.get.return_value = value
+            self.assertEqual(geo.enrich(self.item)["location"], expected)
+
     def test_public_key_recognition_is_user_scoped_and_fails_visibly(self):
         raw = b"\x00\x00\x00\x0bssh-ed25519" + b"\x00\x00\x00\x20" + bytes(range(32))
         encoded = base64.b64encode(raw).decode()

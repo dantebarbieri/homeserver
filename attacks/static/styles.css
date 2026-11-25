@@ -164,6 +164,8 @@ select,input,.button{background:#202024;border-color:#39393f;color:var(--text)}
   footer{padding-bottom:max(24px,env(safe-area-inset-bottom))}
 }
 @keyframes sheet-in{from{transform:translateY(100%)}to{transform:translateY(0)}}
+/* Phone sheets close with a downward swipe instead; the button stays for screen readers and keyboards. */
+@media(max-width:650px) and (pointer:coarse){#close:not(:focus-visible),#map-popover-close:not(:focus-visible){position:absolute;width:1px;height:1px;min-width:0;min-height:0;padding:0;border:0;overflow:hidden;clip-path:inset(50%)}.popover-head,.dialog-heading{min-height:24px}}
 @keyframes arrival-sheet-fade{0%{opacity:0;transform:translateY(16px)}8%,65%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(8px)}}
 @media(prefers-reduced-motion:reduce){.arrival-summary,dialog[open]{animation:none}}
 

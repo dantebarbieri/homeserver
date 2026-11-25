@@ -297,7 +297,9 @@ export function createMapView({panel, svg, globe, isGlobe, resetPoints, changed,
   }
   window.addEventListener("pointerup", release);
   window.addEventListener("pointercancel", release);
-  svg.addEventListener("lostpointercapture", release);
+  // Touch pointers start captured to the touched path; moving capture to the SVG fires lostpointercapture on that
+  // path, which bubbles here. Only losing the SVG's own capture ends the gesture.
+  svg.addEventListener("lostpointercapture", event => { if (event.target === svg) release(event); });
   function cancelGesture() {
     for (const id of [...pointers.keys()]) release({pointerId: id});
     dragging = false; svg.classList.remove("dragging");

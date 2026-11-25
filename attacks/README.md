@@ -61,10 +61,14 @@ applies to history collected before it existed:
 | Severity | Kinds |
 |---|---|
 | Info | Accepted SSH login, Plex client request, probable Plex remote-access check |
-| Low | Endlessh connection, real-SSH port probe, HTTP 401/403/429, service-port connection, game port scan, public Plex endpoint |
-| Suspicious | SSH disconnect before login, unauthenticated Plex request, rejected Hytale identity token |
+| Low | Endlessh close (the trapped duration), HTTP 401/403/429, service-port connection, game port scan, public Plex endpoint |
+| Suspicious | Endlessh connection, real-SSH port probe, SSH disconnect before login, unauthenticated Plex request, rejected Hytale identity token |
 | High | Failed SSH login, fail2ban ban, failed Authelia sign-in, suspicious web request |
 | Critical | SSH login with a credential missing from the key registry |
+
+Endlessh connections and real-SSH port probes are Suspicious: nothing legitimate
+connects to the decoy, and both are reported to AbuseIPDB. Game-port scans stay Low
+and are never reported, since server-status sites probe those ports.
 
 Severity ranks how much attention an event deserves, not whether it was an
 attack, and it never uses source reputation. A "Suspicious or higher" filter keeps
@@ -114,7 +118,10 @@ requests in the browser.
 The map's controls are icon buttons in its top-right corner, each with an accessible
 name and a tooltip. **Map settings** (the gear) opens a popover, or a bottom sheet on
 phones, holding the projection, **Show faded dots** and the dot settings; Escape, its
-close button or a press outside closes it. **Full screen** sits beside the gear.
+close button or a press outside closes it. On touch phones both bottom sheets (map
+settings and event details) close with a downward swipe, like native sheets, and
+hide their close button, which stays available to screen readers and keyboards; a
+short or slow pull springs back, and long content still scrolls. **Full screen** sits beside the gear.
 Wherever the view can move (the globe, or the full-screen flat map) a second row adds
 **Reset view**, **Follow** and the zoom buttons. A status line under the map names
 the sources it leaves out, for example `Sources not drawn: 2 faded · 5 on far side`.
@@ -252,6 +259,8 @@ observed IPs. Network ownership never upgrades the attack classification. The
 one exception is the optional AbuseIPDB integration below.
 
 - DB-IP Lite City and ASN provide approximate location and routed-network ownership.
+  US locations read `City, ST` because city names repeat across states; US
+  territories such as Puerto Rico are separate countries in DB-IP.
 - Official AWS, Azure Public Cloud, Google Cloud and Oracle Cloud prefix lists
   support explicit cloud badges, independent of ASN ownership.
 - Mullvad and NordVPN's public server lists support **VPN server** associations.
@@ -523,8 +532,11 @@ vectors (subdividing long edges so they follow the great circle) and then, on ea
 frame, rotates only what can reach the viewport, clips it at the horizon and writes
 integer path coordinates at a scale picked from the zoom. Marker sizes come from
 the layout's own scale instead of asking the browser to measure on every frame.
-The page decodes detail on demand and yields during country indexing to keep
-gestures responsive. The atlas build also generates `static/atlas.mjs`, the shared
+A module worker (`static/atlas-worker.mjs`) decodes each detail level and builds its
+flat-map paths off the main thread, and the next finer level is prepared shortly
+after a zoom so crossing the threshold does not stall a gesture. After the page
+loads, the service worker downloads the 1:50m and 1:10m files once in the
+background (about 5 MB), so later zooms and offline use read them from cache. The atlas build also generates `static/atlas.mjs`, the shared
 filename manifest used by the page, and rewrites the copy inlined in the classic
 service worker (`static/sw.js`); a test fails if the two differ.
 

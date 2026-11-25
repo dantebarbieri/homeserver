@@ -32,6 +32,9 @@ if ("serviceWorker" in navigator && isSecureContext) {
         status.textContent = "Offline app setup failed. Reload while signed in and connected.";
     });
   }).catch(error => { status.textContent = `Offline app setup unavailable: ${error.message}`; });
+  // Once the page has loaded and a worker is active, let it fetch the finer borders in the background.
+  window.addEventListener("load", () => setTimeout(() => navigator.serviceWorker.ready
+    .then(registration => registration.active?.postMessage({type: "attacks-prefetch-maps"})), 5000));
 } else {
   status.textContent = "Home-screen app support requires HTTPS and a supported browser.";
 }

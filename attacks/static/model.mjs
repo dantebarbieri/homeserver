@@ -19,13 +19,13 @@ export const OUTCOMES = [
 export const SEVERITIES = [
   ["info", "Info", "Looks routine: a signed-in session or an ordinary service check."],
   ["low", "Low", "Reached a port or public endpoint; unremarkable on its own."],
-  ["suspicious", "Suspicious", "Unusual or unauthenticated, but nothing was rejected or exploited."],
+  ["suspicious", "Suspicious", "Unsolicited, unusual or unauthenticated, such as a decoy SSH connection, but nothing was rejected or exploited."],
   ["high", "High", "A rejected login, ban, or a request matching a known exploit pattern."],
   ["critical", "Critical", "A login succeeded with a credential this dashboard does not recognize."],
 ];
 const SEVERITY_BY_KIND = {
-  endlessh_open: "low", endlessh_close: "low", ssh_failure: "high", ssh_accepted: "info", ssh_accepted_unknown: "critical",
-  ssh_disconnect: "suspicious", ssh_probe: "low", ssh_ban: "high", auth_failure: "high", http_probe: "high",
+  endlessh_open: "suspicious", endlessh_close: "low", ssh_failure: "high", ssh_accepted: "info", ssh_accepted_unknown: "critical",
+  ssh_disconnect: "suspicious", ssh_probe: "suspicious", ssh_ban: "high", auth_failure: "high", http_probe: "high",
   http_denied: "low", service_connection: "low", plex_client: "info", plex_reachability: "info", plex_public: "low",
   plex_probe: "suspicious", hytale_rejected: "suspicious", port_scan: "low",
 };

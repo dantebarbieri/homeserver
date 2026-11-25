@@ -33,9 +33,9 @@ KINDS = {
 # Evidence of hostile intent, lowest first. A pure function of the kind, so history is covered at read time.
 SEVERITIES = ("info", "low", "suspicious", "high", "critical")
 SEVERITY = {
-    "endlessh_open": "low", "endlessh_close": "low",
+    "endlessh_open": "suspicious", "endlessh_close": "low",
     "ssh_failure": "high", "ssh_accepted": "info", "ssh_accepted_unknown": "critical",
-    "ssh_disconnect": "suspicious", "ssh_probe": "low", "ssh_ban": "high",
+    "ssh_disconnect": "suspicious", "ssh_probe": "suspicious", "ssh_ban": "high",
     "auth_failure": "high", "http_probe": "high", "http_denied": "low", "service_connection": "low",
     "port_scan": "low", "plex_client": "info", "plex_reachability": "info", "plex_public": "low", "plex_probe": "suspicious",
     "hytale_rejected": "suspicious",
