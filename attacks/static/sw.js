@@ -4,7 +4,7 @@
 const MAP_FILES = {"110m":"/world-110m-308dfeb0b90b.json","50m":"/world-50m-c4ac46bd8d55.json","10m":"/world-10m-d597e8ffe7d8.json"};
 
 /* Public static assets only. Navigation authenticates; APIs never enter a cache. */
-const CACHE = "attacks-shell-v11";
+const CACHE = "attacks-shell-v12";
 const MAP_CACHE = "attacks-maps-v1";
 const ASSETS = ["/", "/styles.css", "/app.mjs", "/model.mjs", "/map-view.mjs", "/globe.mjs", "/globe-draw.mjs",
   "/atlas.mjs", "/geo-vendor.mjs", "/geo-vendor-LICENSE.txt", "/pwa.mjs",

@@ -146,6 +146,20 @@ export function mergeEvents(current, incoming, limit = 1000) {
   return [...all.values()].sort((a, b) => BigInt(a.cursor) > BigInt(b.cursor) ? -1 : BigInt(a.cursor) < BigInt(b.cursor) ? 1 : a.id.localeCompare(b.id)).slice(0, limit);
 }
 
+// Splits a fetched page into events not loaded yet and loaded ones that came back different. Polls overlap
+// recent history, so most of a page is usually events already on screen that need no redraw.
+export function diffEvents(current, incoming) {
+  const known = new Map(current.map(item => [item.id, item]));
+  const added = [], revised = [];
+  for (const item of incoming) {
+    if (!TYPES[item.type]) continue;
+    const earlier = known.get(item.id);
+    if (!earlier) added.push(item);
+    else if (JSON.stringify(earlier) !== JSON.stringify(item)) revised.push(item);
+  }
+  return {added, revised};
+}
+
 export function equalEarth(longitude, latitude) {
   const radians = Math.PI / 180;
   const theta = Math.asin(Math.sqrt(3) / 2 * Math.sin(latitude * radians));

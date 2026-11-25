@@ -210,7 +210,10 @@ and starts off.
 
 The feed polls every three seconds, loads 250 rows per page and retains at most
 1,000 in the browser. Busy live polls catch up through at most eight pages per
-cycle and show a catching-up indicator while more remain. Filters are applied
+cycle and show a catching-up indicator while more remain. Each poll re-reads the
+last 15 seconds, so the stream changes only when an event is new or came back
+different; unchanged rows are reused, so a quiet poll costs nothing and a row's
+highlight, focus and scroll position survive new arrivals. Filters are applied
 server-side, not just to the visible
 rows. The map and source count describe the loaded rows, not every event in the
 selected period. Top-level metrics cover **all sources** in the selected window.

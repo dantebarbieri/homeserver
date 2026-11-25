@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, diffEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -8,6 +8,12 @@ test("event replays deduplicate without losing nanosecond ordering", () => {
   const second = {id: "b", type: "ssh", cursor: "1795530000000000002"};
   assert.deepEqual(mergeEvents([first], [second, first]).map(item => item.id), ["b", "a"]);
   assert.equal(mergeEvents([first], [second], 1)[0].id, "b");
+});
+test("a poll's overlap with loaded events is news only when an event is new or came back different", () => {
+  const a = {id: "a", type: "ssh", cursor: "1", keyStatus: "unregistered"}, b = {id: "b", type: "ssh", cursor: "2"};
+  assert.deepEqual(diffEvents([a, b], [{...b}, {...a}]), {added: [], revised: []});
+  const recognized = {...a, keyStatus: "recognized"}, c = {id: "c", type: "ssh", cursor: "3"};
+  assert.deepEqual(diffEvents([a, b], [{...b}, recognized, c, {id: "d", type: "not-a-type", cursor: "4"}]), {added: [c], revised: [recognized]});
 });
 test("Equal Earth matches the PROJ reference example and preserves relative area", () => {
   const [x, y] = equalEarth(122, 47);

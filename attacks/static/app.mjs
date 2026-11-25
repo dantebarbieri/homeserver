@@ -1,4 +1,4 @@
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, diffEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
 import {createGlobe, globeGeometry, detailLevel, followCenter, prepareLand, prepareGrid} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
@@ -206,8 +206,7 @@ function trapClock(trap) {
 }
 
 // Says how long a client was held, but only when the log or live telemetry actually shows it.
-function trapBadge(item) {
-  const trap = trapOf(item);
+function trapBadge(item, trap = trapOf(item)) {
   if (trap?.state === "ended") return node("span", `Trapped for ${trapDuration(trap.seconds)}`, "badge trap");
   if (trap?.state !== "active") return null;
   const badge = node("span", undefined, "badge trap live");
@@ -232,9 +231,8 @@ function trapKey() {
   return `${trapSample.activeTruncated}|${(trapSample.active || []).map(row => `${row.ip}|${row.sourcePort}|${row.since}`).join(",")}`;
 }
 
-// What an event's trapped badge currently says, so an open tooltip or dialog can tell when it has gone stale.
-function trapSignature(item) {
-  const trap = trapOf(item);
+// What an event's trapped badge currently says, so an open tooltip, dialog or stream row can tell when it has gone stale.
+function trapSignature(item, trap = trapOf(item)) {
   return !trap ? "" : trap.state === "ended" ? `ended|${trap.seconds}` : trap.state;
 }
 
@@ -259,40 +257,63 @@ function tickTrapping() {
   for (const clock of clocks) setText(clock, trapDuration(Math.floor(trapSince(trapSample, elapsed, Number(clock.dataset.trapSince)))));
 }
 
+// Rows are rebuilt only when their event or its trapped state changes, so a redraw touches just what moved.
+const rowCache = new WeakMap();
+
+function eventRow(item) {
+  const trap = trapOf(item), key = trapSignature(item, trap), cached = rowCache.get(item);
+  if (cached?.key === key) return cached.row;
+  const row = node("button", undefined, "event-row");
+  row.type = "button";
+  row.dataset.eventId = item.id;
+  row.addEventListener("click", () => detail(item));
+  const time = node("time", new Date(item.timestamp * 1000).toLocaleTimeString([], {hour12: false}));
+  time.dateTime = new Date(item.timestamp * 1000).toISOString();
+  time.title = new Date(item.timestamp * 1000).toLocaleString();
+  const classification = node("span", undefined, "event-cell");
+  classification.append(node("span", item.title, "event-primary"));
+  const badges = node("span", undefined, "badges");
+  const category = node("span", undefined, `badge type-${item.type}`);
+  category.append(node("span", undefined, "legend-dot"), node("span", TYPES[item.type].label));
+  badges.append(severityBadge(item), category, node("span", item.verdict, `badge verdict-${item.verdict}`));
+  const trapped = trapBadge(item, trap);
+  if (trapped) badges.append(trapped);
+  if (item.origin === "own") badges.append(node("span", "Own", "badge origin-own"));
+  if (item.keyStatus) badges.append(node("span", item.keyStatus === "recognized" ? "known key" : "unregistered key", `badge key-${item.keyStatus}`));
+  classification.append(badges);
+  const source = node("span", undefined, "event-cell");
+  source.append(node("span", item.ip, "event-primary mono"), locationLabel(item), networkBadges(item));
+  const extra = node("span", undefined, "event-cell event-detail");
+  const target = item.user ? `user: ${item.user}` : item.path || item.service;
+  extra.append(node("span", target, "event-primary mono"),
+    node("span", item.host || `port ${item.port}`, "event-secondary"));
+  row.append(time, classification, source, extra, node("span", "↗", "event-arrow"));
+  rowCache.set(item, {key, row});
+  return row;
+}
+
+// Puts a container's children in the order of `rows`, moving or inserting only what differs.
+function syncRows(container, rows) {
+  const keep = new Set(rows);
+  for (const child of [...container.children]) if (!keep.has(child)) child.remove();
+  let next = container.firstElementChild;
+  for (const row of rows) {
+    if (row === next) next = next.nextElementSibling;
+    else container.insertBefore(row, next);
+  }
+}
+
 function render() {
   renderedTrap = trapKey();
-  const fragment = document.createDocumentFragment();
-  for (const item of events) {
-    const row = node("button", undefined, `event-row${item.id === highlighted ? " highlighted" : ""}`);
-    row.type = "button";
-    row.addEventListener("click", () => detail(item));
-    const time = node("time", new Date(item.timestamp * 1000).toLocaleTimeString([], {hour12: false}));
-    time.dateTime = new Date(item.timestamp * 1000).toISOString();
-    time.title = new Date(item.timestamp * 1000).toLocaleString();
-    const classification = node("span", undefined, "event-cell");
-    classification.append(node("span", item.title, "event-primary"));
-    const badges = node("span", undefined, "badges");
-    const category = node("span", undefined, `badge type-${item.type}`);
-    category.append(node("span", undefined, "legend-dot"), node("span", TYPES[item.type].label));
-    badges.append(severityBadge(item), category, node("span", item.verdict, `badge verdict-${item.verdict}`));
-    const trap = trapBadge(item);
-    if (trap) badges.append(trap);
-    if (item.origin === "own") badges.append(node("span", "Own", "badge origin-own"));
-    if (item.keyStatus) badges.append(node("span", item.keyStatus === "recognized" ? "known key" : "unregistered key", `badge key-${item.keyStatus}`));
-    classification.append(badges);
-    const source = node("span", undefined, "event-cell");
-    source.append(node("span", item.ip, "event-primary mono"), locationLabel(item), networkBadges(item));
-    const extra = node("span", undefined, "event-cell event-detail");
-    const target = item.user ? `user: ${item.user}` : item.path || item.service;
-    extra.append(node("span", target, "event-primary mono"),
-      node("span", item.host || `port ${item.port}`, "event-secondary"));
-    row.append(time, classification, source, extra, node("span", "↗", "event-arrow"));
-    fragment.append(row);
-  }
-  const focusedId = $("events").contains(document.activeElement) ? document.activeElement.dataset.eventId : null;
-  [...fragment.children].forEach((row, i) => { row.dataset.eventId = events[i].id; });
-  $("events").replaceChildren(fragment);
-  if (focusedId) [...$("events").children].find(row => row.dataset.eventId === focusedId)?.focus({preventScroll: true});
+  const container = $("events");
+  const rows = events.map(item => {
+    const row = eventRow(item);
+    row.classList.toggle("highlighted", item.id === highlighted);
+    return row;
+  });
+  const focusedId = container.contains(document.activeElement) ? document.activeElement.dataset.eventId : null;
+  syncRows(container, rows);
+  if (focusedId) rows.find(row => row.dataset.eventId === focusedId)?.focus({preventScroll: true});
   $("empty").hidden = events.length > 0;
   $("empty").textContent = errors.has("feed") ? "Events unavailable. Check collection health above." : "No matching events in this observation window.";
   counter("feed-count", `${events.length} shown`);
@@ -588,6 +609,8 @@ async function load(reset = false, history = false) {
   if ((busy && !reset) || (!live && !reset && !history)) return;
   const epoch = reset ? ++generation : generation;
   busy = true;
+  // A poll that finds nothing new leaves the list alone; a reset or an older page always redraws it.
+  let redraw = reset || history;
   if (reset) {
     parameters = {range: $("range").value, ...filterParameters()};
     if ($("own").checked) parameters.own = "1";
@@ -603,6 +626,7 @@ async function load(reset = false, history = false) {
       // The demo's live list is built from the same events, so every open connection's start matches its row.
       trapSample = demoTrapping(demoFeed(), demoBase / 1000); trapReceived = performance.now();
       latest = "demo";
+      redraw = true;
       if (reset) for (const item of events) if (isFresh(item, FLASH.loadWindow)) freshIds.add(item.id);
     } else {
       const query = {...parameters};
@@ -611,12 +635,11 @@ async function load(reset = false, history = false) {
       for (let page = 0; page < (reset || history ? 1 : 8); page++) {
         const result = await request("/api/events", query);
         if (epoch !== generation) return;
-        const known = new Set(events.map(item => item.id));
-        for (const item of result.events) {
-          // Server time keeps freshness correct when this device's clock is off.
-          if (!known.has(item.id) && !history && isFresh(item, reset ? FLASH.loadWindow : FLASH.liveWindow, result.queriedAt)) freshIds.add(item.id);
-        }
-        events = mergeEvents(events, result.events);
+        const {added, revised} = diffEvents(events, result.events);
+        // Server time keeps freshness correct when this device's clock is off.
+        if (!history) for (const item of added) if (isFresh(item, reset ? FLASH.loadWindow : FLASH.liveWindow, result.queriedAt)) freshIds.add(item.id);
+        // Events already loaded keep their objects, so their rows survive the redraw untouched.
+        if (added.length || revised.length) { events = mergeEvents(events, [...added, ...revised]); redraw = true; }
         if (reset || history) { older = result.next; hasOlder = result.more; }
         if (!history) {
           // Inclusive overlap tolerates normal log-delivery delay; IDs remove replays.
@@ -626,9 +649,9 @@ async function load(reset = false, history = false) {
         if (reset || history || !catchingUp) break;
         query.after = latest;
       }
-      errors.delete("feed");
+      if (errors.delete("feed")) redraw = true;
     }
-    render();
+    if (redraw) render();
   } catch (error) {
     if (epoch === generation) { errors.set("feed", error.message); render(); }
   } finally {
