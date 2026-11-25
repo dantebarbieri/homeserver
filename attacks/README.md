@@ -301,7 +301,8 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
 
   | Evidence | Threshold | Categories |
   |---|---|---|
-  | Failed SSH authentication (real port or Forgejo) | 3 | SSH, Brute-Force |
+  | SSH login with a username that does not exist or may not log in, such as root or admin (real port or Forgejo) | 1 | SSH, Brute-Force |
+  | Other failed SSH authentication (real port or Forgejo) | 3 | SSH, Brute-Force |
   | Failed Authelia sign-in | 5 | Brute-Force, Web App Attack |
   | Exploit, credential-file or admin-path web probe | 2 | Web App Attack |
   | Endlessh visit (port 22 serves no SSH) | 1 | Port Scan, SSH |

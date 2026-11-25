@@ -27,12 +27,17 @@ WINDOW = 3600
 # kind: (events within WINDOW, AbuseIPDB categories, public comment)
 RULES = {
     "ssh_failure": (3, (18, 22), "Repeated failed SSH authentication against a key-only server."),
+    # Host and Forgejo SSH only accept keys for known accounts, so a username that does not exist or may not
+    # log in is a credential guess on its first try; failures for real accounts keep the threshold above.
+    "ssh_guess": (1, (18, 22), "SSH login attempt with a guessed username against a key-only server."),
     "auth_failure": (5, (18, 21), "Repeated failed sign-in attempts against a single sign-on portal."),
     "http_probe": (2, (21,), "Requests for exploit, credential-file or administration paths on sites that do not serve them."),
     # Nothing legitimate is served on port 22; a sign-in within REPORT_DELAY (someone who forgot the real SSH port)
     # still cancels the report. Game-port scans are not reported: server-status sites probe those ports.
     "endlessh_open": (1, (14, 22), "Unsolicited SSH connection to a port that offers no SSH service."),
 }
+GUESSED = frozenset({"Username does not exist", "Username does not exist; authentication rejected",
+                     "Account is not permitted to log in over SSH"})
 # A source that has signed in successfully is trusted, and is never reported.
 TRUSTED = frozenset({"ssh_accepted", "ssh_accepted_unknown", "plex_client"})
 TRUST_FOR = 30 * 86400
@@ -89,6 +94,8 @@ class AbuseIPDB:
             return
         self.want(ip)
         kind, at = item["kind"], float(item["timestamp"])
+        if kind == "ssh_failure" and item.get("rejectionReason") in GUESSED:
+            kind = "ssh_guess"
         with self.lock, self.db:
             if kind in TRUSTED:
                 self.db.execute("INSERT INTO trusted VALUES (?,?) ON CONFLICT(ip) DO UPDATE SET at=max(at, excluded.at)", (ip, at))

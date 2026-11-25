@@ -783,6 +783,18 @@ class AbuseIPDBTests(unittest.TestCase):
         checked = {url.split("ipAddress=")[1].split("&")[0] for _, url, _ in self.http.calls}
         self.assertEqual(checked, {"9.9.9.9", "1.0.0.1", "1.0.0.2"})
 
+    def test_one_guessed_ssh_username_is_reported_but_a_real_account_needs_repeats(self):
+        for ip, reason in (("1.0.0.1", "Username does not exist"),
+                           ("1.0.0.2", "Account is not permitted to log in over SSH"),
+                           (self.IP, "Public key rejected")):
+            self.abuse.observe({"ip": ip, "kind": "ssh_failure", "origin": "external", "timestamp": self.now,
+                                "rejectionReason": reason})
+        self.now += REPORT_DELAY; self.drain()
+        sent = sorted(form for _, _, form in self.reports())
+        self.assertEqual(len(sent), 2)
+        self.assertTrue(all(b"categories=18%2C22" in form and b"guessed+username" in form for form in sent))
+        self.assertEqual({self.abuse.lookup([ip])[ip].get("reportedAt") is not None for ip in ("1.0.0.1", "1.0.0.2")}, {True})
+
     def test_one_endlessh_visit_is_reported_as_an_ssh_port_scan_unless_a_sign_in_follows(self):
         self.event("endlessh_open")
         self.event("endlessh_open", ip="1.0.0.1")
