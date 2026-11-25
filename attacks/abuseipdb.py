@@ -29,6 +29,10 @@ RULES = {
     "ssh_failure": (3, (18, 22), "Repeated failed SSH authentication against a key-only server."),
     "auth_failure": (5, (18, 21), "Repeated failed sign-in attempts against a single sign-on portal."),
     "http_probe": (2, (21,), "Requests for exploit, credential-file or administration paths on sites that do not serve them."),
+    # Nothing legitimate is served on port 22, and a scan verdict needs a game-port miss; a sign-in within REPORT_DELAY
+    # (someone who forgot the real SSH port) still cancels the report.
+    "endlessh_open": (1, (14, 22), "Unsolicited SSH connection to a port that offers no SSH service."),
+    "port_scan": (1, (14,), "Connection to a game server's secondary port without contacting its game port first."),
 }
 # A source that has signed in successfully is trusted, and is never reported.
 TRUSTED = frozenset({"ssh_accepted", "ssh_accepted_unknown", "plex_client"})

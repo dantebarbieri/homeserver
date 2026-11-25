@@ -776,11 +776,20 @@ class AbuseIPDBTests(unittest.TestCase):
             self.event("ssh_failure", origin="own")
             self.event("ssh_failure", ip="192.168.1.5")
             self.event("ssh_failure", ip="9.9.9.9", age=2 * 86400)
-            self.event("endlessh_open", ip="1.0.0.1")
+            self.event("service_connection", ip="1.0.0.1")
         self.now += REPORT_DELAY; self.drain()
         self.assertEqual(self.reports(), [])
         checked = {url.split("ipAddress=")[1].split("&")[0] for _, url, _ in self.http.calls}
         self.assertEqual(checked, {"9.9.9.9", "1.0.0.1"})
+
+    def test_one_endlessh_visit_is_reported_as_an_ssh_port_scan_unless_a_sign_in_follows(self):
+        self.event("endlessh_open")
+        self.event("endlessh_open", ip="1.0.0.1")
+        self.event("ssh_accepted", ip="1.0.0.1")
+        self.now += REPORT_DELAY; self.drain()
+        (_, _, form), = self.reports()
+        self.assertIn(b"ip=8.8.4.4", form)
+        self.assertIn(b"categories=14%2C22", form)
 
     def test_lookups_are_cached_for_a_day(self):
         self.http.replies.append((200, {"data": {"abuseConfidenceScore": 87, "totalReports": 4, "numDistinctUsers": 2}}, {}))
