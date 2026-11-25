@@ -1,4 +1,4 @@
-FROM python:3.13-alpine
+FROM python:3.15-alpine
 # Not COPY --chmod: it also sets the mode of the /app dir it creates, locking out non-root users.
 COPY *.py /app/
 RUN chmod -R a+rX /app
