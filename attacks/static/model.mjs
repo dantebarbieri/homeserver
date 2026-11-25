@@ -27,7 +27,7 @@ const SEVERITY_BY_KIND = {
   endlessh_open: "low", endlessh_close: "low", ssh_failure: "high", ssh_accepted: "info", ssh_accepted_unknown: "critical",
   ssh_disconnect: "suspicious", ssh_probe: "low", ssh_ban: "high", auth_failure: "high", http_probe: "high",
   http_denied: "low", service_connection: "low", plex_client: "info", plex_reachability: "info", plex_public: "low",
-  plex_probe: "suspicious", hytale_rejected: "suspicious",
+  plex_probe: "suspicious", hytale_rejected: "suspicious", port_scan: "low",
 };
 
 export function severityOf(item) {
@@ -328,6 +328,7 @@ const DEMO_TITLES = {
   plex_reachability: ["Probable Plex remote-access check", "observed"], plex_public: ["Public Plex endpoint request", "observed"],
   hytale_rejected: ["Hytale identity token rejected", "failure"], ssh_failure: ["SSH authentication failed", "failure"],
   ssh_disconnect: ["SSH disconnected before login", "incomplete"], ssh_probe: ["Targeted real SSH port", "unclassified"],
+  port_scan: ["Port scan: not a game client", "suspected"],
 };
 // Demo events that repeat an earlier event's source (same IP, place and network), so mixed dots show on load.
 const DEMO_SHARED = {10: 0, 31: 0, 11: 3, 19: 3, 21: 3};
@@ -407,6 +408,8 @@ function demoEvent(i, timestamp, id, ip, place, network = i) {
     set(kind, {method: "GET", status: kind === "plex_probe" ? 403 : 200, path: {plex_client: undefined, plex_probe: "/robots.txt", plex_reachability: "/identity", plex_public: "/web/index.html"}[kind]});
   } else if (type === "game" && variant % 2) {
     set("hytale_rejected", {service: "Hytale", protocol: "udp", port: 5205});
+  } else if (type === "game" && variant === 2) {
+    set("port_scan", {service: "Satisfactory messaging", protocol: "tcp", port: 29778});
   } else if (type === "git" && variant > 0) {
     const kind = ["ssh_failure", "ssh_disconnect", "ssh_probe"][(variant - 1) % 3];
     set(kind, {service: "Forgejo SSH", port: 2222, user: kind === "ssh_failure" ? "root" : undefined, protocol: "tcp"});

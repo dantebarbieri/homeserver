@@ -23,6 +23,7 @@ KINDS = {
     "http_probe": ("web", "Suspicious web request", "suspected"),
     "http_denied": ("web", "HTTP access denied", "unclassified"),
     "service_connection": ("service", "Service connection", "unclassified"),
+    "port_scan": ("service", "Port scan: not a game client", "suspected"),
     "plex_client": ("plex", "Plex client request", "observed"),
     "plex_reachability": ("plex", "Probable Plex remote-access check", "observed"),
     "plex_public": ("plex", "Public Plex endpoint request", "observed"),
@@ -36,7 +37,7 @@ SEVERITY = {
     "ssh_failure": "high", "ssh_accepted": "info", "ssh_accepted_unknown": "critical",
     "ssh_disconnect": "suspicious", "ssh_probe": "low", "ssh_ban": "high",
     "auth_failure": "high", "http_probe": "high", "http_denied": "low", "service_connection": "low",
-    "plex_client": "info", "plex_reachability": "info", "plex_public": "low", "plex_probe": "suspicious",
+    "port_scan": "low", "plex_client": "info", "plex_reachability": "info", "plex_public": "low", "plex_probe": "suspicious",
     "hytale_rejected": "suspicious",
 }
 REASONS = {
@@ -52,6 +53,7 @@ REASONS = {
     "http_probe": "The requested path matches a common credential-file, exploit, or administration-endpoint probe pattern.",
     "http_denied": "NPM returned HTTP 401, 403, or 429. This can be legitimate unauthenticated traffic.",
     "service_connection": "An inbound TCP SYN or representative UDP datagram reached a configured service port; no payload was analyzed.",
+    "port_scan": "A TCP SYN reached the game's messaging port, but this address had not contacted the game port in the previous 10 minutes. Real clients always reach the game port first, so this is consistent with a port scanner.",
     "plex_client": "Plex logged a request carrying a Plex token (or an in-progress streaming session). Looks like a signed-in client; this does not identify the person.",
     "plex_reachability": "Unauthenticated GET /identity from an AWS-published address range. Plex.tv checks remote access this way, but any AWS customer can send the same request, so this is an inference.",
     "plex_public": "A request without a token for an endpoint Plex serves publicly (/identity, the web app, or a streaming session). These expose no library data.",
@@ -64,8 +66,12 @@ PORTS = {
     32469: ("plex", "Plex DLNA"),
     36676: ("minecraft", "Minecraft"), 36677: ("minecraft", "RLCraft"),
     5205: ("game", "Hytale"), 7778: ("game", "Satisfactory"),
-    8888: ("game", "Satisfactory"),
+    29778: ("game", "Satisfactory messaging"),
 }
+# Ports a real client reaches only after contacting a companion port (Satisfactory's
+# reliable-messaging port follows the game port); a lone connection is a port scan.
+COMPANIONS = {29778: 7778}
+COMPANION_WINDOW = 600
 TYPES = frozenset({"endlessh", "ssh", "authelia", "web", "git", "plex", "minecraft", "game"})
 VERDICTS = frozenset(value[2] for value in KINDS.values())
 OWN_NETWORKS = ("10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",

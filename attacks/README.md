@@ -38,6 +38,15 @@ Hytale refuses clients whose identity token is invalid
 could be a server-list poller, a scanner speaking the game protocol or an outdated
 client. Player names from the same log are never stored.
 
+Satisfactory clients reach the game port (7778) before its messaging port
+(29778). A messaging-port connection from an address that had not contacted the
+game port in the previous 10 minutes is labeled **Port scan: not a game client**.
+The collector keeps that contact history in memory, so in the first 10 minutes
+after a collector restart a real player can be mislabeled. The messaging port
+used to be 8888, a common HTTP-alternate port; every connection seen there in a
+week came from scanning and cloud networks that never touched the game port.
+History collected before the move keeps its old Satisfactory label.
+
 Every event includes a plain-language evidence explanation. A failed sign-in
 can be a legitimate typo; a port connection can be a real player, viewer or
 health check. Successful SSH logins are audit events, **not attack counts**.
@@ -51,7 +60,7 @@ applies to history collected before it existed:
 | Severity | Kinds |
 |---|---|
 | Info | Accepted SSH login, Plex client request, probable Plex remote-access check |
-| Low | Endlessh connection, real-SSH port probe, HTTP 401/403/429, service-port connection, public Plex endpoint |
+| Low | Endlessh connection, real-SSH port probe, HTTP 401/403/429, service-port connection, game port scan, public Plex endpoint |
 | Suspicious | SSH disconnect before login, unauthenticated Plex request, rejected Hytale identity token |
 | High | Failed SSH login, fail2ban ban, failed Authelia sign-in, suspicious web request |
 | Critical | SSH login with a credential missing from the key registry |
@@ -432,7 +441,7 @@ those private-gateway log records cannot be geolocated or attributed. The
 dual-stack network preserves real clients without changing the published port.
 
 Ports are explicitly mapped in `events.py`: real SSH 28, Git SSH 2222, Plex
-32400/8324/32469, Minecraft 36676/36677, Hytale 5205 and Satisfactory 7778/8888.
+32400/8324/32469, Minecraft 36676/36677, Hytale 5205 and Satisfactory 7778 (game) / 29778 (messaging).
 Unknown ports and traffic blocked upstream by the router are not visible.
 Forgejo's and Hytale's container logs reach the collector through the same Loki
 path as Endlessh. Plex's own `Plex Media Server*.log*` files are mounted read-only at

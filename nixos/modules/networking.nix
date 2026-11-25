@@ -66,7 +66,7 @@
       3478    # Coturn TURN (host-networked)
       5349    # Coturn TURNS TLS (host-networked)
       7881    # LiveKit ICE/TCP fallback
-      8888    # Satisfactory TCP
+      29778   # Satisfactory messaging (TCP)
     ];
     allowedUDPPorts = [
       53      # DNS → AdGuard Home

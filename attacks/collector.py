@@ -16,7 +16,7 @@ import maxminddb
 
 from abuseipdb import AbuseIPDB
 from common import Client, UpstreamError
-from events import KINDS, PARSERS, address, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, text, traffic_origin
+from events import COMPANION_WINDOW, COMPANIONS, KINDS, PARSERS, address, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, retag, text, traffic_origin
 from networks import Networks
 from ssh_keys import SSHKeys
 
@@ -269,6 +269,7 @@ class Collector:
     def __init__(self, store, loki, geo, npm, keys=None, networks=None, plex="/plex-logs", plex_zone=None, reputation=None):
         self.store, self.loki, self.geo, self.npm = store, loki, geo, Path(npm)
         self.reputation = reputation
+        self.contacts = {}
         zone = os.environ.get("PLEX_LOG_TZ", "UTC")
         self.plex, self.plex_zone = Path(plex), plex_zone or (timezone.utc if zone == "UTC" else ZoneInfo(zone))
         self.status = {name: {"state": "waiting"} for name in (*SELECTORS, "npm", "plex", "delivery")}
@@ -282,8 +283,23 @@ class Collector:
         own = self.own_traffic()
         if own["state"] != "ready":
             raise UpstreamError(own["message"])
-        return {**refine(self.keys.annotate(self.networks.enrich(self.geo.enrich(item)))),
+        return {**refine(self.keys.annotate(self.networks.enrich(self.geo.enrich(self.companion(item))))),
                 "origin": traffic_origin(item["ip"], own["networks"])}
+
+    def companion(self, item):
+        """Relabel a companion-port connection with no recent game-port contact as a scan."""
+        if item["kind"] != "service_connection":
+            return item
+        port, at = item["port"], item["timestamp"]
+        if port in COMPANIONS.values():
+            if len(self.contacts) > 20000:
+                self.contacts = {key: value for key, value in self.contacts.items() if value > at - COMPANION_WINDOW}
+            self.contacts[(item["ip"], port)] = max(at, self.contacts.get((item["ip"], port), at))
+        elif port in COMPANIONS:
+            last = self.contacts.get((item["ip"], COMPANIONS[port]))
+            if last is None or not at - COMPANION_WINDOW <= last <= at + 5:
+                return retag(item, "port_scan")
+        return item
 
     def collect(self, item, source, key):
         if self.store.enqueue(item, source, key) and self.reputation:

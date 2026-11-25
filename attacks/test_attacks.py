@@ -357,6 +357,16 @@ class StateTests(unittest.TestCase):
         self.assertIsNone(self.store.get("cursor:endlessh"))
         self.assertEqual(self.store.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 0)
 
+    def test_messaging_port_without_game_contact_is_a_port_scan(self):
+        collector = Collector(self.store, Mock(), Mock(), self.root)
+        flow = lambda ip, port, at: parse_flow(json.dumps({"schema": "attacks-flow-v1", "ip": ip, "port": port,
+                                                           "sourcePort": 1234, "protocol": "tcp"}), at)
+        self.assertEqual(collector.companion(flow("8.8.4.4", 29778, 100))["kind"], "port_scan")
+        collector.companion(flow("9.9.9.9", 7778, 100))
+        self.assertEqual(collector.companion(flow("9.9.9.9", 29778, 102))["kind"], "service_connection")
+        self.assertEqual(collector.companion(flow("9.9.9.9", 29778, 800))["kind"], "port_scan")
+        self.assertEqual(collector.companion(flow("1.0.0.1", 7778, 100))["kind"], "service_connection")
+
     def test_log_rotation_and_partial_lines(self):
         logdir = self.root / "logs"
         logdir.mkdir()

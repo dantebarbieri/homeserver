@@ -164,8 +164,11 @@ services:
     ports:
       - "7778:7777/tcp"
       - "7778:7777/udp"
-      - "8888:8888/tcp"
+      # Messaging port moved off 8888, a common HTTP-alt port that drew web scanners.
+      # The image uses it unmapped (host = container); clients learn it from the game port.
+      - "29778:29778/tcp"
     environment:
+      SERVERMESSAGINGPORT: 29778
       PUID: ${HOST_UID}
       PGID: ${HOST_GID}
       MAXPLAYERS: 4

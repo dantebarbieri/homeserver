@@ -289,7 +289,7 @@ test("severity is read from the row or derived from its kind, and filters mirror
   assert.equal(severityOf({kind: "something_new"}), "low");
   const events = demoEvents(Date.parse("2026-01-01T00:00:00Z"));
   const kinds = new Set(events.map(item => item.kind));
-  for (const kind of ["plex_client", "plex_probe", "plex_reachability", "hytale_rejected"]) assert.equal(kinds.has(kind), true, kind);
+  for (const kind of ["plex_client", "plex_probe", "plex_reachability", "hytale_rejected", "port_scan"]) assert.equal(kinds.has(kind), true, kind);
   assert.equal(events.some(item => item.service === "Forgejo SSH"), true);
   const external = events.filter(item => item.origin !== "own");
   const atLeast = level => external.filter(item => matchesFilters(item, {severity: level}));
