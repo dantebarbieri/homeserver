@@ -8,6 +8,12 @@ services:
       service: common-service
     image: "jc21/nginx-proxy-manager:latest"
     container_name: nginxproxymanager
+    environment:
+      # Otherwise NPM trusts X-Real-IP from every CloudFront and Cloudflare
+      # address on every host. Both CDNs pass a client's own X-Real-IP through,
+      # so anyone could make the logs (and AbuseIPDB reports) name any address.
+      # Cloudflare trust is scoped to mirklurk.wiki: nginx/cloudflare-real-ip.conf.
+      IP_RANGES_FETCH_ENABLED: "false"
     ports:
       - "80:80"
       - "127.0.0.1:81:81"

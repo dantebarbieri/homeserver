@@ -130,6 +130,15 @@ address(es), preferably `/32` and `/128`, not `0.0.0.0/0`, `::/0`, or the
 entire shared web-service network. Verify forwarding and rate-limit behavior
 with that configuration. Recheck the value if the proxy's address changes.
 
+mirklurk.wiki is proxied by Cloudflare. NPM restores each visitor's address
+from `CF-Connecting-IP`, trusted only from Cloudflare's published ranges
+([`nginx/cloudflare-real-ip.conf`](../nginx/cloudflare-real-ip.conf)), and
+forwards it, so MediaWiki rate limits, blocks and logs see visitors rather than
+Cloudflare edges. Requests that bypass Cloudflare keep their own address
+whatever headers they forge. Apply or verify the host's Advanced config with
+`sh scripts/mirklurk-wiki-proxy.sh --check|--apply`; refresh the ranges if
+Cloudflare changes them.
+
 ## Operator-supplied branding
 
 Provision `${DATA}/mirklurk/branding` before merging this mount, even when

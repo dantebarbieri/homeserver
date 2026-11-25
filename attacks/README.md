@@ -320,9 +320,15 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
 
   Game-port scans (server-status sites probe those), other 401/403 responses
   (expired sessions, token refreshes), plain 404s (mostly real app traffic),
-  Plex, Hytale and other service connections are never reported. Requests to
-  Cloudflare-proxied sites (mirklurk.wiki) log a Cloudflare edge address, which
-  AbuseIPDB whitelists, so those are never reported either. Safeguards: a report waits five minutes and is dropped if
+  Plex, Hytale and other service connections are never reported. The wiki
+  (mirklurk.wiki) sits behind Cloudflare's proxy; NPM takes its visitor's
+  address from `CF-Connecting-IP`, trusted only from Cloudflare's ranges
+  (`docker/nginx/cloudflare-real-ip.conf`, applied by
+  `docker/scripts/mirklurk-wiki-proxy.sh --apply`), so wiki probes are mapped
+  and reported like any other. NPM's own CDN range list is disabled
+  (`IP_RANGES_FETCH_ENABLED=false`): it trusted a client-supplied `X-Real-IP`
+  through any CloudFront or Cloudflare edge, letting anyone forge the logged
+  address. Safeguards: a report waits five minutes and is dropped if
   the address has since signed in successfully over SSH or used Plex as a
   client (such addresses stay exempt for 30 days); an address is reported at
   most once a day and never when AbuseIPDB whitelists it; events older than a
