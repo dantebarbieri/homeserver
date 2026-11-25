@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `44a8c4c9b66d13945c9058c91d869f992f984198`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45623166232) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/72) has no open issues, with private-audit/real-1.0-fixture limitations retained |
-| Web | `mirklurk-map:44a8c4c`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:44a8c4c`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `b2b04c7f32bf71b56db45c7528f7f10b81b05cf0`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45662655322) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/73) has no open issues |
+| Web | `mirklurk-map:b2b04c7`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:b2b04c7`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -337,6 +337,45 @@ the accepted 61884a78 predecessor and all earlier failure records.
 Use a separate normal uploads-then-web window with full IPv4/IPv6
 size/SHA checks, one new sharing/identity lifecycle and independent acceptance.
 Wiki publication and the final catalog refresh remain separate operations.
+
+### Final public 1.0 catalog and spider pin
+
+Following accepted wiki PR86 publication
+`5dcb056f10abc2538d79cb26c37522f5b77d8bc4` (689 texts, no new File imports),
+the reviewed map PR73 refresh adds exactly four verified titles:
+Achievements, Chestplate, Shortbow and Version 1.0.0.0. Catalog 554 is dated
+November 25. The legacy Version 0.9.9.7 title remains an accepted redirect
+allowlist entry, not current beta navigation.
+
+The shared spider SVG uses the user-selected two-segment design in both
+browser bundles. Other marker SVG/CSS/mappings, version rules, saved-state
+data and all 404 artwork PNGs remain unchanged. Latest/default remains
+1.0.0.0, with no active Beta. API, server, auth and proxy contracts do not change.
+
+Acceptance uses `1000-final-bundle.json`, SHA-256
+`f5fccc410b28329a0cd758ddfcc392f7651bec78052c4ecb92fe58dfe115f487`:
+418 distribution files plus unchanged nginx `50x.html` (419 physical files),
+417 precache entries and cache `259cb1e1de`. `1000-final-contract.json`
+records the exact selected spider body, detail and eye paths for checks
+in both bundles.
+
+| Asset | SHA-256 |
+|---|---|
+| `app.2d28d1318e.js` | `2d28d1318e99ff2324dfef31f3ea3876a5231b63a5cfe6f1fa94734e61108e17` |
+| `edit.75aece3064.js` | `75aece3064bb9cf751ebad42a66e401e13536942f9c9875a0dbbc89bcba0d00e` |
+| `sw.js` | `e1844f60f23a6790e029665255de21f1fc9fd5da156e57e6c0fc98a5de3bf2bf` |
+
+Build both targets because uploads copies the changed `src`. This pin is
+not a live claim: use a separate serialized uploads-then-web window after
+normal exact-source review/CI and fresh canonical/origin, writer, jobs,
+health, timer, exact NPM ownership/trust and full mount/hardening guards.
+Verify legitimate intervening maintenance separately; never silently waive
+external recreations. Preserve the actual accepted 44a8c4c core images as
+rollback, its initial failed comparator/rollback evidence, and all current
+unrelated runtime contracts. Require full IPv4/IPv6 size/SHA checks,
+independent catalog/spider acceptance, one new sharing/identity lifecycle
+and unchanged published wiki revisions before releasing the window.
+No File imports, backups or unrelated repair belong to this follow-up.
 
 ### Historical beta-wiki acceptance identifiers
 
