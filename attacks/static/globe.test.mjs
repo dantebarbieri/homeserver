@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
-import {activityLongitude, createGlobe, globeGeometry, detailLevel, turnPath, followCenter} from "./globe.mjs";
+import {activityLongitude, createGlobe, globeGeometry, detailLevel, prepareLand, turnPath, followCenter} from "./globe.mjs";
 import {feature, geoArea, geoCentroid} from "./geo-vendor.mjs";
 import {MAP_FILES} from "./atlas.mjs";
 
@@ -25,8 +25,10 @@ test("country winding and horizon clipping do not paint the back hemisphere", ()
   const country = globeGeometry({type: "Polygon", coordinates: [[[5, 10], [20, 10], [20, 25], [5, 25], [5, 10]]]});
   const far = globeGeometry({type: "Polygon", coordinates: [[[160, -10], [175, -10], [175, 10], [160, 10], [160, -10]]]});
   assert.ok(geoArea(country) < 1);
-  assert.ok(globe.path(country).length > 20);
-  assert.equal(globe.path(far), "");
+  globe.resize(1000, 500, 1);
+  globe.aim();
+  assert.ok(globe.shape(prepareLand(country, "110m")).length > 20);
+  assert.equal(globe.shape(prepareLand(far, "110m")), "");
   const point = globe.position(12, 18);
   globe.drag([point.x, point.y], [520, 265]);
   // The same anchor adjustment is used when pinch zoom changes the SVG viewBox.
@@ -141,7 +143,8 @@ test("progressive atlas adds real tiny territories and preserves them at close z
     assert.ok(point.visible);
     globe.drag([point.x, point.y], [500, 250]);
     globe.resize(1000, 500, 128);
-    const outline = globe.path(geometry);
+    globe.aim();
+    const outline = globe.shape(prepareLand(geometry, "10m"));
     assert.ok(outline.length > 10 && !outline.includes("NaN"), `${id} must survive close-zoom clipping`);
   }
 });

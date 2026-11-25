@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, located, project, duration, liveTrapping, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, demoEvents, demoLiveEvent, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, located, project, duration, liveTrapping, trapDuration, trapTime, ago, equalEarth, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, isFresh, FLASH, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {constrainView, zoomView, flyPath, fitView, easeInOut, placeArrival} from "./map-view.mjs";
 
 test("event replays deduplicate without losing nanosecond ordering", () => {
@@ -77,6 +77,14 @@ test("unlocated events do not displace held dots and unknown countries never inv
   assert.equal(activity.unlocated, 1);
   assert.equal(countryFlag("US"), "\u{1f1fa}\u{1f1f8}");
   for (const code of [undefined, "ZZ", "XX", "usa", "<script>"]) assert.equal(countryFlag(code), "");
+});
+
+test("the map names every source it leaves out and says nothing when it draws all of them", () => {
+  assert.equal(notDrawn({}), "");
+  assert.equal(notDrawn({faded: 0, farSide: 0, unlocated: 0, omitted: 0}), "");
+  assert.equal(notDrawn({faded: 3, farSide: 12, unlocated: 1, omitted: 2}),
+    "Sources not drawn: 3 faded · 12 on far side · 1 unlocated · 2 over the dot limit");
+  assert.equal(notDrawn({farSide: 4, omitted: 1}), "Sources not drawn: 4 on far side · 1 over the dot limit");
 });
 
 test("own traffic stays off the map even in history mode without displacing external dots", () => {
@@ -156,6 +164,100 @@ test("live trapping ticks between samples, switches on close, and stops on stale
   assert.equal(liveTrapping(null, 0), null);
 });
 
+test("trapped time reads to the second and never rounds up into a longer unit", () => {
+  const cases = [[0, "0 s"], [.04, "<0.1 s"], [.3, "0.3 s"], [2, "2 s"], [9.96, "10 s"], [9.7, "9.7 s"], [10, "10 s"], [41.2, "41 s"], [59.6, "1 min"],
+    [60, "1 min"], [252, "4 min 12 s"], [312.6, "5 min 13 s"], [3599.6, "1 h"], [3900, "1 h 5 min"], [7200, "2 h"], [93600, "1 d 2 h"], [86400, "1 d"]];
+  for (const [seconds, text] of cases) assert.equal(trapDuration(seconds), text, String(seconds));
+  for (const bad of [-1, NaN, Infinity, null, undefined]) assert.equal(trapDuration(bad), "—");
+});
+
+// Events as the collector logs them: an open and, if the client left, a close with the connection's own `time=`.
+const open = (id, timestamp, extra = {}) => ({id, kind: "endlessh_open", ip: "198.51.100.7", sourcePort: 50001, timestamp, observedAt: timestamp + .5, origin: "external", ...extra});
+const close = (id, timestamp, seconds, extra = {}) => ({id, kind: "endlessh_close", ip: "198.51.100.7", sourcePort: 50001, timestamp, observedAt: timestamp + .5, origin: "external",
+  ...(seconds === undefined ? {} : {duration: seconds}), ...extra});
+const fresh = (extra = {}) => ({available: true, connections: 1, seconds: 30, asOf: 1030, through: 1030, active: [{ip: "198.51.100.7", sourcePort: 50001, since: 1000}], activeTruncated: false, ...extra});
+
+test("an Endlessh connection reads as ended once its close is loaded, however the close is found", () => {
+  const events = [close("c", 1042.5, 42.5), open("o", 1000)];
+  assert.deepEqual(trapTime(events[0], events, null, 0), {state: "ended", seconds: 42.5});
+  assert.deepEqual(trapTime(events[1], events, null, 0), {state: "ended", seconds: 42.5});
+  // The close wins over a published list that still shows the connection.
+  assert.deepEqual(trapTime(events[1], events, fresh(), 1000), {state: "ended", seconds: 42.5});
+  assert.equal(trapTime({kind: "ssh_failure", ip: "198.51.100.7"}, events, fresh(), 0), null);
+  assert.equal(trapTime(close("x", 1, undefined), events, null, 0), null);
+});
+
+test("an open connection ticks from the collector's clock while the published list names it", () => {
+  const events = [open("o", 1000)];
+  assert.deepEqual(trapTime(events[0], events, fresh(), 0), {state: "active", seconds: 30, since: 1000});
+  assert.deepEqual(trapTime(events[0], events, fresh(), 12000), {state: "active", seconds: 42, since: 1000});
+  // The list is only evidence for the connection it names: same address, same port and the same start.
+  for (const row of [{ip: "198.51.100.8", sourcePort: 50001, since: 1000}, {ip: "198.51.100.7", sourcePort: 50002, since: 1000},
+    {ip: "198.51.100.7", sourcePort: 50001, since: 900}]) {
+    assert.deepEqual(trapTime(events[0], events, fresh({active: [row]}), 0), {state: "unknown"}, JSON.stringify(row));
+  }
+  assert.deepEqual(trapTime(events[0], events, fresh({active: undefined}), 0), {state: "unknown"});
+});
+
+test("an open the published list has not caught up with is still held, and one it should have listed is not", () => {
+  const sample = fresh({active: [], connections: 0, seconds: 0, through: 1000});
+  const newer = open("new", 1005, {observedAt: 1005.5});
+  assert.deepEqual(trapTime(newer, [newer], sample, 2000), {state: "active", seconds: 27, since: 1005});
+  // Older than the list's horizon yet missing from it: it closed without a logged close, or the list was truncated.
+  const older = open("old", 990, {observedAt: 990.5});
+  assert.deepEqual(trapTime(older, [older], sample, 2000), {state: "unknown"});
+  assert.deepEqual(trapTime(older, [older], {...sample, activeTruncated: true}, 2000), {state: "unknown"});
+});
+
+test("no live claim is made from stale, unavailable or own-traffic telemetry", () => {
+  const events = [open("o", 1000)];
+  assert.deepEqual(trapTime(events[0], events, fresh(), 90001), {state: "unknown"});
+  assert.deepEqual(trapTime(events[0], events, fresh({available: false}), 0), {state: "unknown"});
+  assert.deepEqual(trapTime(events[0], events, fresh({asOf: undefined}), 0), {state: "unknown"});
+  assert.deepEqual(trapTime(events[0], events, null, 0), {state: "unknown"});
+  // The collector does not track our own connections, so it cannot say when they ended.
+  const own = [open("own", 1000, {origin: "own"})];
+  assert.deepEqual(trapTime(own[0], own, fresh(), 0), {state: "unknown"});
+  assert.deepEqual(trapTime(own[0], [...own, close("c", 1010, 10, {origin: "own"})], fresh(), 0), {state: "ended", seconds: 10});
+});
+
+test("a reused source port never lends one connection's end to another", () => {
+  const first = open("a", 1000), second = open("b", 2000, {observedAt: 2000.5});
+  const events = [close("d", 2100, 100), second, first];
+  // The second open owns the later close; the first was followed by another open, so nothing says how it ended.
+  assert.deepEqual(trapTime(second, events, null, 0), {state: "ended", seconds: 100});
+  assert.deepEqual(trapTime(first, events, null, 0), {state: "unknown"});
+  assert.deepEqual(trapTime(first, events, fresh(), 0), {state: "unknown"});
+  const other = [close("e", 1500, 500, {ip: "198.51.100.9"}), open("f", 1000, {sourcePort: undefined}), first];
+  assert.deepEqual(trapTime(first, other, null, 0), {state: "unknown"});
+  assert.deepEqual(trapTime(other[1], other, fresh(), 0), {state: "unknown"});
+});
+
+test("demo events pair each ended Endlessh connection with its close and keep the newest one open", () => {
+  const now = Date.parse("2026-01-01T00:00:00Z");
+  const events = demoEvents(now);
+  const opens = events.filter(item => item.kind === "endlessh_open"), closes = events.filter(item => item.kind === "endlessh_close");
+  assert.equal(new Set(events.map(item => item.id)).size, events.length);
+  assert.equal(opens.every(item => Number.isFinite(item.sourcePort)), true);
+  assert.equal(new Set(opens.map(item => `${item.ip}|${item.sourcePort}`)).size, opens.length);
+  assert.equal(closes.length, 3);
+  const sample = demoTrapping(events, now / 1000);
+  assert.deepEqual(opens.map(item => trapTime(item, events, sample, 0).state).sort(), ["active", "ended", "ended", "ended"]);
+  assert.equal(sample.connections, 1);
+  assert.deepEqual(sample.active, [{ip: "192.0.2.1", sourcePort: opens.find(item => item.id === "demo-0").sourcePort, since: now / 1000}]);
+  assert.equal(sample.seconds, 0);
+  const live = demoLiveEvent(5, now + 5000, (values => () => values.shift() ?? 0)([0, .5, .5, .5]));
+  assert.equal(live.kind, "endlessh_open");
+  const ended = [...events, live, demoCloseEvent(live, 7.5)];
+  const after = demoTrapping(ended, now / 1000 + 20);
+  assert.equal(after.connections, 1);
+  assert.deepEqual(trapTime(live, ended, after, 0), {state: "ended", seconds: 7.5});
+  assert.equal(demoCloseEvent(live, 7.5).id, "demo-close-live-5");
+  // Closes sort after their opens in the stream.
+  const merged = mergeEvents([], ended);
+  assert.equal(merged.findIndex(item => item.id === "demo-close-live-5") < merged.findIndex(item => item.id === "demo-live-5"), true);
+});
+
 test("simulated arrivals are unique, located, documentation-range addresses that merge newest first", () => {
   const now = Date.parse("2026-01-01T00:00:00Z");
   let seed = 7;
@@ -171,7 +273,7 @@ test("simulated arrivals are unique, located, documentation-range addresses that
   }
   const merged = mergeEvents(demoEvents(now), arrivals);
   assert.equal(merged[0].id, "demo-live-60");
-  assert.equal(merged.length, 92);
+  assert.equal(merged.length, 95);
 });
 
 test("severity is read from the row or derived from its kind, and filters mirror the server", () => {

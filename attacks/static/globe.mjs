@@ -1,8 +1,12 @@
-import {geoArea, geoCentroid, geoDistance, geoGraticule10, geoOrthographic, geoPath, versor} from "./geo-vendor.mjs";
+import {geoArea, geoCentroid, geoDistance, geoGraticule10, geoOrthographic, versor} from "./geo-vendor.mjs";
+import {createPainter, prepareLines, prepareShape} from "./globe-draw.mjs";
 
 const FALLBACK_LONGITUDE = -97.7421638889;
 const VIEW_LATITUDE = 30.4291555556;
 const HORIZON = Math.PI / 2 - 1e-6;
+// Longest great-circle edge kept in prepared geometry, in degrees. Longer edges are split once so that they stay within
+// about a fifth of a pixel of a true arc at the highest zoom their detail level is used for.
+const EDGE_DEGREES = {"110m": 2.5, "50m": 1.8, "10m": 0.4};
 
 export function activityLongitude(points) {
   const edges = [], degrees = 180 / Math.PI;
@@ -79,11 +83,26 @@ export function globeGeometry(geometry) {
   })};
 }
 
+// A country's polygons from `globeGeometry`, ready for `globe.shape`.
+export function prepareLand(geometry, level) {
+  return prepareShape(geometry.geometries, EDGE_DEGREES[level] * Math.PI / 180);
+}
+
+const grids = new Map();
+
+// The graticule, ready for `globe.lines`.
+export function prepareGrid(level) {
+  if (!grids.has(level)) grids.set(level, prepareLines(geoGraticule10().coordinates, EDGE_DEGREES[level] * Math.PI / 180));
+  return grids.get(level);
+}
+
 export function createGlobe() {
   const initial = [-FALLBACK_LONGITUDE, -VIEW_LATITUDE, 0];
-  const projection = geoOrthographic().translate([500, 250]).scale(235).rotate(initial).clipAngle(90);
-  const path = geoPath(projection), grid = geoGraticule10();
+  const projection = geoOrthographic().translate([500, 250]).scale(235).rotate(initial);
+  const painter = createPainter();
   let visibleArc = Math.PI / 2, reach = Math.PI / 2;
+  // The part of the 1000×500 plane the viewport shows, and how many of its units one CSS pixel covers.
+  let left = 0, top = 0, right = 1000, bottom = 500, pixel = 1;
   function drag(from, to) {
     const a = projection.invert(from), b = projection.invert(to);
     if (![...a, ...b].every(Number.isFinite)) return;
@@ -98,21 +117,21 @@ export function createGlobe() {
     rotate: rotation => { projection.rotate(rotation); },
     // Angular radius of the largest globe cap the viewport shows in full.
     reach: () => reach,
-    resize: (width, height, zoom) => {
-      projection.scale(Math.min(width, height) * .47).precision(.3 / zoom);
-      projection.clipExtent([[500 - width / zoom / 2, 250 - height / zoom / 2],
-        [500 + width / zoom / 2, 250 + height / zoom / 2]]);
+    // `width` and `height` are the unzoomed view in plane units; `boxWidth` is the map's width in CSS pixels.
+    resize: (width, height, zoom, boxWidth = width) => {
+      projection.scale(Math.min(width, height) * .47);
+      left = 500 - width / zoom / 2; right = 500 + width / zoom / 2;
+      top = 250 - height / zoom / 2; bottom = 250 + height / zoom / 2;
+      pixel = width / zoom / boxWidth;
       visibleArc = Math.asin(Math.min(1, Math.hypot(width, height) / 2 / zoom / projection.scale()));
       reach = Math.asin(Math.min(1, Math.min(width, height) / 2 / zoom / projection.scale()));
     },
-    path: geometry => {
-      const center = projection.invert([500, 250]);
-      // Cull entire island polygons before projecting their detailed coastlines.
-      const visible = geometry.type === "GeometryCollection" ? {...geometry,
-        geometries: geometry.geometries.filter(part => geoDistance(center, part.center) <= part.radius + visibleArc + .001)} : geometry;
-      return path(visible) || "";
-    },
-    grid: () => path(grid),
+    // Points the painter at the current rotation and viewport. Paths come out as integers in 1/unit of a plane unit, so
+    // the groups that hold them need transform="scale(1/unit)"; the return value is `unit`.
+    aim: () => painter.view({rotation: projection.rotate(), scale: projection.scale(), left, top, right, bottom, pixel, arc: visibleArc}),
+    // The path of one country's prepared polygons, skipping those that cannot reach the viewport.
+    shape: parts => painter.shape(parts),
+    lines: lines => painter.lines(lines),
     sphere: () => {
       const r = projection.scale();
       return `M${500 - r},250a${r},${r} 0 1,0 ${2 * r},0a${r},${r} 0 1,0 ${-2 * r},0Z`;

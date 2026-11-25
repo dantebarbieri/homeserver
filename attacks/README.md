@@ -101,6 +101,18 @@ equirectangular map (which was not Mercator). Both country outlines and event
 coordinates use the same projection. It uses no map tiles, CDN or third-party
 requests in the browser.
 
+The map's controls are icon buttons in its top-right corner, each with an accessible
+name and a tooltip. **Map settings** (the gear) opens a popover, or a bottom sheet on
+phones, holding the projection, **Show faded dots** and the dot settings; Escape, its
+close button or a press outside closes it. **Full screen** sits beside the gear.
+Wherever the view can move (the globe, or the full-screen flat map) a second row adds
+**Reset view**, **Follow** and the zoom buttons. A status line under the map names
+the sources it leaves out, for example `Sources not drawn: 2 faded · 5 on far side`.
+**Faded** sources have fully faded (they are drawn instead when Show faded dots is
+on), **on far side** applies to the globe, **unlocated** sources have no
+coordinates, and **over the dot limit** counts sources dropped by the cap below.
+The line is empty when everything is drawn.
+
 **Globe** is the touch-first default and is selectable on desktop too. Drag to
 rotate in any direction; pinch or scroll to zoom around the chosen point.
 It works inline and fullscreen. The page can still scroll outside the globe;
@@ -150,8 +162,10 @@ fading when displaced from that group and disappear after **30 minutes**.
 The map has a hard **300-dot limit**, dropping oldest points first during bursts;
 this never deletes collected events. **Map settings** adjusts all three values
 and saves them in the browser. Set the held count to 0 for a fully fading map.
-Fading uses collection time, not time since opening the page. **Show older
-history** optionally restores expired dots faintly, still within the limit.
+Fading uses collection time, not time since opening the page. **Show faded dots**
+draws fully faded sources at 12% opacity, still within the limit. It uses only
+events already loaded in the browser (the stream's **Load older events** is what
+fetches more) and changes no statistic.
 
 A new event **flashes** its source's dot: a burst in the new event's kind colour,
 a white-hot dot and two expanding severity rings, settling back into the pie
@@ -300,6 +314,26 @@ completed duration. The live gauges are `attacks_endlessh_trapped_connections`
 and `attacks_endlessh_trapped_now_seconds`; consult `attacks_source_ready` before
 using gauges for alerts.
 
+Each Endlessh event also says how long **its own connection** was held. A close
+record carries the duration Endlessh logged, so both the "Stuck in Endlessh" and the
+"Left Endlessh" rows of a finished connection show **Trapped for 5 min 13 s**
+(badges on rows, hover cards and arrival cards, and **Time stuck** in the event
+details). A connection still open shows **Trapped now · 41 s**, a clock that advances
+every second, and "so far · still connected" in the details. An open and its close
+are matched by source address and port. When neither can be shown honestly (no close
+was logged and live telemetry cannot confirm the connection is open, which includes
+own traffic, restarts and lost log lines) the badge is omitted and the details say
+**Unknown** rather than guess.
+
+For the live part, `/api/stats` returns a `trapping` object beyond the totals:
+`active` lists the newest currently held external connections (`ip`, `sourcePort`,
+`since`; at most 200), `activeTruncated` is true when more were open than listed,
+`asOf` is the API's clock when it answered and `through` is the delivered-data
+watermark. An event observed at or before `through` is accounted for by `active`;
+a later one may not be yet, so the page treats it as still held "so far" rather than
+unknown. The collector publishes this list together with the live gauges, so after
+changing it redeploy both `attacks` and `attacks-collector`.
+
 The secondary lifetime figure remains Prometheus's **completed external** counter,
 with its classification start date shown. Pre-upgrade counters are preserved as
 `origin="legacy"`: their own/external split is unknowable from aggregate labels,
@@ -412,7 +446,12 @@ To regenerate them: `npm --prefix attacks ci`, then
 `npm --prefix attacks run build:map` and `npm --prefix attacks run build:atlas`.
 The latter downloads only the three pinned public Natural Earth datasets and
 verifies that the requested microstates/territory have real polygons. Globe
-rendering culls off-screen island polygons before projecting detailed coastlines.
+rendering is split in two so dragging and zooming stay cheap even at 1:10m:
+`static/globe-draw.mjs` converts each border and graticule line once into unit
+vectors (subdividing long edges so they follow the great circle) and then, on each
+frame, rotates only what can reach the viewport, clips it at the horizon and writes
+integer path coordinates at a scale picked from the zoom. Marker sizes come from
+the layout's own scale instead of asking the browser to measure on every frame.
 The page decodes detail on demand and yields during country indexing to keep
 gestures responsive. The atlas build also generates `static/atlas.mjs`, the shared
 filename manifest used by the page, and rewrites the copy inlined in the classic
@@ -428,7 +467,7 @@ If Docker's default address pools are exhausted, supply `--subnet` with an
 explicit test subnet verified not to overlap existing networks or routes.
 
 Visit `http://127.0.0.1:8786/?demo=1` for the explicitly synthetic design preview.
-It starts with 32 fabricated events and then simulates a live stream of arrivals
+It starts with 35 fabricated events and then simulates a live stream of arrivals
 (occasional bursts included) so the flash and fade can be judged without real
 traffic; add `&simulate=0` for a static, deterministic page. Every address is
 inside an RFC 5737 documentation range. Without `demo=1`, unavailable backends

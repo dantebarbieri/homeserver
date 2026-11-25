@@ -1,6 +1,6 @@
-import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, project, duration, liveTrapping, ago, demoEvents, demoLiveEvent, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
+import {TYPES, OUTCOMES, SEVERITIES, severityOf, matchesFilters, mergeEvents, project, duration, liveTrapping, trapDuration, trapTime, trapSince, ago, demoEvents, demoLiveEvent, demoCloseEvent, demoTrapping, FLASH, FOLLOW, isFresh, countryFlag, MAP_DEFAULTS, mapSettings, mapActivity, notDrawn, TYPE_ORDER, SEVERITY_ORDER, slices, slicePath} from "./model.mjs";
 import {createMapView, fitView, placeArrival} from "./map-view.mjs";
-import {createGlobe, globeGeometry, detailLevel, followCenter} from "./globe.mjs";
+import {createGlobe, globeGeometry, detailLevel, followCenter, prepareLand, prepareGrid} from "./globe.mjs";
 import {feature as decodeTopology, geoArea, geoCentroid} from "./geo-vendor.mjs";
 import {MAP_FILES} from "./atlas.mjs";
 import "./pwa.mjs";
@@ -8,20 +8,25 @@ import "./pwa.mjs";
 const $ = id => document.getElementById(id);
 const demo = new URLSearchParams(location.search).get("demo") === "1";
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+// Live queries, so the per-frame map code never parses a new one.
+const coarse = matchMedia("(pointer: coarse)"), narrow = matchMedia("(max-width: 650px)"), hovering = matchMedia("(hover: hover)");
 let events = [], world = null, live = true, latest = null, older = null, hasOlder = false;
-let generation = 0, busy = false, selected = null, parameters = {range: "24h"};
+let generation = 0, busy = false, selected = null, selectedCount = 0, parameters = {range: "24h"};
 const errors = new Map(), pulses = new Map(), freshIds = new Set();
 const demoLive = [];
 let demoSequence = 0;
+// Demo events are all generated from one moment, so a given event keeps its time between calls.
+let demoBase = Date.now();
+const demoFeed = () => mergeEvents(demoLive, demoEvents(demoBase));
 let sourceIssues = [];
-let trapSample = null, trapReceived = 0, completedTrapSeconds = null;
+let trapSample = null, trapReceived = 0, completedTrapSeconds = null, renderedTrap = "";
 let highlighted = null;
 let dotSettings = {...MAP_DEFAULTS}, catchingUp = false;
 const pointNodes = new Map();
 const pointData = new WeakMap();
 const arrivals = new Map();
 let arrivalsOmitted = 0;
-let globeLand = [], mapCaption = "Waiting for telemetry";
+let mapShapes = [], mapHidden = {};
 let activeDetail = null, wantedDetail = "110m", countryLabels = [];
 // Pending arrivals are keyed by source IP, like the markers and cards.
 const followQueue = new Map();
@@ -31,7 +36,7 @@ const globe = createGlobe();
 const isGlobe = () => $("projection").value === "globe";
 const SVG = "http://www.w3.org/2000/svg";
 
-$("projection").value = matchMedia("(pointer: coarse)").matches ? "globe" : "equal-earth";
+$("projection").value = coarse.matches ? "globe" : "equal-earth";
 try {
   const saved = localStorage.getItem("attacks.map-projection");
   if (saved) {
@@ -62,6 +67,9 @@ function node(tag, value, className) {
   if (className) element.className = className;
   return element;
 }
+
+// Per-frame map code writes only what changed, so a rotation never invalidates layout for nothing.
+function setText(element, text) { if (element.textContent !== text) element.textContent = text; }
 
 function counter(id, value) {
   const element = $(id), text = String(value), previous = element.dataset.counterText;
@@ -185,7 +193,74 @@ function mixText(source) {
   return ` Mix: ${list(mix.kinds, key => TYPES[key].label)}. Severity: ${list(mix.levels, key => SEVERITY_LABELS[key])}.`;
 }
 
+const trapElapsed = () => performance.now() - trapReceived;
+
+// How long Endlessh held, or is still holding, the connection behind an event; null for anything else.
+const trapOf = item => trapTime(item, events, trapSample, trapElapsed());
+
+// The running time of a connection that is still held; the 1 s tick keeps it moving.
+function trapClock(trap) {
+  const clock = node("span", trapDuration(Math.floor(trap.seconds)));
+  clock.dataset.trapSince = String(trap.since);
+  return clock;
+}
+
+// Says how long a client was held, but only when the log or live telemetry actually shows it.
+function trapBadge(item) {
+  const trap = trapOf(item);
+  if (trap?.state === "ended") return node("span", `Trapped for ${trapDuration(trap.seconds)}`, "badge trap");
+  if (trap?.state !== "active") return null;
+  const badge = node("span", undefined, "badge trap live");
+  badge.append(node("span", undefined, "legend-dot"), "Trapped now · ", trapClock(trap));
+  return badge;
+}
+
+function trapBadges(item) {
+  const badge = trapBadge(item);
+  if (!badge) return [];
+  const row = node("span", undefined, "badges");
+  row.append(badge);
+  return [row];
+}
+
+// Telemetry that is recent enough to say who is still held; older samples stop vouching for anyone.
+const trapLive = () => Boolean(liveTrapping(trapSample, trapElapsed())) && Number.isFinite(trapSample.asOf);
+
+// What the trapped badges depend on besides the loaded events: whether telemetry can be trusted, and who it lists.
+function trapKey() {
+  if (!trapLive()) return "";
+  return `${trapSample.activeTruncated}|${(trapSample.active || []).map(row => `${row.ip}|${row.sourcePort}|${row.since}`).join(",")}`;
+}
+
+// What an event's trapped badge currently says, so an open tooltip or dialog can tell when it has gone stale.
+function trapSignature(item) {
+  const trap = trapOf(item);
+  return !trap ? "" : trap.state === "ended" ? `ended|${trap.seconds}` : trap.state;
+}
+
+// Redraws whatever shows trapped time once the connections it describes change, instead of waiting for the next event poll.
+function syncTrap() {
+  if (events.length && trapKey() !== renderedTrap) render();
+  const tip = $("map-tooltip"), point = tip.hidden ? null : pointNodes.get(tip.dataset.sourceIp), source = point && pointData.get(point);
+  if (source && trapSignature(source.latest) !== tip.dataset.trap) tooltip(point);
+  if ($("detail").open && selected && trapSignature(selected) !== $("detail").dataset.trap) detail(selected, selectedCount);
+}
+
+// Runs every second: moves the clocks of connections still held, and drops them from cards once telemetry is too old to vouch for them.
+function tickTrapping() {
+  syncTrap();
+  const clocks = document.querySelectorAll("[data-trap-since]");
+  if (!clocks.length) return;
+  if (!trapLive()) {
+    for (const clock of document.querySelectorAll("#map-arrivals [data-trap-since]")) clock.closest(".badges")?.remove();
+    return;
+  }
+  const elapsed = trapElapsed();
+  for (const clock of clocks) setText(clock, trapDuration(Math.floor(trapSince(trapSample, elapsed, Number(clock.dataset.trapSince)))));
+}
+
 function render() {
+  renderedTrap = trapKey();
   const fragment = document.createDocumentFragment();
   for (const item of events) {
     const row = node("button", undefined, `event-row${item.id === highlighted ? " highlighted" : ""}`);
@@ -200,6 +275,8 @@ function render() {
     const category = node("span", undefined, `badge type-${item.type}`);
     category.append(node("span", undefined, "legend-dot"), node("span", TYPES[item.type].label));
     badges.append(severityBadge(item), category, node("span", item.verdict, `badge verdict-${item.verdict}`));
+    const trap = trapBadge(item);
+    if (trap) badges.append(trap);
     if (item.origin === "own") badges.append(node("span", "Own", "badge origin-own"));
     if (item.keyStatus) badges.append(node("span", item.keyStatus === "recognized" ? "known key" : "unregistered key", `badge key-${item.keyStatus}`));
     classification.append(badges);
@@ -208,7 +285,7 @@ function render() {
     const extra = node("span", undefined, "event-cell event-detail");
     const target = item.user ? `user: ${item.user}` : item.path || item.service;
     extra.append(node("span", target, "event-primary mono"),
-      node("span", `${item.host || `port ${item.port}`} ${item.duration !== undefined ? `· ${duration(item.duration)} trapped` : ""}`, "event-secondary"));
+      node("span", item.host || `port ${item.port}`, "event-secondary"));
     row.append(time, classification, source, extra, node("span", "↗", "event-arrow"));
     fragment.append(row);
   }
@@ -223,9 +300,22 @@ function render() {
   mapPoints();
 }
 
+function trapField(item) {
+  const trap = trapOf(item);
+  if (!trap) return undefined;
+  if (trap.state === "ended") return trapDuration(trap.seconds);
+  if (trap.state === "unknown") {
+    return "Unknown. No matching close was logged, and live connection data can't confirm it is still open (own traffic is not tracked; restarts and lost log lines leave gaps).";
+  }
+  const field = node("span");
+  field.append(trapClock(trap), " so far · still connected");
+  return field;
+}
+
 function detail(item, sourceCount) {
   hideTooltip();
-  selected = item;
+  selected = item; selectedCount = sourceCount;
+  $("detail").dataset.trap = trapSignature(item);
   $("detail-title").textContent = item.title;
   const fields = {
     "Source activity": sourceCount > 1 ? `${loadedEvents(sourceCount)}; showing the latest. View this source's events below.` : undefined,
@@ -250,11 +340,15 @@ function detail(item, sourceCount) {
     "Auth method": item.authMethod, "Rejection reason": item.rejectionReason,
     "Key status": item.keyStatus, "Key label": item.keyLabel, "Key fingerprint": item.keyFingerprint,
     "Host": item.host, "Request path": item.path, "Method": item.method, "HTTP status": item.status,
-    "Time stuck": item.duration === undefined ? undefined : duration(item.duration),
+    "Time stuck": trapField(item),
     "Log source": item.source, "Event ID": item.id,
   };
   $("detail-fields").replaceChildren(...Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== "")
-    .flatMap(([key, value]) => [node("dt", key), node("dd", String(value))]));
+    .flatMap(([key, value]) => {
+      const field = node("dd");
+      field.append(value instanceof Node ? value : String(value));
+      return [node("dt", key), field];
+    }));
   $("filter-country").hidden = !item.countryCode;
   $("filter-country").textContent = `Only ${item.countryCode ? countryName(item.countryCode) : "this country"}`;
   $("filter-network").hidden = !item.asn;
@@ -395,7 +489,7 @@ function buildFilters() {
 }
 
 function demoSources() {
-  const count = (key, extra) => [...Map.groupBy(mergeEvents(demoLive, demoEvents()).filter(item => item.origin !== "own" && item[key]), item => item[key])]
+  const count = (key, extra) => [...Map.groupBy(demoFeed().filter(item => item.origin !== "own" && item[key]), item => item[key])]
     .map(([value, rows]) => ({[key]: String(value), ...extra?.(rows[0]), count: rows.length})).sort((a, b) => b.count - a.count).slice(0, 12);
   return {countries: count("countryCode"), networks: count("asn", item => ({networkOrganization: item.networkOrganization}))};
 }
@@ -458,6 +552,21 @@ $("filters").addEventListener("keydown", event => {
   open.querySelector("summary").focus();
 });
 
+// Demo only: a simulated Endlessh connection is let go after a few seconds to a minute, like a scanner giving up.
+function demoClose(open) {
+  const seconds = Math.round((4 + Math.random() * 40) * 10) / 10;
+  setTimeout(() => {
+    const close = demoCloseEvent(open, seconds);
+    demoLive.unshift(close);
+    demoLive.length = Math.min(demoLive.length, 200);
+    if (!live || !matchesFilters(close, parameters)) return;
+    events = mergeEvents(events, [close]);
+    if (document.hidden) return;
+    freshIds.add(close.id);
+    render();
+  }, seconds * 1000);
+}
+
 // Demo only: simulate scanners arriving every few seconds, with occasional bursts.
 function demoArrivals() {
   setTimeout(demoArrivals, 2500 + Math.random() * 3500);
@@ -467,6 +576,7 @@ function demoArrivals() {
   for (let i = 0; i < count; i++) fresh.push(demoLiveEvent(++demoSequence, now + i));
   demoLive.unshift(...fresh.toReversed());
   demoLive.length = Math.min(demoLive.length, 200);
+  for (const item of fresh) if (item.kind === "endlessh_open") demoClose(item);
   const shown = fresh.filter(item => matchesFilters(item, parameters));
   if (!shown.length) return;
   events = mergeEvents(events, shown);
@@ -488,7 +598,10 @@ async function load(reset = false, history = false) {
   }
   try {
     if (demo) {
-      events = mergeEvents(demoLive, demoEvents()).filter(item => matchesFilters(item, parameters));
+      demoBase = Date.now();
+      events = demoFeed().filter(item => matchesFilters(item, parameters));
+      // The demo's live list is built from the same events, so every open connection's start matches its row.
+      trapSample = demoTrapping(demoFeed(), demoBase / 1000); trapReceived = performance.now();
       latest = "demo";
       if (reset) for (const item of events) if (isFresh(item, FLASH.loadWindow)) freshIds.add(item.id);
     } else {
@@ -527,7 +640,7 @@ async function stats() {
   const period = $("range").value;
   try {
     const result = demo ? {available: true, totals: [{kind: "endlessh_open", value: 6821}, {kind: "ssh_failure", value: 143}, {kind: "auth_failure", value: 12}, {kind: "http_probe", value: 924}], trappedSeconds: 184800, lifetimeTrappedSeconds: 2064000,
-      trapping: {available: true, connections: 3, seconds: 340, since: Date.now() / 1000 - 3600},
+      trapping: demoTrapping(demoFeed(), Date.now() / 1000),
       timeline: Array.from({length: 120}, (_, i) => [i, String(5 + (Math.sin(i * 1.9) + 1) * 7 + (i % 29 === 0 ? 30 : 0))])}
       : await request("/api/stats", {range: period});
     if (period !== $("range").value) return;
@@ -537,6 +650,7 @@ async function stats() {
     counter("failures", result.available ? Math.round(failures).toLocaleString() : "—");
     trapSample = result.trapping; trapReceived = performance.now(); completedTrapSeconds = result.trappedSeconds;
     updateTrapping();
+    syncTrap();
     const since = new Date(trapSample.since * 1000).toLocaleString();
     counter("trapped-lifetime", `${duration(result.lifetimeTrappedSeconds)} completed external · since ${since}`);
     $("metric-status").textContent = demo ? "Synthetic preview" : "Loki · logged events (own excluded)";
@@ -546,6 +660,7 @@ async function stats() {
     if (period !== $("range").value) return;
     for (const id of ["total", "failures", "trapped"]) counter(id, "—");
     trapSample = null;
+    syncTrap();
     counter("trapping-now", "Live trapping unavailable");
     counter("trapped-lifetime", "Completed Endlessh connection time");
     $("metric-status").textContent = "Metrics unavailable";
@@ -623,51 +738,91 @@ function svg(tag, attributes = {}) {
   return element;
 }
 
-function mapProject(longitude, latitude) {
-  return project(longitude, latitude, 1000, 500, $("projection").value);
+function mapProject(longitude, latitude, name = $("projection").value) {
+  return project(longitude, latitude, 1000, 500, name);
 }
 
-function linePath(coordinates) {
-  return coordinates.map(([lon, lat], index) => `${index ? "L" : "M"}${mapProject(lon, lat).map(value => value.toFixed(2)).join(",")}`).join("");
+function linePath(coordinates, name) {
+  let path = "";
+  for (let index = 0; index < coordinates.length; index++) {
+    const [x, y] = mapProject(coordinates[index][0], coordinates[index][1], name);
+    path += `${index ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`;
+  }
+  return path;
 }
 
+const landPaths = [], landFeatures = new WeakMap();
+
+function setPath(element, path) {
+  const current = element.getAttribute("d");
+  if (path !== current && (path || current)) element.setAttribute("d", path);
+}
+
+function setTransform(element, value) {
+  if (value === null) element.removeAttribute("transform");
+  else if (element.getAttribute("transform") !== value) element.setAttribute("transform", value);
+}
+
+// Flat maps move by changing the viewBox, so each country's path only needs building once per detail and projection.
+function flatPaths(data, name) {
+  if (data.flat?.name !== name) {
+    data.flat = {name, paths: data.world.features.map(feature => {
+      const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+      let path = "";
+      for (const polygon of polygons) for (const ring of polygon) path += `${linePath(ring, name)}Z`;
+      return path;
+    })};
+  }
+  return data.flat.paths;
+}
+
+// The globe is repainted for every rotation and zoom step, so it comes from the painter, clipped to the viewport.
 function mapLand() {
-  let grid = "";
-  if (isGlobe()) grid = globe.grid();
-  else {
+  const globeMode = isGlobe(), name = $("projection").value, data = atlas.get(activeDetail);
+  let grid = "", scale = null;
+  if (globeMode) {
+    const unit = globe.aim();
+    scale = `scale(${1 / unit})`;
+    grid = globe.lines(prepareGrid(activeDetail ?? "110m"));
+  } else {
     for (let lon = -180; lon <= 180; lon += 30)
-      grid += linePath(Array.from({length: 91}, (_, i) => [lon, -90 + i * 2]));
+      grid += linePath(Array.from({length: 91}, (_, i) => [lon, -90 + i * 2]), name);
     for (let lat = -60; lat <= 60; lat += 30)
-      grid += linePath([[-180, lat], [180, lat]]);
+      grid += linePath([[-180, lat], [180, lat]], name);
   }
   if (!$("map-grid").firstChild) $("map-grid").append(svg("path"));
-  $("map-grid").firstChild.setAttribute("d", grid);
+  setPath($("map-grid").firstChild, grid);
+  setTransform($("map-grid"), scale);
+  setTransform($("map-land"), scale);
   for (const id of ["map-sphere", "map-shading"]) {
-    $(id).toggleAttribute("hidden", !isGlobe());
-    if (isGlobe()) $(id).setAttribute("d", globe.sphere());
+    $(id).toggleAttribute("hidden", !globeMode);
+    if (globeMode) setPath($(id), globe.sphere());
   }
   const features = world?.features || [];
-  while ($("map-land").children.length > features.length) $("map-land").lastChild.remove();
-  while ($("map-land").children.length < features.length) $("map-land").append(svg("path"));
-  for (const [index, feature] of features.entries()) {
-    let d = "";
-    if (isGlobe()) d = globe.path(globeLand[index]);
-    else {
-      const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
-      for (const polygon of polygons) for (const ring of polygon) d += linePath(ring) + "Z";
+  while (landPaths.length > features.length) landPaths.pop().remove();
+  while (landPaths.length < features.length) {
+    const country = svg("path");
+    country.append(svg("title"));
+    landPaths.push(country);
+    $("map-land").append(country);
+  }
+  const flat = !globeMode && data ? flatPaths(data, name) : null;
+  for (let index = 0; index < features.length; index++) {
+    const country = landPaths[index], feature = features[index];
+    setPath(country, globeMode ? globe.shape(mapShapes[index]) : flat?.[index] ?? "");
+    // A shape's index maps to a different country once the detail changes.
+    if (landFeatures.get(country) !== feature) {
+      landFeatures.set(country, feature);
+      country.dataset.country = feature.id;
+      country.firstChild.textContent = feature.properties.name;
     }
-    const country = $("map-land").children[index];
-    country.setAttribute("d", d);
-    country.dataset.country = feature.id;
-    if (!country.firstChild) country.append(svg("title"));
-    country.firstChild.textContent = feature.properties.name;
   }
 }
 
 function activateAtlas(level) {
   if (activeDetail === level) return;
   const data = atlas.get(level);
-  world = data.world; globeLand = data.globeLand;
+  world = data.world; mapShapes = data.shapes;
   activeDetail = level;
   countryLabels = data.labels;
   mapLand(); positionCountryLabels();
@@ -695,21 +850,22 @@ async function updateMapDetail() {
     let slice = performance.now();
     for (const item of world.features) {
       const geometry = globeGeometry(item.geometry), area = geoArea(geometry) * 6371 ** 2;
-      prepared.push({item, geometry, area});
+      prepared.push({item, geometry, area, shape: prepareLand(geometry, level)});
       if (performance.now() - slice > 8) {
         await new Promise(resolve => setTimeout(resolve, 0));
         slice = performance.now();
       }
     }
+    prepareGrid(level);
     // Tiny enclaves draw last so a larger neighbour cannot cover their borders.
     prepared.sort((a, b) => b.area - a.area);
     world.features = prepared.map(value => value.item);
-    const globeLand = prepared.map(value => value.geometry);
+    const shapes = prepared.map(value => value.shape);
     const labels = prepared.filter(value => value.area <= 3000).toReversed().map(({item, geometry, area}) => {
       const [longitude, latitude] = geoCentroid(geometry);
       return {id: item.id, name: item.properties.name, longitude, latitude, area};
     });
-    atlas.set(level, {world, globeLand, labels});
+    atlas.set(level, {world, shapes, labels});
     atlasFailed.delete(level);
     if (wantedDetail === level) { activateAtlas(level); await updateMapDetail(); }
   } catch (error) {
@@ -722,27 +878,45 @@ async function updateMapDetail() {
   } finally { atlasPending.delete(level); }
 }
 
+// Labels are reused between frames: only moved when their position or the zoom changed.
+const labelNodes = new Map();
+
 function positionCountryLabels() {
-  const matrix = $("map").getScreenCTM();
-  if (!matrix || !mapView.viewport().width || mapView.zoom() < 4) {
-    $("map-labels").replaceChildren(); return;
+  const scale = mapView.scale(), view = mapView.viewport(), layer = $("map-labels");
+  if (!scale || !view.width || mapView.zoom() < 4) {
+    if (labelNodes.size) { layer.replaceChildren(); labelNodes.clear(); }
+    return;
   }
-  const scale = Math.hypot(matrix.a, matrix.b), view = mapView.viewport(), occupied = [];
-  const fragment = document.createDocumentFragment();
+  const occupied = [], shown = new Set();
   for (const item of countryLabels) {
     const {x, y, visible} = pointPosition(item);
     if (!visible || Math.abs(x - view.x) > view.width / 2 || Math.abs(y - view.y) > view.height / 2) continue;
     const labelWidth = Math.min(180, item.name.length * 5.5) / scale, labelHeight = 17 / scale;
     const rect = {left: x, right: x + labelWidth, top: y - labelHeight, bottom: y};
     if (occupied.some(other => other.left < rect.right && other.right > rect.left && other.top < rect.bottom && other.bottom > rect.top)) continue;
-    const label = svg("text", {x, y, dx: 4 / scale, dy: -4 / scale, "font-size": 10 / scale, "data-country": item.id});
-    label.textContent = item.name;
-    fragment.append(label); occupied.push(rect);
+    occupied.push(rect); shown.add(item);
+    let entry = labelNodes.get(item);
+    if (!entry) {
+      const label = svg("text", {"data-country": item.id});
+      label.textContent = item.name;
+      layer.append(label);
+      entry = {label, x: NaN, y: NaN, scale: 0};
+      labelNodes.set(item, entry);
+    }
+    if (entry.x !== x || entry.y !== y) {
+      entry.label.setAttribute("x", x); entry.label.setAttribute("y", y);
+      entry.x = x; entry.y = y;
+    }
+    if (entry.scale !== scale) {
+      entry.label.setAttribute("dx", 4 / scale); entry.label.setAttribute("dy", -4 / scale);
+      entry.label.setAttribute("font-size", 10 / scale);
+      entry.scale = scale;
+    }
   }
-  $("map-labels").replaceChildren(fragment);
+  for (const [item, entry] of labelNodes) if (!shown.has(item)) { entry.label.remove(); labelNodes.delete(item); }
 }
 
-function hideTooltip() { $("map-tooltip").hidden = true; }
+function hideTooltip() { if (!$("map-tooltip").hidden) $("map-tooltip").hidden = true; }
 
 function refreshTooltipAge() {
   const target = $("map-tooltip"), age = target.querySelector(".tip-ago");
@@ -761,11 +935,13 @@ function tooltip(point) {
   const target = $("map-tooltip");
   target.dataset.sourceIp = item.ip;
   target.dataset.timestamp = String(item.timestamp);
+  target.dataset.trap = trapSignature(item);
   const head = node("div", undefined, "tip-head");
   head.append(node("strong", item.title), node("time", ago(item.timestamp), "tip-ago"));
   target.replaceChildren(head,
     node("span", `${item.ip} · ${loadedEvents(count)}`), ...mixBadges(source), locationLabel(place), networkBadges(item),
     node("span", `${count > 1 ? "Latest: " : ""}${TYPES[item.type].label} · port ${item.port}${item.user ? ` · user ${item.user}` : ""}`),
+    ...trapBadges(item),
     node("small", `${new Date(item.timestamp * 1000).toLocaleString()} · ${clickHint(count)}`));
   target.hidden = false;
   const center = point.getScreenCTM(), parent = $("map").parentElement.getBoundingClientRect();
@@ -774,7 +950,7 @@ function tooltip(point) {
 }
 
 // Mobile/fullscreen keep their detail sheet; the inline map goes straight to the stream.
-function opensDetail() { return mapView.expanded() || matchMedia("(max-width: 650px)").matches; }
+function opensDetail() { return mapView.expanded() || narrow.matches; }
 
 function reveal({latest: item, count}) {
   if (opensDetail()) { detail(item, count); return; }
@@ -788,29 +964,34 @@ function reveal({latest: item, count}) {
 }
 
 function positionArrivals() {
-  const parent = $("map").parentElement.getBoundingClientRect();
-  const mobile = matchMedia("(max-width: 650px)").matches;
-  const placed = [];
-  for (const [id, entry] of arrivals) {
-    const point = pointNodes.get(id);
-    if (!point || point.hasAttribute("hidden") || performance.now() >= entry.expires) {
-      entry.node.remove(); arrivals.delete(id); continue;
+  if (arrivals.size) {
+    const parent = $("map").parentElement.getBoundingClientRect(), mobile = narrow.matches, placed = [];
+    // Cards steer around the map's controls and the settings popover instead of hiding behind them.
+    if (!mobile) for (const control of document.querySelectorAll(".tool-rows, #map-popover:not([hidden])")) {
+      const box = control.getBoundingClientRect();
+      placed.push({left: box.left - parent.left, top: box.top - parent.top, width: box.width, height: box.height});
     }
-    if (mobile) {
-      entry.node.style.left = "10px"; entry.node.style.top = "auto"; entry.node.style.bottom = "12px";
-    } else {
-      entry.node.style.bottom = "auto";
-      // The group's origin is the projected dot; its bounding box includes the animated flash rings.
-      const center = point.getScreenCTM();
-      const spot = placeArrival(center.e - parent.left, center.f - parent.top, entry.node.offsetWidth,
-        entry.node.offsetHeight, parent, placed, entry.spot);
-      entry.spot = spot;
-      placed.push(spot);
-      entry.node.style.left = `${spot.left}px`; entry.node.style.top = `${spot.top}px`;
+    for (const [id, entry] of arrivals) {
+      const point = pointNodes.get(id);
+      if (!point || point.hasAttribute("hidden") || performance.now() >= entry.expires) {
+        entry.node.remove(); arrivals.delete(id); continue;
+      }
+      if (mobile) {
+        entry.node.style.left = "10px"; entry.node.style.top = "auto"; entry.node.style.bottom = "12px";
+      } else {
+        entry.node.style.bottom = "auto";
+        // The group's origin is the projected dot; its bounding box includes the animated flash rings.
+        const center = point.getScreenCTM();
+        const spot = placeArrival(center.e - parent.left, center.f - parent.top, entry.node.offsetWidth,
+          entry.node.offsetHeight, parent, placed, entry.spot);
+        entry.spot = spot;
+        placed.push(spot);
+        entry.node.style.left = `${spot.left}px`; entry.node.style.top = `${spot.top}px`;
+      }
     }
   }
   if (!arrivals.size) arrivalsOmitted = 0;
-  $("arrival-status").textContent = arrivalsOmitted ? `${arrivalsOmitted} more arrivals in this burst; hover or tap dots for details.` : "";
+  setText($("arrival-status"), arrivalsOmitted ? `${arrivalsOmitted} more arrivals in this burst; hover or tap dots for details.` : "");
 }
 
 function arrival(source) {
@@ -818,7 +999,7 @@ function arrival(source) {
   const previous = arrivals.get(item.ip);
   previous?.node.remove();
   arrivals.delete(item.ip);
-  const limit = matchMedia("(max-width: 650px)").matches ? 1 : 3;
+  const limit = narrow.matches ? 1 : 3;
   while (arrivals.size >= limit) {
     const oldest = arrivals.keys().next().value;
     arrivals.get(oldest).node.remove(); arrivals.delete(oldest); arrivalsOmitted++;
@@ -827,7 +1008,7 @@ function arrival(source) {
   const label = node("span", undefined, "mono"), entry = {node: card, label, mix: [], expires: performance.now() + 4500, spot: previous?.spot};
   card.append(node("strong", item.title), label, locationLabel(place),
     node("small", `${TYPES[item.type].label} · ${item.verdict}${item.user ? ` · user ${item.user}` : item.path ? ` · ${item.path}` : ` · port ${item.port}`}`),
-    networkBadges(item));
+    ...trapBadges(item), networkBadges(item));
   refreshArrival(entry, source);
   $("map-arrivals").append(card);
   arrivals.set(item.ip, entry);
@@ -841,18 +1022,30 @@ function refreshArrival(entry, source) {
   entry.label.after(...entry.mix);
 }
 
+// Each marker's parts and the size last written to them, so a frame only touches markers whose size changed.
+const markerSizes = new WeakMap();
+
 function sizeMapMarkers() {
-  const matrix = $("map").getScreenCTM();
-  if (!matrix) return;
-  const scale = Math.hypot(matrix.a, matrix.b);
+  const scale = mapView.scale();
   if (!scale) return;
-  const touch = matchMedia("(pointer: coarse)").matches || matchMedia("(max-width: 650px)").matches;
+  const touch = coarse.matches || narrow.matches;
   for (const point of pointNodes.values()) {
-    point.querySelector(".map-hit").setAttribute("r", String((touch ? 24 : 12) / scale));
-    point.querySelector(".map-flash").setAttribute("r", String(7 / scale));
+    let sized = markerSizes.get(point);
+    if (!sized) {
+      sized = {
+        hit: point.querySelector(".map-hit"), flash: point.querySelector(".map-flash"),
+        dot: point.querySelector(".map-dot > g"), rings: [...point.querySelectorAll(".map-ring > g")],
+        scale: 0, touch: null,
+      };
+      markerSizes.set(point, sized);
+    }
+    if (sized.scale === scale && sized.touch === touch) continue;
+    sized.scale = scale; sized.touch = touch;
+    sized.hit.setAttribute("r", String((touch ? 24 : 12) / scale));
+    sized.flash.setAttribute("r", String(7 / scale));
     // Slices and arcs are unit-radius paths, sized by their wrapper so they never need redrawing on zoom.
-    point.querySelector(".map-dot > g").setAttribute("transform", `scale(${(touch ? 4.5 : 3) / scale})`);
-    for (const ring of point.querySelectorAll(".map-ring > g")) ring.setAttribute("transform", `scale(${7 / scale})`);
+    sized.dot.setAttribute("transform", `scale(${(touch ? 4.5 : 3) / scale})`);
+    for (const ring of sized.rings) ring.setAttribute("transform", `scale(${7 / scale})`);
   }
 }
 
@@ -972,18 +1165,31 @@ function followTick() {
   });
 }
 
+// Last values written per point: a still dot (any flat map pan, or far-side globe dots) costs no attribute writes.
+const pointPlacement = new WeakMap();
+
+function placePoint(point, {x, y, visible}) {
+  let last = pointPlacement.get(point);
+  if (!last) { last = {x: NaN, y: NaN, visible: null}; pointPlacement.set(point, last); }
+  if (visible && (last.x !== x || last.y !== y)) {
+    point.setAttribute("transform", `translate(${x} ${y})`);
+    last.x = x; last.y = y;
+  }
+  if (last.visible !== visible) { point.toggleAttribute("hidden", !visible); last.visible = visible; }
+}
+
 function positionMapPoints() {
   let backside = 0;
+  const tipIp = $("map-tooltip").hidden ? null : $("map-tooltip").dataset.sourceIp;
   for (const point of pointNodes.values()) {
-    const source = pointData.get(point), {x, y, visible} = pointPosition(source.place);
-    point.setAttribute("transform", `translate(${x} ${y})`);
-    point.toggleAttribute("hidden", !visible);
-    if (!visible) {
+    const source = pointData.get(point), position = pointPosition(source.place);
+    placePoint(point, position);
+    if (!position.visible) {
       backside++;
-      if ($("map-tooltip").dataset.sourceIp === source.ip) hideTooltip();
+      if (tipIp === source.ip) hideTooltip();
     }
   }
-  $("map-caption").textContent = `${mapCaption}${isGlobe() ? ` · ${backside} on far side` : ""}`;
+  setText($("map-caption"), notDrawn({...mapHidden, farSide: isGlobe() ? backside : 0}));
 }
 
 function currentMapActivity() {
@@ -996,7 +1202,8 @@ function mapPoints() {
   const ips = new Set(activity.points.map(source => source.ip));
   const represented = activity.points.reduce((sum, source) => sum + source.count, 0);
   counter("map-count", `${ips.size} source${ips.size === 1 ? "" : "s"} · ${loadedEvents(represented)}`);
-  mapCaption = `${activity.expired} faded · ${activity.omitted} outside dot limit · ${activity.unlocated} unlocated`;
+  // With "Show faded dots" on, faded sources are drawn dimly, so they are not left out.
+  mapHidden = {faded: $("history-dots").checked ? 0 : activity.expired, omitted: activity.omitted, unlocated: activity.unlocated};
   for (const [ip, point] of pointNodes) {
     if (!ips.has(ip)) {
       if ($("map-tooltip").dataset.sourceIp === ip) hideTooltip();
@@ -1022,7 +1229,7 @@ function mapPoints() {
         marker("map-ring"), marker("map-ring late"), marker("map-dot", slicesGroup, svg("circle", {r: 1, class: "map-dot-edge"})));
       point.addEventListener("pointerenter", event => { if (event.pointerType === "mouse") tooltip(point); });
       point.addEventListener("pointerleave", hideTooltip);
-      point.addEventListener("focus", () => { if (matchMedia("(hover: hover)").matches) tooltip(point); });
+      point.addEventListener("focus", () => { if (hovering.matches) tooltip(point); });
       point.addEventListener("blur", hideTooltip);
       point.addEventListener("click", () => reveal(pointData.get(point)));
       point.addEventListener("keydown", event => {
@@ -1042,7 +1249,7 @@ function mapPoints() {
       point.dataset.mix = mix;
       drawMix(point, source);
       const pos = pointPosition(place);
-      point.setAttribute("transform", `translate(${pos.x} ${pos.y})`);
+      placePoint(point, pos);
       point.setAttribute("aria-label", `${ip}, ${place.location}: ${loadedEvents(count)}.${mixText(source)} Latest: ${item.title}. ${clickHint(count)}.`);
       if (!$("map-tooltip").hidden && $("map-tooltip").dataset.sourceIp === ip) tooltip(point);
       if (arrivals.has(ip)) refreshArrival(arrivals.get(ip), source);
@@ -1074,14 +1281,14 @@ $("projection").onchange = () => {
 };
 function showMapSettings() {
   for (const [key, value] of Object.entries(dotSettings)) $(key).value = value;
-  $("map-setting-summary").textContent = `Map settings · hold ${dotSettings.keep} · fade ${dotSettings.fadeMinutes}m · limit ${dotSettings.maxDots}`;
-  $("map-explainer").textContent = `One dot per source IP. Repeat requests refresh the same dot. A source with several kinds of events becomes a pie: one slice per kind, sized by count and ordered clockwise from the top as in the key, with every kind kept visible. New events flash in their kind's color, and the rings that follow are split by severity, highest first; hover or focus a dot to see its ring. The newest ${dotSettings.keep} sources stay bright; older dots fade over ${dotSettings.fadeMinutes} minutes. At most ${dotSettings.maxDots} are shown. Select a dot to explore its events. On the globe or in full screen, Follow moves to new activity; dragging or Reset view turns it off. IP locations are approximate.`;
+  $("map-explainer").textContent = `One dot per source IP. Repeat requests refresh the same dot. A source with several kinds of events becomes a pie: one slice per kind, sized by count and ordered clockwise from the top as in the key, with every kind kept visible. New events flash in their kind's color, and the rings that follow are split by severity, highest first; hover or focus a dot to see its ring. The newest ${dotSettings.keep} sources stay bright; older dots fade over ${dotSettings.fadeMinutes} minutes. At most ${dotSettings.maxDots} are shown. Select a dot to explore its events. On the globe or in full screen, the crosshair button follows new activity; dragging the map or the reset button turns it off. The gear holds the projection and these dot settings. IP locations are approximate.`;
 }
 $("map-settings").onsubmit = event => {
   event.preventDefault();
+  let applied = false;
   try {
     const next = mapSettings(Object.fromEntries(Object.keys(MAP_DEFAULTS).map(key => [key, $(key).value])));
-    dotSettings = next;
+    dotSettings = next; applied = true;
     showMapSettings(); hideTooltip(); mapPoints();
     localStorage.setItem("attacks.map-settings", JSON.stringify(next));
     errors.delete("mapSettings");
@@ -1089,8 +1296,32 @@ $("map-settings").onsubmit = event => {
     errors.set("mapSettings", `Map settings: ${error.message} Settings that cannot be saved apply only to this tab.`);
   }
   notices();
+  if (applied) setMapSettingsOpen(false, true);
 };
 showMapSettings();
+
+// The settings popover floats over the map. Escape, its close button, an outside press and Apply dismiss it.
+const settingsPopover = $("map-popover"), settingsToggle = $("map-settings-toggle");
+function setMapSettingsOpen(open, restoreFocus = false) {
+  if (settingsPopover.hidden === !open) return;
+  settingsPopover.hidden = !open;
+  settingsToggle.setAttribute("aria-expanded", String(open));
+  if (open) { hideTooltip(); settingsPopover.focus({preventScroll: true}); }
+  else if (restoreFocus) settingsToggle.focus({preventScroll: true});
+  positionArrivals();
+}
+settingsToggle.onclick = () => setMapSettingsOpen(settingsPopover.hidden);
+$("map-popover-close").onclick = () => setMapSettingsOpen(false, true);
+document.addEventListener("pointerdown", event => {
+  if (!settingsPopover.hidden && !event.target.closest?.("#map-popover, #map-settings-toggle")) setMapSettingsOpen(false);
+});
+// Capture phase, so the first Escape closes the popover before full screen sees it.
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || settingsPopover.hidden || $("detail").open) return;
+  if (event.target !== document.body && !$("map-panel").contains(event.target)) return;
+  event.preventDefault(); event.stopPropagation();
+  setMapSettingsOpen(false, true);
+}, true);
 for (const [key, value] of Object.entries(TYPES)) {
   const item = node("span", undefined, `legend-item type-${key}`);
   item.append(node("span", undefined, "legend-dot"), node("span", value.label));
@@ -1123,8 +1354,9 @@ const mapView = createMapView({
     updateMapDetail();
     if (isGlobe() && previousDetail === activeDetail) mapLand();
     positionMapPoints(); sizeMapMarkers(); positionArrivals(); positionCountryLabels();
-    $("map-gesture-hint").hidden = !isGlobe() && !mapView.expanded();
-    $("map-gesture-hint").textContent = `Drag to ${isGlobe() ? "rotate" : "pan"} · ${matchMedia("(pointer: coarse)").matches ? "Pinch" : "Scroll"} to zoom`;
+    const hint = $("map-gesture-hint"), hintHidden = !isGlobe() && !mapView.expanded();
+    if (hint.hidden !== hintHidden) hint.hidden = hintHidden;
+    setText(hint, `Drag to ${isGlobe() ? "rotate" : "pan"} · ${coarse.matches ? "Pinch" : "Scroll"} to zoom`);
   },
   closed: hideTooltip,
   // Zooming refines what is followed; taking the view elsewhere by hand ends following.
@@ -1154,6 +1386,8 @@ if (!navigator.onLine) errors.set("network", "Offline: live telemetry is unavail
 
 mapLand(); updateMapDetail(); applyFilters(); stats(); health();
 if (demo && new URLSearchParams(location.search).get("simulate") !== "0") setTimeout(demoArrivals, 3000);
-setInterval(() => { if (!document.hidden) { mapPoints(); updateTrapping(); } }, 1000);
+setInterval(() => { if (!document.hidden) { mapPoints(); updateTrapping(); tickTrapping(); } }, 1000);
 setInterval(() => { if (!document.hidden && !demo) load(); }, 3000);
 setInterval(() => { if (!document.hidden) { stats(); health(); } }, 30000);
+// Timers pause in a hidden tab, so telemetry is refreshed on return before its running times can mislead.
+document.addEventListener("visibilitychange", () => { if (!document.hidden) stats(); });

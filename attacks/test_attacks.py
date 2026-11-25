@@ -311,6 +311,40 @@ class StateTests(unittest.TestCase):
         self.store.flush(Mock())
         self.assertEqual(self.store.trapping()["connections"], 0)
 
+    def test_published_active_sessions_name_open_connections_and_flag_truncation(self):
+        now = [time.time() + 1]
+        self.store.clock = lambda: now[0]
+        opened = parse_endlessh(f"ACCEPT host={IP} port=1000 n=1/4096", now[0])
+        self.store.enqueue(opened, "endlessh", "open")
+        self.store.enqueue({**opened, "sourcePort": 1001, "origin": "own"}, "endlessh", "own-open")
+        self.assertEqual(self.store.trapping()["active"], [])
+        self.store.flush(Mock())
+        trapping = self.store.trapping()
+        self.assertEqual(trapping["active"], [{"ip": IP, "sourcePort": 1000, "since": opened["timestamp"]}])
+        self.assertFalse(trapping["activeTruncated"])
+        now[0] += 10
+        self.store.enqueue(parse_endlessh(f"CLOSE host={IP} port=1000 time=10 bytes=64", now[0]), "endlessh", "close")
+        self.store.flush(Mock())
+        self.assertEqual(self.store.trapping()["active"], [])
+        with patch("collector.ACTIVE_SESSIONS_SHOWN", 2):
+            for port in (2000, 2001, 2002):
+                now[0] += 1
+                self.store.enqueue({**opened, "timestamp": now[0], "sourcePort": port}, "endlessh", f"open-{port}")
+            self.store.flush(Mock())
+        trapping = self.store.trapping()
+        self.assertEqual([item["sourcePort"] for item in trapping["active"]], [2002, 2001])
+        self.assertTrue(trapping["activeTruncated"])
+        self.assertEqual(trapping["connections"], 3)
+        # A snapshot published before this field existed reports an unknown set, not an empty one.
+        self.store.set("published", {"through": now[0], "sessions": [now[0] - 5]})
+        old = self.store.trapping()
+        self.assertEqual(old["active"], [])
+        self.assertTrue(old["activeTruncated"])
+        self.store.restart(now[0] + 1)
+        self.store.flush(Mock())
+        self.assertEqual(self.store.trapping()["active"], [])
+        self.assertFalse(self.store.trapping()["activeTruncated"])
+
     def test_missing_own_network_metadata_retains_source_checkpoint(self):
         self.store.set("capture", {"timestamp": time.time()})
         client = Mock()

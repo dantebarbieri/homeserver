@@ -8,7 +8,7 @@ async function worker(fetch, cachedMaps = []) {
   const handlers = {}, puts = [], messages = [];
   const cached = {body: "public static shell"};
   const stores = new Map([
-    ["attacks-shell-v9", new Map(["/", "/globe.mjs", "/geo-vendor.mjs"].map(path => [path, cached]))],
+    ["attacks-shell-v11", new Map(["/", "/globe.mjs", "/globe-draw.mjs", "/geo-vendor.mjs"].map(path => [path, cached]))],
     ["attacks-maps-v1", new Map(cachedMaps.map(path => [path, cached]))],
   ]);
   const open = async name => {
@@ -79,7 +79,7 @@ test("offline shell fallback never replaces an authentication response or caches
   assert.equal(redirected.puts.length, 0);
   const offline = await worker(async () => { throw new TypeError("Network unavailable"); });
   assert.equal(await offline.request("/"), offline.cached);
-  for (const path of ["/globe.mjs", "/geo-vendor.mjs"])
+  for (const path of ["/globe.mjs", "/globe-draw.mjs", "/geo-vendor.mjs"])
     assert.equal(await offline.request(path), offline.cached);
   const asset = {ok: true, redirected: false, type: "basic", headers: new Map([["X-Attacks-Asset", "1"]])};
   asset.clone = () => asset;

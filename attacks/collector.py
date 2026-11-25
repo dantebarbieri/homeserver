@@ -33,6 +33,7 @@ SELECTORS = {
     "hytale": '{container="hytale-server"} |= "Disconnecting QuicConnectionAddress" |= "invalidIdentityToken"',
 }
 NANO = 1_000_000_000
+ACTIVE_SESSIONS_SHOWN = 200
 
 
 def window(client, query, start, end, budget=None):
@@ -144,15 +145,21 @@ class Store:
         if self.db.execute("SELECT 1 FROM outbox LIMIT 1").fetchone():
             return
         sessions = [row[0] for row in self.db.execute("SELECT since FROM trapped WHERE since IS NOT NULL")]
-        value = {"through": max(self.clock(), self.get("last_observed", 0)), "sessions": sessions}
+        # The newest sessions identify which loaded "stuck" events are still open.
+        active = [list(row) for row in self.db.execute(
+            "SELECT ip, port, since FROM trapped WHERE since IS NOT NULL ORDER BY since DESC LIMIT ?",
+            (ACTIVE_SESSIONS_SHOWN,))]
+        value = {"through": max(self.clock(), self.get("last_observed", 0)), "sessions": sessions, "active": active}
         self.db.execute("INSERT OR REPLACE INTO meta VALUES ('published',?)", (json.dumps(value),))
 
     def trapping(self):
         with self.lock:
             published = self.get("published", {"through": 0, "sessions": []})
         now = self.clock()
+        active = [{"ip": ip, "sourcePort": port, "since": since} for ip, port, since in published.get("active", [])]
         return {"connections": len(published["sessions"]),
                 "seconds": sum(max(0, now - since) for since in published["sessions"]),
+                "active": active, "activeTruncated": len(active) < len(published["sessions"]),
                 "asOf": now, "through": published["through"], "since": self.get("origins_started")}
 
     def flush(self, client):

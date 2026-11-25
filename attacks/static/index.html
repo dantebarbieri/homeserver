@@ -33,7 +33,7 @@
       <article class="activity-card"><span class="eyebrow">EVENTS / MINUTE</span><canvas id="spark" aria-label="Event rate over the selected window" role="img"></canvas><small id="metric-status">Waiting for Loki</small></article>
     </section>
     <section id="map-panel" class="map-panel" aria-label="Source IP locations">
-      <div class="panel-top"><div><span class="live-dot" aria-hidden="true"></span><strong>GLOBAL ACTIVITY</strong><span id="map-count" class="muted"></span></div><div class="map-toolbar"><label class="projection-control">Projection<select id="projection"><option value="equal-earth">Equal Earth</option><option value="globe">Globe</option><option value="rectangular">Original rectangular</option></select></label><button id="fullscreen" class="button" aria-controls="map-panel" aria-pressed="false">Full screen</button></div></div>
+      <div class="panel-top"><div><span class="live-dot" aria-hidden="true"></span><strong>GLOBAL ACTIVITY</strong><span id="map-count" class="muted"></span></div></div>
       <div class="map-wrap">
         <svg id="map" viewBox="0 0 1000 500" tabindex="0" aria-label="Interactive world map. One dot per source IP; select a dot to explore its events. Drag or use arrow keys to rotate the globe, or pan a fullscreen flat map. Pinch, scroll, or use plus/minus to zoom. Zero resets the view.">
           <defs>
@@ -46,17 +46,37 @@
           <g id="map-labels" aria-hidden="true"></g><g id="map-points"></g>
         </svg>
         <div id="map-tooltip" role="tooltip" hidden></div><div id="map-arrivals" aria-hidden="true"></div>
-        <div id="map-navigation" hidden><button id="map-zoom-in" class="button" aria-label="Zoom in">+</button><output id="map-zoom-level" aria-label="Zoom level">100%</output><button id="map-zoom-out" class="button" aria-label="Zoom out">−</button><button id="map-follow" class="button" aria-pressed="false" title="Move the view to new attacks as they arrive. Dragging or Reset view turns it off; zooming keeps it on.">Follow</button><button id="map-reset" class="button" title="Zoom out; on the globe, face the most activity with north up">Reset view</button></div>
-        <div class="map-overlay"><span>INBOUND SIGNAL</span><strong id="map-caption">Waiting for telemetry</strong></div>
+        <div id="map-tools" class="map-tools">
+          <div class="tool-rows">
+            <div class="tool-row">
+              <button id="map-settings-toggle" class="button icon-button" type="button" aria-label="Map settings" title="Map settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="map-popover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.52 5.06L10.85 2.67L13.15 2.67L13.48 5.06A7.1 7.1 0 0 1 15.87 6.05L17.79 4.59L19.41 6.21L17.95 8.13A7.1 7.1 0 0 1 18.94 10.52L21.33 10.85L21.33 13.15L18.94 13.48A7.1 7.1 0 0 1 17.95 15.87L19.41 17.79L17.79 19.41L15.87 17.95A7.1 7.1 0 0 1 13.48 18.94L13.15 21.33L10.85 21.33L10.52 18.94A7.1 7.1 0 0 1 8.13 17.95L6.21 19.41L4.59 17.79L6.05 15.87A7.1 7.1 0 0 1 5.06 13.48L2.67 13.15L2.67 10.85L5.06 10.52A7.1 7.1 0 0 1 6.05 8.13L4.59 6.21L6.21 4.59L8.13 6.05A7.1 7.1 0 0 1 10.52 5.06Z"/><circle cx="12" cy="12" r="2.8"/></svg></button>
+              <button id="fullscreen" class="button icon-button" type="button" aria-label="Full screen" title="Full screen" aria-controls="map-panel" aria-pressed="false"><svg class="icon icon-expand" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="icon icon-compress" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
+            </div>
+            <div id="map-navigation" class="tool-row" hidden>
+              <button id="map-reset" class="button icon-button" type="button" aria-label="Reset view" title="Reset view: zoom out and, on the globe, face the most activity with north up"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M6.7 2v4.7h4.7"/></svg></button>
+              <button id="map-follow" class="button icon-button" type="button" aria-label="Follow new activity" aria-pressed="false" title="Follow new activity: move the view to new attacks as they arrive. Dragging or Reset view turns it off; zooming keeps it on."><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v3.5M12 18v3.5M2.5 12H6M18 12h3.5"/></svg></button>
+              <button id="map-zoom-out" class="button icon-button" type="button" aria-label="Zoom out">−</button>
+              <output id="map-zoom-level" aria-label="Zoom level">100%</output>
+              <button id="map-zoom-in" class="button icon-button" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <div id="map-popover" class="map-popover" role="dialog" aria-labelledby="map-popover-title" tabindex="-1" hidden>
+            <div class="sheet-grip" aria-hidden="true"></div>
+            <div class="popover-head"><strong id="map-popover-title">Map settings</strong><button id="map-popover-close" class="button icon-button" type="button" aria-label="Close map settings"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+            <label class="field">Projection<select id="projection"><option value="equal-earth">Equal Earth</option><option value="globe">Globe</option><option value="rectangular">Original rectangular</option></select></label>
+            <div><label class="check"><input id="history-dots" type="checkbox"> Show faded dots</label><p class="hint">Fully faded sources come back dimly, from events already loaded in this browser. Nothing more is fetched, and the dot limit still applies.</p></div>
+            <form id="map-settings">
+              <label>Keep newest dots<input id="keep" type="number" min="0" max="1000" step="1" required></label>
+              <label>Fade over (minutes)<input id="fadeMinutes" type="number" min="1" max="1440" step="1" required></label>
+              <label>Maximum map dots<input id="maxDots" type="number" min="1" max="1000" step="1" required></label>
+              <button class="button" type="submit">Apply</button>
+            </form>
+            <p class="hint">Saved in this browser. The limit affects only the map, never collection or stored events. Set Keep newest to 0 to let every dot fade.</p>
+          </div>
+        </div>
       </div>
-      <div class="map-status"><span id="map-gesture-hint" hidden></span><span id="map-detail-status"></span><span id="arrival-status"></span><span id="follow-status" role="status"></span><span id="fullscreen-status" role="status"></span></div>
-      <div class="map-controls"><div class="legend" id="legend" aria-label="Map color key"></div><label class="history-toggle" title="Also show faded sources from the loaded events, still respecting the dot limit."><input id="history-dots" type="checkbox"> Show older history</label></div>
-      <details class="map-options"><summary id="map-setting-summary">Map settings</summary><form id="map-settings">
-        <label>Keep newest dots<input id="keep" type="number" min="0" max="1000" step="1" required></label>
-        <label>Fade over (minutes)<input id="fadeMinutes" type="number" min="1" max="1440" step="1" required></label>
-        <label>Maximum map dots<input id="maxDots" type="number" min="1" max="1000" step="1" required></label>
-        <button class="button" type="submit">Apply map settings</button>
-      </form><p>Saved in this browser. The limit affects only the map, never collection or stored events. Set Keep newest to 0 to let every dot fade.</p></details>
+      <div class="map-status"><span id="map-gesture-hint" hidden></span><span id="map-detail-status"></span><span id="arrival-status"></span><span id="follow-status" role="status"></span><span id="fullscreen-status" role="status"></span><span id="map-caption"></span></div>
+      <div class="map-controls"><div class="legend" id="legend" aria-label="Map color key"></div></div>
       <p id="map-explainer" class="map-explainer"></p>
       <dialog id="detail"><div class="sheet-grip" aria-hidden="true"></div><div class="dialog-heading"><p class="eyebrow">EVENT DETAILS</p><button id="close" class="button" aria-label="Close event details">✕</button></div><h2 id="detail-title"></h2><dl id="detail-fields"></dl><p class="detail-note">An IP can be a VPN, relay, shared address, or spoofed source. Location is approximate. No passwords, cookies, or request bodies are collected.</p><div class="dialog-actions"><button id="filter-ip" class="button">Only this source IP</button><button id="filter-country" class="button">Only this country</button><button id="filter-network" class="button">Only this network</button></div></dialog>
     </section>

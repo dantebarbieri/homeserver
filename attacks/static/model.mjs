@@ -97,6 +97,13 @@ export function mapActivity(events, settings, now = Date.now() / 1000, history =
   return {points: visible.slice(0, settings.maxDots), expired, omitted: Math.max(0, visible.length - settings.maxDots), unlocated};
 }
 
+// The sources the map leaves out and why. Silent when it draws everything it has.
+export function notDrawn({faded = 0, farSide = 0, unlocated = 0, omitted = 0}) {
+  const parts = [[faded, "faded"], [farSide, "on far side"], [unlocated, "unlocated"], [omitted, "over the dot limit"]]
+    .filter(([count]) => count > 0).map(([count, label]) => `${count} ${label}`);
+  return parts.length ? `Sources not drawn: ${parts.join(" · ")}` : "";
+}
+
 export const TYPE_ORDER = Object.keys(TYPES);
 export const SEVERITY_ORDER = SEVERITIES.map(([level]) => level).reverse();
 
@@ -149,13 +156,15 @@ export function equalEarth(longitude, latitude) {
   return [2 * longitude * radians * Math.cos(theta) / (Math.sqrt(3) * derivative), vertical];
 }
 
+const EQUAL_EARTH_EXTENT = [equalEarth(180, 0)[0], equalEarth(0, 90)[1]];
+
 export function project(longitude, latitude, width, height, projection = "equal-earth") {
   if (projection === "rectangular") {
     const scale = Math.min(width / 380, height / 190);
     return [width / 2 + longitude * scale, height / 2 - latitude * scale];
   }
   const [x, y] = equalEarth(longitude, latitude);
-  const scale = Math.min(width / (equalEarth(180, 0)[0] * 2.12), height / (equalEarth(0, 90)[1] * 2.12));
+  const scale = Math.min(width / (EQUAL_EARTH_EXTENT[0] * 2.12), height / (EQUAL_EARTH_EXTENT[1] * 2.12));
   return [width / 2 + x * scale, height / 2 - y * scale];
 }
 
@@ -172,10 +181,75 @@ export function duration(seconds) {
   return `${Math.round(seconds)} s`;
 }
 
+// A telemetry sample older than this is no longer trusted to say who is still connected.
+const TRAP_STALE_MS = 90000;
+
 export function liveTrapping(sample, elapsedMs) {
   if (!sample?.available || !Number.isFinite(sample.seconds) || !Number.isFinite(sample.connections)
-    || elapsedMs > 90000) return null;
+    || elapsedMs > TRAP_STALE_MS) return null;
   return {connections: sample.connections, seconds: sample.seconds + sample.connections * Math.max(0, elapsedMs / 1000)};
+}
+
+// Trapped time reads finer than the dashboard totals: a client held for 4 min 12 s was not held for "4 min".
+export function trapDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  if (seconds > 0 && seconds < .05) return "<0.1 s";
+  if (seconds < 10) return `${Math.round(seconds * 10) / 10} s`;
+  const total = Math.round(seconds), days = Math.floor(total / 86400), hours = Math.floor(total % 86400 / 3600);
+  const minutes = Math.floor(total % 3600 / 60), rest = total % 60;
+  const parts = days ? [[days, "d"], [hours, "h"]] : hours ? [[hours, "h"], [minutes, "min"]]
+    : minutes ? [[minutes, "min"], [rest, "s"]] : [[rest, "s"]];
+  return parts.filter(([value]) => value).map(([value, unit]) => `${value} ${unit}`).join(" ");
+}
+
+const sessionIndexes = new WeakMap();
+
+// Endlessh events grouped by connection (source address and port), oldest first.
+function sessionIndex(events) {
+  let index = sessionIndexes.get(events);
+  if (!index) {
+    index = new Map();
+    for (const item of events) {
+      if ((item.kind !== "endlessh_open" && item.kind !== "endlessh_close") || !Number.isFinite(item.sourcePort)) continue;
+      const key = `${item.ip}|${item.sourcePort}`;
+      if (!index.has(key)) index.set(key, []);
+      index.get(key).push(item);
+    }
+    for (const sessions of index.values()) sessions.sort((a, b) => a.timestamp - b.timestamp || a.observedAt - b.observedAt);
+    sessionIndexes.set(events, index);
+  }
+  return index;
+}
+
+// A source port can be reused, so a connection's end is the next event for its address and port, never just any.
+function laterEvent(item, events) {
+  if (!Number.isFinite(item.sourcePort)) return undefined;
+  return sessionIndex(events).get(`${item.ip}|${item.sourcePort}`)?.find(other => other.id !== item.id
+    && (other.timestamp > item.timestamp || (other.timestamp === item.timestamp && other.observedAt > item.observedAt)));
+}
+
+// How long Endlessh held this connection: null for anything else, "ended" with the final time, "active" while
+// the client is still connected (ticking from `since`), or "unknown" when nothing says how it ended.
+// `sample` is the latest stats `trapping` object and `elapsedMs` how long ago it arrived.
+export function trapTime(item, events, sample, elapsedMs) {
+  if (item.kind === "endlessh_close") return Number.isFinite(item.duration) ? {state: "ended", seconds: item.duration} : null;
+  if (item.kind !== "endlessh_open") return null;
+  const next = laterEvent(item, events);
+  if (next?.kind === "endlessh_close" && Number.isFinite(next.duration)) return {state: "ended", seconds: next.duration};
+  const unknown = {state: "unknown"};
+  // A later event for the same connection means this open's own close was never logged. The collector does not
+  // track our own connections, so it cannot say whether those are still open.
+  if (next || item.origin === "own" || !liveTrapping(sample, elapsedMs) || !Number.isFinite(sample.asOf)) return unknown;
+  const listed = sample.active?.find(row => row.ip === item.ip && row.sourcePort === item.sourcePort
+    && Math.abs(row.since - item.timestamp) < .001);
+  // The published list only covers what the collector had seen by `through`; a newer open has had no chance to close yet.
+  const since = listed ? listed.since : item.observedAt > sample.through ? item.timestamp : null;
+  return since === null ? unknown : {state: "active", seconds: trapSince(sample, elapsedMs, since), since};
+}
+
+// Seconds a connection has been held, counted on the collector's clock so a device with the wrong time still reads right.
+export function trapSince(sample, elapsedMs, since) {
+  return Math.max(0, sample.asOf + elapsedMs / 1000 - since);
 }
 
 export function ago(timestamp, now = Date.now() / 1000) {
@@ -225,11 +299,31 @@ const DEMO_TITLES = {
 };
 // Demo events that repeat an earlier event's source (same IP, place and network), so mixed dots show on load.
 const DEMO_SHARED = {10: 0, 31: 0, 11: 3, 19: 3, 21: 3};
+// Endlessh connections that already ended (index into the events below, seconds held). The newest one, 0, is still open.
+const DEMO_TRAPPED = [[24, 312.6], [16, 41.2], [8, 2.4]];
 export function demoEvents(now = Date.now()) {
-  return Array.from({length: 32}, (_, i) => {
+  const events = Array.from({length: 32}, (_, i) => {
     const host = DEMO_SHARED[i] ?? i;
-    return demoEvent(i, (now - i * 17000) / 1000, `demo-${i}`, `192.0.2.${host + 1}`, DEMO_PLACES[(host * 3) % 8], host);
+    const item = demoEvent(i, (now - i * 17000) / 1000, `demo-${i}`, `192.0.2.${host + 1}`, DEMO_PLACES[(host * 3) % 8], host);
+    if (item.kind === "endlessh_open") item.sourcePort = 40000 + (i * 7919) % 10000;
+    return item;
   });
+  return mergeEvents([], [...events, ...DEMO_TRAPPED.map(([i, seconds]) => demoCloseEvent(events[i], seconds))]);
+}
+
+// The "Left Endlessh" event that ends a demo connection `seconds` after it opened.
+export function demoCloseEvent(open, seconds) {
+  const timestamp = open.timestamp + seconds;
+  return {...open, id: open.id.replace("demo-", "demo-close-"), cursor: String(BigInt(Math.floor(timestamp * 1000)) * 1000000n + 999999n),
+    timestamp, observedAt: timestamp, kind: "endlessh_close", title: "Left Endlessh", duration: seconds};
+}
+
+// The stats `trapping` sample a collector would publish for demo events: an external open without a close is still connected.
+export function demoTrapping(events, now) {
+  const active = events.filter(item => item.kind === "endlessh_open" && item.origin !== "own" && !laterEvent(item, events))
+    .map(item => ({ip: item.ip, sourcePort: item.sourcePort, since: item.timestamp}));
+  return {available: true, connections: active.length, seconds: active.reduce((total, row) => total + Math.max(0, now - row.since), 0),
+    active, activeTruncated: false, asOf: now, through: now, since: now - 3600};
 }
 
 // One synthetic arrival for the simulated live stream. Addresses stay inside the RFC 5737 documentation ranges.
@@ -241,6 +335,7 @@ export function demoLiveEvent(sequence, now = Date.now(), random = Math.random) 
   const prefix = ["192.0.2", "198.51.100", "203.0.113"][Math.floor(random() * 3)];
   const item = demoEvent(type + 8 * variant, now / 1000, `demo-live-${sequence}`, `${prefix}.${1 + Math.floor(random() * 254)}`, place);
   item.cursor = String(BigInt(Math.floor(now)) * 1000000n + BigInt(sequence % 1000000));
+  if (item.kind === "endlessh_open") item.sourcePort = 50000 + (sequence * 7919) % 10000;
   return item;
 }
 

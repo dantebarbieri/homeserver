@@ -80,26 +80,32 @@ export function createMapView({panel, svg, globe, isGlobe, resetPoints, changed,
   const $ = id => document.getElementById(id);
   const calm = matchMedia("(prefers-reduced-motion: reduce)");
   let view = {zoom: 1, x: 500, y: 250}, frame = 0, native = false, dragging = false, suppressClickUntil = 0;
-  let flight = 0, landing = null;
+  let flight = 0, landing = null, scale = 0;
   const pointers = new Map();
   const expanded = () => panel.classList.contains("map-expanded");
   const interactive = () => expanded() || isGlobe();
+  // Skipping unchanged writes keeps a rotation from invalidating layout for nothing.
+  function setHidden(element, hidden) { if (element.hidden !== hidden) element.hidden = hidden; }
+  function setText(element, text) { if (element.textContent !== text) element.textContent = text; }
+  function setDisabled(element, disabled) { if (element.disabled !== disabled) element.disabled = disabled; }
   function draw() {
     frame = 0;
     panel.classList.toggle("globe-view", isGlobe());
-    $("map-navigation").hidden = !interactive();
+    setHidden($("map-navigation"), !interactive());
     const box = svg.getBoundingClientRect();
     if (!box.width || !box.height) return;
     if (isGlobe()) {
       view.x = 500; view.y = 250;
       const base = constrainView({...view, zoom: 1}, box.width, box.height);
-      globe.resize(base.width, base.height, view.zoom);
+      globe.resize(base.width, base.height, view.zoom, box.width);
     }
     view = constrainView(view, box.width, box.height);
+    // The viewBox always has the box's aspect ratio, so this is the CSS pixels per plane unit without asking the layout.
+    scale = box.width / view.width;
     svg.setAttribute("viewBox", `${view.x - view.width / 2} ${view.y - view.height / 2} ${view.width} ${view.height}`);
-    $("map-zoom-level").textContent = `${Math.round(view.zoom * 100)}%`;
-    $("map-zoom-out").disabled = view.zoom <= 1;
-    $("map-zoom-in").disabled = view.zoom >= MAX_ZOOM;
+    setText($("map-zoom-level"), `${Math.round(view.zoom * 100)}%`);
+    setDisabled($("map-zoom-out"), view.zoom <= 1);
+    setDisabled($("map-zoom-in"), view.zoom >= MAX_ZOOM);
     changed();
   }
   function update() { if (!frame) frame = requestAnimationFrame(draw); }
@@ -186,7 +192,7 @@ export function createMapView({panel, svg, globe, isGlobe, resetPoints, changed,
   function setExpanded(value) {
     panel.classList.toggle("map-expanded", value);
     document.body.classList.toggle("map-open", value);
-    $("fullscreen").textContent = value ? "Exit full screen" : "Full screen";
+    $("fullscreen").title = value ? "Exit full screen" : "Full screen";
     $("fullscreen").setAttribute("aria-pressed", String(value));
     $("map-navigation").hidden = !interactive();
     $("fullscreen-status").textContent = "";
@@ -293,5 +299,5 @@ export function createMapView({panel, svg, globe, isGlobe, resetPoints, changed,
   new ResizeObserver(update).observe(svg);
   update();
   return {expanded, exit, reset, interactive, flyTo, moving: () => !!flight, held: () => pointers.size > 0,
-    zoom: () => view.zoom, viewport: () => view};
+    zoom: () => view.zoom, viewport: () => view, scale: () => scale};
 }

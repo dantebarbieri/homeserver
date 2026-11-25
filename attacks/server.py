@@ -22,7 +22,8 @@ MAP_ASSETS = {path.name for path in ROOT.glob("world-*.json")
               if re.fullmatch(r"world-(110m|50m|10m)-[0-9a-f]{12}\.json", path.name)}
 STATIC = {"index.html", "styles.css", "app.mjs", "model.mjs", "map-view.mjs", "pwa.mjs", "sw.js",
           "atlas.mjs", "favicon.svg", "flags.woff2", "flags-LICENSE.txt", "manifest.webmanifest",
-          "apple-touch-icon.png", "icon-192.png", "icon-512.png", "globe.mjs", "geo-vendor.mjs", "geo-vendor-LICENSE.txt"} | MAP_ASSETS
+          "apple-touch-icon.png", "icon-192.png", "icon-512.png", "globe.mjs", "globe-draw.mjs", "geo-vendor.mjs",
+          "geo-vendor-LICENSE.txt"} | MAP_ASSETS
 RANGES = {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800, "30d": 2592000}
 LIMIT = 250
 NANO = 1_000_000_000
