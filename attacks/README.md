@@ -291,7 +291,7 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   and private addresses are never sent. Reputation is context only; it never
   changes an event's classification or severity.
 - **Filters** the stream, map and facets by a **Reputation** picker (shown only
-  while a key is configured): High (50-100%), Some reports (1-49%), No reports
+  while a key is configured): High risk (50-100%), Some reports (1-49%), No reports
   (0%), Not checked yet, and Reported by this server. Choices combine with OR,
   and each shows its matching count.
 - **Reports** (`ABUSEIPDB_REPORTING=strict`, the default; `off` disables it)
