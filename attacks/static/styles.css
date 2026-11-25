@@ -88,7 +88,8 @@ select,input,.button{background:#202024;border-color:#39393f;color:var(--text)}
 .network-owner{--color:#c5c5ce;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
 .privacy-service{--color:#c7afe9}.reputation-clean{--color:#9aa0ab}.reputation-medium{--color:#f2b84b}.reputation-high{--color:#ff6b6b}.reputation-reported{--color:#7fd1ff}.reputation-unchecked{--color:#5d6370}.network-badges{max-width:100%}
 .location-line{display:flex;align-items:center;gap:7px;min-width:0;max-width:100%}
-.country-flag{font-family:"Country Flags","Apple Color Emoji","Segoe UI Emoji",sans-serif;font-size:16px;line-height:1.2;flex-shrink:0}
+/* Apple's native flags first: WebKit cannot paint the bundled COLRv1 font and would show its monochrome fallback outlines. */
+.country-flag{font-family:"Apple Color Emoji","Country Flags","Segoe UI Emoji",sans-serif;font-size:16px;line-height:1.2;flex-shrink:0}
 #map-tooltip .country-flag{font-size:16px}#map-tooltip .badge{font-size:9px}
 #map-tooltip,dialog{background:#19191ef7;border-color:#555561}dialog dl{border-color:var(--line)}
 .icon{display:block;flex:none;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
