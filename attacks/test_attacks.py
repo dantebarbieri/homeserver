@@ -781,7 +781,7 @@ class AbuseIPDBTests(unittest.TestCase):
         self.now += REPORT_DELAY; self.drain()
         self.assertEqual(self.reports(), [])
         checked = {url.split("ipAddress=")[1].split("&")[0] for _, url, _ in self.http.calls}
-        self.assertEqual(checked, {"9.9.9.9", "1.0.0.1"})
+        self.assertEqual(checked, {"9.9.9.9", "1.0.0.1", "1.0.0.2"})
 
     def test_one_endlessh_visit_is_reported_as_an_ssh_port_scan_unless_a_sign_in_follows(self):
         self.event("endlessh_open")
