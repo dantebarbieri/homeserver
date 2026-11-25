@@ -77,16 +77,6 @@ authenticate a client on **calcifer**, **no-face**, **Windows**, and each
 remote phone/laptop, all in the same tailnet. It is split-tunnel access,
 not an exit node: ordinary internet traffic stays on the client's network.
 
-**Legacy VPN rollback:** wg-easy is no longer deployed. Its peer keys and
-configuration remain in `${DATA}/wg-easy`, not in Git or a NixOS generation.
-Keep its two `WGEASY_*` environment values in private backup before removing
-them from production `.env`. To restore the service, revert its removal in
-Git, remove the host-local `wg-easy: !reset null` Compose override if present,
-restore the environment values, and apply the firewall configuration. Pin the
-last deployed image (`ghcr.io/wg-easy/wg-easy@sha256:5f26407fd2ede54df76d63304ef184576a6c1bb73f934a58a11abdd852fab549`)
-rather than pointing `latest` at the retained keys. Then run
-`docker compose up -d --no-deps wg-easy` from `/srv/homeserver/docker`.
-
 For the [ASUS router over Tailscale](http://router.home.arpa/Main_Login.asp?redirct=false),
 bookmark that exact URL. The router's `redirct=false` parameter keeps its
 login page from switching to `www.asusrouter.com`.

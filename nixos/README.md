@@ -73,10 +73,9 @@ access policy; existing service authentication remains in place.
 
 For recovery, connect to No-Face directly over its Tailscale IP and reach
 the BMC through No-Face's `192.168.50.50/32` subnet route. Neither depends on
-this server. The old wg-easy service and its UDP 51820 firewall opening
-have been removed from the deployment configuration.
-See the [remote-access setup](../README.md#tailscale-remote-access) for
-off-LAN checks and rollback instructions.
+this server. Tailscale replaced the old wg-easy WireGuard server, which has
+been fully removed. See the [remote-access setup](../README.md#tailscale-remote-access)
+for off-LAN checks.
 
 ## Storage
 
