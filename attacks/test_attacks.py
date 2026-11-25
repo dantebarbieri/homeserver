@@ -795,6 +795,24 @@ class AbuseIPDBTests(unittest.TestCase):
         self.assertTrue(all(b"categories=18%2C22" in form and b"guessed+username" in form for form in sent))
         self.assertEqual({self.abuse.lookup([ip])[ip].get("reportedAt") is not None for ip in ("1.0.0.1", "1.0.0.2")}, {True})
 
+    def test_repeated_ssh_port_probes_and_login_form_rejections_are_reported(self):
+        for _ in range(3):
+            self.event("ssh_probe", ip="1.0.0.1")
+            self.event("ssh_probe", ip="1.0.0.3")
+        self.event("ssh_accepted", ip="1.0.0.3")
+        for path in ["/login"] * 10 + ["/api/v1/auth/local"] * 9:
+            for ip, method in (("1.0.0.2", "POST"), ("1.0.0.4", "GET")):
+                self.abuse.observe({"ip": ip, "kind": "http_denied", "origin": "external", "timestamp": self.now,
+                                    "method": method, "path": path})
+        for _ in range(20):
+            self.abuse.observe({"ip": self.IP, "kind": "http_denied", "origin": "external", "timestamp": self.now,
+                                "method": "POST", "path": "/api/auth/refresh"})
+        self.now += REPORT_DELAY; self.drain()
+        sent = {form.split(b"&")[0]: form for _, _, form in self.reports()}
+        self.assertEqual(set(sent), {b"ip=1.0.0.1", b"ip=1.0.0.2"})
+        self.assertIn(b"categories=14%2C22", sent[b"ip=1.0.0.1"])
+        self.assertIn(b"categories=18%2C21", sent[b"ip=1.0.0.2"])
+
     def test_one_endlessh_visit_is_reported_as_an_ssh_port_scan_unless_a_sign_in_follows(self):
         self.event("endlessh_open")
         self.event("endlessh_open", ip="1.0.0.1")

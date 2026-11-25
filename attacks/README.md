@@ -303,11 +303,15 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
   |---|---|---|
   | SSH login with a username that does not exist or may not log in, such as root or admin (real port or Forgejo) | 1 | SSH, Brute-Force |
   | Other failed SSH authentication (real port or Forgejo) | 3 | SSH, Brute-Force |
+  | Other failed SSH authentication (real port or Forgejo) | 3 | SSH, Brute-Force |
+  | Connection to the real SSH port, or SSH handshake abandoned before login | 3 | Port Scan, SSH |
   | Failed Authelia sign-in | 5 | Brute-Force, Web App Attack |
+  | Rejected (401/403/429) POST to a login, sign-in or session path | 10 | Brute-Force, Web App Attack |
   | Exploit, credential-file or admin-path web probe | 2 | Web App Attack |
   | Endlessh visit (port 22 serves no SSH) | 1 | Port Scan, SSH |
 
-  Real-SSH-port touches, game-port scans (server-status sites probe those),
+  Game-port scans (server-status sites probe those), other 401/403 responses
+  (expired sessions, token refreshes),
   Plex, Hytale and other service connections are never reported. Safeguards: a report waits five minutes and is dropped if
   the address has since signed in successfully over SSH or used Plex as a
   client (such addresses stay exempt for 30 days); an address is reported at

@@ -7,6 +7,7 @@ no usernames, hostnames, paths or other attacker-controlled text.
 from datetime import datetime, timezone
 import json
 import logging
+import re
 import sqlite3
 import threading
 import time
@@ -35,7 +36,13 @@ RULES = {
     # Nothing legitimate is served on port 22; a sign-in within REPORT_DELAY (someone who forgot the real SSH port)
     # still cancels the report. Game-port scans are not reported: server-status sites probe those ports.
     "endlessh_open": (1, (14, 22), "Unsolicited SSH connection to a port that offers no SSH service."),
+    # New connections to the real SSH port, or handshakes abandoned before authentication. A real user signs in on
+    # the first connection, which trusts the address and cancels the report.
+    "ssh_probe": (3, (14, 22), "Repeated SSH connections abandoned before authentication on a key-only server."),
+    # Rejected sign-in form submissions. Other 401/403 responses (expired sessions, token refreshes) are not counted.
+    "http_login_denied": (10, (18, 21), "Repeated rejected sign-in attempts against a web application."),
 }
+LOGIN_PATH = re.compile(r"/(?:log-?in|sign-?in|logon|session|auth(?:enticate)?(?:/(?:local|login|password))?)/?$", re.I)
 GUESSED = frozenset({"Username does not exist", "Username does not exist; authentication rejected",
                      "Account is not permitted to log in over SSH"})
 # A source that has signed in successfully is trusted, and is never reported.
@@ -43,6 +50,15 @@ TRUSTED = frozenset({"ssh_accepted", "ssh_accepted_unknown", "plex_client"})
 TRUST_FOR = 30 * 86400
 # Filter grades; the first three partition checked addresses and match the badge colours.
 GRADES = ("high", "medium", "clean", "unchecked", "reported")
+
+
+def rule_kind(item):
+    kind = item["kind"]
+    if kind == "ssh_failure" and item.get("rejectionReason") in GUESSED:
+        return "ssh_guess"
+    if kind == "http_denied" and item.get("method") == "POST" and LOGIN_PATH.search(str(item.get("path", ""))):
+        return "http_login_denied"
+    return kind
 
 
 def grade(score):
@@ -93,9 +109,7 @@ class AbuseIPDB:
         if not self.enabled or item.get("origin") != "external" or not public(ip):
             return
         self.want(ip)
-        kind, at = item["kind"], float(item["timestamp"])
-        if kind == "ssh_failure" and item.get("rejectionReason") in GUESSED:
-            kind = "ssh_guess"
+        kind, at = rule_kind(item), float(item["timestamp"])
         with self.lock, self.db:
             if kind in TRUSTED:
                 self.db.execute("INSERT INTO trusted VALUES (?,?) ON CONFLICT(ip) DO UPDATE SET at=max(at, excluded.at)", (ip, at))
