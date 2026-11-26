@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `1dd155d20e24549338e2336a1f406a952925df1f`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45863861943) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/75) has no open issues |
-| Web | `mirklurk-map:1dd155d`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:1dd155d`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `3b0c3b8fa7f4ef1305534414ab8ee6834b2a6221`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45868795325) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/76) has no open issues |
+| Web | `mirklurk-map:3b0c3b8`, target `web`, `nginx/nginx-unprivileged:1.30-alpine` (at least 1.30.8), non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:3b0c3b8`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -457,6 +457,34 @@ geometry acceptance, one new sharing/identity lifecycle and unchanged
 Scheduled read-only checks must be accounted separately from immutable
 prior baselines; no silent timer/runtime exception, unrelated repair,
 snapshot trigger or denied authentication retry belongs to this follow-up.
+
+### nginx 1.30 security base pin
+
+Map PR76 (merge `3b0c3b8`) is security-only. The `web` target moves from
+`nginxinc/nginx-unprivileged:1.29-alpine` (nginx 1.29.8 was running on
+2026-11-26; the 1.31 mainline has superseded that branch) to the maintained
+stable branch `nginx/nginx-unprivileged:1.30-alpine`, NGINX's current
+publishing repository. Its `tools/smoke.sh` now fails below 1.30.8, the
+release fixing the 2026-11-18 advisories (resolver, alias/try_files) and
+CVE-2026-132779. `src`, `server`, assets, both Deno 2.9.7 stages and
+`deploy/nginx.conf` are unchanged, so the bind-mounted
+`nginx/mirklurk-map.conf` still matches its 66a4bae source and needs no edit.
+
+Catalog 555, Latest 1.0.1.0 with no Beta, the versioned shield gate, the
+selected spider geometry and all 404 PNGs are unchanged: the 1010-final
+identifiers above (418 distribution files plus `50x.html`, 417 precache
+entries, cache `78f752dcc7`, the three asset hashes) still apply byte for
+byte. Rebuild both targets anyway so the paired tags, Git contexts and
+revision labels stay consistent, with `--pull` so the floating stable tag
+resolves to its newest patch. No API, storage, proxy or NPM change is needed.
+
+This pin is not a live claim. Acceptance requires `nginx -v` of at least
+1.30.8 and a passing `nginx -t` in the running web container, unchanged UID
+101/1993, hardening and mounts, healthy containers, full IPv4/IPv6 size/SHA
+checks against the identifiers above, `/api/config` 200 and keyless
+`GET /api/library` / `POST /api/library/pair` 401. Preserve the accepted
+1dd155d images (web `sha256:18f6b08eec6c…`, uploads `sha256:7243a9774f79…`)
+as rollback under `rollback-1dd155d-20261126-3b0c3b8`.
 
 ### Historical beta-wiki acceptance identifiers
 
