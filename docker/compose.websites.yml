@@ -1,6 +1,10 @@
 # Web hosting services
 # Uncomment services as needed
 
+# Anchor the mapping, not the scalar: Dependabot rewrites literal image: lines.
+x-mirklurk-mariadb: &mirklurk-mariadb
+  image: mariadb:11.4.13@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
+
 services:
   # Intentionally public, read-only installer downloads; no accounts or APIs.
   starr:
@@ -94,10 +98,10 @@ services:
         condition: service_healthy
 
   mirklurk-db:
+    <<: *mirklurk-mariadb
     extends:
       file: compose.common.yml
       service: common-service
-    image: &mirklurk-mariadb mariadb:11.4.13@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
     container_name: mirklurk-db
     environment:
       MARIADB_DATABASE: mirklurk
@@ -121,10 +125,10 @@ services:
       retries: 5
 
   mirklurk-backup:
+    <<: *mirklurk-mariadb
     extends:
       file: compose.common.yml
       service: common-service
-    image: *mirklurk-mariadb
     container_name: mirklurk-backup
     init: true
     user: "${HOST_UID}:${HOST_GID}"
