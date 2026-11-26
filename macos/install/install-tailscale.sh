@@ -14,4 +14,8 @@ admin=dantebarbieri
 /opt/homebrew/bin/tailscaled install-system-daemon
 printf 'tailscaled installed.\n'
 # Then, once: sudo tailscale up --hostname=no-face \
-#   --advertise-routes=192.168.50.50/32 --accept-routes=false --accept-dns=false
+#   --advertise-routes=192.168.50.1/32,192.168.50.50/32,192.168.100.1/32 \
+#   --accept-routes=false --accept-dns=false
+# (router, BMC, cable modem; the 2026-11-21 run had only the BMC). Change
+# routes later with `sudo tailscale set --advertise-routes=...`, which replaces
+# the whole list, then approve new ones on the admin console's Machines page.
