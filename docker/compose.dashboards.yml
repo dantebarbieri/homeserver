@@ -88,7 +88,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: wollomatic/socket-proxy:1.13.2
+    image: wollomatic/socket-proxy:1.14.0
     container_name: homepage-socket-proxy
     # Runs as nobody; the docker group is what lets it open the socket.
     group_add:
