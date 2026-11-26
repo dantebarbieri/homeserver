@@ -460,8 +460,12 @@ re-polled every 30 seconds, queued every other dashboard query behind it until
 
 Per-IP aggregation needs more than Loki's default 500 series per query, so
 `docker/monitoring/loki-config.yml` sets `max_query_series: 20000`. That limit
-applies only to query results; ingestion limits are unchanged. Restart `loki`
-after changing it. The page shows a spinner with what it is loading
+applies only to query results; ingestion limits are unchanged. Loki also runs
+each query as one sub-query per split interval. At the 1h default a 30-day
+query was 720 sub-queries through four workers, about 5 seconds of queueing
+for 9 MB of data, so the config splits by 24h and runs 16 workers. Every
+dashboard request then takes under a second. Restart `loki` after changing
+any of these. The page shows a spinner with what it is loading
 (events, statistics, filter counts) and cancels a request superseded by a newer
 window or filter, so switching ranges never waits on a stale query.
 

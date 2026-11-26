@@ -34,6 +34,11 @@ limits_config:
   # per source IP so it can join AbuseIPDB grades outside LogQL; 30 days is ~1k series,
   # well past the default 500.
   max_query_series: 20000
+  # Each split is a separately scheduled sub-query. At the 1h defaults a 30-day query was
+  # 720 of them queued through four workers: ~5s of scheduling for 9 MB of attacks data.
+  # Day-sized splits make those queries ~0.1s and left heavy container-log queries no slower.
+  split_queries_by_interval: 24h
+  split_instant_metric_queries_by_interval: 24h
 
 compactor:
   working_directory: /loki/compactor
@@ -42,3 +47,7 @@ compactor:
   delete_request_cancel_period: 10m
   retention_delete_delay: 2h
   delete_request_store: filesystem
+
+querier:
+  # The default 4 leaves most of the 32-core host idle while sub-queries wait in the queue.
+  max_concurrent: 16
