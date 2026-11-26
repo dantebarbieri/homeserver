@@ -33,6 +33,11 @@ include:
 networks:
   proxy:
     enable_ipv6: true
+  # Docker's automatic 192.168.96.0/20 route shadows the modem at 192.168.100.1.
+  authelia:
+    ipam:
+      config:
+        - subnet: 10.253.240.32/28
   studio-whisper:
     # Default pools are exhausted; adjacent to, not overlapping, the transfer /29.
     ipam:
