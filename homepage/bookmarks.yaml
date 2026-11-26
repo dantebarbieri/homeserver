@@ -1,4 +1,4 @@
-# Bookmarks — external links and local-only management pages
+# Bookmarks — external links and hardware management pages
 # https://gethomepage.dev/configs/bookmarks/
 
 - Hardware & External Links:
@@ -12,5 +12,9 @@
           description: ASRock Rack BMC
     - ASUS Router:
         - icon: mdi-router-wireless
-          href: http://router.home.arpa/Main_Login.asp?redirct=false
-          description: GT-BE98 Pro
+          href: https://router.danteb.com/
+          description: GT-BE98 Pro · Admins 2FA
+    - Cable Modem:
+        - icon: mdi-modem
+          href: https://modem.danteb.com/
+          description: ARRIS SURFboard S33 · Admins 2FA

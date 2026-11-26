@@ -35,6 +35,7 @@ The Mac Studio is set up by hand, not declaratively. Read `macos/DECISIONS.md` b
 - **Backward-compat symlink**: `/srv/docker/compose` → `/srv/homeserver/docker`
 - **Bulk storage**: `/data` (RAID6 mount, referenced as `${RAID}`)
 - **BMC (IPMI)**: `192.168.50.50` (ASRock Rack, dedicated IPMI port) — reverse-proxied at `https://ipmi.danteb.com` via NPM with Authelia SSO (admins-only, two-factor). BMC bonding must be **disabled** in BMC web UI (Settings → Network → Network Bond Configuration) or the host cannot reach the BMC. The BMC uses HTTPS (self-signed) with `proxy_ssl_verify off` in NPM.
+- **Modem and router**: `https://modem.danteb.com` and `https://router.danteb.com` are public NPM hosts with the same admins-only two-factor gate. Unlike IPMI, both **require upstream TLS verification**. Use [the device trust runbook](docker/docs/DEVICE-ADMIN.md); never copy IPMI's verification exception. Keep the Authelia bridge outside `192.168.100.0/24`.
 
 ### Router (ASUS GT-BE98 Pro)
 

@@ -258,9 +258,10 @@ wake the Windows PC like the server can. The tailnet-wide migration
 has presets for every machine in the house, is installed on all of them, skips
 the machine it runs on, and auto-updates from its own git repository.
 
-**Intent** (*Dante*, 2026-11-26): reach the cable modem's web UI over the
-tailnet without changing the server's Docker networking for now, so the route
-goes through No-Face rather than NPM.
+**Intent** (*Dante*, 2026-11-26): keep direct tailnet access to the modem.
+For everyday use Dante also chose public, admins-only Authelia portals for
+the modem and router on calcifer, like IPMI; these do not replace the
+No-Face recovery routes.
 
 **Current**
 
@@ -277,10 +278,7 @@ goes through No-Face rather than NPM.
   the admin console (checked 2026-11-26), and nothing else on the LAN:
   - `192.168.50.50/32`: the server's BMC (approved 2026-11-21);
   - `192.168.50.1/32`: the ASUS router's web UI;
-  - `192.168.100.1/32`: the ARRIS SURFboard S33 cable modem's web UI. The
-    server can't serve this one: Docker auto-assigned `compose_authelia`
-    `192.168.96.0/20`, which contains the modem's address, so calcifer routes
-    it to that bridge.
+  - `192.168.100.1/32`: the ARRIS SURFboard S33 cable modem's web UI.
 - The admin console's split DNS sends `home.arpa` to No-Face, which resolves
   it with its own resolvers: calcifer's AdGuard, then `1.1.1.1` (which can't
   answer `home.arpa`). `router.home.arpa` therefore only works remotely while
@@ -300,7 +298,8 @@ goes through No-Face rather than NPM.
   (`https+insecure://`). It cannot pin a certificate (`ipn/ipnlocal/serve.go`
   in 1.104.7 sets only `InsecureSkipVerify`), so a Serve URL would stop anyone
   checking that the page really comes from the modem. No-Face has no Serve
-  config; browsers open the modem directly and check its fingerprint.
+  config. Use the [verified NPM portal](../docker/docs/DEVICE-ADMIN.md) or,
+  for direct recovery, check the device certificate fingerprint.
 - `/usr/local/bin/wake` is the `aarch64-apple-darwin` release of
   [dantebarbieri/wake](https://github.com/dantebarbieri/wake), installed by
   its `install/install.sh` (run with sudo), which also deleted the old

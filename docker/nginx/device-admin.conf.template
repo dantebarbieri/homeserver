@@ -1,0 +1,55 @@
+if ($http_host !~* "^@HOST_REGEX@(:443)?$") { return 421; }
+
+location = / {
+    include /snippets/authelia-authrequest.conf;
+    add_header Cache-Control no-store always;
+    add_header Referrer-Policy no-referrer always;
+    content_by_lua_block { return ngx.redirect("@LOGIN@", 302) }
+}
+
+location / {
+    auth_request /internal/authelia/authz;
+    auth_request_set $auth_redirect $upstream_http_location;
+    error_page 401 =302 $auth_redirect;
+
+    proxy_ssl_verify on;
+    proxy_ssl_verify_depth 3;
+    proxy_ssl_trusted_certificate /data/device-admin/@DEVICE@-ca.pem;
+    proxy_ssl_name @TLS_NAME@;
+    proxy_ssl_server_name on;
+    proxy_set_header Host @AUTHORITY@;
+
+    # Only translate our own origin. Never turn a foreign Origin or Referer
+    # into a trusted one for the device's CSRF checks.
+    set $device_origin $http_origin;
+    if ($http_origin = "https://@HOST@") { set $device_origin "https://@AUTHORITY@"; }
+    set_by_lua_block $device_referrer {
+        local r = ngx.var.http_referer or ""
+        local origin = "https://@HOST@"
+        if r:sub(1, #origin + 1) == origin .. "/" then
+            return "https://@AUTHORITY@" .. r:sub(#origin + 1)
+        end
+        return r
+    }
+    proxy_set_header Origin $device_origin;
+    proxy_set_header Referer $device_referrer;
+
+    # The device needs its own cookies, not the parent-domain SSO session.
+    set_by_lua_block $device_cookies {
+        local keep = {}
+        for item in (ngx.var.http_cookie or ""):gmatch("[^;]+") do
+            local name = item:match("^%s*([^%s=]+)%s*=")
+            if name and name:lower() ~= "authelia_session" then
+                keep[#keep + 1] = item:match("^%s*(.*)$")
+            end
+        end
+        return table.concat(keep, "; ")
+    }
+    proxy_set_header Cookie $device_cookies;
+    proxy_set_header Proxy-Authorization "";
+    proxy_set_header Connection "";
+    proxy_http_version 1.1;
+    proxy_redirect http://@AUTHORITY@/ https://@HOST@/;
+    proxy_redirect https://@AUTHORITY@/ https://@HOST@/;
+    proxy_pass https://@AUTHORITY@;
+}

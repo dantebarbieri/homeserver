@@ -70,6 +70,16 @@ docker compose config
 
 See [`CLAUDE.md`](CLAUDE.md) for detailed architecture documentation.
 
+## Hardware admin portals
+
+Use [modem.danteb.com](https://modem.danteb.com/) for the ARRIS S33,
+[router.danteb.com](https://router.danteb.com/) for the ASUS GT-BE98 Pro,
+and [ipmi.danteb.com](https://ipmi.danteb.com/) for the BMC. These public
+URLs require an Authelia **admins** account and two factors, then the
+device's own login. Tailscale is not required. NPM verifies the modem's
+and router's TLS identities separately from the browser-facing wildcard
+certificate. See [trust, recovery and renewal](docker/docs/DEVICE-ADMIN.md).
+
 ## Tailscale remote access
 
 Hosted Tailscale replaces the server-as-VPN-gateway dependency: install and
@@ -77,12 +87,12 @@ authenticate a client on **calcifer**, **no-face**, **Windows**, and each
 remote phone/laptop, all in the same tailnet. It is split-tunnel access,
 not an exit node: ordinary internet traffic stays on the client's network.
 
-For the [ASUS router over Tailscale](http://router.home.arpa/Main_Login.asp?redirct=false),
-bookmark that exact URL. The router's `redirct=false` parameter keeps its
-login page from switching to `www.asusrouter.com`. Split DNS sends
-`home.arpa` lookups to no-face, which resolves them through calcifer's
-AdGuard, so while calcifer is down use
-`http://192.168.50.1/Main_Login.asp?redirct=false` instead.
+If calcifer or SSO is down, No-Face still routes directly to the
+[ASUS router](https://192.168.50.1:8443/Main_Login.asp?redirct=false).
+Use the numeric address: `router.home.arpa` depends on calcifer's AdGuard
+and is not in the HTTPS certificate. `redirct=false` keeps the login page
+from switching to `www.asusrouter.com`. Direct access presents the router's
+own certificate, not NPM's.
 
 For the [cable modem over Tailscale](https://192.168.100.1/Login.html),
 bookmark that exact HTTPS URL: the modem's root page redirects to plain
@@ -140,10 +150,8 @@ check that the certificate's SHA-256 fingerprint is
 (checked 2026-11-26; a modem firmware update may legitimately replace it).
 The modem's own password is still required. Repeated failed logins lock its
 web user until the modem reboots; a reboot drops the home internet and with
-it this remote path. calcifer cannot reach the modem at all (Docker's
-`compose_authelia` network, `192.168.96.0/20`, contains `192.168.100.1`),
-so there is no NPM or Tailscale Serve URL for it; see
-[`macos/DECISIONS.md`](macos/DECISIONS.md#tailnet-lan-admin-routes-and-wake).
+it this remote path. Unlike the public portals, these numeric recovery
+URLs do not depend on calcifer, NPM or Authelia.
 
 On Linux remote clients, enable route acceptance with
 `sudo tailscale set --accept-routes=true`; Windows/macOS normally accept

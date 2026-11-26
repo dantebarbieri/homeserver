@@ -75,9 +75,10 @@ For recovery, connect to No-Face directly over its Tailscale IP and reach
 the BMC, router and cable modem through No-Face's single-host subnet routes
 (`192.168.50.50/32`, `192.168.50.1/32` and `192.168.100.1/32`). None depends
 on this server, but use the router's numeric address: `router.home.arpa`
-resolves through this server's AdGuard. This server itself cannot reach the
-modem: Docker's `compose_authelia` network (`192.168.96.0/20`) contains
-`192.168.100.1`. Tailscale replaced the old wg-easy WireGuard server, which has
+resolves through this server's AdGuard. The separate public [hardware admin
+portals](../docker/docs/DEVICE-ADMIN.md) depend on calcifer and Authelia;
+the Authelia bridge is pinned outside the modem's subnet. Tailscale
+replaced the old wg-easy WireGuard server, which has
 been fully removed. See the [remote-access setup](../README.md#tailscale-remote-access)
 for off-LAN checks.
 

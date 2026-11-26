@@ -15,7 +15,7 @@ dashboard, which is now archived.
 |------|---------|
 | `settings.yaml` | Global theme, layout, and search settings |
 | `services.yaml` | App links and backend status cards with consumer descriptions |
-| `bookmarks.yaml` | External links (GitHub repos) and local management pages |
+| `bookmarks.yaml` | External links and the Authelia-protected BMC, router and modem portals |
 | `widgets.yaml` | Top-level page widgets (date/time, weather) |
 | `docker.yaml` | Docker API connection (via `homepage-socket-proxy`) for container status |
 
