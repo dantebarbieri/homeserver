@@ -266,7 +266,7 @@ services:
       service: gpu-service
     container_name: tdarr
     # Tdarr 3.08.00; upgrade together with No-Face's native node.
-    image: ghcr.io/haveagitgat/tdarr@sha256:84743e5ae433a5b49cb463b2dff2679eb02f0cac24fb88c830f49bf8aa9f1c04
+    image: ghcr.io/haveagitgat/tdarr@sha256:98137b694eed678f14ebc5f1d594d87ff8086df5cbc04203a15a53d95fe518b7
     restart: unless-stopped
     logging:
       driver: json-file
