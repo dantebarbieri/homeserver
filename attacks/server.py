@@ -29,6 +29,7 @@ STATIC = {"index.html", "styles.css", "app.mjs", "model.mjs", "map-view.mjs", "p
 ALIASES = {"apple-touch-icon-precomposed.png": "apple-touch-icon.png"}
 RANGES = {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800, "30d": 2592000}
 LIMIT = 250
+SCAN_PAGE, SCAN_PAGES = 1000, 5
 NANO = 1_000_000_000
 
 
@@ -57,24 +58,28 @@ def alternatives(values):
     return "|".join(re.escape(value) for value in values)
 
 
-def ip_filter(include=None, exclude=()):
-    """Exact-address filter for reputation grades; `include=[]` matches nothing."""
-    if include is not None:
-        return " | ip=~" + json.dumps(alternatives(sorted(include))) if include else ' | ip="!"'
-    return " | ip!~" + json.dumps(alternatives(sorted(exclude))) if exclude else ""
+def reputation_of(grades):
+    """Maps an address to its (grade, reported) pair. Unchecked means no high, medium or
+    clean answer; reporting is independent of the grade, as in the browser's pickers."""
+    known = {ip: grade for grade in ("clean", "medium", "high") for ip in grades.get(grade, ())}
+    reported = set(grades.get("reported", ()))
+    return lambda ip: (known.get(ip, "unchecked"), ip in reported)
 
 
-def reputation_filter(selected, grades):
+def reputation_match(selected, grades):
+    # Address sets stay out of LogQL: Loki evaluates `ip=~"a|b|…"` per line, and a few
+    # hundred graded addresses turn a sub-second query into one that outlives the API.
     if grades is None:
         raise BadRequest("Reputation filtering needs an AbuseIPDB key")
-    include = set().union(*(grades.get(grade, ()) for grade in selected if grade != "unchecked"))
-    if "unchecked" not in selected:
-        return ip_filter(include)
-    checked = set().union(*(grades.get(grade, ()) for grade in GRADES if grade != "unchecked"))
-    return ip_filter(exclude=checked - include)
+    of = reputation_of(grades)
+
+    def match(ip):
+        grade, reported = of(ip)
+        return grade in selected or (reported and "reported" in selected)
+    return match
 
 
-def event_query(params, now, networks=(), grades=None):
+def event_query(params, now, networks=()):
     if set(params) - {"range", "type", "outcome", "severity", "ip", "country", "asn", "reputation", "before", "after", "own"}:
         raise BadRequest("Unknown filter")
     if params.get("own", "0") not in ("0", "1"):
@@ -112,7 +117,7 @@ def event_query(params, now, networks=(), grades=None):
             raise BadRequest("Invalid network number")
         selector += " | asn=" + json.dumps(params["asn"])
     if params.get("reputation"):
-        selector += reputation_filter(choices(params["reputation"], GRADES, "reputation grade"), grades)
+        choices(params["reputation"], GRADES, "reputation grade")
     start, end = int((now - RANGES[period]) * NANO), int(now * NANO)
     if "before" in params and "after" in params:
         raise BadRequest("Use one cursor direction")
@@ -125,7 +130,8 @@ def event_query(params, now, networks=(), grades=None):
             if not 0 < cursor <= end:
                 raise BadRequest("Cursor outside supported range")
             if key == "before":
-                end = cursor - 1
+                # Loki's end is exclusive: a page before `cursor` stops just short of it.
+                end = cursor
             else:
                 start = max(start, cursor)
     return selector + ' | __error__=""', start, max(start, end)
@@ -149,30 +155,26 @@ class API:
 
     def events(self, params):
         networks = self.own_networks(self.collector.request("/status"))
-        grades = self.grades(params) if params.get("reputation") else None
-        query, start, end = event_query(params, time.time(), networks, grades)
-        data = self.loki.request("/loki/api/v1/query_range", {
-            "query": query, "start": start, "end": end,
-            "direction": "forward" if "after" in params else "backward", "limit": LIMIT + 1,
-        })
-        if data.get("status") != "success" or data.get("data", {}).get("resultType") != "streams":
-            raise UpstreamError("Invalid event response from Loki")
-        rows = []
-        for stream in data["data"]["result"]:
-            for ns, line in stream["values"]:
-                item = json.loads(line)
-                if (not isinstance(item, dict) or item.get("type") not in TYPES
-                        or not isinstance(item.get("id"), str)):
-                    raise UpstreamError("Invalid normalized event")
-                origin = "own" if item.get("origin") == "own" else traffic_origin(item["ip"], networks)
-                rows.append({**item, "origin": origin, "cursor": ns,
-                             "severity": SEVERITY.get(item.get("kind"), "low")})
-        rows.sort(key=lambda item: int(item["cursor"]), reverse="after" not in params)
+        query, start, end = event_query(params, time.time(), networks)
+        forward = "after" in params
+        position = None
+        if params.get("reputation"):
+            match = reputation_match(params["reputation"].split(","), self.grades(params))
+            expected = self.matching(query, start, end, match)
+            rows, position = self.scan(query, start, end, forward, networks,
+                                       lambda item: match(item["ip"]), expected) if expected else ([], None)
+        else:
+            rows = self.page(query, start, end, forward, networks, LIMIT + 1)
         more = len(rows) > LIMIT
         # Do not silently drop events sharing a pagination timestamp.
         if more and rows[LIMIT - 1]["cursor"] == rows[LIMIT]["cursor"]:
             raise UpstreamError("Event timestamp exceeds page capacity; narrow the filters")
         rows = rows[:LIMIT]
+        following = rows[-1]["cursor"] if rows else None
+        if not more and position is not None:
+            # The scan stopped before the range ended: resume at the timestamp it left unread.
+            # Backward pages end just before `before`; forward polls start at `next + 1`.
+            more, following = True, str(position + 1 if not forward else position - 1)
         unique = {item["id"]: item for item in rows}
         ips = sorted({item["ip"] for item in unique.values() if item["origin"] == "external"})
         try:
@@ -183,9 +185,63 @@ class API:
             if isinstance(reputation.get(item["ip"]), dict) and item["origin"] == "external":
                 item["reputation"] = reputation[item["ip"]]
         return {"events": sorted(unique.values(), key=lambda item: int(item["cursor"]), reverse=True),
-                "more": more, "next": rows[-1]["cursor"] if rows else None,
+                "more": more, "next": following,
                 "latest": str(max((int(item["cursor"]) for item in rows), default=end)),
                 "queriedAt": time.time()}
+
+    def page(self, query, start, end, forward, networks, limit):
+        """Up to `limit` normalized events in [start, end), ordered in the paging direction."""
+        data = self.loki.request("/loki/api/v1/query_range", {
+            "query": query, "start": start, "end": end,
+            "direction": "forward" if forward else "backward", "limit": limit,
+        })
+        if data.get("status") != "success" or data.get("data", {}).get("resultType") != "streams":
+            raise UpstreamError("Invalid event response from Loki")
+        rows = []
+        for stream in data["data"]["result"]:
+            for ns, line in stream["values"]:
+                item = json.loads(line)
+                if (not isinstance(item, dict) or item.get("type") not in TYPES
+                        or not isinstance(item.get("id"), str) or not isinstance(item.get("ip"), str)):
+                    raise UpstreamError("Invalid normalized event")
+                origin = "own" if item.get("origin") == "own" else traffic_origin(item["ip"], networks)
+                rows.append({**item, "origin": origin, "cursor": ns,
+                             "severity": SEVERITY.get(item.get("kind"), "low")})
+        rows.sort(key=lambda item: int(item["cursor"]), reverse=not forward)
+        return rows
+
+    def matching(self, query, start, end, match):
+        """About how many events in [start, end) come from addresses passing `match`. Rounding
+        the window up only overcounts; zero is the only answer trusted without a scan."""
+        seconds = max(1, -(-(end - start) // NANO))
+        rows = self.loki_metrics(f"sum by (ip) (count_over_time({query} | keep ip [{seconds}s]))", time=str(end))
+        return sum(float(row["value"][1]) for row in rows if match(row["metric"].get("ip", "")))
+
+    def scan(self, query, start, end, forward, networks, keep, expected):
+        """Events passing `keep`, read in bounded Loki pages. Returns up to LIMIT + 1 matches and,
+        unless the range was read to its end, the oldest (or newest) timestamp left unread.
+        Reaching the `expected` count stops early but still returns a cursor: events
+        delivered after the count could be newer than ones not read yet."""
+        matches = []
+        for _ in range(SCAN_PAGES):
+            rows = self.page(query, start, end, forward, networks, SCAN_PAGE)
+            if len(rows) < SCAN_PAGE:
+                return matches + [item for item in rows if keep(item)], None
+            # The page may have cut the last timestamp short: re-read it whole on the next page.
+            boundary = int(rows[-1]["cursor"])
+            whole = [item for item in rows if int(item["cursor"]) != boundary]
+            if not whole:
+                raise UpstreamError("Event timestamp exceeds page capacity; narrow the filters")
+            matches += [item for item in whole if keep(item)]
+            if len(matches) > LIMIT:
+                return matches, None
+            if len(matches) >= expected:
+                break
+            if forward:
+                start = boundary
+            else:
+                end = boundary + 1
+        return matches, boundary
 
     def prometheus_query(self, query, **params):
         endpoint = "/api/v1/query_range" if "start" in params else "/api/v1/query"
@@ -230,8 +286,10 @@ class API:
                 rows.append({**row["metric"], "count": count})
             return sorted(rows, key=lambda row: -row["count"])
 
-        countries = [row for row in top("countryCode") if re.fullmatch(r"[A-Z]{2}", row.get("countryCode", ""))]
-        asns = [row for row in top("asn,networkOrganization") if re.fullmatch(r"[1-9][0-9]{0,9}", row.get("asn", ""))]
+        with ThreadPoolExecutor(2) as pool:
+            countries, asns = pool.map(top, ("countryCode", "asn,networkOrganization"))
+        countries = [row for row in countries if re.fullmatch(r"[A-Z]{2}", row.get("countryCode", ""))]
+        asns = [row for row in asns if re.fullmatch(r"[1-9][0-9]{0,9}", row.get("asn", ""))]
         return {"range": period, "countries": countries, "networks": asns, "queriedAt": time.time()}
 
     def facets(self, params):
@@ -246,42 +304,26 @@ class API:
             grades = self.grades(params)
         except UpstreamError:
             grades = None
-        # Without a key there is one unfiltered part; with one, the four grades each split
-        # by whether this server reported the address, so overlapping choices stay exact.
-        parts = [({}, "")]
-        if grades is not None:
-            reported = set(grades.get("reported", ()))
-            checked = set().union(*(grades.get(g, ()) for g in ("high", "medium", "clean")))
-            parts = []
-            for grade in ("high", "medium", "clean"):
-                ips = set(grades.get(grade, ()))
-                parts += [({"reputation": grade, "reported": False}, ips - reported),
-                          ({"reputation": grade, "reported": True}, ips & reported)]
-            parts = [(labels, ip_filter(ips)) for labels, ips in parts if ips]
-            if reported - checked:
-                parts.append(({"reputation": "unchecked", "reported": True}, ip_filter(reported - checked)))
-            parts.append(({"reputation": "unchecked", "reported": False}, ip_filter(exclude=checked | reported)))
-
-        def count(part):
-            labels, extra = part
-            filtered = query.removesuffix(' | __error__=""') + extra + ' | __error__=""'
-            rows = self.loki_metrics(
-                f"sum by (type,verdict,kind) (count_over_time({filtered} | keep type,verdict,kind [{period}]))",
-                time=str(int(time.time() * NANO)))
-            merged = {}
-            for row in rows:
-                value = float(row["value"][1])
-                if not math.isfinite(value):
-                    raise UpstreamError("Facet counts contain an invalid value")
-                metric = row["metric"]
-                if metric.get("type") not in TYPES or metric.get("verdict") not in VERDICTS:
-                    continue
-                key = (metric["type"], metric["verdict"], SEVERITY.get(metric.get("kind"), "low"))
-                merged[key] = merged.get(key, 0) + value
-            return [{"type": t, "outcome": v, "severity": s, "count": c, **labels} for (t, v, s), c in merged.items()]
-
-        with ThreadPoolExecutor(len(parts)) as pool:
-            counts = [row for rows in pool.map(count, parts) for row in rows]
+        # With a key, one query counts per source address and Python joins the grades, so the
+        # cost doesn't grow with the number of graded addresses (see reputation_match).
+        labels = "type,verdict,kind" + (",ip" if grades is not None else "")
+        rows = self.loki_metrics(f"sum by ({labels}) (count_over_time({query} | keep {labels} [{period}]))",
+                                 time=str(int(time.time() * NANO)))
+        of = reputation_of(grades) if grades is not None else None
+        merged = {}
+        for row in rows:
+            value = float(row["value"][1])
+            if not math.isfinite(value):
+                raise UpstreamError("Facet counts contain an invalid value")
+            metric = row["metric"]
+            if metric.get("type") not in TYPES or metric.get("verdict") not in VERDICTS:
+                continue
+            key = (metric["type"], metric["verdict"], SEVERITY.get(metric.get("kind"), "low"),
+                   of(metric.get("ip", "")) if of else None)
+            merged[key] = merged.get(key, 0) + value
+        counts = [{"type": t, "outcome": v, "severity": s, "count": c,
+                   **({"reputation": grade[0], "reported": grade[1]} if grade else {})}
+                  for (t, v, s, grade), c in merged.items()]
         return {"range": period, "queriedAt": time.time(), "reputation": grades is not None, "counts": counts}
 
     def stats(self, params):
@@ -296,23 +338,36 @@ class API:
         query += f' | observedAt <= {float(trapping["through"]):.6f} | __error__=""'
         instant = {"time": str(int(now * NANO))}
         counts = query + " | keep type,kind"
-        totals = self.loki_metrics(f"sum by (type,kind) (count_over_time({counts}[{period}]))", **instant)
-        trapped = self.loki_metrics(
-            f'sum(sum_over_time({query} | kind="endlessh_close" | keep duration | unwrap duration | __error__="" [{period}]))',
-            **instant)
-        lifetime_trapped = self.prometheus_query('sum(attacks_endlessh_seconds_total{origin="external"})')
-        sources = self.loki_metrics(f'count(sum by (ip) (count_over_time({query} | keep ip [{period}])))', **instant)
-        try:
-            abuse = self.collector.request("/reputation/summary", {"since": f"{now - seconds:.0f}"})
-        except UpstreamError:
-            abuse = {"enabled": True, "error": "Report history unavailable"}
         step = max(60, seconds // 120)
         # Loki aligns range samples to the step grid. Query full buckets on that
         # grid, then evaluate the current partial bucket without future timestamps.
         end = int(now) // step * step
         start = end - seconds + step
-        timeline = self.loki_metrics(f"sum(count_over_time({counts}[{step}s])) * 60 / {step}",
-                                     start=str(start * NANO), end=str(end * NANO), step=step)
+        partial = int(now) - end
+
+        def abuse_summary():
+            try:
+                return self.collector.request("/reputation/summary", {"since": f"{now - seconds:.0f}"})
+            except UpstreamError:
+                return {"enabled": True, "error": "Report history unavailable"}
+
+        # The queries are independent; waiting on each in turn made the card as slow as their sum.
+        with ThreadPoolExecutor(7) as pool:
+            totals = pool.submit(self.loki_metrics, f"sum by (type,kind) (count_over_time({counts}[{period}]))", **instant)
+            trapped = pool.submit(self.loki_metrics,
+                f'sum(sum_over_time({query} | kind="endlessh_close" | keep duration | unwrap duration | __error__="" [{period}]))',
+                **instant)
+            lifetime_trapped = pool.submit(self.prometheus_query, 'sum(attacks_endlessh_seconds_total{origin="external"})')
+            sources = pool.submit(self.loki_metrics, f'count(sum by (ip) (count_over_time({query} | keep ip [{period}])))', **instant)
+            abuse = pool.submit(abuse_summary)
+            timeline = pool.submit(self.loki_metrics, f"sum(count_over_time({counts}[{step}s])) * 60 / {step}",
+                                   start=str(start * NANO), end=str(end * NANO), step=step)
+            tail = pool.submit(self.loki_metrics, f"sum(count_over_time({counts}[{partial}s])) * 60 / {partial}",
+                               **instant) if partial else None
+            totals, trapped, lifetime_trapped, sources, abuse, timeline = (
+                future.result() for future in (totals, trapped, lifetime_trapped, sources, abuse, timeline))
+            tail = tail.result() if tail else None
+
         def value(row):
             result = float(row["value"][1])
             if not math.isfinite(result):
@@ -320,9 +375,7 @@ class API:
             return result
         points = {int(float(at)): number for row in timeline for at, number in row["values"]}
         timeline = [[at, points.get(at, "0")] for at in range(start, end + 1, step)]
-        partial = int(now) - end
         if partial:
-            tail = self.loki_metrics(f"sum(count_over_time({counts}[{partial}s])) * 60 / {partial}", **instant)
             timeline.append([int(now), str(value(tail[0])) if tail else "0"])
         return {"range": period, "totals": [{**row["metric"], "value": value(row)} for row in totals],
                 "trappedSeconds": value(trapped[0]) if trapped else 0,
