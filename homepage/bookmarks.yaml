@@ -1,4 +1,4 @@
-# Bookmarks — external links and local-only management pages
+# Bookmarks — external links and hardware management pages
 # https://gethomepage.dev/configs/bookmarks/
 
 - Hardware & External Links:
@@ -7,10 +7,14 @@
           href: https://github.com/dantebarbieri/HomeServer
 
     - IPMI (BMC):
-        - icon: mdi-server
+        - icon: mdi-server-network
           href: https://ipmi.danteb.com
           description: ASRock Rack BMC
     - ASUS Router:
         - icon: mdi-router-wireless
-          href: http://router.home.arpa/Main_Login.asp?redirct=false
+          href: https://router.danteb.com/
           description: GT-BE98 Pro
+    - Cable Modem:
+        - icon: mdi-router-network
+          href: https://modem.danteb.com/
+          description: ARRIS SURFboard S33
