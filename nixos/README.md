@@ -72,8 +72,12 @@ access must be limited to the intended administrator/devices in Tailscale's
 access policy; existing service authentication remains in place.
 
 For recovery, connect to No-Face directly over its Tailscale IP and reach
-the BMC through No-Face's `192.168.50.50/32` subnet route. Neither depends on
-this server. Tailscale replaced the old wg-easy WireGuard server, which has
+the BMC, router and cable modem through No-Face's single-host subnet routes
+(`192.168.50.50/32`, `192.168.50.1/32` and `192.168.100.1/32`). None depends
+on this server, but use the router's numeric address: `router.home.arpa`
+resolves through this server's AdGuard. This server itself cannot reach the
+modem: Docker's `compose_authelia` network (`192.168.96.0/20`) contains
+`192.168.100.1`. Tailscale replaced the old wg-easy WireGuard server, which has
 been fully removed. See the [remote-access setup](../README.md#tailscale-remote-access)
 for off-LAN checks.
 

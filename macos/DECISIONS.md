@@ -40,7 +40,7 @@ Dante bought this Mac Studio as a compute companion for the homeserver.
 > both pinned models and the `mlx-whisper` CLI, the `_bazarr`/`_arrmaint`
 > forwarding accounts, and the server's two tunnels (re-pinned host key;
 > previous `known_hosts` kept as `known_hosts.before-no-face-20261121`). New:
-> [Tailscale BMC route and `wake`](#tailnet-bmc-access-and-wake).
+> [Tailscale BMC route and `wake`](#tailnet-lan-admin-routes-and-wake).
 > The Tdarr tunnel and disabled native node were restored the following day
 > ([current status](#offload-video-encoding-tdarr)); historical mount and
 > canary results are not evidence for this install. The benchmark/comparison
@@ -246,7 +246,7 @@ Whisper and Ollama listen only on the Studio's loopback. Only Bazarr reaches
 Whisper. The three *arr maintenance helpers reach Ollama through their
 separate `studio-ollama` SSH forward on the private `arr-ai` Docker network.
 
-## Tailnet: BMC access and wake
+## Tailnet: LAN admin routes and wake
 
 **Intent** (*Dante*, 2026-11-21): "get it onto hosted tailscale and lets get a
 wake-pc running on the no-face machine too". The tailnet should reach the
@@ -258,6 +258,10 @@ wake the Windows PC like the server can. The tailnet-wide migration
 has presets for every machine in the house, is installed on all of them, skips
 the machine it runs on, and auto-updates from its own git repository.
 
+**Intent** (*Dante*, 2026-11-26): reach the cable modem's web UI over the
+tailnet without changing the server's Docker networking for now, so the route
+goes through No-Face rather than NPM.
+
 **Current**
 
 - Open-source `tailscaled` from Homebrew, installed as the boot-time
@@ -267,15 +271,36 @@ the machine it runs on, and auto-updates from its own git repository.
   everything else only after FileVault is unlocked. It copies the binary to
   `/usr/local/bin/tailscaled`, which `brew upgrade` does not update: rerun
   `sudo tailscaled install-system-daemon` after upgrading.
-- Logged in as machine `no-face` (`100.94.21.37`), advertising only
-  `192.168.50.50/32` (the BMC; route approved 2026-11-21), with
+- Logged in as machine `no-face` (`100.94.21.37`) with
   `--accept-routes=false --accept-dns=false` so local routing and DNS stay on
-  the LAN and AdGuard.
+  the LAN and AdGuard. It advertises three single-host routes, all approved in
+  the admin console (checked 2026-11-26), and nothing else on the LAN:
+  - `192.168.50.50/32`: the server's BMC (approved 2026-11-21);
+  - `192.168.50.1/32`: the ASUS router's web UI;
+  - `192.168.100.1/32`: the ARRIS SURFboard S33 cable modem's web UI. The
+    server can't serve this one: Docker auto-assigned `compose_authelia`
+    `192.168.96.0/20`, which contains the modem's address, so calcifer routes
+    it to that bridge.
+- The admin console's split DNS sends `home.arpa` to No-Face, which resolves
+  it with its own resolvers: calcifer's AdGuard, then `1.1.1.1` (which can't
+  answer `home.arpa`). `router.home.arpa` therefore only works remotely while
+  calcifer is up; the README gives the numeric fallback.
 - No NAT, IP forwarding or pf rules are needed: on macOS `tailscaled` serves
-  subnet routes through its userspace network stack, so the BMC sees ordinary
-  connections from `192.168.50.80`. Verified from DANTE-PC: its route to
-  `192.168.50.50` is via the Tailscale interface and HTTPS returns 200. (A pf
-  NAT helper tried first matched no packets and was removed.)
+  subnet routes through its userspace network stack, so the targets see
+  ordinary connections from `192.168.50.80`. Verified from DANTE-PC: its route
+  to `192.168.50.50` is via the Tailscale interface and HTTPS returns 200;
+  verified from the MacBook (2026-11-26): its route to `192.168.100.1` is via
+  the Tailscale interface, `https://192.168.100.1/Login.html` returns 200 and
+  the leaf certificate matches the fingerprint in the README. (A pf NAT helper
+  tried first matched no packets and was removed.)
+- Not used: Tailscale Serve for a warning-free modem URL (evaluated
+  2026-11-26). Serve's HTTPS proxy either verifies the upstream against the
+  system roots and its hostname, which the modem's ARRIS device certificate
+  (only a URI SAN) can never pass, or skips verification entirely
+  (`https+insecure://`). It cannot pin a certificate (`ipn/ipnlocal/serve.go`
+  in 1.104.7 sets only `InsecureSkipVerify`), so a Serve URL would stop anyone
+  checking that the page really comes from the modem. No-Face has no Serve
+  config; browsers open the modem directly and check its fingerprint.
 - `/usr/local/bin/wake` is the `aarch64-apple-darwin` release of
   [dantebarbieri/wake](https://github.com/dantebarbieri/wake), installed by
   its `install/install.sh` (run with sudo), which also deleted the old

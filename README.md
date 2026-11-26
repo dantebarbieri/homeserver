@@ -79,7 +79,14 @@ not an exit node: ordinary internet traffic stays on the client's network.
 
 For the [ASUS router over Tailscale](http://router.home.arpa/Main_Login.asp?redirct=false),
 bookmark that exact URL. The router's `redirct=false` parameter keeps its
-login page from switching to `www.asusrouter.com`.
+login page from switching to `www.asusrouter.com`. Split DNS sends
+`home.arpa` lookups to no-face, which resolves them through calcifer's
+AdGuard, so while calcifer is down use
+`http://192.168.50.1/Main_Login.asp?redirct=false` instead.
+
+For the [cable modem over Tailscale](https://192.168.100.1/Login.html),
+bookmark that exact HTTPS URL: the modem's root page redirects to plain
+HTTP.
 
 - **calcifer:** native NixOS daemon, managed by
   [`nixos/modules/tailscale.nix`](nixos/modules/tailscale.nix); after deployment,
@@ -88,9 +95,11 @@ login page from switching to `www.asusrouter.com`.
   key-only SSH on port 28 during first enrollment.
 - **no-face:** boot-time `tailscaled` plus `wake`; see
   [`macos/DECISIONS.md`](macos/DECISIONS.md) for the installed paths and
-  startup details. Its BMC-only subnet route is `192.168.50.50/32`.
-  Approve that route on the Tailscale Machines page. FileVault must be
-  unlocked after a cold boot before any macOS daemon can run.
+  startup details. It advertises three single-host subnet routes, each
+  approved on the Tailscale Machines page: `192.168.50.50/32` (the BMC),
+  `192.168.50.1/32` (the ASUS router) and `192.168.100.1/32` (the ARRIS
+  SURFboard S33 cable modem). No other LAN address is routed. FileVault
+  must be unlocked after a cold boot before any macOS daemon can run.
 - **Windows:** install the official `Tailscale.Tailscale` WinGet package,
   sign in, then run `tailscale set --unattended=true`. The automatic
   Tailscale service must stay running when the Windows user signs out so
@@ -119,14 +128,28 @@ connected, verify:
    BMC's own credentials and expect its existing self-signed certificate.
    `ipmi.danteb.com` still depends on calcifer's NPM/Authelia and is **not**
    the recovery path.
-4. SSH to no-face and use `wake pc --wait` when the PC is intentionally
+4. Open the router and modem bookmarks above through No-Face's other two
+   routes.
+5. SSH to no-face and use `wake pc --wait` when the PC is intentionally
    asleep. This sends the magic packet locally on the LAN.
+
+The modem presents its own ARRIS device certificate, which never matches
+`192.168.100.1`, so every browser warns. Before accepting the warning,
+check that the certificate's SHA-256 fingerprint is
+`59:FE:5C:BE:68:03:7A:84:EC:E4:AA:50:0D:8D:6D:CC:4F:C9:25:13:F8:22:DB:DC:14:25:D3:1F:9B:DA:D5:87`
+(checked 2026-11-26; a modem firmware update may legitimately replace it).
+The modem's own password is still required. Repeated failed logins lock its
+web user until the modem reboots; a reboot drops the home internet and with
+it this remote path. calcifer cannot reach the modem at all (Docker's
+`compose_authelia` network, `192.168.96.0/20`, contains `192.168.100.1`),
+so there is no NPM or Tailscale Serve URL for it; see
+[`macos/DECISIONS.md`](macos/DECISIONS.md#tailnet-lan-admin-routes-and-wake).
 
 On Linux remote clients, enable route acceptance with
 `sudo tailscale set --accept-routes=true`; Windows/macOS normally accept
-routes by default. Checking the BMC from a machine already on the home LAN
-does not by itself prove subnet routing works. Do not shut down calcifer
-just to test it without a planned maintenance window.
+routes by default. Checking these addresses from a machine already on the
+home LAN does not by itself prove subnet routing works. Do not shut down
+calcifer just to test it without a planned maintenance window.
 
 ## Wake machines on the LAN
 
