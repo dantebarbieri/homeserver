@@ -119,6 +119,27 @@ function notices() {
   $("health").classList.toggle("error", !!messages.length && !demo);
 }
 
+// Loki can't report query progress, so the indicator names the parts of a range or filter
+// change still loading; each drops off as it arrives. Background polls stay silent.
+const LOADING = {feed: "events", stats: "statistics", facets: "filter counts"};
+const loading = new Set(), inflight = {};
+
+function setLoading(kind, on) {
+  on ? loading.add(kind) : loading.delete(kind);
+  const parts = Object.keys(LOADING).filter(name => loading.has(name)).map(name => LOADING[name]);
+  $("loading").hidden = !parts.length;
+  $("loading-text").textContent = parts.length ? `Loading ${parts.join(", ")}…` : "";
+  $("range").toggleAttribute("aria-busy", parts.length > 0);
+}
+
+// A newer request of the same kind cancels the older one instead of queueing behind it.
+function supersede(kind) {
+  inflight[kind]?.abort();
+  return (inflight[kind] = new AbortController()).signal;
+}
+
+const aborted = error => error?.name === "AbortError";
+
 function locationLabel(item) {
   const line = node("span", undefined, "location-line");
   const flag = countryFlag(item.countryCode);
@@ -178,8 +199,10 @@ function reputationField(value) {
   return lines.join("\n");
 }
 
-async function request(path, params = {}) {
-  const response = await fetch(`${path}?${new URLSearchParams(params)}`, {cache: "no-store", signal: AbortSignal.timeout(15000), redirect: "error"});
+async function request(path, params = {}, cancel = null) {
+  const timeout = AbortSignal.timeout(15000);
+  const signal = cancel && AbortSignal.any ? AbortSignal.any([cancel, timeout]) : timeout;
+  const response = await fetch(`${path}?${new URLSearchParams(params)}`, {cache: "no-store", signal, redirect: "error"});
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.error || `Telemetry unavailable (${response.status}); sign in again if your session expired.`);
@@ -416,7 +439,8 @@ function render() {
   }
   if (focusedId) container.querySelector(`[data-event-id="${CSS.escape(focusedId)}"]`)?.focus({preventScroll: true});
   $("empty").hidden = events.length > 0;
-  $("empty").textContent = errors.has("feed") ? "Events unavailable. Check collection health above." : "No matching events in this observation window.";
+  $("empty").textContent = errors.has("feed") ? "Events unavailable. Check collection health above."
+    : loading.has("feed") ? "Loading events…" : "No matching events in this observation window.";
   counter("feed-count", grouped ? `${groups.length} ${groups.length === 1 ? "source" : "sources"} · ${events.length} events` : `${events.length} shown`);
   $("older").hidden = !hasOlder || demo || events.length >= 1000;
   mapPoints();
@@ -708,16 +732,21 @@ async function loadFacets() {
   if ($("own").checked) scope.own = "1";
   const key = JSON.stringify(scope);
   if (facetsKey === key && performance.now() - facetsAt < 25000) return;
-  if (facetsKey !== key) { facetRows = null; renderFacets(); }
+  const changed = facetsKey !== key;
+  if (changed) { facetRows = null; renderFacets(); }
   facetsKey = key; facetsAt = performance.now();
+  const signal = supersede("facets");
+  if (changed) setLoading("facets", true);
   try {
-    const result = demo ? demoFacets(scope) : await request("/api/facets", scope);
+    const result = demo ? demoFacets(scope) : await request("/api/facets", scope, signal);
     if (key !== facetsKey) return;
     facetRows = result.counts;
     reputationAvailable(result.reputation === true);
-  } catch {
-    if (key !== facetsKey) return;
+  } catch (error) {
+    if (aborted(error) || key !== facetsKey) return;
     facetRows = null; facetsAt = 0;
+  } finally {
+    if (!signal.aborted) setLoading("facets", false);
   }
   renderFacets();
 }
@@ -827,6 +856,7 @@ function demoArrivals() {
 async function load(reset = false, history = false) {
   if ((busy && !reset) || (!live && !reset && !history)) return;
   const epoch = reset ? ++generation : generation;
+  const signal = supersede("feed");
   busy = true;
   // A poll that finds nothing new leaves the list alone; a reset or an older page always redraws it.
   let redraw = reset || history;
@@ -837,6 +867,8 @@ async function load(reset = false, history = false) {
     followQueue.clear();
     for (const {node} of arrivals.values()) node.remove();
     arrivals.clear(); arrivalsOmitted = 0;
+    setLoading("feed", true);
+    render();
   }
   try {
     if (demo) {
@@ -852,7 +884,7 @@ async function load(reset = false, history = false) {
       if (history && older) query.before = older;
       else if (latest) query.after = latest;
       for (let page = 0; page < (reset || history ? 1 : 8); page++) {
-        const result = await request("/api/events", query);
+        const result = await request("/api/events", query, signal);
         if (epoch !== generation) return;
         const {added, revised} = diffEvents(events, result.events);
         // Server time keeps freshness correct when this device's clock is off.
@@ -872,9 +904,13 @@ async function load(reset = false, history = false) {
     }
     if (redraw) render();
   } catch (error) {
-    if (epoch === generation) { errors.set("feed", error.message); render(); }
+    if (epoch === generation && !aborted(error)) { errors.set("feed", error.message); render(); }
   } finally {
-    if (epoch === generation) { busy = false; notices(); }
+    if (epoch === generation) {
+      busy = false;
+      if (loading.has("feed")) { setLoading("feed", false); if (!events.length) render(); }
+      notices();
+    }
   }
 }
 
@@ -901,14 +937,15 @@ function reportCard(result, failures) {
   counter("report-detail", `${percent} of ${seen.toLocaleString()} ${seen === 1 ? "source" : "sources"} seen`);
 }
 
-async function stats() {
-  const period = $("range").value;
+async function stats(show = false) {
+  const period = $("range").value, signal = supersede("stats");
+  if (show) setLoading("stats", true);
   try {
     const result = demo ? {available: true, totals: [{kind: "endlessh_open", value: 6821}, {kind: "ssh_failure", value: 143}, {kind: "auth_failure", value: 12}, {kind: "http_probe", value: 924}], trappedSeconds: 184800, lifetimeTrappedSeconds: 2064000,
       sources: 412, abuse: {enabled: true, reports: 57, sources: 49},
       trapping: demoTrapping(demoFeed(), Date.now() / 1000),
       timeline: Array.from({length: 120}, (_, i) => [i, String(5 + (Math.sin(i * 1.9) + 1) * 7 + (i % 29 === 0 ? 30 : 0))])}
-      : await request("/api/stats", {range: period});
+      : await request("/api/stats", {range: period}, signal);
     if (period !== $("range").value) return;
     const sum = result.totals.reduce((total, item) => total + item.value, 0);
     const failures = result.totals.filter(item => ["ssh_failure", "auth_failure"].includes(item.kind)).reduce((total, item) => total + item.value, 0);
@@ -924,7 +961,7 @@ async function stats() {
     spark(result.timeline);
     errors.delete("metrics");
   } catch (error) {
-    if (period !== $("range").value) return;
+    if (aborted(error) || period !== $("range").value) return;
     for (const id of ["total", "failures", "trapped"]) counter(id, "—");
     trapSample = null;
     syncTrap();
@@ -933,6 +970,8 @@ async function stats() {
     $("metric-status").textContent = "Metrics unavailable";
     spark([]);
     errors.set("metrics", error.message);
+  } finally {
+    if (!signal.aborted) setLoading("stats", false);
   }
   notices();
 }
@@ -1623,7 +1662,7 @@ for (const [key, value] of Object.entries(TYPES)) {
 }
 
 $("own").onchange = () => applyFilters();
-$("range").onchange = () => { load(true); stats(); loadFacets(); };
+$("range").onchange = () => { load(true); stats(true); loadFacets(); };
 $("older").onclick = () => load(false, true);
 $("group").onclick = () => setGrouped(!grouped);
 setGrouped(grouped, false);
@@ -1672,7 +1711,7 @@ window.addEventListener("offline", () => {
 window.addEventListener("online", () => { errors.delete("network"); atlasFailed.clear(); updateMapDetail(); notices(); load(); stats(); health(); });
 if (!navigator.onLine) errors.set("network", "Offline: live telemetry is unavailable. Event data is never cached.");
 
-mapLand(); updateMapDetail(); applyFilters(); stats(); health();
+mapLand(); updateMapDetail(); applyFilters(); stats(true); health();
 if (demo && new URLSearchParams(location.search).get("simulate") !== "0") setTimeout(demoArrivals, 3000);
 setInterval(() => { if (!document.hidden) { mapPoints(); updateTrapping(); tickTrapping(); } }, 1000);
 setInterval(() => { if (!document.hidden && !demo) load(); }, 3000);

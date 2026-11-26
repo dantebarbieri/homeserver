@@ -18,7 +18,7 @@
 <body>
   <header class="appbar">
     <a class="brand" href="/"><img class="brand-icon" src="/favicon.svg" alt="" width="36" height="36"><strong>ATTACKS</strong></a>
-    <div class="top-right"><label class="period"><span>Observation window</span><select id="range"><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h" selected>Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label><button id="health" class="status" aria-controls="sources">Connecting</button></div>
+    <div class="top-right"><span id="loading" class="loading" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text"></span></span><label class="period"><span>Observation window</span><select id="range"><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h" selected>Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select></label><button id="health" class="status" aria-controls="sources">Connecting</button></div>
   </header>
   <main>
     <div id="notice" role="status" class="notice" hidden></div>
@@ -100,7 +100,7 @@
       <div id="active-filters" class="active-filters" aria-label="Active filters" hidden></div>
       <div class="feed-columns" aria-hidden="true"><span>TIME</span><span>EVENT / CLASSIFICATION</span><span>SOURCE</span><span>DETAIL</span><span></span></div>
       <div id="events" aria-live="off"></div>
-      <div id="empty" class="empty">Connecting to the event collector…</div>
+      <div id="empty" class="empty">Loading events…</div>
       <div class="feed-footer"><span id="feed-note">Updates every 3 seconds. Events are not unique attacks.</span><button id="older" class="button" hidden>Load older events</button></div>
     </section>
     <div class="app-install"><button id="install-app" class="button" hidden>Install app</button><span>On iPhone: Safari → Share → Add to Home Screen.</span><span id="pwa-status" role="status"></span></div>

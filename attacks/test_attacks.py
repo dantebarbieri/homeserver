@@ -4,6 +4,7 @@ from contextlib import closing
 import hashlib
 import ipaddress
 import json
+import re
 from pathlib import Path
 import struct
 import sqlite3
@@ -23,7 +24,7 @@ from common import Client, UpstreamError
 from events import (KINDS, SEVERITIES, SEVERITY, home_networks, kinds_at_least, parse_authelia, parse_endlessh,
                     parse_fail2ban, parse_flow, parse_forgejo_ssh, parse_hytale, parse_npm, parse_plex, parse_ssh,
                     refine, traffic_origin)
-from server import API, BadRequest, event_query, parameters
+from server import API, NANO, BadRequest, event_query, parameters, reputation_match
 from ssh_keys import SSHKeys
 from networks import FEEDS, Networks
 from update_intelligence import ranges, refresh_prefixes
@@ -639,37 +640,87 @@ class QueryTests(unittest.TestCase):
             with self.assertRaises(BadRequest, msg=params):
                 API(loki, Mock(), collector).facets(params)
 
-    def test_reputation_filter_matches_grades_and_needs_a_key(self):
+    def test_reputation_match_mirrors_the_pickers_and_needs_a_key(self):
         grades = {"high": ["1.2.3.4"], "medium": ["5.6.7.8"], "clean": ["2001:db8::1"], "reported": ["9.9.9.9", "1.2.3.4"]}
-        query = lambda value: event_query({"reputation": value}, time.time(), grades=grades)[0]
-        self.assertIn(r'| ip=~"1\\.2\\.3\\.4|9\\.9\\.9\\.9"', query("high,reported"))
-        self.assertIn(r'| ip!~"1\\.2\\.3\\.4|2001:db8::1|5\\.6\\.7\\.8|9\\.9\\.9\\.9"', query("unchecked"))
-        self.assertIn(r'| ip!~"2001:db8::1|5\\.6\\.7\\.8"', query("unchecked,high,reported"))
-        self.assertIn('| ip="!"', event_query({"reputation": "high"}, time.time(), grades={})[0])
-        for value, known in (("high", None), ("severe", grades), ("high,high", grades)):
+        matched = lambda value: {ip for ip in ("1.2.3.4", "5.6.7.8", "2001:db8::1", "9.9.9.9", "7.7.7.7")
+                                 if reputation_match(value.split(","), grades)(ip)}
+        self.assertEqual(matched("high,reported"), {"1.2.3.4", "9.9.9.9"})
+        self.assertEqual(matched("unchecked"), {"9.9.9.9", "7.7.7.7"})  # Reporting doesn't grade an address.
+        self.assertEqual(matched("medium"), {"5.6.7.8"})
+        with self.assertRaises(BadRequest):
+            reputation_match(["high"], None)
+        for value in ("severe", "high,high"):
             with self.assertRaises(BadRequest, msg=value):
-                event_query({"reputation": value}, time.time(), grades=known)
+                event_query({"reputation": value}, time.time())
+        self.assertNotIn("ip=~", event_query({"reputation": "high"}, time.time())[0])
+
+    def test_reputation_events_are_filtered_in_python_across_bounded_pages(self):
+        lines = [(str(1000 - i), {"id": str(i), "type": "ssh", "kind": "ssh_failure",
+                                   "ip": "1.2.3.4" if i % 400 == 0 else "8.8.8.8"}) for i in range(1000)]
+        calls = []
+
+        def query_range(path, params):
+            calls.append(params)
+            if "query_range" not in path:
+                at, seconds = int(params["time"]), int(re.search(r"\[(\d+)s\]", params["query"])[1])
+                inside = [item for ns, item in lines if at - seconds * NANO < int(ns) <= at]
+                return {"status": "success", "data": {"resultType": "vector", "result": [
+                    {"metric": {"ip": ip}, "value": [1, str(sum(item["ip"] == ip for item in inside))]}
+                    for ip in ("1.2.3.4", "8.8.8.8")]}}
+            rows = [(ns, item) for ns, item in lines if params["start"] <= int(ns) <= params["end"]]
+            rows = rows[:params["limit"]] if params["direction"] == "backward" else rows[::-1][:params["limit"]]
+            return {"status": "success", "data": {"resultType": "streams", "result": [
+                {"stream": {}, "values": [[ns, json.dumps(item)] for ns, item in rows]}]}}
+        loki = Mock()
+        loki.request.side_effect = query_range
+        collector = Mock()
+        grades = {"enabled": True, "grades": {"high": ["1.2.3.4"], "medium": [], "clean": [], "reported": []}}
+        collector.request.side_effect = lambda path, params=None: grades if path == "/reputation/grades" else (
+            {} if path == "/reputation" else {"ownTraffic": {"state": "ready", "networks": []}})
+        api = API(loki, Mock(), collector)
+        with patch("server.time.time", return_value=2000 / NANO), patch("server.SCAN_PAGE", 300), patch("server.SCAN_PAGES", 2):
+            first = api.events({"reputation": "high"})
+            # Two pages of 300 cover cursors 1000..403; the boundary timestamp 402 is read again next time.
+            self.assertEqual([item["id"] for item in first["events"]], ["0", "400"])
+            self.assertTrue(first["more"])
+            self.assertEqual(first["next"], "403")
+            rest = api.events({"reputation": "high", "before": first["next"]})
+        self.assertEqual([item["id"] for item in rest["events"]], ["800"])
+        self.assertFalse(rest["more"])
+        # The count says all three are found, so the scan stops without reading the oldest page.
+        self.assertEqual(sum("direction" in params for params in calls), 3)
+        grades["grades"]["high"] = []
+        calls.clear()
+        self.assertEqual(api.events({"reputation": "high"})["events"], [])
+        self.assertEqual(len(calls), 1)  # Nothing matches: only the count query runs.
+        self.assertTrue(all("ip=~" not in params["query"] and '| ip="' not in params["query"] for params in calls))
 
     def test_facets_split_counts_by_reputation_only_with_a_key(self):
         loki = Mock()
         loki.request.return_value = {"status": "success", "data": {"resultType": "vector", "result": [
-            {"metric": {"type": "ssh", "verdict": "failure", "kind": "ssh_failure"}, "value": [1, "2"]}]}}
+            {"metric": {"type": "ssh", "verdict": "failure", "kind": "ssh_failure", "ip": ip}, "value": [1, "2"]}
+            for ip in ("1.2.3.4", "5.6.7.8", "9.9.9.9", "7.7.7.7")]}}
         collector = Mock()
-        grades = {"enabled": True, "grades": {"high": ["1.2.3.4"], "medium": [], "clean": ["5.6.7.8"], "reported": ["1.2.3.4"]}}
+        grades = {"enabled": True, "grades": {"high": ["1.2.3.4"], "medium": [], "clean": ["5.6.7.8"], "reported": ["1.2.3.4", "9.9.9.9"]}}
         collector.request.side_effect = lambda path, params=None: grades if path == "/reputation/grades" else {
             "ownTraffic": {"state": "ready", "networks": []}}
         result = API(loki, Mock(), collector).facets({"range": "24h"})
         self.assertTrue(result["reputation"])
-        self.assertCountEqual([(row["reputation"], row["reported"]) for row in result["counts"]],
-                              [("high", True), ("clean", False), ("unchecked", False)])
-        queries = [call[0][1]["query"] for call in loki.request.call_args_list]
-        self.assertTrue(any(r'| ip!~"1\\.2\\.3\\.4|5\\.6\\.7\\.8" | __error__=""' in query for query in queries))
+        self.assertCountEqual([(row["reputation"], row["reported"], row["count"]) for row in result["counts"]],
+                              [("high", True, 2), ("clean", False, 2), ("unchecked", True, 2), ("unchecked", False, 2)])
+        self.assertEqual(loki.request.call_count, 1)
+        query = loki.request.call_args[0][1]["query"]
+        self.assertIn("sum by (type,verdict,kind,ip)", query)
+        self.assertNotIn("ip=~", query)
         grades = {"enabled": False}
         loki.request.reset_mock()
+        loki.request.return_value = {"status": "success", "data": {"resultType": "vector", "result": [
+            {"metric": {"type": "ssh", "verdict": "failure", "kind": "ssh_failure"}, "value": [1, "2"]}]}}
         result = API(loki, Mock(), collector).facets({"range": "24h"})
         self.assertFalse(result["reputation"])
         self.assertEqual(loki.request.call_count, 1)
         self.assertNotIn("reputation", result["counts"][0])
+        self.assertIn("sum by (type,verdict,kind) ", loki.request.call_args[0][1]["query"])
 
     def test_saturated_timestamp_fails_instead_of_skipping(self):
         client = Mock()

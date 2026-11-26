@@ -30,6 +30,10 @@ storage_config:
 
 limits_config:
   retention_period: 720h
+  # Query-time cap only (ingestion limits are unchanged). The attacks dashboard counts
+  # per source IP so it can join AbuseIPDB grades outside LogQL; 30 days is ~1k series,
+  # well past the default 500.
+  max_query_series: 20000
 
 compactor:
   working_directory: /loki/compactor

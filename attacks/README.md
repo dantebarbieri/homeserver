@@ -304,7 +304,9 @@ account allows 1,000 checks and 1,000 reports a day), the collector also:
 - **Filters** the stream, map and facets by a **Reputation** picker (shown only
   while a key is configured): High risk (50-100%), Some reports (1-49%), No reports
   (0%), Not checked yet, and Reported by this server. Choices combine with OR,
-  and each shows its matching count.
+  and each shows its matching count. "Not checked yet" means no grade, whether or
+  not this server reported the source. The API joins grades to events in Python,
+  never as a LogQL address list (see **Query cost** below).
 - **Reports** (`ABUSEIPDB_REPORTING=strict`, the default; `off` disables it)
   only high-confidence abuse from external sources within one hour:
 
@@ -435,6 +437,29 @@ queries for bounded log scans; the UI's maximum window is Loki's 30-day retentio
 while Prometheus retains 90 days. Failures are reported, never replaced with fake
 zeroes. Timeline gaps from valid, quiet queries are zero-filled. Extracted
 high-cardinality fields are removed before aggregation.
+
+**Query cost.** Moving back to Prometheus would not speed up long windows; the
+LogQL shape decides it. Never put a set of IPs into LogQL: an `ip=~"a|b|…"`
+filter over hundreds of graded addresses took over 9 seconds per query and,
+re-polled every 30 seconds, queued every other dashboard query behind it until
+7- and 30-day windows timed out. Instead:
+
+- `/api/facets` is one `sum by (type, verdict, kind, ip)` metric query; Python
+  merges the rows and joins reputation grades.
+- A reputation-filtered `/api/events` first counts events per IP with one
+  metric query, so with no matching source it answers at once. Otherwise it
+  reads plain Loki pages, keeps rows whose IP passes the filter and stops once
+  it has a page or every counted match. At most five 1,000-row pages per request,
+  then it returns a cursor to continue.
+- `/api/stats` runs its seven upstream queries concurrently, and `/api/sources`
+  its two.
+
+Per-IP aggregation needs more than Loki's default 500 series per query, so
+`docker/monitoring/loki-config.yml` sets `max_query_series: 20000`. That limit
+applies only to query results; ingestion limits are unchanged. Restart `loki`
+after changing it. The page shows a spinner with what it is loading
+(events, statistics, filter counts) and cancels a request superseded by a newer
+window or filter, so switching ranges never waits on a stale query.
 
 ## Data flow and limits
 
