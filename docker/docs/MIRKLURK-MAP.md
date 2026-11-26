@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `b2b04c7f32bf71b56db45c7528f7f10b81b05cf0`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45662655322) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/73) has no open issues |
-| Web | `mirklurk-map:b2b04c7`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:b2b04c7`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `e352e3d2c2fe788d3e4e5c78c5e2ae42f54b1e1d`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45848477083) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/74) has no open issues |
+| Web | `mirklurk-map:e352e3d`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:e352e3d`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -376,6 +376,46 @@ unrelated runtime contracts. Require full IPv4/IPv6 size/SHA checks,
 independent catalog/spider acceptance, one new sharing/identity lifecycle
 and unchanged published wiki revisions before releasing the window.
 No File imports, backups or unrelated repair belong to this follow-up.
+
+### Public 1.0.1 core pin
+
+The reviewed core promotes **Latest/default to 1.0.1.0**, with no active Beta.
+Shield blocking for items 280, 282 and 283 is now explicitly gated to 1.0.1;
+their incorrectly modeled effective block in historical 0.9.9.7/1.0 is
+corrected to zero. Iron Chestplate 281 is excluded. Item availability,
+saved armor/durability, other shields and skill rules remain unchanged.
+This is a version-rule correction, not a save migration or game simulation.
+
+Catalog 554 and its November 25 verification date remain unchanged until
+the separately accepted 1.0.1 wiki publication and mandatory final refresh.
+All 404 PNGs (330 wiki, 74 game), attribution/mappings and the selected
+spider geometry in both bundles are unchanged. No File import, API/config,
+Docker, schema, auth or proxy change is required, but build both targets:
+uploads copies the changed `src`.
+
+Acceptance uses `1010-core-bundle.json`, SHA-256
+`925ea446fbd7d67435521b10b04b1416b5cefc12b5881078d165fbd35c4b541c`:
+418 distribution files plus unchanged nginx `50x.html` (419 physical files),
+417 precache entries and cache `e4197e3c71`. `1010-core-contract.json` and
+`1010-rule-contract.json` record exact historical/new shield gates and
+unchanged geometry. No real 1.0.1 gameplay fixture is claimed.
+
+| Asset | SHA-256 |
+|---|---|
+| `app.d7433ac588.js` | `d7433ac58819bf1ada698d0f62860421cee5635b67016a8cfcca1d14d3c322d9` |
+| `edit.a4eb5a5336.js` | `a4eb5a5336b97267bde69df30a19737dba6299176af0fe5871b85254c10129b9` |
+| `sw.js` | `648f2c2ab5fc6c89ac33d6ff2be5efb0fcc929a78672e6659a6060d8016433a7` |
+
+This pin is not a live claim or guard waiver. Use normal exact candidate
+review/CI and merged-main CI, fresh canonical/origin cleanliness, exclusive
+NPM trust, intended mounts/hardening, current runtime/jobs/timers and sole
+serialized uploads-then-web window. Account legitimate scheduled recreations
+with fresh evidence; preserve the accepted b2b04c7 images as rollback and
+all earlier failure records. Require full IPv4/IPv6 size/SHA verification,
+independent shield-gate acceptance, one new sharing/identity lifecycle and
+unchanged published wiki revisions before explicit window release.
+No backups, denied authentication retries or unrelated repairs belong to
+this rollout. Fetch no unpublished wiki/catalog inputs.
 
 ### Historical beta-wiki acceptance identifiers
 
