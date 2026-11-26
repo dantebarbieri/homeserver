@@ -130,7 +130,8 @@ def event_query(params, now, networks=()):
             if not 0 < cursor <= end:
                 raise BadRequest("Cursor outside supported range")
             if key == "before":
-                end = cursor - 1
+                # Loki's end is exclusive: a page before `cursor` stops just short of it.
+                end = cursor
             else:
                 start = max(start, cursor)
     return selector + ' | __error__=""', start, max(start, end)
@@ -171,8 +172,8 @@ class API:
         rows = rows[:LIMIT]
         following = rows[-1]["cursor"] if rows else None
         if not more and position is not None:
-            # The scan stopped before the range ended: resume where it stopped. Backward pages
-            # end at `before - 1`; forward polls start at `next + 1`.
+            # The scan stopped before the range ended: resume at the timestamp it left unread.
+            # Backward pages end just before `before`; forward polls start at `next + 1`.
             more, following = True, str(position + 1 if not forward else position - 1)
         unique = {item["id"]: item for item in rows}
         ips = sorted({item["ip"] for item in unique.values() if item["origin"] == "external"})
@@ -189,7 +190,7 @@ class API:
                 "queriedAt": time.time()}
 
     def page(self, query, start, end, forward, networks, limit):
-        """Up to `limit` normalized events in [start, end], ordered in the paging direction."""
+        """Up to `limit` normalized events in [start, end), ordered in the paging direction."""
         data = self.loki.request("/loki/api/v1/query_range", {
             "query": query, "start": start, "end": end,
             "direction": "forward" if forward else "backward", "limit": limit,
@@ -210,33 +211,36 @@ class API:
         return rows
 
     def matching(self, query, start, end, match):
-        """How many events in [start, end] come from addresses passing `match`. Rounding the
-        window up only overcounts, which costs a longer scan, never a missed event."""
+        """About how many events in [start, end) come from addresses passing `match`. Rounding
+        the window up only overcounts; zero is the only answer trusted without a scan."""
         seconds = max(1, -(-(end - start) // NANO))
         rows = self.loki_metrics(f"sum by (ip) (count_over_time({query} | keep ip [{seconds}s]))", time=str(end))
         return sum(float(row["value"][1]) for row in rows if match(row["metric"].get("ip", "")))
 
     def scan(self, query, start, end, forward, networks, keep, expected):
-        """Events passing `keep`, read in bounded Loki pages until all `expected` are found.
-        Returns up to LIMIT + 1 matches and, if the page budget ran out first, the
-        timestamp the next request resumes from."""
+        """Events passing `keep`, read in bounded Loki pages. Returns up to LIMIT + 1 matches and,
+        unless the range was read to its end, the oldest (or newest) timestamp left unread.
+        Reaching the `expected` count stops early but still returns a cursor: events
+        delivered after the count could be newer than ones not read yet."""
         matches = []
         for _ in range(SCAN_PAGES):
             rows = self.page(query, start, end, forward, networks, SCAN_PAGE)
             if len(rows) < SCAN_PAGE:
                 return matches + [item for item in rows if keep(item)], None
-            # Loki bounds are inclusive: re-read the last timestamp whole on the next page.
+            # The page may have cut the last timestamp short: re-read it whole on the next page.
             boundary = int(rows[-1]["cursor"])
             whole = [item for item in rows if int(item["cursor"]) != boundary]
             if not whole:
                 raise UpstreamError("Event timestamp exceeds page capacity; narrow the filters")
             matches += [item for item in whole if keep(item)]
+            if len(matches) > LIMIT:
+                return matches, None
+            if len(matches) >= expected:
+                break
             if forward:
                 start = boundary
             else:
-                end = boundary
-            if len(matches) > LIMIT or len(matches) >= expected:
-                return matches, None
+                end = boundary + 1
         return matches, boundary
 
     def prometheus_query(self, query, **params):

@@ -656,7 +656,7 @@ class QueryTests(unittest.TestCase):
 
     def test_reputation_events_are_filtered_in_python_across_bounded_pages(self):
         lines = [(str(1000 - i), {"id": str(i), "type": "ssh", "kind": "ssh_failure",
-                                   "ip": "1.2.3.4" if i % 400 == 0 else "8.8.8.8"}) for i in range(1000)]
+                                   "ip": "1.2.3.4" if i in (0, 299, 400, 598, 800) else "8.8.8.8"}) for i in range(1000)]
         calls = []
 
         def query_range(path, params):
@@ -667,7 +667,7 @@ class QueryTests(unittest.TestCase):
                 return {"status": "success", "data": {"resultType": "vector", "result": [
                     {"metric": {"ip": ip}, "value": [1, str(sum(item["ip"] == ip for item in inside))]}
                     for ip in ("1.2.3.4", "8.8.8.8")]}}
-            rows = [(ns, item) for ns, item in lines if params["start"] <= int(ns) <= params["end"]]
+            rows = [(ns, item) for ns, item in lines if params["start"] <= int(ns) < params["end"]]  # Loki's end is exclusive.
             rows = rows[:params["limit"]] if params["direction"] == "backward" else rows[::-1][:params["limit"]]
             return {"status": "success", "data": {"resultType": "streams", "result": [
                 {"stream": {}, "values": [[ns, json.dumps(item)] for ns, item in rows]}]}}
@@ -680,15 +680,21 @@ class QueryTests(unittest.TestCase):
         api = API(loki, Mock(), collector)
         with patch("server.time.time", return_value=2000 / NANO), patch("server.SCAN_PAGE", 300), patch("server.SCAN_PAGES", 2):
             first = api.events({"reputation": "high"})
-            # Two pages of 300 cover cursors 1000..403; the boundary timestamp 402 is read again next time.
-            self.assertEqual([item["id"] for item in first["events"]], ["0", "400"])
+            # Two pages of 300 cover cursors 1000..403. Each page's boundary timestamp (701, then 402)
+            # is read again whole: id 299 by the second page, id 598 by the next request.
+            self.assertEqual([item["id"] for item in first["events"]], ["0", "299", "400"])
             self.assertTrue(first["more"])
             self.assertEqual(first["next"], "403")
             rest = api.events({"reputation": "high", "before": first["next"]})
-        self.assertEqual([item["id"] for item in rest["events"]], ["800"])
-        self.assertFalse(rest["more"])
-        # The count says all three are found, so the scan stops without reading the oldest page.
-        self.assertEqual(sum("direction" in params for params in calls), 3)
+            # The count says both are found, so the scan stops without reading the oldest page,
+            # but still offers a cursor in case the count missed late-delivered events.
+            self.assertEqual([item["id"] for item in rest["events"]], ["598", "800"])
+            self.assertEqual(sum("direction" in params for params in calls), 3)
+            self.assertTrue(rest["more"])
+            calls.clear()
+            end = api.events({"reputation": "high", "before": rest["next"]})
+        self.assertEqual((end["events"], end["more"]), ([], False))
+        self.assertEqual(len(calls), 1)  # Nothing left to match: only the count query runs.
         grades["grades"]["high"] = []
         calls.clear()
         self.assertEqual(api.events({"reputation": "high"})["events"], [])

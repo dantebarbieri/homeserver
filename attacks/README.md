@@ -449,8 +449,12 @@ re-polled every 30 seconds, queued every other dashboard query behind it until
 - A reputation-filtered `/api/events` first counts events per IP with one
   metric query, so with no matching source it answers at once. Otherwise it
   reads plain Loki pages, keeps rows whose IP passes the filter and stops once
-  it has a page or every counted match. At most five 1,000-row pages per request,
-  then it returns a cursor to continue.
+  it has a page, every counted match, or five 1,000-row pages. Unless it read
+  to the window's end, it returns a cursor to continue: the count can miss
+  events delivered after it ran. While a reload finds nothing yet, the page
+  keeps following that cursor (up to eight requests). Loki's `end` is
+  exclusive, so `before` cursors and re-read page boundaries end one
+  nanosecond after the last timestamp they must include.
 - `/api/stats` runs its seven upstream queries concurrently, and `/api/sources`
   its two.
 
