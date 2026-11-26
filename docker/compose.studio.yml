@@ -4,7 +4,7 @@ services:
     extends:
       file: compose.common.yml
       service: common-service
-    image: ghcr.io/servercontainers/samba@sha256:31b90ea7fe3258d30fccd971c85743b92694605f4b43dc8a4df23a202fced06a
+    image: ghcr.io/servercontainers/samba@sha256:40235b97bf0e85f0c1a02abf294c168f375425320af112bb204f8170a6f6801e
     container_name: studio-media-share
     profiles: [studio-transfer]
     env_file:
