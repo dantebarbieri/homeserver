@@ -1,4 +1,13 @@
 version: 2
+# Add these public hosts to the Compose job's egress allowlist without credentials.
+registries:
+  forgejo:
+    type: docker-registry
+    url: https://data.forgejo.org
+  gitlab:
+    type: docker-registry
+    url: https://registry.gitlab.com
+
 updates:
   # Python requirements in the custom MCP server images
   # (docker/dockerfiles/mcp-*/requirements.txt)
@@ -37,6 +46,7 @@ updates:
   # Image tags in the compose files
   - package-ecosystem: "docker-compose"
     directory: "/docker"
+    registries: ["forgejo", "gitlab"]
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -45,12 +55,17 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
     ignore:
+      # Local build output; the Dockerfile job tracks its actual qbit_manage base.
+      - dependency-name: "qbit-manage-inactivity"
       # Postgres major bumps require pg_upgrade on on-disk data — handle manually.
       - dependency-name: "postgres"
         update-types: ["version-update:semver-major"]
-      # MariaDB majors want a controlled mariadb-upgrade run — same reasoning.
+      # Both Compose files report "mariadb". Keep wiki/backup on 11.x;
+      # RomM already receives all 12.x fixes via its rolling :12 tag.
+      # Revisit this ceiling if either service changes its pinning policy.
       - dependency-name: "mariadb"
         update-types: ["version-update:semver-major"]
+        versions: [">= 12"]
       # Immich's postgres image is version-coupled to Immich itself (vector
       # extension compatibility window). Bump only alongside Immich upgrades.
       # Same applies to pgvecto.rs — a past auto-bump to 0.4 took Immich down.
