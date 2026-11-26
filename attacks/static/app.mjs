@@ -440,7 +440,9 @@ function render() {
   if (focusedId) container.querySelector(`[data-event-id="${CSS.escape(focusedId)}"]`)?.focus({preventScroll: true});
   $("empty").hidden = events.length > 0;
   $("empty").textContent = errors.has("feed") ? "Events unavailable. Check collection health above."
-    : loading.has("feed") ? "Loading events…" : "No matching events in this observation window.";
+    : loading.has("feed") ? "Loading events…"
+    : hasOlder ? "No matches among the newest events yet. Load older events to keep searching."
+    : "No matching events in this observation window.";
   counter("feed-count", grouped ? `${groups.length} ${groups.length === 1 ? "source" : "sources"} · ${events.length} events` : `${events.length} shown`);
   $("older").hidden = !hasOlder || demo || events.length >= 1000;
   mapPoints();
@@ -883,7 +885,7 @@ async function load(reset = false, history = false) {
       const query = {...parameters};
       if (history && older) query.before = older;
       else if (latest) query.after = latest;
-      for (let page = 0; page < (reset || history ? 1 : 8); page++) {
+      for (let page = 0; page < 8; page++) {
         const result = await request("/api/events", query, signal);
         if (epoch !== generation) return;
         const {added, revised} = diffEvents(events, result.events);
@@ -892,12 +894,18 @@ async function load(reset = false, history = false) {
         // Events already loaded keep their objects, so their rows survive the redraw untouched.
         if (added.length || revised.length) { events = mergeEvents(events, [...added, ...revised]); redraw = true; }
         if (reset || history) { older = result.next; hasOlder = result.more; }
-        if (!history) {
+        if (!history && !query.before) {
           // Inclusive overlap tolerates normal log-delivery delay; IDs remove replays.
           catchingUp = result.more && !!query.after;
           latest = catchingUp ? String(BigInt(result.next) + 1n) : String(BigInt(result.latest) - 15000000000n);
         }
-        if (reset || history || !catchingUp) break;
+        if (reset || history) {
+          // A sparse reputation filter can spend a request's scan budget without a match; keep reading older.
+          if (result.events.length || !result.more) break;
+          query.before = older;
+          continue;
+        }
+        if (!catchingUp) break;
         query.after = latest;
       }
       if (errors.delete("feed")) redraw = true;
