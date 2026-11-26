@@ -484,7 +484,7 @@ This pin is not a live claim. Acceptance requires `nginx -v` of at least
 checks against the identifiers above, `/api/config` 200 and keyless
 `GET /api/library` / `POST /api/library/pair` 401. Preserve the accepted
 1dd155d images (web `sha256:18f6b08eec6c…`, uploads `sha256:7243a9774f79…`)
-as rollback.
+as rollback under `rollback-1dd155d-20261126-3b0c3b8`.
 
 ### Historical beta-wiki acceptance identifiers
 
