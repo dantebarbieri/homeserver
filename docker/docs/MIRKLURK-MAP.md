@@ -248,9 +248,9 @@ cached immutable like `app.*.js` / `style.*.css`.
 
 | Item | Value |
 |---|---|
-| Source (both targets) | `e352e3d2c2fe788d3e4e5c78c5e2ae42f54b1e1d`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45848477083) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/74) has no open issues |
-| Web | `mirklurk-map:e352e3d`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
-| Uploads | `mirklurk-map-uploads:e352e3d`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
+| Source (both targets) | `1dd155d20e24549338e2336a1f406a952925df1f`, merged main; [exact-source CI](https://github.com/dantebarbieri/mirklurk-map/actions/runs/45863861943) passed `test` and `docker-smoke`; [review](https://github.com/dantebarbieri/mirklurk-map/pull/75) has no open issues |
+| Web | `mirklurk-map:1dd155d`, target `web`, nginx non-root UID 101, private IPv4/IPv6 :8080 |
+| Uploads | `mirklurk-map-uploads:1dd155d`, target `uploads`, Deno non-root UID/GID **1993**, private :8081 |
 | Networks | Web joins `proxy` and internal `mirklurk-map-uploads`; backend joins only the internal network with alias `uploads` |
 | Storage | Named volume `compose_mirklurk-map-shares` at `/data`; Docker initializes ownership from the image, not host UID 1000 |
 | Hardening | Both read-only, 16 MiB `/tmp`, cap-drop ALL, no-new-privileges; backend 768 MiB RAM, 1 CPU, 64 PIDs, unless-stopped |
@@ -416,6 +416,47 @@ independent shield-gate acceptance, one new sharing/identity lifecycle and
 unchanged published wiki revisions before explicit window release.
 No backups, denied authentication retries or unrelated repairs belong to
 this rollout. Fetch no unpublished wiki/catalog inputs.
+
+### Final public 1.0.1 catalog pin
+
+Following accepted wiki PR87 publication
+`d972a6eb83071b2d551d007c14540c2fd934d6dc` (690 texts, 31 required parses,
+26 existing Files/history preserved), map PR75 adds only Version 1.0.1.0
+to the catalog and advances verification metadata to November 26.
+Catalog 555 removes no titles; legacy Version 0.9.9.7 still redirects
+to Version 1.0.0.0, not to the new release. The accepted new page revision
+is 9485; legacy redirect revision 9263 remains unchanged.
+
+Latest/default stays 1.0.1.0 with no active Beta. The versioned shield
+predicate, area-13 rules, old-save compatibility, selected spider geometry,
+all 404 PNGs, mappings and attribution remain unchanged. No API/config,
+server, Docker, migration, File import or proxy change is required.
+Both targets must rebuild because uploads copies the updated `src`.
+
+Acceptance uses `1010-final-bundle.json`, SHA-256
+`cdb25ab7f25765ba23fccb8ba3588c8fd53bc63364ab15f822898d2fe93d7a62`:
+418 distribution files plus unchanged nginx `50x.html` (419 physical files),
+417 precache entries and cache `78f752dcc7`. `1010-final-contract.json`
+records the exact catalog, source, historical shield predicate and selected
+spider geometry in both bundles.
+
+| Asset | SHA-256 |
+|---|---|
+| `app.3db69a5623.js` | `3db69a562394f8c6a5d9804ac4fc6d8d32f914902b0890ee39651ed6abee2131` |
+| `edit.b2a40bc002.js` | `b2a40bc0029e900de82b62ef1cff346a3cded92ed7dd4fa39e4c05811adbc297` |
+| `sw.js` | `d63ca081d9dee028d17a57b1450c83e2527366b008f7f711087148df9d573416` |
+
+This pin is not a live claim or guard waiver. Require normal exact candidate
+review/CI and merged-main CI, freshly verified canonical/origin cleanliness,
+jobs/writers/timers, exact exclusive NPM ownership/trust, intended mounts,
+hardening and current runtime provenance. Use a sole uploads-then-web window;
+preserve accepted e352e3d core images as rollback and all prior failure
+records. Require full IPv4/IPv6 size/SHA checks, independent catalog/gate/
+geometry acceptance, one new sharing/identity lifecycle and unchanged
+690 published wiki revisions plus 26 Files before explicit release.
+Scheduled read-only checks must be accounted separately from immutable
+prior baselines; no silent timer/runtime exception, unrelated repair,
+snapshot trigger or denied authentication retry belongs to this follow-up.
 
 ### Historical beta-wiki acceptance identifiers
 
