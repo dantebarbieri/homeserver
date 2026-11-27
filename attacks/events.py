@@ -72,6 +72,14 @@ PORTS = {
 # reliable-messaging port follows the game port); a lone connection is a port scan.
 COMPANIONS = {29778: 7778}
 COMPANION_WINDOW = 600
+# Server-list and status trackers contact a game port on a fixed timer, which scanners
+# don't: see Store.poll. Companion ports keep their port-scan rule instead.
+POLLED_PORTS = frozenset(port for port, (category, _) in PORTS.items()
+                         if category in ("game", "minecraft") and port not in COMPANIONS)
+POLL_GAPS = (120, 3600)
+POLL_IDLE = 86400
+POLL_KEEP = 31 * 86400
+POLLERS_SHOWN = 64
 TYPES = frozenset({"endlessh", "ssh", "authelia", "web", "git", "plex", "minecraft", "game"})
 VERDICTS = frozenset(value[2] for value in KINDS.values())
 OWN_NETWORKS = ("10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",

@@ -37,7 +37,8 @@ are summarised to one event per source and request class per window.
 Hytale refuses clients whose identity token is invalid
 (`invalidIdentityToken`). That means the client was not a signed-in player; it
 could be a server-list poller, a scanner speaking the game protocol or an outdated
-client. Player names from the same log are never stored.
+client. Player names from the same log are never stored. A rejection within one
+interval of a known status poller's contact is labeled as that poller's (below).
 
 Satisfactory clients reach the game port (7778) before its messaging port
 (29778). A messaging-port connection from an address that had not contacted the
@@ -82,7 +83,21 @@ usable global /64s from `bond0`; the collector does not hardcode a changing ISP
 prefix. Own traffic is retained as audit evidence, hidden by default behind
 **Show own traffic**, and always excluded from the map and aggregate cards.
 This is a network classification, not proof of identity or permission.
-Other legitimate public clients and game-server status pollers can still appear.
+Other legitimate public clients can still appear.
+
+**Poller** marks game-server status checkers: server lists and uptime trackers that
+contact a game port (Hytale, Satisfactory 7778, Minecraft, RLCraft) on a steady timer.
+Three contacts from one address to one port whose two gaps are 2–60 minutes and agree
+to within 20% (or 30 s) confirm a poller; its later contacts count while they keep no
+more than twice that pace, and a Hytale identity rejection within one interval of a
+contact is its handshake. A quicker contact restarts an unconfirmed cadence and is not
+a poll once confirmed, so scanner retry bursts stay attacks, and a day of silence
+starts over. The collector keeps this history in SQLite and lists up to 64 known
+(address, port) pairs in `/status` for 31 days after their last contact; the API
+hides those pairs' earlier contacts too, including the first two before confirmation.
+Like own traffic, pollers are hidden by default behind **Show status pollers**,
+excluded from the map and aggregate cards, and never reported to AbuseIPDB. A steady
+cadence is not proof of who runs the checker.
 Missing/stale network metadata reports an error and holds source checkpoints,
 rather than silently counting home IPv6 clients as external.
 
@@ -243,12 +258,13 @@ since a step means "at least"); options with none are dimmed but still selectabl
 `/api/facets` returns those counts grouped by type, outcome and severity, so changing a
 picker recounts instantly; they refresh every 30 seconds. **Source** chooses an exact IP,
 a country or a network (ASN); its country and network lists show the top twelve by
-event count in the selected window (own traffic follows the toggle), fetched when the
+event count in the selected window (own traffic and pollers follow their toggles), fetched when the
 picker opens. An event's details also offer **Only this source IP / country / network**.
 Active filters appear as removable chips. They are applied server-side: `/api/events`
 accepts `severity`, comma-separated `type` and `outcome`, `ip`, `country` and `asn`, and
 `/api/sources` returns the Source picker's lists. There is no attempted-username filter; the
-username is still shown on events. **Clear filters** clears all of these and **Show own traffic**
+username is still shown on events. `own=1` and `pollers=1` include own traffic and status
+pollers. **Clear filters** clears all of these, **Show own traffic** and **Show status pollers**
 and immediately reloads the unfiltered stream, preserving the observation window and pause state.
 
 ### Network ownership, flags and VPN evidence
@@ -428,7 +444,7 @@ The secondary lifetime figure remains Prometheus's **completed external** counte
 with its classification start date shown. Pre-upgrade counters are preserved as
 `origin="legacy"`: their own/external split is unknowable from aggregate labels,
 so they are not guessed into the new external lifetime counter. New counters carry
-`origin="own"` or `origin="external"`. SQLite persists all three.
+`origin="own"`, `origin="external"` or `origin="poller"`. SQLite persists all four.
 
 Window totals, failures and the per-minute timeline count normalized Loki records,
 not Prometheus `increase()` estimates. This avoids missing the first event of a
@@ -457,6 +473,10 @@ re-polled every 30 seconds, queued every other dashboard query behind it until
   nanosecond after the last timestamp they must include.
 - `/api/stats` runs its seven upstream queries concurrently, and `/api/sources`
   its two.
+- Hiding status pollers is the one deliberate exception: at most 64 known
+  (address, port) pairs, each a `(ip != "…" or port != "…")` filter. New
+  poller events are already excluded by their `origin` stream label; the pairs
+  only catch contacts logged before confirmation.
 
 Per-IP aggregation needs more than Loki's default 500 series per query, so
 `docker/monitoring/loki-config.yml` sets `max_query_series: 20000`. That limit

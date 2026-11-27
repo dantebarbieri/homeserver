@@ -17,7 +17,7 @@ import maxminddb
 
 from abuseipdb import AbuseIPDB
 from common import Client, UpstreamError
-from events import COMPANION_WINDOW, COMPANIONS, KINDS, PARSERS, address, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, retag, text, traffic_origin
+from events import COMPANION_WINDOW, COMPANIONS, KINDS, PARSERS, POLL_GAPS, POLL_IDLE, POLL_KEEP, POLLED_PORTS, POLLERS_SHOWN, address, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, retag, text, traffic_origin
 from networks import Networks
 from ssh_keys import SSHKeys
 
@@ -81,6 +81,9 @@ class Store:
                PRIMARY KEY(kind,category,country,origin));
             CREATE TABLE IF NOT EXISTS trapped
               (ip TEXT, port INTEGER, since REAL, changed REAL, PRIMARY KEY(ip,port));
+            CREATE TABLE IF NOT EXISTS pollers
+              (ip TEXT, port INTEGER, contacts TEXT NOT NULL, interval REAL, confirmed REAL, last REAL NOT NULL,
+               PRIMARY KEY(ip,port));
         """)
         # Old counters cannot be split by IP. Preserve them, explicitly unclassified.
         if "origin" not in {row[1] for row in self.db.execute("PRAGMA table_info(counters)")}:
@@ -146,6 +149,53 @@ class Store:
         if self.db.execute("SELECT count(*) FROM trapped WHERE since IS NOT NULL").fetchone()[0] > 4096:
             raise UpstreamError("Endlessh active-session limit exceeded; checkpoint retained")
         self.db.execute("DELETE FROM trapped WHERE since IS NULL AND changed<?", (self.clock() - 172800,))
+
+    def poll(self, ip, port, at):
+        """Whether this contact comes from a regular status poller. Three contacts whose two
+        gaps fall within POLL_GAPS and agree to within 20% (or 30 s) confirm one. Scanners
+        retry within seconds, so a quicker contact restarts an unconfirmed cadence and, once
+        confirmed, isn't a poll. A day of silence starts over. History lives in the database
+        so a restart doesn't relabel a known poller."""
+        with self.lock, self.db:
+            row = self.db.execute("SELECT contacts,interval,confirmed,last FROM pollers WHERE ip=? AND port=?",
+                                  (ip, port)).fetchone()
+            contacts, interval, confirmed, last = (json.loads(row[0]), *row[1:]) if row else ([], None, None, None)
+            if last is not None and at <= last + 5:
+                # Duplicates and replayed log windows belong to contacts already judged.
+                return interval is not None
+            gap = at - contacts[-1] if contacts else None
+            if gap is not None and gap > POLL_IDLE:
+                contacts, interval, gap = [], None, None
+            poller = False
+            if interval is not None and gap < interval / 2:
+                pass
+            elif interval is None and gap is not None and gap < POLL_GAPS[0]:
+                contacts = [at]
+            else:
+                contacts = (contacts + [at])[-3:]
+                gaps = [b - a for a, b in zip(contacts, contacts[1:])]
+                if len(gaps) == 2 and all(POLL_GAPS[0] <= value <= POLL_GAPS[1] for value in gaps) \
+                        and abs(gaps[0] - gaps[1]) <= max(30, 0.2 * max(gaps)):
+                    interval, confirmed = gaps[1], confirmed or at
+                poller = interval is not None
+            self.db.execute("INSERT OR REPLACE INTO pollers VALUES (?,?,?,?,?,?)",
+                            (ip, port, json.dumps(contacts), interval, confirmed, at))
+            self.db.execute("DELETE FROM pollers WHERE (confirmed IS NULL AND last<?) OR last<?",
+                            (at - 2 * POLL_GAPS[1], at - POLL_KEEP))
+            return poller
+
+    def polling(self, ip, port, at):
+        """Whether a confirmed poller of this port contacted it within one interval of `at`."""
+        with self.lock:
+            row = self.db.execute("SELECT interval,last FROM pollers WHERE ip=? AND port=?", (ip, port)).fetchone()
+        return bool(row and row[0] is not None and -120 <= at - row[1] <= row[0] + 120)
+
+    def pollers(self):
+        with self.lock:
+            rows = self.db.execute("""SELECT ip,port,interval,confirmed,last FROM pollers
+                WHERE confirmed IS NOT NULL ORDER BY last DESC LIMIT ?""", (POLLERS_SHOWN,)).fetchall()
+        return [{"ip": ip, "port": port, "interval": interval, "confirmed": confirmed, "lastSeen": last}
+                for ip, port, interval, confirmed, last in rows]
 
     def restart(self, timestamp):
         with self.lock, self.db:
@@ -213,7 +263,7 @@ class Store:
                   f"attacks_endlessh_trapped_now_seconds {sum(max(0, self.clock() - since) for since in active)}"]
         present = {(row[0], row[3]) for row in rows}
         for kind, (category, _, _) in KINDS.items():
-            for origin in ("own", "external"):
+            for origin in ("own", "external", "poller"):
                 if (kind, origin) not in present:
                     rows.append((kind, category, "ZZ", origin, 0, 0))
         for kind, category, country, origin, count, seconds in rows:
@@ -300,8 +350,19 @@ class Collector:
         own = self.own_traffic()
         if own["state"] != "ready":
             raise UpstreamError(own["message"])
-        return {**refine(self.keys.annotate(self.networks.enrich(self.geo.enrich(self.companion(item))))),
-                "origin": traffic_origin(item["ip"], own["networks"])}
+        item = self.companion(item)
+        origin = traffic_origin(item["ip"], own["networks"])
+        if origin == "external" and self.polled(item):
+            origin = "poller"
+        return {**refine(self.keys.annotate(self.networks.enrich(self.geo.enrich(item)))), "origin": origin}
+
+    def polled(self, item):
+        """Contacts from a regular status poller, and Hytale's rejection of its handshake."""
+        if item.get("port") not in POLLED_PORTS:
+            return False
+        if item["kind"] == "service_connection":
+            return self.store.poll(item["ip"], item["port"], item["timestamp"])
+        return item["kind"] == "hytale_rejected" and self.store.polling(item["ip"], item["port"], item["timestamp"])
 
     def companion(self, item):
         """Relabel a companion-port connection with no recent game-port contact as a scan."""
@@ -468,7 +529,7 @@ class Collector:
             and time.time() - sources[name].get("lastSuccess", 0) <= 90 for name in ("endlessh", "delivery"))}
         return {"sources": sources, "geo": self.geo.status,
                 **({"abuseipdb": self.reputation.status()} if self.reputation else {}), "sshKeys": self.keys.status, "networks": self.networks.status,
-                "ownTraffic": own, "trapping": trapping,
+                "ownTraffic": own, "pollers": self.store.pollers(), "trapping": trapping,
                 "lastTick": self.last_tick, "capture": self.capture,
                 "startedAt": self.store.get("started")}
 

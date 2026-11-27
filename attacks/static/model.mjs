@@ -61,8 +61,11 @@ export function matchesFilters(item, parameters) {
     && (!parameters.ip || item.ip === parameters.ip) && (!parameters.country || item.countryCode === parameters.country)
     && (!parameters.asn || String(item.asn) === parameters.asn)
     && reputationOk(reputationGrade(item), !!item.reputation?.reportedAt, list(parameters.reputation))
-    && (parameters.own === "1" || item.origin !== "own");
+    && (parameters.own === "1" || item.origin !== "own") && (parameters.pollers === "1" || item.origin !== "poller");
 }
+
+// Own traffic and status pollers are shown on request but never drawn or counted as attacks.
+const hostile = item => item.origin !== "own" && item.origin !== "poller";
 
 // Faceted option counts: each picker counts against the other pickers' current choices,
 // so a number always says how many events selecting that option (alone) would add or show.
@@ -104,7 +107,7 @@ export function mapSettings(input) {
 
 export function mapActivity(events, settings, now = Date.now() / 1000, history = false) {
   const sources = new Map(), held = new Set();
-  const ordered = events.filter(item => item.origin !== "own" && item.ip && Number.isFinite(item.observedAt))
+  const ordered = events.filter(item => hostile(item) && item.ip && Number.isFinite(item.observedAt))
     .sort((a, b) => b.observedAt - a.observedAt);
   // Replay oldest first so hits refresh their own IP, not a neighbor's fade timer.
   for (let i = ordered.length - 1; i >= 0; i--) {
@@ -371,6 +374,8 @@ const DEMO_PLACES = [[-74, 40.7, "New York, United States", "US"], [13.4, 52.5, 
   [4.9, 52.4, "Amsterdam, Netherlands", "NL"], [72.9, 19.1, "Mumbai, India", "IN"], [121, 14.6, "Manila, Philippines", "PH"],
   [30.5, 50.4, "Kyiv, Ukraine", "UA"], [-21.9, 64.1, "Reykjavik, Iceland", "IS"], [-149.9, 61.2, "Anchorage, United States", "US"]];
 const DEMO_PROVIDERS = ["AWS", "Azure", "Google Cloud", "Oracle Cloud", "Vercel", "Hetzner", "Cloudflare", "Example ISP"];
+// A game-port status check, hidden unless status pollers are shown.
+const DEMO_POLLER = 14;
 const DEMO_KINDS = ["endlessh_open", "ssh_probe", "auth_failure", "http_probe", "service_connection", "service_connection", "service_connection", "service_connection"];
 // Weighted like real traffic: most scanners hit Endlessh or the web.
 const DEMO_MIX = [0, 0, 0, 0, 3, 3, 3, 1, 1, 2, 4, 5, 6, 7];
@@ -406,7 +411,7 @@ export function demoCloseEvent(open, seconds) {
 
 // The stats `trapping` sample a collector would publish for demo events: an external open without a close is still connected.
 export function demoTrapping(events, now) {
-  const active = events.filter(item => item.kind === "endlessh_open" && item.origin !== "own" && !laterEvent(item, events))
+  const active = events.filter(item => item.kind === "endlessh_open" && hostile(item) && !laterEvent(item, events))
     .map(item => ({ip: item.ip, sourcePort: item.sourcePort, since: item.timestamp}));
   return {available: true, connections: active.length, seconds: active.reduce((total, row) => total + Math.max(0, now - row.since), 0),
     active, activeTruncated: false, asOf: now, through: now, since: now - 3600};
@@ -428,7 +433,7 @@ export function demoLiveEvent(sequence, now = Date.now(), random = Math.random) 
 function demoEvent(i, timestamp, id, ip, place, network = i) {
   const type = Object.keys(TYPES)[i % 8], n = network % 8;
   const item = {id, cursor: String(BigInt(Math.floor(timestamp * 1000)) * 1000000n),
-    timestamp, observedAt: timestamp, origin: i === 9 ? "own" : "external", type, kind: DEMO_KINDS[i % 8],
+    timestamp, observedAt: timestamp, origin: i === 9 ? "own" : i === DEMO_POLLER ? "poller" : "external", type, kind: DEMO_KINDS[i % 8],
     title: ["Stuck in Endlessh", "Targeted real SSH port", "Authelia sign-in failed", "Suspicious web request", "Service connection"][Math.min(i % 8, 4)],
     verdict: type === "authelia" ? "failure" : type === "web" ? "suspected" : type === "endlessh" ? "observed" : "unclassified",
     ip, port: [22, 28, 443, 443, 36676, 32400, 5205, 2222][i % 8],
@@ -437,7 +442,7 @@ function demoEvent(i, timestamp, id, ip, place, network = i) {
     longitude: place[0], latitude: place[1], location: place[2], countryCode: place[3],
     networkLookup: "ready", networkProvider: DEMO_PROVIDERS[n], asn: 64512 + n,
     networkOrganization: "Synthetic example network (private-use ASN)", networkEvidence: "Synthetic preview association, not a real IP lookup",
-    reputation: i === 9 ? undefined : {score: [100, 0, 37, 88, 0, 12, 100, 64][n], reports: [412, 0, 6, 91, 0, 2, 1503, 30][n],
+    reputation: i === 9 || i === DEMO_POLLER ? undefined : {score: [100, 0, 37, 88, 0, 12, 100, 64][n], reports: [412, 0, 6, 91, 0, 2, 1503, 30][n],
       users: [180, 0, 4, 52, 0, 1, 611, 19][n], usage: "Synthetic preview", lastReportedAt: n % 4 === 1 ? null : new Date((timestamp - 3600) * 1000).toISOString(),
       tor: n === 3, whitelisted: false, checkedAt: timestamp, ...(n === 6 ? {reportedAt: timestamp} : {})},
     privacyServices: n > 0 && n < 4 ? [{

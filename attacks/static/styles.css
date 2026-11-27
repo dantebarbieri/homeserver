@@ -58,6 +58,7 @@
 .filters .own-toggle{flex-direction:row;align-items:center;min-height:40px;cursor:pointer}
 .filters .own-toggle input{width:18px;height:18px;min-height:18px;accent-color:var(--accent)}
 .origin-own{--color:#aab8ca}
+.origin-poller{--color:#9fd3c7}
 #trapping-now,#trapped-lifetime{display:block;line-height:1.5}
 .number-token{position:relative;display:inline-block;white-space:nowrap;font-variant-numeric:tabular-nums}
 .number-value{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
@@ -216,7 +217,7 @@ select,input,.button{background:#202024;border-color:#39393f;color:var(--text)}
   /* Static pickers anchor menus to .filters: full width, overlaid at their natural spot below the button, without reflowing the page. */
   .filters .picker{position:static}
   .picker-menu,.source-menu{position:absolute;z-index:60;top:auto;left:16px;right:16px;width:auto;min-width:0;max-width:none;max-height:min(60dvh,440px);margin-top:6px;background:#19191e;overscroll-behavior:contain}
-  .filters .picker-menu .choice{min-height:44px}.filter-end{width:100%;margin-left:0;justify-content:space-between}
+  .filters .picker-menu .choice{min-height:44px}.filter-end{width:100%;margin-left:0;justify-content:space-between;flex-wrap:wrap}
   .active-filters{padding:0 16px 14px}.chip{min-height:36px;padding-right:9px}
 }
 @media(prefers-reduced-motion:reduce){.segment span{transition:none}.badge.trap.live .legend-dot{animation:none}}
