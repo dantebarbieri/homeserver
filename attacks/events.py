@@ -76,6 +76,9 @@ COMPANION_WINDOW = 600
 # don't: see Store.poll. Companion ports keep their port-scan rule instead.
 POLLED_PORTS = frozenset(port for port, (category, _) in PORTS.items()
                          if category in ("game", "minecraft") and port not in COMPANIONS)
+# Only a status check's connection and Hytale's rejection of its handshake are polls; any
+# other event from a poller's address (a probe, an exploit, another port) stays an attack.
+POLL_KINDS = ("service_connection", "hytale_rejected")
 POLL_GAPS = (120, 3600)
 POLL_IDLE = 86400
 POLL_KEEP = 31 * 86400

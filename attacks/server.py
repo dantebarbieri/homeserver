@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from abuseipdb import GRADES
 from common import UpstreamError, clients
-from events import OWN_NETWORKS, POLLERS_SHOWN, SEVERITIES, SEVERITY, TYPES, VERDICTS, home_networks, kinds_at_least, traffic_origin
+from events import OWN_NETWORKS, POLL_KINDS, POLLERS_SHOWN, SEVERITIES, SEVERITY, TYPES, VERDICTS, home_networks, kinds_at_least, traffic_origin
 
 
 ROOT = Path(__file__).parent / "static"
@@ -155,7 +155,8 @@ def origin_of(item, networks, pollers):
     if item.get("origin") == "own" or traffic_origin(item["ip"], networks) == "own":
         return "own"
     if item.get("origin") == "poller" or any(
-            (ip, port) == (item["ip"], item.get("port")) and item["timestamp"] < confirmed
+            (ip, port) == (item["ip"], item.get("port")) and item["kind"] in POLL_KINDS
+            and item["timestamp"] < confirmed
             for ip, port, confirmed in pollers):
         return "poller"
     return "external"
@@ -171,7 +172,8 @@ def exclude_pollers(pollers):
     # carry the external label; later external contacts were judged not to be polls. The
     # collector lists at most POLLERS_SHOWN pairs, so this stays a short filter rather than
     # the address sets reputation_match keeps out of LogQL.
-    return "".join(f' | (ip != {json.dumps(ip)} or port != "{port}" or timestamp >= {confirmed:.6f})'
+    kinds = json.dumps("|".join(POLL_KINDS))
+    return "".join(f' | (ip != {json.dumps(ip)} or port != "{port}" or kind !~ {kinds} or timestamp >= {confirmed:.6f})'
                    for ip, port, confirmed in pollers)
 
 

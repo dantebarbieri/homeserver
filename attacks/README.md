@@ -97,7 +97,9 @@ starts over. The collector keeps this history in SQLite and lists up to 64 known
 31 days after its last contact or, once it stops polling, after its confirmation. The
 API also hides each pair's contacts from before that confirmation, including the first
 two; its later contacts keep the collector's verdict.
-Like own traffic, pollers are hidden by default behind **Show status pollers**,
+Only those polls are poller traffic: any other event from the same address (another
+port, a probe, a contact off the cadence) stays an attack, on the map and reportable
+under the usual rules. Like own traffic, pollers are hidden by default behind **Show status pollers**,
 excluded from the map and aggregate cards, and never reported to AbuseIPDB. A steady
 cadence is not proof of who runs the checker.
 Missing/stale network metadata reports an error and holds source checkpoints,
@@ -476,8 +478,8 @@ re-polled every 30 seconds, queued every other dashboard query behind it until
 - `/api/stats` runs its seven upstream queries concurrently, and `/api/sources`
   its two.
 - Hiding status pollers is the one deliberate exception: at most 64 known
-  (address, port) pairs, each a `(ip != "…" or port != "…" or timestamp >= …)`
-  filter. New poller events are already excluded by their `origin` stream label;
+  (address, port) pairs, each an `(ip != "…" or port != "…" or kind !~ "…" or timestamp >= …)`
+  filter (only for its connection and Hytale-rejection kinds). New poller events are already excluded by their `origin` stream label;
   the pairs only catch contacts logged before confirmation.
 
 Per-IP aggregation needs more than Loki's default 500 series per query, so

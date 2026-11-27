@@ -17,7 +17,7 @@ import maxminddb
 
 from abuseipdb import AbuseIPDB
 from common import Client, UpstreamError
-from events import COMPANION_WINDOW, COMPANIONS, KINDS, PARSERS, POLL_GAPS, POLL_IDLE, POLL_KEEP, POLLED_PORTS, POLLERS_SHOWN, address, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, retag, text, traffic_origin
+from events import COMPANION_WINDOW, COMPANIONS, KINDS, PARSERS, POLL_GAPS, POLL_IDLE, POLL_KEEP, POLL_KINDS, POLLED_PORTS, POLLERS_SHOWN, address, home_networks, identity, parse_flow, parse_npm, parse_plex, public, refine, retag, text, traffic_origin
 from networks import Networks
 from ssh_keys import SSHKeys
 
@@ -367,7 +367,7 @@ class Collector:
 
     def polled(self, item):
         """Contacts from a regular status poller, and Hytale's rejection of its handshake."""
-        if item.get("port") not in POLLED_PORTS:
+        if item.get("port") not in POLLED_PORTS or item["kind"] not in POLL_KINDS:
             return False
         if item["kind"] == "service_connection":
             return self.store.poll(item["ip"], item["port"], item["timestamp"])
