@@ -37,8 +37,8 @@ are summarised to one event per source and request class per window.
 Hytale refuses clients whose identity token is invalid
 (`invalidIdentityToken`). That means the client was not a signed-in player; it
 could be a server-list poller, a scanner speaking the game protocol or an outdated
-client. Player names from the same log are never stored. A rejection within one
-interval of a known status poller's contact is labeled as that poller's (below).
+client. Player names from the same log are never stored. A rejection on a known
+status poller's timer is labeled as that poller's (below).
 
 Satisfactory clients reach the game port (7778) before its messaging port
 (29778). A messaging-port connection from an address that had not contacted the
@@ -88,18 +88,22 @@ Other legitimate public clients can still appear.
 **Poller** marks game-server status checkers: server lists and uptime trackers that
 contact a game port (Hytale, Satisfactory 7778, Minecraft, RLCraft) on a steady timer.
 Three contacts from one address to one port whose two gaps are 2–60 minutes and agree
-to within 20% (or 30 s) confirm a poller; its later contacts count while they keep no
-more than twice that pace, and a Hytale identity rejection within one interval of a
-contact is its handshake. A quicker contact restarts an unconfirmed cadence and is not
-a poll once confirmed, so scanner retry bursts stay attacks, and a day of silence
-starts over. The collector keeps this history in SQLite and lists up to 64 known
-(address, port) pairs with their first confirmation time in `/status`, dropping a pair
-31 days after its last contact or, once it stops polling, after its confirmation. The
-API also hides each pair's contacts from before that confirmation, including the first
-two; its later contacts keep the collector's verdict.
+to within 20% (or 30 s) confirm a poller. After that, a contact is a poll only if it
+lands on the timer: a whole number of intervals after the last poll (so a missed poll
+is fine), within 10% of the interval or 20 s, whichever is more. Packets within 5 s of a poll share its
+verdict, and a Hytale identity rejection there or on the timer is its handshake. Polls refine the interval; contacts off the timer don't
+move it, but three of them that form a new steady cadence re-anchor it. A gap under
+two minutes restarts an unconfirmed cadence, and a day of silence starts over. The
+collector keeps this history in SQLite and lists up to 64 known (address, port) pairs in
+`/status` with when their confirming cadence began and was confirmed, dropping a pair 31
+days after its last contact or, once it stops polling, after its confirmation. The API
+also hides contacts the collector never judged: those before poller classification was
+deployed (listed as `pollersStarted`) and the confirming cadence itself. Every other
+contact, including an earlier burst from the same address, keeps the collector's verdict.
 Only those polls are poller traffic: any other event from the same address (another
-port, a probe, a contact off the cadence) stays an attack, on the map and reportable
-under the usual rules. Like own traffic, pollers are hidden by default behind **Show status pollers**,
+port, a probe, a contact off the timer, such as a game-protocol exploit attempt between
+polls) stays an attack, on the map and reportable under the usual rules. A single
+connection that happens to land on the timer is indistinguishable from a poll. Like own traffic, pollers are hidden by default behind **Show status pollers**,
 excluded from the map and aggregate cards, and never reported to AbuseIPDB. A steady
 cadence is not proof of who runs the checker.
 Missing/stale network metadata reports an error and holds source checkpoints,
@@ -478,9 +482,9 @@ re-polled every 30 seconds, queued every other dashboard query behind it until
 - `/api/stats` runs its seven upstream queries concurrently, and `/api/sources`
   its two.
 - Hiding status pollers is the one deliberate exception: at most 64 known
-  (address, port) pairs, each an `(ip != "…" or port != "…" or kind !~ "…" or timestamp >= …)`
+  (address, port) pairs, each an `(ip != "…" or port != "…" or kind !~ "…" or (timestamp >= … and (timestamp < … or timestamp >= …)))`
   filter (only for its connection and Hytale-rejection kinds). New poller events are already excluded by their `origin` stream label;
-  the pairs only catch contacts logged before confirmation.
+  the pairs only catch unjudged contacts: those before classification began, and the confirming cadence.
 
 Per-IP aggregation needs more than Loki's default 500 series per query, so
 `docker/monitoring/loki-config.yml` sets `max_query_series: 20000`. That limit

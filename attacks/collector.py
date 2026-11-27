@@ -64,6 +64,25 @@ def window(client, query, start, end, budget=None):
     return window(client, query, start, middle, budget) + window(client, query, middle + 1, end, budget)
 
 
+def cadence(contacts, at):
+    """Follow an unconfirmed timer: the last contacts, and its interval once three agree."""
+    if contacts and at - contacts[-1] < POLL_GAPS[0]:
+        return [at], None
+    contacts = (contacts + [at])[-3:]
+    gaps = [b - a for a, b in zip(contacts, contacts[1:])]
+    if len(gaps) == 2 and all(POLL_GAPS[0] <= value <= POLL_GAPS[1] for value in gaps) \
+            and abs(gaps[0] - gaps[1]) <= max(30, 0.2 * max(gaps)):
+        return contacts, gaps[1]
+    return contacts, None
+
+
+def on_cadence(since, interval):
+    """Whether a contact `since` seconds after a poll lands on one of the poller's later
+    polls. Measured pollers stay within 10 s (300 s timer) and 43 s (673 s, p99)."""
+    beats = round(since / interval)
+    return beats >= 1 and abs(since - beats * interval) <= max(20, 0.1 * interval)
+
+
 class Store:
     def __init__(self, path, clock=time.time):
         self.lock = threading.RLock()
@@ -82,8 +101,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS trapped
               (ip TEXT, port INTEGER, since REAL, changed REAL, PRIMARY KEY(ip,port));
             CREATE TABLE IF NOT EXISTS pollers
-              (ip TEXT, port INTEGER, contacts TEXT NOT NULL, interval REAL, confirmed REAL, last REAL NOT NULL,
-               polled INTEGER NOT NULL, PRIMARY KEY(ip,port));
+              (ip TEXT, port INTEGER, contacts TEXT NOT NULL, candidates TEXT NOT NULL, interval REAL,
+               since REAL, confirmed REAL, last REAL NOT NULL, polled INTEGER NOT NULL, PRIMARY KEY(ip,port));
         """)
         # Old counters cannot be split by IP. Preserve them, explicitly unclassified.
         if "origin" not in {row[1] for row in self.db.execute("PRAGMA table_info(counters)")}:
@@ -99,6 +118,8 @@ class Store:
             self.set("started", clock())
         if self.get("origins_started") is None:
             self.set("origins_started", clock())
+        if self.get("pollers_started") is None:
+            self.set("pollers_started", clock())
 
     def get(self, key, default=None):
         with self.lock:
@@ -151,60 +172,65 @@ class Store:
         self.db.execute("DELETE FROM trapped WHERE since IS NULL AND changed<?", (self.clock() - 172800,))
 
     def poll(self, ip, port, at):
-        """Whether this contact comes from a regular status poller. Three contacts whose two
-        gaps fall within POLL_GAPS and agree to within 20% (or 30 s) confirm one. Scanners
-        retry within seconds, so a quicker contact restarts an unconfirmed cadence and, once
-        confirmed, isn't a poll. A day of silence starts over; `confirmed` keeps the first
-        confirmation, since the server hides only the pair's events from before it. History
-        lives in the database so a restart doesn't relabel a known poller."""
+        """Whether this contact is a regular status poller's poll. Three contacts whose two
+        gaps fall within POLL_GAPS and agree to within 20% (or 30 s) confirm one; after that
+        only contacts on its timer (a whole number of intervals after the last poll, so a
+        missed poll is fine) are polls. Anything else from the address, such as a scanner's
+        retry or a one-off exploit attempt, stays an attack and doesn't move the timer. If
+        the timer drifts, three rejected contacts forming a fresh cadence re-anchor it. A day
+        of silence starts over; `since` and `confirmed` keep the first confirming cadence,
+        which the server hides retroactively. History lives in the database so a restart
+        doesn't relabel a known poller."""
         with self.lock, self.db:
-            row = self.db.execute("SELECT contacts,interval,confirmed,last,polled FROM pollers WHERE ip=? AND port=?",
-                                  (ip, port)).fetchone()
-            contacts, interval, confirmed, last, polled = \
-                (json.loads(row[0]), *row[1:]) if row else ([], None, None, None, False)
+            row = self.db.execute("""SELECT contacts,candidates,interval,since,confirmed,last,polled
+                FROM pollers WHERE ip=? AND port=?""", (ip, port)).fetchone()
+            contacts, candidates, interval, since, confirmed, last, polled = \
+                (json.loads(row[0]), json.loads(row[1]), *row[2:]) if row else ([], [], None, None, None, None, False)
             if last is not None and at <= last + 5:
                 # Duplicates, replayed log windows and a contact's trailing packets share the
                 # verdict of the contact just judged.
                 return bool(polled)
-            gap = at - contacts[-1] if contacts else None
-            if gap is not None and gap > POLL_IDLE:
-                contacts, interval, gap = [], None, None
-            poller = False
-            if interval is not None and gap < interval / 2:
-                pass
-            elif interval is None and gap is not None and gap < POLL_GAPS[0]:
-                contacts = [at]
-            else:
-                contacts = (contacts + [at])[-3:]
-                gaps = [b - a for a, b in zip(contacts, contacts[1:])]
-                if len(gaps) == 2 and all(POLL_GAPS[0] <= value <= POLL_GAPS[1] for value in gaps) \
-                        and abs(gaps[0] - gaps[1]) <= max(30, 0.2 * max(gaps)):
-                    interval, confirmed = gaps[1], confirmed or at
+            if contacts and at - contacts[-1] > POLL_IDLE:
+                contacts, candidates, interval = [], [], None
+            if interval is None:
+                contacts, interval = cadence(contacts, at)
+                if interval is not None and confirmed is None:
+                    since, confirmed = contacts[0], at
                 poller = interval is not None
-            self.db.execute("INSERT OR REPLACE INTO pollers VALUES (?,?,?,?,?,?,?)",
-                            (ip, port, json.dumps(contacts), interval, confirmed, at, poller))
+            elif on_cadence(at - contacts[-1], interval):
+                beats = round((at - contacts[-1]) / interval)
+                interval = 0.75 * interval + 0.25 * (at - contacts[-1]) / beats
+                contacts, candidates, poller = (contacts + [at])[-3:], [], True
+            else:
+                candidates, fresh = cadence(candidates, at)
+                poller = fresh is not None
+                if poller:
+                    contacts, candidates, interval = candidates, [], fresh
+            self.db.execute("INSERT OR REPLACE INTO pollers VALUES (?,?,?,?,?,?,?,?,?)",
+                            (ip, port, json.dumps(contacts), json.dumps(candidates), interval, since, confirmed,
+                             at, poller))
             # Loki keeps 30 days, so a lapsed confirmation older than that hides nothing.
             self.db.execute("""DELETE FROM pollers WHERE (confirmed IS NULL AND last<?) OR last<?
                 OR (interval IS NULL AND confirmed<?)""", (at - 2 * POLL_GAPS[1], at - POLL_KEEP, at - POLL_KEEP))
             return poller
 
     def polling(self, ip, port, at):
-        """Whether `at` belongs to a confirmed poller's poll: it trails the last poll, or is
-        where poll() would count a contact. Sources are read separately, so a rejection can
-        be judged before its own flow; retries and scanner contacts in between are not polls."""
+        """Whether `at` belongs to a confirmed poller's poll: it trails the last poll, or lands
+        on its timer. Sources are read separately, so a rejection can be judged before its
+        own flow; retries, scanner contacts and other one-offs in between are not polls."""
         with self.lock:
             row = self.db.execute("SELECT contacts,interval FROM pollers WHERE ip=? AND port=?", (ip, port)).fetchone()
         if not row or row[1] is None:
             return False
         since = at - json.loads(row[0])[-1]
-        return abs(since) <= 5 or row[1] / 2 <= since <= row[1] + 120
+        return abs(since) <= 5 or on_cadence(since, row[1])
 
     def pollers(self):
         with self.lock:
-            rows = self.db.execute("""SELECT ip,port,interval,confirmed,last FROM pollers
+            rows = self.db.execute("""SELECT ip,port,interval,since,confirmed,last FROM pollers
                 WHERE confirmed IS NOT NULL ORDER BY last DESC LIMIT ?""", (POLLERS_SHOWN,)).fetchall()
-        return [{"ip": ip, "port": port, "interval": interval, "confirmed": confirmed, "lastSeen": last}
-                for ip, port, interval, confirmed, last in rows]
+        return [{"ip": ip, "port": port, "interval": interval, "since": since, "confirmed": confirmed, "lastSeen": last}
+                for ip, port, interval, since, confirmed, last in rows]
 
     def restart(self, timestamp):
         with self.lock, self.db:
@@ -538,7 +564,8 @@ class Collector:
             and time.time() - sources[name].get("lastSuccess", 0) <= 90 for name in ("endlessh", "delivery"))}
         return {"sources": sources, "geo": self.geo.status,
                 **({"abuseipdb": self.reputation.status()} if self.reputation else {}), "sshKeys": self.keys.status, "networks": self.networks.status,
-                "ownTraffic": own, "pollers": self.store.pollers(), "trapping": trapping,
+                "ownTraffic": own, "pollers": self.store.pollers(),
+                "pollersStarted": self.store.get("pollers_started"), "trapping": trapping,
                 "lastTick": self.last_tick, "capture": self.capture,
                 "startedAt": self.store.get("started")}
 

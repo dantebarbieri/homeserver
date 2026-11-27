@@ -156,8 +156,8 @@ def origin_of(item, networks, pollers):
         return "own"
     if item.get("origin") == "poller" or any(
             (ip, port) == (item["ip"], item.get("port")) and item["kind"] in POLL_KINDS
-            and item["timestamp"] < confirmed
-            for ip, port, confirmed in pollers):
+            and any((start is None or start <= item["timestamp"]) and item["timestamp"] < end for start, end in hidden)
+            for ip, port, hidden in pollers):
         return "poller"
     return "external"
 
@@ -167,14 +167,26 @@ def exclude_own(networks):
     return "".join(f" | ip != ip({json.dumps(cidr)})" for cidr in (*OWN_NETWORKS, *networks))
 
 
+def poll_windows(started, since, confirmed):
+    """When a poller's polls carry the external label: before classification existed, and
+    its confirming cadence. Everything else from it was judged by the collector."""
+    start = since - 5  # a rejection can be logged just before its flow
+    return ((None, confirmed),) if start <= started else ((None, started), (start, confirmed))
+
+
 def exclude_pollers(pollers):
-    # A poller's contacts before it was confirmed, and before this classification existed,
-    # carry the external label; later external contacts were judged not to be polls. The
-    # collector lists at most POLLERS_SHOWN pairs, so this stays a short filter rather than
-    # the address sets reputation_match keeps out of LogQL.
+    # The collector lists at most POLLERS_SHOWN pairs, so this stays a short filter rather
+    # than the address sets reputation_match keeps out of LogQL.
     kinds = json.dumps("|".join(POLL_KINDS))
-    return "".join(f' | (ip != {json.dumps(ip)} or port != "{port}" or kind !~ {kinds} or timestamp >= {confirmed:.6f})'
-                   for ip, port, confirmed in pollers)
+    clauses = []
+    for ip, port, hidden in pollers:
+        if len(hidden) == 1:
+            keep = f"timestamp >= {hidden[0][1]:.6f}"
+        else:
+            (_, started), (start, end) = hidden
+            keep = f"(timestamp >= {started:.6f} and (timestamp < {start:.6f} or timestamp >= {end:.6f}))"
+        clauses.append(f' | (ip != {json.dumps(ip)} or port != "{port}" or kind !~ {kinds} or {keep})')
+    return "".join(clauses)
 
 
 class API:
@@ -288,17 +300,17 @@ class API:
 
     @staticmethod
     def context(status):
-        """Own networks and known (ip, port, first confirmation) status pollers from the collector's status."""
+        """Own networks, and known status pollers as (ip, port, poll_windows) from the collector's status."""
         own = status.get("ownTraffic", {})
         if own.get("state") != "ready":
             raise UpstreamError("Own-traffic classification unavailable; check host capture health")
         pollers = set()
         for item in status.get("pollers", ())[:POLLERS_SHOWN]:
             try:
-                confirmed = float(item["confirmed"])
-                if not math.isfinite(confirmed):
+                times = [float(value) for value in (status["pollersStarted"], item["since"], item["confirmed"])]
+                if not all(map(math.isfinite, times)):
                     raise ValueError
-                pollers.add((str(ipaddress.ip_address(item["ip"])), int(item["port"]), confirmed))
+                pollers.add((str(ipaddress.ip_address(item["ip"])), int(item["port"]), poll_windows(*times)))
             except (KeyError, TypeError, ValueError):
                 raise UpstreamError("Invalid status-poller list") from None
         return home_networks(own["networks"]), tuple(sorted(pollers))

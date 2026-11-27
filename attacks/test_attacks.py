@@ -24,7 +24,7 @@ from common import Client, UpstreamError
 from events import (KINDS, SEVERITIES, SEVERITY, home_networks, kinds_at_least, parse_authelia, parse_endlessh,
                     parse_fail2ban, parse_flow, parse_forgejo_ssh, parse_hytale, parse_npm, parse_plex, parse_ssh,
                     refine, traffic_origin)
-from server import API, NANO, BadRequest, event_query, parameters, reputation_match
+from server import API, NANO, BadRequest, event_query, parameters, poll_windows, reputation_match
 from ssh_keys import SSHKeys
 from networks import FEEDS, Networks
 from update_intelligence import ranges, refresh_prefixes
@@ -379,32 +379,38 @@ class StateTests(unittest.TestCase):
         collector = Collector(self.store, Mock(), Mock(), self.root)
         contact = lambda ip, at, port=5205: collector.polled(parse_flow(json.dumps({
             "schema": "attacks-flow-v1", "ip": ip, "port": port, "sourcePort": 1234, "protocol": "udp"}), at))
+        rejected = lambda at: collector.polled({"kind": "hytale_rejected", "ip": poller, "port": 5205, "timestamp": at})
         poller = "148.113.200.55"
         self.assertEqual([contact(poller, at) for at in (1000, 1300, 1610, 1900)], [False, False, True, True])
-        self.assertFalse(contact(poller, 1960), "an off-cadence retry is not a poll")
-        self.assertTrue(contact(poller, 2200))
+        self.assertFalse(contact(poller, 1960), "a quick retry is not a poll")
+        self.assertFalse(contact(poller, 2050), "nor is a one-off contact between polls, such as an exploit attempt")
+        self.assertFalse(rejected(2048), "nor is its rejection")
+        self.assertTrue(contact(poller, 2200), "off-timer contacts don't move the timer")
         self.assertTrue(contact(poller, 2202), "a poll's trailing packets share its verdict")
-        rejected = lambda at: collector.polled({"kind": "hytale_rejected", "ip": poller, "port": 5205, "timestamp": at})
         self.assertTrue(rejected(2203))
-        self.assertFalse(rejected(4000))
         self.assertEqual([contact(poller, at) for at in (2300, 2303)], [False, False],
                          "a retry's trailing packets are not polls either")
         self.assertFalse(rejected(2301), "nor is a retry's rejection")
-        self.assertTrue(rejected(2490), "a rejection logged before its poll's flow is the poller's")
+        self.assertTrue(rejected(2495), "a rejection logged before its poll's flow is the poller's")
+        self.assertFalse(rejected(2650))
+        self.assertTrue(contact(poller, 2808), "a missed poll keeps the timer")
         # Scanners retry within seconds or minutes; their contacts never settle into a cadence.
         self.assertFalse(any(contact("45.56.79.53", at, 36676) for at in (1000, 1002, 1030, 1090, 1190, 1290, 1390)))
         self.assertFalse(any(contact("45.33.109.17", at, 32400) for at in (1000, 1300, 1600, 1900)))
         probe = lambda at: collector.polled({"kind": "port_scan", "ip": poller, "port": 5205, "timestamp": at})
-        self.assertFalse(probe(2500), "only a poll's own kinds are polls, whatever the address")
-        self.assertEqual(self.store.pollers(), [{"ip": poller, "port": 5205, "interval": 300,
-                                                  "confirmed": 1610, "lastSeen": 2300}])
+        self.assertFalse(probe(3112), "only a poll's own kinds are polls, whatever the address")
+        [listed] = self.store.pollers()
+        self.assertAlmostEqual(listed.pop("interval"), 303, delta=3)
+        self.assertEqual(listed, {"ip": poller, "port": 5205, "since": 1000, "confirmed": 1610, "lastSeen": 2808})
         self.store.db.close()
         self.store = Store(self.root / "state.sqlite")
         collector = Collector(self.store, Mock(), Mock(), self.root)
-        self.assertTrue(contact(poller, 2500), "a restart keeps confirmed pollers")
-        self.assertFalse(contact(poller, 2500 + 86401), "a day of silence starts over")
-        self.assertEqual(self.store.pollers(), [{"ip": poller, "port": 5205, "interval": None,
-                                                  "confirmed": 1610, "lastSeen": 2500 + 86401}])
+        self.assertTrue(contact(poller, 3112), "a restart keeps confirmed pollers")
+        self.assertEqual([contact(poller, at) for at in (3262, 3662, 4062, 4462)], [False, False, True, True],
+                         "a poller whose timer shifts is re-anchored by a fresh cadence")
+        self.assertFalse(contact(poller, 4462 + 86401), "a day of silence starts over")
+        [listed] = self.store.pollers()
+        self.assertEqual((listed["interval"], listed["since"], listed["confirmed"]), (None, 1000, 1610))
         self.assertFalse(contact(poller, 1610 + 31 * 86400 + 1))
         self.assertEqual(self.store.pollers(), [], "a lapsed confirmation past Loki's retention is dropped")
 
@@ -793,8 +799,12 @@ class QueryTests(unittest.TestCase):
         self.assertIn('ip != ip("2001:4860:1::/64")', query)
 
     def test_known_pollers_are_hidden_unless_requested_and_marked_when_shown(self):
-        rows = [{"id": "poll", "type": "game", "kind": "service_connection", "ip": "208.69.78.130", "port": 5205,
-                 "origin": "external", "timestamp": 50},
+        rows = [{"id": "legacy", "type": "game", "kind": "service_connection", "ip": "208.69.78.130", "port": 5205,
+                 "origin": "external", "timestamp": 10},
+                {"id": "burst", "type": "game", "kind": "service_connection", "ip": "208.69.78.130", "port": 5205,
+                 "origin": "external", "timestamp": 40},
+                {"id": "poll", "type": "game", "kind": "service_connection", "ip": "208.69.78.130", "port": 5205,
+                 "origin": "external", "timestamp": 65},
                 {"id": "other", "type": "game", "kind": "port_scan", "ip": "208.69.78.130", "port": 5205,
                  "origin": "external", "timestamp": 50},
                 {"id": "retry", "type": "game", "kind": "service_connection", "ip": "208.69.78.130", "port": 5205,
@@ -806,8 +816,8 @@ class QueryTests(unittest.TestCase):
         loki = Mock()
         loki.request.return_value = {"status": "success", "data": {"resultType": "streams", "result": [
             {"stream": {}, "values": [[str(100 + i), json.dumps(row)] for i, row in enumerate(rows)]}]}}
-        status = {"ownTraffic": {"state": "ready", "networks": []},
-                  "pollers": [{"ip": "208.69.78.130", "port": 5205, "confirmed": 80}]}
+        status = {"ownTraffic": {"state": "ready", "networks": []}, "pollersStarted": 20,
+                  "pollers": [{"ip": "208.69.78.130", "port": 5205, "since": 60, "confirmed": 80}]}
         collector = Mock()
         collector.request.side_effect = lambda path, *args: (
             {"148.113.200.55": {"score": 0}} if path == "/reputation" else status)
@@ -816,18 +826,20 @@ class QueryTests(unittest.TestCase):
         query = loki.request.call_args.args[1]["query"]
         self.assertIn('origin!~"own|poller"', query)
         self.assertIn('| (ip != "208.69.78.130" or port != "5205" or kind !~ "service_connection|hytale_rejected"'
-                      ' or timestamp >= 80.000000)', query)
+                      ' or (timestamp >= 20.000000 and (timestamp < 55.000000 or timestamp >= 80.000000)))', query)
         events = {item["id"]: item for item in api.events({"pollers": "1"})["events"]}
-        # Only contacts from before confirmation are the poller's; later external ones were judged retries.
+        # Only unjudged polls are the poller's: from before classification, and its confirming
+        # cadence. The collector judged everything else, such as an earlier burst, an attack.
         self.assertEqual({key: item["origin"] for key, item in events.items()},
-                         {"poll": "poller", "other": "external", "retry": "external", "scan": "external",
-                          "new": "poller"})
+                         {"legacy": "poller", "burst": "external", "poll": "poller", "other": "external",
+                          "retry": "external", "scan": "external", "new": "poller"})
+        self.assertEqual(poll_windows(100, 90, 200), ((None, 200),), "a cadence begun before classification")
         self.assertEqual(events["new"]["reputation"], {"score": 0}, "graded like the reputation filter sees it")
         query = loki.request.call_args.args[1]["query"]
         self.assertIn('origin!="own"', query)
         self.assertNotIn("208.69.78.130", query)
-        for bad in ({"ip": '1.2.3.4" or ip != "', "port": 5205, "confirmed": 80},
-                    {"ip": "1.2.3.4", "port": 5205, "confirmed": "nan"}, {"ip": "1.2.3.4", "port": 5205}):
+        for bad in ({"ip": '1.2.3.4" or ip != "', "port": 5205, "since": 60, "confirmed": 80},
+                    {"ip": "1.2.3.4", "port": 5205, "since": 60, "confirmed": "nan"}, {"ip": "1.2.3.4", "port": 5205}):
             status["pollers"] = [bad]
             with self.assertRaises(UpstreamError):
                 api.events({})
