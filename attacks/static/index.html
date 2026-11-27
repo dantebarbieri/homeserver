@@ -94,6 +94,7 @@
         </details>
         <div class="filter-end">
           <label class="own-toggle" title="Include LAN, Tailscale and home IPv6 audit events. Own traffic never appears on the map or in attack totals."><input id="own" type="checkbox"> Show own traffic</label>
+          <label class="own-toggle" title="Include game-server status checkers: sources that contact a game port on a steady timer. Like own traffic, they never appear on the map or in attack totals."><input id="pollers" type="checkbox"> Show status pollers</label>
           <button id="clear-filters" class="button" type="button" disabled>Clear filters</button>
         </div>
       </form>

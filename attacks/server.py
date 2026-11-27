@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from abuseipdb import GRADES
 from common import UpstreamError, clients
-from events import OWN_NETWORKS, SEVERITIES, SEVERITY, TYPES, VERDICTS, home_networks, kinds_at_least, traffic_origin
+from events import OWN_NETWORKS, POLL_KINDS, POLLERS_SHOWN, SEVERITIES, SEVERITY, TYPES, VERDICTS, home_networks, kinds_at_least, traffic_origin
 
 
 ROOT = Path(__file__).parent / "static"
@@ -79,21 +79,17 @@ def reputation_match(selected, grades):
     return match
 
 
-def event_query(params, now, networks=()):
-    if set(params) - {"range", "type", "outcome", "severity", "ip", "country", "asn", "reputation", "before", "after", "own"}:
+def event_query(params, now, networks=(), pollers=()):
+    if set(params) - {"range", "type", "outcome", "severity", "ip", "country", "asn", "reputation", "before", "after", "own", "pollers"}:
         raise BadRequest("Unknown filter")
-    if params.get("own", "0") not in ("0", "1"):
-        raise BadRequest("Unknown own-traffic setting")
     period = params.get("range", "24h")
     if period not in RANGES:
         raise BadRequest("Unknown time range")
-    selector = '{job="attacks"' + (',origin!="own"' if params.get("own") != "1" else "")
+    labels = ""
     if params.get("type"):
         categories = choices(params["type"], TYPES, "event type")
-        selector += ",type=~" + json.dumps(alternatives(categories))
-    selector += "} | json"
-    if params.get("own") != "1":
-        selector += exclude_own(networks)
+        labels = ",type=~" + json.dumps(alternatives(categories))
+    selector = scope(params, networks, pollers, labels)
     if params.get("outcome"):
         outcomes = choices(params["outcome"], VERDICTS, "outcome")
         selector += " | verdict=~" + json.dumps(alternatives(outcomes))
@@ -137,9 +133,60 @@ def event_query(params, now, networks=()):
     return selector + ' | __error__=""', start, max(start, end)
 
 
+def scope(params, networks, pollers, labels=""):
+    """The parsed stream, without own traffic and status pollers unless asked for."""
+    for key, label in (("own", "own-traffic"), ("pollers", "status-poller")):
+        if params.get(key, "0") not in ("0", "1"):
+            raise BadRequest(f"Unknown {label} setting")
+    hidden = [origin for origin in ("own", "poller") if params.get("pollers" if origin == "poller" else origin) != "1"]
+    if len(hidden) == 2:
+        labels = ',origin!~"own|poller"' + labels
+    elif hidden:
+        labels = f",origin!={json.dumps(hidden[0])}" + labels
+    selector = '{job="attacks"' + labels + "} | json"
+    if "own" in hidden:
+        selector += exclude_own(networks)
+    if "poller" in hidden:
+        selector += exclude_pollers(pollers)
+    return selector
+
+
+def origin_of(item, networks, pollers):
+    if item.get("origin") == "own" or traffic_origin(item["ip"], networks) == "own":
+        return "own"
+    if item.get("origin") == "poller" or any(
+            (ip, port) == (item["ip"], item.get("port")) and item["kind"] in POLL_KINDS
+            and any((start is None or start <= item["timestamp"]) and item["timestamp"] < end for start, end in hidden)
+            for ip, port, hidden in pollers):
+        return "poller"
+    return "external"
+
+
 def exclude_own(networks):
     # Missing origin labels are pre-upgrade events, not missing history.
     return "".join(f" | ip != ip({json.dumps(cidr)})" for cidr in (*OWN_NETWORKS, *networks))
+
+
+def poll_windows(started, since, confirmed):
+    """When a poller's polls carry the external label: before classification existed, and
+    its confirming cadence. Everything else from it was judged by the collector."""
+    start = since - 5  # a rejection can be logged just before its flow
+    return ((None, confirmed),) if start <= started else ((None, started), (start, confirmed))
+
+
+def exclude_pollers(pollers):
+    # The collector lists at most POLLERS_SHOWN pairs, so this stays a short filter rather
+    # than the address sets reputation_match keeps out of LogQL.
+    kinds = json.dumps("|".join(POLL_KINDS))
+    clauses = []
+    for ip, port, hidden in pollers:
+        if len(hidden) == 1:
+            keep = f"timestamp >= {hidden[0][1]:.6f}"
+        else:
+            (_, started), (start, end) = hidden
+            keep = f"(timestamp >= {started:.6f} and (timestamp < {start:.6f} or timestamp >= {end:.6f}))"
+        clauses.append(f' | (ip != {json.dumps(ip)} or port != "{port}" or kind !~ {kinds} or {keep})')
+    return "".join(clauses)
 
 
 class API:
@@ -154,17 +201,17 @@ class API:
         return data.get("grades") if data.get("enabled") else None
 
     def events(self, params):
-        networks = self.own_networks(self.collector.request("/status"))
-        query, start, end = event_query(params, time.time(), networks)
+        networks, pollers = self.context(self.collector.request("/status"))
+        query, start, end = event_query(params, time.time(), networks, pollers)
         forward = "after" in params
         position = None
         if params.get("reputation"):
             match = reputation_match(params["reputation"].split(","), self.grades(params))
             expected = self.matching(query, start, end, match)
-            rows, position = self.scan(query, start, end, forward, networks,
+            rows, position = self.scan(query, start, end, forward, (networks, pollers),
                                        lambda item: match(item["ip"]), expected) if expected else ([], None)
         else:
-            rows = self.page(query, start, end, forward, networks, LIMIT + 1)
+            rows = self.page(query, start, end, forward, (networks, pollers), LIMIT + 1)
         more = len(rows) > LIMIT
         # Do not silently drop events sharing a pagination timestamp.
         if more and rows[LIMIT - 1]["cursor"] == rows[LIMIT]["cursor"]:
@@ -176,20 +223,21 @@ class API:
             # Backward pages end just before `before`; forward polls start at `next + 1`.
             more, following = True, str(position + 1 if not forward else position - 1)
         unique = {item["id"]: item for item in rows}
-        ips = sorted({item["ip"] for item in unique.values() if item["origin"] == "external"})
+        # Poller addresses are public and graded too; the reputation filter and facets match them.
+        ips = sorted({item["ip"] for item in unique.values() if item["origin"] != "own"})
         try:
             reputation = self.collector.request("/reputation", [("ip", ip) for ip in ips]) if ips else {}
         except UpstreamError:
             reputation = {}
         for item in unique.values():
-            if isinstance(reputation.get(item["ip"]), dict) and item["origin"] == "external":
+            if isinstance(reputation.get(item["ip"]), dict) and item["origin"] != "own":
                 item["reputation"] = reputation[item["ip"]]
         return {"events": sorted(unique.values(), key=lambda item: int(item["cursor"]), reverse=True),
                 "more": more, "next": following,
                 "latest": str(max((int(item["cursor"]) for item in rows), default=end)),
                 "queriedAt": time.time()}
 
-    def page(self, query, start, end, forward, networks, limit):
+    def page(self, query, start, end, forward, context, limit):
         """Up to `limit` normalized events in [start, end), ordered in the paging direction."""
         data = self.loki.request("/loki/api/v1/query_range", {
             "query": query, "start": start, "end": end,
@@ -204,7 +252,7 @@ class API:
                 if (not isinstance(item, dict) or item.get("type") not in TYPES
                         or not isinstance(item.get("id"), str) or not isinstance(item.get("ip"), str)):
                     raise UpstreamError("Invalid normalized event")
-                origin = "own" if item.get("origin") == "own" else traffic_origin(item["ip"], networks)
+                origin = origin_of(item, *context)
                 rows.append({**item, "origin": origin, "cursor": ns,
                              "severity": SEVERITY.get(item.get("kind"), "low")})
         rows.sort(key=lambda item: int(item["cursor"]), reverse=not forward)
@@ -217,14 +265,14 @@ class API:
         rows = self.loki_metrics(f"sum by (ip) (count_over_time({query} | keep ip [{seconds}s]))", time=str(end))
         return sum(float(row["value"][1]) for row in rows if match(row["metric"].get("ip", "")))
 
-    def scan(self, query, start, end, forward, networks, keep, expected):
+    def scan(self, query, start, end, forward, context, keep, expected):
         """Events passing `keep`, read in bounded Loki pages. Returns up to LIMIT + 1 matches and,
         unless the range was read to its end, the oldest (or newest) timestamp left unread.
         Reaching the `expected` count stops early but still returns a cursor: events
         delivered after the count could be newer than ones not read yet."""
         matches = []
         for _ in range(SCAN_PAGES):
-            rows = self.page(query, start, end, forward, networks, SCAN_PAGE)
+            rows = self.page(query, start, end, forward, context, SCAN_PAGE)
             if len(rows) < SCAN_PAGE:
                 return matches + [item for item in rows if keep(item)], None
             # The page may have cut the last timestamp short: re-read it whole on the next page.
@@ -251,11 +299,21 @@ class API:
         return data["data"]["result"]
 
     @staticmethod
-    def own_networks(status):
+    def context(status):
+        """Own networks, and known status pollers as (ip, port, poll_windows) from the collector's status."""
         own = status.get("ownTraffic", {})
         if own.get("state") != "ready":
             raise UpstreamError("Own-traffic classification unavailable; check host capture health")
-        return home_networks(own["networks"])
+        pollers = set()
+        for item in status.get("pollers", ())[:POLLERS_SHOWN]:
+            try:
+                times = [float(value) for value in (status["pollersStarted"], item["since"], item["confirmed"])]
+                if not all(map(math.isfinite, times)):
+                    raise ValueError
+                pollers.add((str(ipaddress.ip_address(item["ip"])), int(item["port"]), poll_windows(*times)))
+            except (KeyError, TypeError, ValueError):
+                raise UpstreamError("Invalid status-poller list") from None
+        return home_networks(own["networks"]), tuple(sorted(pollers))
 
     def loki_metrics(self, query, **params):
         ranged = "start" in params
@@ -268,12 +326,9 @@ class API:
 
     def sources(self, params):
         period = params.get("range", "24h")
-        if set(params) - {"range", "own"} or period not in RANGES or params.get("own", "0") not in ("0", "1"):
+        if set(params) - {"range", "own", "pollers"} or period not in RANGES:
             raise BadRequest("Unknown source range")
-        networks = self.own_networks(self.collector.request("/status"))
-        base = '{job="attacks"' + (',origin!="own"' if params.get("own") != "1" else "") + "} | json"
-        if params.get("own") != "1":
-            base += exclude_own(networks)
+        base = scope(params, *self.context(self.collector.request("/status")))
         instant = {"time": str(int(time.time() * NANO))}
 
         def top(labels):
@@ -295,10 +350,9 @@ class API:
     def facets(self, params):
         # Type, outcome, severity and reputation filters are applied by the browser, so each
         # picker can count its options against the others without another round trip.
-        if set(params) - {"range", "ip", "country", "asn", "own"}:
+        if set(params) - {"range", "ip", "country", "asn", "own", "pollers"}:
             raise BadRequest("Unknown facet filter")
-        networks = self.own_networks(self.collector.request("/status"))
-        query, _, _ = event_query(params, time.time(), networks)
+        query, _, _ = event_query(params, time.time(), *self.context(self.collector.request("/status")))
         period = params.get("range", "24h")
         try:
             grades = self.grades(params)
@@ -332,9 +386,8 @@ class API:
             raise BadRequest("Unknown statistics range")
         now, seconds = time.time(), RANGES[period]
         status = self.collector.request("/status")
-        networks = self.own_networks(status)
         trapping = status["trapping"]
-        query = '{job="attacks",origin!="own"} | json' + exclude_own(networks)
+        query = scope({}, *self.context(status))
         query += f' | observedAt <= {float(trapping["through"]):.6f} | __error__=""'
         instant = {"time": str(int(now * NANO))}
         counts = query + " | keep type,kind"

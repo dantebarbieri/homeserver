@@ -93,11 +93,12 @@ test("the map names every source it leaves out and says nothing when it draws al
   assert.equal(notDrawn({farSide: 4, omitted: 1}), "Sources not drawn: 4 on far side · 1 over the dot limit");
 });
 
-test("own traffic stays off the map even in history mode without displacing external dots", () => {
+test("own traffic and status pollers stay off the map even in history mode without displacing external dots", () => {
   const external = dots(7);
   const own = {...dots(1)[0], id: "own", origin: "own", observedAt: 20000};
+  const poller = {...dots(1)[0], id: "poller", origin: "poller", observedAt: 20001};
   for (const history of [true, false]) {
-    const activity = mapActivity([own, ...external], MAP_DEFAULTS, 20000, history);
+    const activity = mapActivity([own, poller, ...external], MAP_DEFAULTS, 20000, history);
     assert.deepEqual(activity.points.map(({latest}) => latest.id), external.map(item => item.id));
     assert.ok(activity.points.every(({opacity}) => opacity === 1));
   }
@@ -291,7 +292,13 @@ test("severity is read from the row or derived from its kind, and filters mirror
   const kinds = new Set(events.map(item => item.kind));
   for (const kind of ["plex_client", "plex_probe", "plex_reachability", "hytale_rejected", "port_scan"]) assert.equal(kinds.has(kind), true, kind);
   assert.equal(events.some(item => item.service === "Forgejo SSH"), true);
-  const external = events.filter(item => item.origin !== "own");
+  const external = events.filter(item => item.origin === "external");
+  for (const origin of ["own", "poller"]) {
+    const hidden = events.find(item => item.origin === origin);
+    const toggle = origin === "own" ? "own" : "pollers";
+    assert.equal(matchesFilters(hidden, {}), false, origin);
+    assert.equal(matchesFilters(hidden, {[toggle]: "1"}), true, origin);
+  }
   const atLeast = level => external.filter(item => matchesFilters(item, {severity: level}));
   assert.equal(atLeast("info").length, external.length);
   assert.equal(atLeast("suspicious").every(item => ["suspicious", "high", "critical"].includes(severityOf(item))), true);
@@ -310,7 +317,7 @@ test("severity is read from the row or derived from its kind, and filters mirror
 });
 
 test("facet counts equal what selecting each option would show", () => {
-  const external = demoEvents(Date.parse("2026-01-01T00:00:00Z")).filter(item => item.origin !== "own");
+  const external = demoEvents(Date.parse("2026-01-01T00:00:00Z")).filter(item => item.origin === "external");
   const rows = external.map(item => ({type: item.type, outcome: item.verdict, severity: severityOf(item),
     reputation: reputationGrade(item), reported: !!item.reputation?.reportedAt, count: 1}));
   for (const current of [{}, {type: "ssh,plex"}, {outcome: "failure"}, {severity: "suspicious", type: "web"}, {reputation: "high,reported"}, {reputation: "clean", type: "ssh"}]) {

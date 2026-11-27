@@ -332,6 +332,7 @@ function eventRow(item) {
   const trapped = trapBadge(item, trap);
   if (trapped) badges.append(trapped);
   if (item.origin === "own") badges.append(node("span", "Own", "badge origin-own"));
+  if (item.origin === "poller") badges.append(node("span", "Poller", "badge origin-poller"));
   if (item.keyStatus) badges.append(node("span", item.keyStatus === "recognized" ? "known key" : "unregistered key", `badge key-${item.keyStatus}`));
   classification.append(badges);
   const source = node("span", undefined, "event-cell");
@@ -478,7 +479,8 @@ function detail(item, sourceCount) {
     "Event time": new Date(item.timestamp * 1000).toLocaleString(),
     "Collected": new Date(item.observedAt * 1000).toLocaleString(),
     "Classification": item.verdict, "Severity": `${severityBadge(item).textContent}: ${SEVERITIES.find(([value]) => value === severityOf(item))[2]}`,
-    "Traffic": item.origin === "own" ? "Own network (not proof of who is using it)" : "External",
+    "Traffic": item.origin === "own" ? "Own network (not proof of who is using it)"
+      : item.origin === "poller" ? "Status poller (contacts this game port on a steady timer; not proof of who runs it)" : "External",
     "Source IP": item.ip, "Approx. location": item.location,
     "Evidence": item.reason,
     "Network owner": item.networkOrganization, "ASN": item.asn ? `AS${item.asn}` : undefined,
@@ -511,7 +513,7 @@ function detail(item, sourceCount) {
   $("filter-network").hidden = !item.asn;
   $("filter-network").textContent = `Only AS${item.asn}`;
   // Opens only on click, so no address leaves the page unless asked.
-  $("abuse-check").hidden = !item.ip || item.origin === "own" || item.networkLookup === "not-public";
+  $("abuse-check").hidden = !item.ip || item.origin === "own" || item.origin === "poller" || item.networkLookup === "not-public";
   $("abuse-check").href = `https://www.abuseipdb.com/check/${encodeURIComponent(item.ip || "")}`;
   if (!$("detail").open) {
     document.body.classList.add("detail-open");
@@ -604,6 +606,12 @@ function filterParameters() {
   return result;
 }
 
+// Checkboxes that add traffic hidden by default; each id is also its API parameter.
+const TOGGLES = ["own", "pollers"];
+function toggleParameters() {
+  return Object.fromEntries(TOGGLES.filter(name => $(name).checked).map(name => [name, "1"]));
+}
+
 function activeFilters() {
   const label = (options, values) => options.filter(([value]) => values.has(value)).map(([, text]) => text).join(", ");
   const types = Object.entries(TYPES).map(([value, {label: text}]) => [value, text]);
@@ -617,6 +625,7 @@ function activeFilters() {
     filters.country && [["country"], `Country: ${countryName(filters.country)}`],
     filters.asn && [["asn"], `Network: ${networkNames.get(filters.asn) || `AS${filters.asn}`}`],
     $("own").checked && [["own"], "Including own traffic"],
+    $("pollers").checked && [["pollers"], "Including status pollers"],
   ].filter(Boolean);
 }
 
@@ -656,7 +665,7 @@ function syncFilters() {
     chip.append(node("span", "✕", "chip-remove"));
     chip.querySelector(".chip-remove").setAttribute("aria-hidden", "true");
     chip.setAttribute("aria-label", `Remove filter ${text}`);
-    chip.onclick = () => name === "own" ? ($("own").checked = false, applyFilters())
+    chip.onclick = () => TOGGLES.includes(name) ? ($(name).checked = false, applyFilters())
       : applyFilters({[name]: SETS.includes(name) ? new Set() : ""});
     return chip;
   }));
@@ -671,7 +680,7 @@ function applyFilters(change = {}) {
 }
 
 function clearFilters() {
-  $("own").checked = false;
+  for (const name of TOGGLES) $(name).checked = false;
   sourcesKey = "";
   return applyFilters({severity: "", type: new Set(), outcome: new Set(), reputation: new Set(), ip: "", country: "", asn: ""});
 }
@@ -731,7 +740,7 @@ function demoFacets(scope) {
 async function loadFacets() {
   const scope = {range: $("range").value};
   for (const name of ["ip", "country", "asn"]) if (filters[name]) scope[name] = filters[name];
-  if ($("own").checked) scope.own = "1";
+  Object.assign(scope, toggleParameters());
   const key = JSON.stringify(scope);
   if (facetsKey === key && performance.now() - facetsAt < 25000) return;
   const changed = facetsKey !== key;
@@ -760,19 +769,19 @@ function reputationAvailable(available) {
 }
 
 function demoSources() {
-  const count = (key, extra) => [...Map.groupBy(demoFeed().filter(item => item.origin !== "own" && item[key]), item => item[key])]
+  const count = (key, extra) => [...Map.groupBy(demoFeed().filter(item => item.origin === "external" && item[key]), item => item[key])]
     .map(([value, rows]) => ({[key]: String(value), ...extra?.(rows[0]), count: rows.length})).sort((a, b) => b.count - a.count).slice(0, 12);
   return {countries: count("countryCode"), networks: count("asn", item => ({networkOrganization: item.networkOrganization}))};
 }
 
 async function loadSources() {
-  const range = $("range").value, own = $("own").checked;
-  const key = `${range}|${own}`;
+  const range = $("range").value, toggles = toggleParameters();
+  const key = JSON.stringify({range, ...toggles});
   if (sourcesKey === key && performance.now() - sourcesAt < 60000) return;
   sourcesKey = key; sourcesAt = performance.now();
   try {
-    const result = demo ? demoSources() : await request("/api/sources", own ? {range, own: "1"} : {range});
-    if (key !== `${$("range").value}|${$("own").checked}`) return;
+    const result = demo ? demoSources() : await request("/api/sources", {range, ...toggles});
+    if (key !== JSON.stringify({range: $("range").value, ...toggleParameters()})) return;
     for (const row of result.networks) networkNames.set(row.asn, row.networkOrganization || `AS${row.asn}`);
     const amount = row => ` · ${Math.round(row.count).toLocaleString()}`;
     fillSources($("country"), "Any country", result.countries.map(row => [row.countryCode, countryName(row.countryCode) + amount(row)]),
@@ -863,8 +872,7 @@ async function load(reset = false, history = false) {
   // A poll that finds nothing new leaves the list alone; a reset or an older page always redraws it.
   let redraw = reset || history;
   if (reset) {
-    parameters = {range: $("range").value, ...filterParameters()};
-    if ($("own").checked) parameters.own = "1";
+    parameters = {range: $("range").value, ...filterParameters(), ...toggleParameters()};
     events = []; latest = null; older = null; highlighted = null; catchingUp = false; pulses.clear(); freshIds.clear();
     followQueue.clear();
     for (const {node} of arrivals.values()) node.remove();
@@ -965,7 +973,7 @@ async function stats(show = false) {
     const since = new Date(trapSample.since * 1000).toLocaleString();
     counter("trapped-lifetime", `${duration(result.lifetimeTrappedSeconds)} completed external · since ${since}`);
     $("metric-status").textContent = rateLabel(result.timeline, period);
-    $("metric-status").title = demo ? "Synthetic preview" : "Loki · logged events per minute, own traffic excluded";
+    $("metric-status").title = demo ? "Synthetic preview" : "Loki · logged events per minute, own traffic and status pollers excluded";
     spark(result.timeline);
     errors.delete("metrics");
   } catch (error) {
@@ -1669,7 +1677,7 @@ for (const [key, value] of Object.entries(TYPES)) {
   $("legend").append(item);
 }
 
-$("own").onchange = () => applyFilters();
+for (const name of TOGGLES) $(name).onchange = () => applyFilters();
 $("range").onchange = () => { load(true); stats(true); loadFacets(); };
 $("older").onclick = () => load(false, true);
 $("group").onclick = () => setGrouped(!grouped);
