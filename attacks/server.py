@@ -209,13 +209,14 @@ class API:
             # Backward pages end just before `before`; forward polls start at `next + 1`.
             more, following = True, str(position + 1 if not forward else position - 1)
         unique = {item["id"]: item for item in rows}
-        ips = sorted({item["ip"] for item in unique.values() if item["origin"] == "external"})
+        # Poller addresses are public and graded too; the reputation filter and facets match them.
+        ips = sorted({item["ip"] for item in unique.values() if item["origin"] != "own"})
         try:
             reputation = self.collector.request("/reputation", [("ip", ip) for ip in ips]) if ips else {}
         except UpstreamError:
             reputation = {}
         for item in unique.values():
-            if isinstance(reputation.get(item["ip"]), dict) and item["origin"] == "external":
+            if isinstance(reputation.get(item["ip"]), dict) and item["origin"] != "own":
                 item["reputation"] = reputation[item["ip"]]
         return {"events": sorted(unique.values(), key=lambda item: int(item["cursor"]), reverse=True),
                 "more": more, "next": following,

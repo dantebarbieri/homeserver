@@ -389,6 +389,8 @@ class StateTests(unittest.TestCase):
         self.assertFalse(rejected(4000))
         self.assertEqual([contact(poller, at) for at in (2300, 2303)], [False, False],
                          "a retry's trailing packets are not polls either")
+        self.assertFalse(rejected(2301), "nor is a retry's rejection")
+        self.assertTrue(rejected(2490), "a rejection logged before its poll's flow is the poller's")
         # Scanners retry within seconds or minutes; their contacts never settle into a cadence.
         self.assertFalse(any(contact("45.56.79.53", at, 36676) for at in (1000, 1002, 1030, 1090, 1190, 1290, 1390)))
         self.assertFalse(any(contact("45.33.109.17", at, 32400) for at in (1000, 1300, 1600, 1900)))
@@ -800,23 +802,27 @@ class QueryTests(unittest.TestCase):
         loki = Mock()
         loki.request.return_value = {"status": "success", "data": {"resultType": "streams", "result": [
             {"stream": {}, "values": [[str(100 + i), json.dumps(row)] for i, row in enumerate(rows)]}]}}
+        status = {"ownTraffic": {"state": "ready", "networks": []},
+                  "pollers": [{"ip": "208.69.78.130", "port": 5205, "confirmed": 80}]}
         collector = Mock()
-        collector.request.return_value = {"ownTraffic": {"state": "ready", "networks": []},
-                                          "pollers": [{"ip": "208.69.78.130", "port": 5205, "confirmed": 80}]}
+        collector.request.side_effect = lambda path, *args: (
+            {"148.113.200.55": {"score": 0}} if path == "/reputation" else status)
         api = API(loki, Mock(), collector)
         api.events({})
         query = loki.request.call_args.args[1]["query"]
         self.assertIn('origin!~"own|poller"', query)
         self.assertIn('| (ip != "208.69.78.130" or port != "5205" or timestamp >= 80.000000)', query)
-        origins = {item["id"]: item["origin"] for item in api.events({"pollers": "1"})["events"]}
+        events = {item["id"]: item for item in api.events({"pollers": "1"})["events"]}
         # Only contacts from before confirmation are the poller's; later external ones were judged retries.
-        self.assertEqual(origins, {"poll": "poller", "retry": "external", "scan": "external", "new": "poller"})
+        self.assertEqual({key: item["origin"] for key, item in events.items()},
+                         {"poll": "poller", "retry": "external", "scan": "external", "new": "poller"})
+        self.assertEqual(events["new"]["reputation"], {"score": 0}, "graded like the reputation filter sees it")
         query = loki.request.call_args.args[1]["query"]
         self.assertIn('origin!="own"', query)
         self.assertNotIn("208.69.78.130", query)
         for bad in ({"ip": '1.2.3.4" or ip != "', "port": 5205, "confirmed": 80},
                     {"ip": "1.2.3.4", "port": 5205, "confirmed": "nan"}, {"ip": "1.2.3.4", "port": 5205}):
-            collector.request.return_value["pollers"] = [bad]
+            status["pollers"] = [bad]
             with self.assertRaises(UpstreamError):
                 api.events({})
         with self.assertRaises(BadRequest):

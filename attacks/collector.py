@@ -189,10 +189,15 @@ class Store:
             return poller
 
     def polling(self, ip, port, at):
-        """Whether a confirmed poller of this port contacted it within one interval of `at`."""
+        """Whether `at` belongs to a confirmed poller's poll: it trails the last poll, or is
+        where poll() would count a contact. Sources are read separately, so a rejection can
+        be judged before its own flow; retries and scanner contacts in between are not polls."""
         with self.lock:
-            row = self.db.execute("SELECT interval,last FROM pollers WHERE ip=? AND port=?", (ip, port)).fetchone()
-        return bool(row and row[0] is not None and -120 <= at - row[1] <= row[0] + 120)
+            row = self.db.execute("SELECT contacts,interval FROM pollers WHERE ip=? AND port=?", (ip, port)).fetchone()
+        if not row or row[1] is None:
+            return False
+        since = at - json.loads(row[0])[-1]
+        return abs(since) <= 5 or row[1] / 2 <= since <= row[1] + 120
 
     def pollers(self):
         with self.lock:
