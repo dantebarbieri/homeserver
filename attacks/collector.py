@@ -83,7 +83,7 @@ class Store:
               (ip TEXT, port INTEGER, since REAL, changed REAL, PRIMARY KEY(ip,port));
             CREATE TABLE IF NOT EXISTS pollers
               (ip TEXT, port INTEGER, contacts TEXT NOT NULL, interval REAL, confirmed REAL, last REAL NOT NULL,
-               PRIMARY KEY(ip,port));
+               polled INTEGER NOT NULL, PRIMARY KEY(ip,port));
         """)
         # Old counters cannot be split by IP. Preserve them, explicitly unclassified.
         if "origin" not in {row[1] for row in self.db.execute("PRAGMA table_info(counters)")}:
@@ -154,15 +154,18 @@ class Store:
         """Whether this contact comes from a regular status poller. Three contacts whose two
         gaps fall within POLL_GAPS and agree to within 20% (or 30 s) confirm one. Scanners
         retry within seconds, so a quicker contact restarts an unconfirmed cadence and, once
-        confirmed, isn't a poll. A day of silence starts over. History lives in the database
-        so a restart doesn't relabel a known poller."""
+        confirmed, isn't a poll. A day of silence starts over; `confirmed` keeps the first
+        confirmation, since the server hides only the pair's events from before it. History
+        lives in the database so a restart doesn't relabel a known poller."""
         with self.lock, self.db:
-            row = self.db.execute("SELECT contacts,interval,confirmed,last FROM pollers WHERE ip=? AND port=?",
+            row = self.db.execute("SELECT contacts,interval,confirmed,last,polled FROM pollers WHERE ip=? AND port=?",
                                   (ip, port)).fetchone()
-            contacts, interval, confirmed, last = (json.loads(row[0]), *row[1:]) if row else ([], None, None, None)
+            contacts, interval, confirmed, last, polled = \
+                (json.loads(row[0]), *row[1:]) if row else ([], None, None, None, False)
             if last is not None and at <= last + 5:
-                # Duplicates and replayed log windows belong to contacts already judged.
-                return interval is not None
+                # Duplicates, replayed log windows and a contact's trailing packets share the
+                # verdict of the contact just judged.
+                return bool(polled)
             gap = at - contacts[-1] if contacts else None
             if gap is not None and gap > POLL_IDLE:
                 contacts, interval, gap = [], None, None
@@ -178,10 +181,11 @@ class Store:
                         and abs(gaps[0] - gaps[1]) <= max(30, 0.2 * max(gaps)):
                     interval, confirmed = gaps[1], confirmed or at
                 poller = interval is not None
-            self.db.execute("INSERT OR REPLACE INTO pollers VALUES (?,?,?,?,?,?)",
-                            (ip, port, json.dumps(contacts), interval, confirmed, at))
-            self.db.execute("DELETE FROM pollers WHERE (confirmed IS NULL AND last<?) OR last<?",
-                            (at - 2 * POLL_GAPS[1], at - POLL_KEEP))
+            self.db.execute("INSERT OR REPLACE INTO pollers VALUES (?,?,?,?,?,?,?)",
+                            (ip, port, json.dumps(contacts), interval, confirmed, at, poller))
+            # Loki keeps 30 days, so a lapsed confirmation older than that hides nothing.
+            self.db.execute("""DELETE FROM pollers WHERE (confirmed IS NULL AND last<?) OR last<?
+                OR (interval IS NULL AND confirmed<?)""", (at - 2 * POLL_GAPS[1], at - POLL_KEEP, at - POLL_KEEP))
             return poller
 
     def polling(self, ip, port, at):

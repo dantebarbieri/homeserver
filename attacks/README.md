@@ -93,8 +93,10 @@ more than twice that pace, and a Hytale identity rejection within one interval o
 contact is its handshake. A quicker contact restarts an unconfirmed cadence and is not
 a poll once confirmed, so scanner retry bursts stay attacks, and a day of silence
 starts over. The collector keeps this history in SQLite and lists up to 64 known
-(address, port) pairs in `/status` for 31 days after their last contact; the API
-hides those pairs' earlier contacts too, including the first two before confirmation.
+(address, port) pairs with their first confirmation time in `/status`, dropping a pair
+31 days after its last contact or, once it stops polling, after its confirmation. The
+API also hides each pair's contacts from before that confirmation, including the first
+two; its later contacts keep the collector's verdict.
 Like own traffic, pollers are hidden by default behind **Show status pollers**,
 excluded from the map and aggregate cards, and never reported to AbuseIPDB. A steady
 cadence is not proof of who runs the checker.
@@ -474,9 +476,9 @@ re-polled every 30 seconds, queued every other dashboard query behind it until
 - `/api/stats` runs its seven upstream queries concurrently, and `/api/sources`
   its two.
 - Hiding status pollers is the one deliberate exception: at most 64 known
-  (address, port) pairs, each a `(ip != "…" or port != "…")` filter. New
-  poller events are already excluded by their `origin` stream label; the pairs
-  only catch contacts logged before confirmation.
+  (address, port) pairs, each a `(ip != "…" or port != "…" or timestamp >= …)`
+  filter. New poller events are already excluded by their `origin` stream label;
+  the pairs only catch contacts logged before confirmation.
 
 Per-IP aggregation needs more than Loki's default 500 series per query, so
 `docker/monitoring/loki-config.yml` sets `max_query_series: 20000`. That limit

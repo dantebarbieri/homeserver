@@ -154,7 +154,9 @@ def scope(params, networks, pollers, labels=""):
 def origin_of(item, networks, pollers):
     if item.get("origin") == "own" or traffic_origin(item["ip"], networks) == "own":
         return "own"
-    if item.get("origin") == "poller" or (item["ip"], item.get("port")) in pollers:
+    if item.get("origin") == "poller" or any(
+            (ip, port) == (item["ip"], item.get("port")) and item["timestamp"] < confirmed
+            for ip, port, confirmed in pollers):
         return "poller"
     return "external"
 
@@ -166,9 +168,11 @@ def exclude_own(networks):
 
 def exclude_pollers(pollers):
     # A poller's contacts before it was confirmed, and before this classification existed,
-    # carry the external label. The collector lists at most POLLERS_SHOWN pairs, so this
-    # stays a short filter rather than the address sets reputation_match keeps out of LogQL.
-    return "".join(f' | (ip != {json.dumps(ip)} or port != "{port}")' for ip, port in sorted(pollers))
+    # carry the external label; later external contacts were judged not to be polls. The
+    # collector lists at most POLLERS_SHOWN pairs, so this stays a short filter rather than
+    # the address sets reputation_match keeps out of LogQL.
+    return "".join(f' | (ip != {json.dumps(ip)} or port != "{port}" or timestamp >= {confirmed:.6f})'
+                   for ip, port, confirmed in pollers)
 
 
 class API:
@@ -281,17 +285,20 @@ class API:
 
     @staticmethod
     def context(status):
-        """Own networks and known (ip, port) status pollers from the collector's status."""
+        """Own networks and known (ip, port, first confirmation) status pollers from the collector's status."""
         own = status.get("ownTraffic", {})
         if own.get("state") != "ready":
             raise UpstreamError("Own-traffic classification unavailable; check host capture health")
         pollers = set()
         for item in status.get("pollers", ())[:POLLERS_SHOWN]:
             try:
-                pollers.add((str(ipaddress.ip_address(item["ip"])), int(item["port"])))
+                confirmed = float(item["confirmed"])
+                if not math.isfinite(confirmed):
+                    raise ValueError
+                pollers.add((str(ipaddress.ip_address(item["ip"])), int(item["port"]), confirmed))
             except (KeyError, TypeError, ValueError):
                 raise UpstreamError("Invalid status-poller list") from None
-        return home_networks(own["networks"]), frozenset(pollers)
+        return home_networks(own["networks"]), tuple(sorted(pollers))
 
     def loki_metrics(self, query, **params):
         ranged = "start" in params
